@@ -2,7 +2,7 @@ import Cocoa
 import WebKit
 import Sparkle
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var windowController: WebViewWindowController?
     private var statusBar: StatusBarController?
     private var hotKey: GlobalHotKey?
@@ -13,10 +13,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         log("App launching...")
 
-        // Initialize Sparkle for auto-updates
+        // Initialize Sparkle for auto-updates with delegate for update notifications
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
-            updaterDelegate: nil,
+            updaterDelegate: self,
             userDriverDelegate: nil
         )
 
@@ -209,5 +209,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+    }
+
+    // MARK: - SPUUpdaterDelegate
+
+    /// Called when Sparkle finds a valid update
+    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
+        log("Update found: \(item.displayVersionString)")
+        notifyWebViewOfUpdate(version: item.displayVersionString)
+    }
+
+    /// Notify the web view that an update is available
+    private func notifyWebViewOfUpdate(version: String) {
+        guard let windowController = self.windowController,
+              let webView = windowController.window?.contentView as? WKWebView else {
+            return
+        }
+
+        let escapedVersion = version.replacingOccurrences(of: "'", with: "\\'")
+        let script = "window.__notifyUpdateAvailable && window.__notifyUpdateAvailable({ version: '\(escapedVersion)' });"
+        webView.evaluateJavaScript(script) { _, error in
+            if let error = error {
+                log("Error notifying web view of update: \(error)")
+            }
+        }
+    }
+
+    /// Trigger the Sparkle update UI - called from web view via message handler
+    func triggerAppUpdate() {
+        updaterController.checkForUpdates(nil)
     }
 }

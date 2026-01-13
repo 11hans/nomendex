@@ -10,6 +10,9 @@ interface WebKitMessageHandlers {
     startWindowDrag?: {
         postMessage: (data: Record<string, never>) => void;
     };
+    triggerAppUpdate?: {
+        postMessage: (data: Record<string, never>) => void;
+    };
 }
 
 declare global {

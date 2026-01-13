@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { RoutingProvider } from "./hooks/useRouting";
 import { ThemeProvider } from "./hooks/useTheme";
 import { useNativeKeyboardBridge } from "./hooks/useNativeKeyboardBridge";
+import { useUpdateNotification } from "./hooks/useUpdateNotification";
 import { WorkspacePage } from "./pages/WorkspacePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { HelpPage } from "./pages/HelpPage";
@@ -24,6 +25,12 @@ import { WorkspaceOnboarding } from "./components/WorkspaceOnboarding";
 // Bridge component for native Mac app keyboard handling
 function NativeKeyboardBridge() {
     useNativeKeyboardBridge();
+    return null;
+}
+
+// Bridge component for native Mac app update notifications
+function UpdateNotificationBridge() {
+    useUpdateNotification();
     return null;
 }
 
@@ -51,6 +58,7 @@ export function App() {
     return (
         <ThemeProvider>
             <NativeKeyboardBridge />
+            <UpdateNotificationBridge />
             <BrowserRouter>
                 <RoutingProvider>
                     <WorkspaceGuard>

@@ -54,6 +54,7 @@ class WebViewWindowController: NSWindowController, WKNavigationDelegate, NSWindo
         let userContentController = WKUserContentController()
         userContentController.add(self, name: "chooseDataRoot")
         userContentController.add(self, name: "setNativeTheme")
+        userContentController.add(self, name: "triggerAppUpdate")
         config.userContentController = userContentController
         config.preferences.javaScriptEnabled = true
         let webView = WKWebView(frame: .zero, configuration: config)
@@ -206,6 +207,11 @@ class WebViewWindowController: NSWindowController, WKNavigationDelegate, NSWindo
                 window?.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
 
                 log("Theme updated: backgroundColor=\(backgroundColor), isDark=\(isDark)")
+            }
+        } else if message.name == "triggerAppUpdate" {
+            // Trigger Sparkle update UI via AppDelegate
+            if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
+                appDelegate.triggerAppUpdate()
             }
         }
     }
