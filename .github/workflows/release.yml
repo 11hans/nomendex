@@ -30,8 +30,10 @@ jobs:
         id: version
         run: |
           VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" mac-app/macos-host/Info.plist)
+          BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" mac-app/macos-host/Info.plist)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Building version: $VERSION"
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION (build $BUILD_NUMBER)"
 
       - name: Build app
         run: |
@@ -172,6 +174,7 @@ jobs:
         env:
           APPCAST_API_KEY: ${{ secrets.APPCAST_API_KEY }}
           VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
           SPARKLE_SIGNATURE: ${{ env.SPARKLE_SIGNATURE }}
         run: |
           cd mac-app
