@@ -4,11 +4,14 @@ import { Button } from "./ui/button";
 import { useWorkspaceSwitcher } from "@/hooks/useWorkspaceSwitcher";
 import { useTheme } from "@/hooks/useTheme";
 import { FolderPickerDialog } from "./FolderPickerDialog";
+import { WorkspaceWarningDialog } from "./WorkspaceWarningDialog";
 
 export function WorkspaceOnboarding() {
     const { addWorkspace } = useWorkspaceSwitcher();
     const { currentTheme } = useTheme();
     const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+    const [warningDialogOpen, setWarningDialogOpen] = useState(false);
+    const [pendingPath, setPendingPath] = useState<string | null>(null);
 
     // Check if we're running in native macOS app
     const isNativeApp = Boolean(
@@ -18,9 +21,10 @@ export function WorkspaceOnboarding() {
     // Set up callback for native folder picker
     const handleSetDataRoot = useCallback(
         (path: string) => {
-            addWorkspace(path);
+            setPendingPath(path);
+            setWarningDialogOpen(true);
         },
-        [addWorkspace]
+        []
     );
 
     useEffect(() => {
@@ -42,7 +46,16 @@ export function WorkspaceOnboarding() {
     };
 
     const handleFolderSelect = (path: string) => {
-        addWorkspace(path);
+        setPendingPath(path);
+        setWarningDialogOpen(true);
+    };
+
+    const handleWarningConfirm = () => {
+        if (pendingPath) {
+            addWorkspace(pendingPath);
+            setPendingPath(null);
+        }
+        setWarningDialogOpen(false);
     };
 
     return (
@@ -84,6 +97,13 @@ export function WorkspaceOnboarding() {
                 onSelect={handleFolderSelect}
                 title="Choose Workspace Folder"
                 description="Select a folder to use as your workspace. Your todos, notes, and settings will be stored there."
+            />
+
+            <WorkspaceWarningDialog
+                open={warningDialogOpen}
+                onOpenChange={setWarningDialogOpen}
+                onConfirm={handleWarningConfirm}
+                selectedPath={pendingPath || ""}
             />
         </div>
     );

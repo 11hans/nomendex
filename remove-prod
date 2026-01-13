@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Remove Noetect from Applications and user data
+# Remove Noetect (production) from Applications and user data
 
 echo "Removing Noetect from /Applications..."
 rm -rf /Applications/Noetect.app

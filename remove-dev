@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Remove Noetect Dev from Applications
+
+echo "Removing Noetect Dev from /Applications..."
+rm -rf "/Applications/Noetect Dev.app"
+
+echo "Done! Noetect Dev has been removed."

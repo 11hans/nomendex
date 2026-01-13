@@ -190,89 +190,26 @@ jobs:
           echo "SPARKLE_SIGNATURE=$SIGNATURE" >> $GITHUB_ENV
           echo "Sparkle signature generated successfully"
 
-      - name: Generate appcast entry
+      - name: Update appcast
+        env:
+          APPCAST_API_KEY: ${{ secrets.APPCAST_API_KEY }}
         run: |
           cd mac-app
           VERSION="${{ steps.version.outputs.version }}"
           ZIP_NAME="Noetect-${VERSION}.zip"
           FILE_SIZE=$(stat -f%z "$ZIP_NAME")
-          PUB_DATE=$(date -R)
 
-          cat > appcast-entry.xml << EOF
-          <item>
-            <title>Version $VERSION</title>
-            <pubDate>$PUB_DATE</pubDate>
-            <sparkle:version>$VERSION</sparkle:version>
-            <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
-            <description><![CDATA[
-              <h2>What's New in $VERSION</h2>
-              <p>See release notes on GitHub.</p>
-            ]]></description>
-            <enclosure
-              url="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${ZIP_NAME}"
-              length="$FILE_SIZE"
-              type="application/octet-stream"
-              sparkle:edSignature="$SPARKLE_SIGNATURE"
-            />
-          </item>
-          EOF
+          curl -X POST https://releases.noetect.com/appcast/entry \
+            -H "Authorization: Bearer $APPCAST_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "version": "'"$VERSION"'",
+              "signature": "'"$SPARKLE_SIGNATURE"'",
+              "length": '"$FILE_SIZE"',
+              "url": "https://github.com/${{ github.repository }}/releases/download/v'"$VERSION"'/'"$ZIP_NAME"'"
+            }'
 
-          echo "=== Appcast Entry ==="
-          cat appcast-entry.xml
-          echo "===================="
-
-      - name: Update appcast.xml
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          ZIP_NAME="Noetect-${VERSION}.zip"
-          FILE_SIZE=$(stat -f%z "mac-app/$ZIP_NAME")
-          PUB_DATE=$(date -R)
-
-          # Create the new item entry
-          NEW_ITEM=$(cat << EOF
-    <item>
-      <title>Version $VERSION</title>
-      <pubDate>$PUB_DATE</pubDate>
-      <sparkle:version>$VERSION</sparkle:version>
-      <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[
-        <h2>What's New in $VERSION</h2>
-        <p>See release notes on GitHub.</p>
-      ]]></description>
-      <enclosure
-        url="https://github.com/${{ github.repository }}/releases/download/v${VERSION}/${ZIP_NAME}"
-        length="$FILE_SIZE"
-        type="application/octet-stream"
-        sparkle:edSignature="$SPARKLE_SIGNATURE"
-      />
-    </item>
-          EOF
-          )
-
-          # Insert new item after <language>en</language> line
-          awk -v new_item="$NEW_ITEM" '
-            /<language>en<\/language>/ {
-              print
-              print ""
-              print new_item
-              next
-            }
-            { print }
-          ' docs/appcast.xml > docs/appcast.xml.tmp
-          mv docs/appcast.xml.tmp docs/appcast.xml
-
-          echo "Updated appcast.xml:"
-          cat docs/appcast.xml
-
-      - name: Commit appcast.xml
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/appcast.xml
-          git commit -m "Update appcast.xml for v${{ steps.version.outputs.version }}"
-          git push
+          echo "Appcast updated for v$VERSION"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1

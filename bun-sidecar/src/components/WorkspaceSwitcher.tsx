@@ -11,6 +11,7 @@ import { useWorkspaceSwitcher } from "@/hooks/useWorkspaceSwitcher";
 import { useTheme } from "@/hooks/useTheme";
 import { FolderPickerDialog } from "./FolderPickerDialog";
 import { WorkspaceManager } from "./WorkspaceManager";
+import { WorkspaceWarningDialog } from "./WorkspaceWarningDialog";
 
 export function WorkspaceSwitcher() {
     const { workspaces, activeWorkspace, loading, switchWorkspace, addWorkspace } =
@@ -18,6 +19,8 @@ export function WorkspaceSwitcher() {
     const { currentTheme } = useTheme();
     const [folderPickerOpen, setFolderPickerOpen] = useState(false);
     const [managerOpen, setManagerOpen] = useState(false);
+    const [warningDialogOpen, setWarningDialogOpen] = useState(false);
+    const [pendingPath, setPendingPath] = useState<string | null>(null);
 
     // Check if we're running in native macOS app
     const isNativeApp = Boolean(
@@ -27,9 +30,10 @@ export function WorkspaceSwitcher() {
     // Set up callback for native folder picker
     const handleSetDataRoot = useCallback(
         (path: string) => {
-            addWorkspace(path);
+            setPendingPath(path);
+            setWarningDialogOpen(true);
         },
-        [addWorkspace]
+        []
     );
 
     useEffect(() => {
@@ -51,7 +55,16 @@ export function WorkspaceSwitcher() {
     };
 
     const handleFolderSelect = (path: string) => {
-        addWorkspace(path);
+        setPendingPath(path);
+        setWarningDialogOpen(true);
+    };
+
+    const handleWarningConfirm = () => {
+        if (pendingPath) {
+            addWorkspace(pendingPath);
+            setPendingPath(null);
+        }
+        setWarningDialogOpen(false);
     };
 
     if (loading) {
@@ -139,6 +152,13 @@ export function WorkspaceSwitcher() {
                 onSelect={handleFolderSelect}
                 title="Add Workspace"
                 description="Select a folder to add as a new workspace."
+            />
+
+            <WorkspaceWarningDialog
+                open={warningDialogOpen}
+                onOpenChange={setWarningDialogOpen}
+                onConfirm={handleWarningConfirm}
+                selectedPath={pendingPath || ""}
             />
         </DropdownMenu>
     );
