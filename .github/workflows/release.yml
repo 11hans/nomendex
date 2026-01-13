@@ -39,10 +39,10 @@ jobs:
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             VERSION="${{ github.event.inputs.version }}"
           else
-            # Strip refs/tags/ and leading v
             VERSION="${GITHUB_REF#refs/tags/}"
-            VERSION="${VERSION#v}"
           fi
+          # Always strip leading v if present
+          VERSION="${VERSION#v}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Building version: $VERSION"
 
