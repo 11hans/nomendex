@@ -19,11 +19,23 @@ function triggerNativeUpdate() {
 }
 
 /**
+ * Check for any pending update that was detected before the web view was ready.
+ */
+function checkForPendingUpdate() {
+    if (window.webkit?.messageHandlers?.checkForPendingUpdate) {
+        window.webkit.messageHandlers.checkForPendingUpdate.postMessage({});
+    }
+}
+
+/**
  * Hook that listens for update availability notifications from the native Mac app.
  *
  * When Sparkle detects an update, Swift calls `window.__notifyUpdateAvailable({ version })`.
  * This hook shows a toast notification with an "Update" button that triggers
  * the native Sparkle update dialog.
+ *
+ * On mount, it also checks for any pending updates that were detected before
+ * the web view was ready (e.g., during app launch).
  *
  * Should be called once at the app root level.
  */
@@ -45,6 +57,9 @@ export function useUpdateNotification() {
 
         // Register global function for Swift to call
         window.__notifyUpdateAvailable = notifyUpdateAvailable;
+
+        // Check for any pending update that was detected before we were ready
+        checkForPendingUpdate();
 
         return () => {
             delete window.__notifyUpdateAvailable;

@@ -9,6 +9,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private let sidecar = SidecarLauncher()
     private var localEventMonitor: Any?
     private var updaterController: SPUStandardUpdaterController!
+    private var pendingUpdateVersion: String?  // Store update until web view is ready
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log("App launching...")
@@ -216,6 +217,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     /// Called when Sparkle finds a valid update
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         log("Update found: \(item.displayVersionString)")
+        pendingUpdateVersion = item.displayVersionString
         notifyWebViewOfUpdate(version: item.displayVersionString)
     }
 
@@ -238,5 +240,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     /// Trigger the Sparkle update UI - called from web view via message handler
     func triggerAppUpdate() {
         updaterController.checkForUpdates(nil)
+    }
+
+    /// Check for pending update - called when web view is ready
+    func checkForPendingUpdate() {
+        if let version = pendingUpdateVersion {
+            log("Web view ready, notifying of pending update: \(version)")
+            notifyWebViewOfUpdate(version: version)
+        }
     }
 }
