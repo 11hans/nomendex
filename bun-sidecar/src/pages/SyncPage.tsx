@@ -140,7 +140,7 @@ function ChangedFilesList({ status }: { status: string }) {
 function SyncContent() {
     const navigate = useNavigate();
     const { addNewTab, setActiveTabId } = useWorkspaceContext();
-    const { status: syncStatus, setupStatus, needsSetup, checkForChanges, sync, recheckSetup } = useGHSync();
+    const { status: syncStatus, setupStatus, needsSetup, checkForChanges, sync, recheckSetup, gitAuthMode, setGitAuthMode } = useGHSync();
     const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [repoUrl, setRepoUrl] = useState("");
@@ -392,12 +392,6 @@ After you provide the merged content, I will manually update the file and mark t
         }
     }, [gitStatus?.hasMergeConflict]);
 
-    // Extract repo name from URL for display
-    const getRepoDisplayName = (url: string) => {
-        const match = url.match(/\/([^/]+?)(?:\.git)?$/);
-        return match ? match[1] : url;
-    };
-
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -419,6 +413,42 @@ After you provide the merged content, I will manually update the file and mark t
                 <p className="text-sm text-muted-foreground ml-8">
                     Workspace Sync
                 </p>
+            </div>
+
+            {/* Auth Mode Setting */}
+            <div className="mb-6 border rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="text-sm font-medium">Authentication Mode</div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                            {gitAuthMode === "local"
+                                ? "Using local git credentials (SSH keys or credential helper)"
+                                : "Using GitHub Personal Access Token"}
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-1 bg-muted rounded-md p-1">
+                        <button
+                            onClick={() => setGitAuthMode("local")}
+                            className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                                gitAuthMode === "local"
+                                    ? "bg-background shadow-sm font-medium"
+                                    : "text-muted-foreground hover:text-foreground"
+                            }`}
+                        >
+                            Local
+                        </button>
+                        <button
+                            onClick={() => setGitAuthMode("pat")}
+                            className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                                gitAuthMode === "pat"
+                                    ? "bg-background shadow-sm font-medium"
+                                    : "text-muted-foreground hover:text-foreground"
+                            }`}
+                        >
+                            PAT
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {/* Setup Required Card */}
@@ -477,8 +507,8 @@ After you provide the merged content, I will manually update the file and mark t
                             </div>
                         )}
 
-                        {/* PAT Status - only show if git is installed */}
-                        {setupStatus.gitInstalled && (
+                        {/* PAT Status - only show if git is installed AND using PAT auth mode */}
+                        {setupStatus.gitInstalled && gitAuthMode === "pat" && (
                             <>
                                 <div className="flex items-center gap-3 text-sm">
                                     {setupStatus.hasPAT ? (
@@ -649,8 +679,8 @@ After you provide the merged content, I will manually update the file and mark t
                         {gitStatus.remoteUrl && (
                             <>
                                 <span className="text-muted-foreground">·</span>
-                                <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">
-                                    {getRepoDisplayName(gitStatus.remoteUrl)}
+                                <span className="text-xs text-muted-foreground font-mono">
+                                    {gitStatus.remoteUrl}
                                 </span>
                             </>
                         )}
@@ -847,6 +877,21 @@ After you provide the merged content, I will manually update the file and mark t
                             {syncStatus.checking && (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                             )}
+                        </div>
+                    )}
+
+                    {/* Sync Error Display */}
+                    {syncStatus.error && (
+                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                            <div className="flex items-start gap-3">
+                                <XCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-sm text-destructive mb-1">Sync Failed</div>
+                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                                        {syncStatus.error}
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     )}
 

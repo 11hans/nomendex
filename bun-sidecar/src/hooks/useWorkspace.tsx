@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { PluginInstance, PluginBase, SerializablePlugin } from "@/types/Plugin";
-import { WorkspaceState, WorkspaceTab, WorkspaceStateSchema, ProjectPreferences } from "@/types/Workspace";
+import { WorkspaceState, WorkspaceTab, WorkspaceStateSchema, ProjectPreferences, GitAuthMode } from "@/types/Workspace";
 import { type RouteParams } from "./useRouting";
 import { emit } from "@/lib/events";
 
@@ -13,6 +13,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         mcpServerConfigs: [],
         themeName: "Light",
         projectPreferences: {},
+        gitAuthMode: "local",
     });
     const [loading, setLoading] = useState(true);
     const initialRouteHandledRef = useRef(false);
@@ -429,6 +430,14 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         [updateWorkspace]
     );
 
+    // Git auth mode
+    const setGitAuthMode = useCallback(
+        (mode: GitAuthMode) => {
+            updateWorkspace((prev) => ({ ...prev, gitAuthMode: mode }));
+        },
+        [updateWorkspace]
+    );
+
     return {
         // State
         workspace,
@@ -468,5 +477,9 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         projectPreferences: workspace.projectPreferences,
         getProjectPreferences,
         setProjectPreferences,
+
+        // Git auth mode
+        gitAuthMode: workspace.gitAuthMode,
+        setGitAuthMode,
     };
 }

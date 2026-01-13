@@ -23,6 +23,7 @@ export const workspaceRoutes = {
                         mcpServerConfigs: [],
                         themeName: "Light",
                         projectPreferences: {},
+                        gitAuthMode: "local",
                     };
                     await Bun.write(`${getNoetectPath()}/workspace.json`, JSON.stringify(defaultWorkspace, null, 2));
 
@@ -133,6 +134,7 @@ export const workspaceRoutes = {
                         mcpServerConfigs: [],
                         themeName: "Light",
                         projectPreferences: {},
+                        gitAuthMode: "local",
                     };
                 }
 

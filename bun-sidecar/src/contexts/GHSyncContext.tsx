@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
-import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useWorkspaceContext } from "./WorkspaceContext";
+import { GitAuthMode } from "@/types/Workspace";
 
 interface SyncStatus {
     checking: boolean;
@@ -27,7 +27,9 @@ interface GHSyncContextValue {
     sync: () => Promise<void>;
     recheckSetup: () => Promise<void>;
     isReady: boolean; // true if git is initialized and has remote
-    needsSetup: boolean; // true if PAT is missing or git not configured
+    needsSetup: boolean; // true if PAT is missing (when using PAT auth) or git not configured
+    gitAuthMode: GitAuthMode;
+    setGitAuthMode: (mode: GitAuthMode) => void;
 }
 
 const GHSyncContext = createContext<GHSyncContextValue | null>(null);
@@ -36,7 +38,7 @@ const POLL_INTERVAL = 60 * 1000; // 1 minute
 
 export function GHSyncProvider(props: { children: React.ReactNode }) {
     const { children } = props;
-    const navigate = useNavigate();
+    const { gitAuthMode, setGitAuthMode } = useWorkspaceContext();
     const [isReady, setIsReady] = useState(false);
     const [status, setStatus] = useState<SyncStatus>({
         checking: false,
@@ -204,13 +206,7 @@ export function GHSyncProvider(props: { children: React.ReactNode }) {
                 const data = await pullResponse.json();
                 // Check for merge conflict
                 if (data.error?.includes("conflict")) {
-                    setStatus(s => ({ ...s, syncing: false, hasMergeConflict: true }));
-                    toast.error("Merge conflict detected", {
-                        action: {
-                            label: "Resolve",
-                            onClick: () => navigate("/sync"),
-                        },
-                    });
+                    setStatus(s => ({ ...s, syncing: false, hasMergeConflict: true, error: "Merge conflict detected. Please resolve conflicts before syncing." }));
                     return;
                 }
                 throw new Error(data.error || "Pull failed");
@@ -237,9 +233,8 @@ export function GHSyncProvider(props: { children: React.ReactNode }) {
                 syncing: false,
                 error: error instanceof Error ? error.message : "Sync failed",
             }));
-            toast.error(error instanceof Error ? error.message : "Sync failed");
         }
-    }, [isReady, navigate]);
+    }, [isReady]);
 
     // Keep syncRef updated
     useEffect(() => {
@@ -293,8 +288,13 @@ export function GHSyncProvider(props: { children: React.ReactNode }) {
         return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
     }, [checkGitReady]);
 
-    // Computed: needs setup if git not installed, PAT missing, or git not configured with remote
-    const needsSetup = setupStatus.checked && (!setupStatus.gitInstalled || !setupStatus.hasPAT || !setupStatus.hasRemote);
+    // Computed: needs setup if git not installed, git not configured with remote,
+    // or PAT missing when using PAT auth mode
+    const needsSetup = setupStatus.checked && (
+        !setupStatus.gitInstalled ||
+        !setupStatus.hasRemote ||
+        (gitAuthMode === "pat" && !setupStatus.hasPAT)
+    );
 
     return (
         <GHSyncContext.Provider value={{
@@ -304,7 +304,9 @@ export function GHSyncProvider(props: { children: React.ReactNode }) {
             sync,
             recheckSetup,
             isReady,
-            needsSetup
+            needsSetup,
+            gitAuthMode,
+            setGitAuthMode,
         }}>
             {children}
         </GHSyncContext.Provider>

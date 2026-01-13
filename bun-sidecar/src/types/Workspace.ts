@@ -16,6 +16,9 @@ export const ProjectPreferencesSchema = z.object({
     hideLaterColumn: z.boolean().default(false),
 });
 
+export const GitAuthModeSchema = z.enum(["pat", "local"]);
+export type GitAuthMode = z.infer<typeof GitAuthModeSchema>;
+
 export const WorkspaceStateSchema = z.object({
     tabs: z.array(WorkspaceTabSchema),
     activeTabId: z.string().nullable(),
@@ -24,6 +27,7 @@ export const WorkspaceStateSchema = z.object({
     mcpServerConfigs: z.array(McpServerStatusSchema).default([]),
     themeName: z.string().default("Light"),
     projectPreferences: z.record(z.string(), ProjectPreferencesSchema).default({}),
+    gitAuthMode: GitAuthModeSchema.default("local"),
 });
 
 export type WorkspaceTab = z.infer<typeof WorkspaceTabSchema>;

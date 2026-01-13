@@ -7,16 +7,25 @@ const logger = createServiceLogger("GIT-SYNC");
 
 // Get GitHub PAT from environment (loaded from secrets)
 function getGitHubPAT(): string | undefined {
-    return process.env.GITHUB_PAT;
+    const pat = process.env.GITHUB_PAT;
+    // Trim whitespace and validate
+    if (pat) {
+        const trimmed = pat.trim();
+        if (trimmed.length > 0) {
+            return trimmed;
+        }
+    }
+    return undefined;
 }
 
 // Inject PAT into HTTPS GitHub URL for authentication
 function injectPATIntoUrl(url: string, pat: string): string {
-    // Handle: https://github.com/... → https://<PAT>@github.com/...
-    // Also handle URLs that already have credentials
+    // GitHub PATs are alphanumeric with underscores, safe for URLs
+    // Use x-access-token as username (GitHub convention)
+    // Handle: https://github.com/... → https://x-access-token:<PAT>@github.com/...
     return url
-        .replace(/^https:\/\/[^@]*@github\.com/, `https://${pat}@github.com`)
-        .replace(/^https:\/\/github\.com/, `https://${pat}@github.com`);
+        .replace(/^https:\/\/[^@]*@github\.com/, `https://x-access-token:${pat}@github.com`)
+        .replace(/^https:\/\/github\.com/, `https://x-access-token:${pat}@github.com`);
 }
 
 // Get the authenticated remote URL (with PAT if available)
@@ -28,10 +37,18 @@ async function getAuthenticatedRemoteUrl(): Promise<string | null> {
 
         const pat = getGitHubPAT();
         if (pat && url.startsWith("https://")) {
-            return injectPATIntoUrl(url, pat);
+            const authUrl = injectPATIntoUrl(url, pat);
+            // Log sanitized URL for debugging (hide PAT)
+            logger.info("Generated auth URL", {
+                originalUrl: url,
+                hasAuth: authUrl.includes("@"),
+                patLength: pat.length
+            });
+            return authUrl;
         }
         return url;
-    } catch {
+    } catch (error) {
+        logger.error("Failed to get remote URL", { error: String(error) });
         return null;
     }
 }
@@ -130,7 +147,24 @@ export const gitInitRoute: RouteHandler<GitSyncResponse> = {
 
             if (!isInitialized) {
                 // Initialize git repo
-                await $`cd ${getRootPath()} && git init`.quiet();
+                const initResult = await $`cd ${getRootPath()} && git init 2>&1`.nothrow();
+                if (initResult.exitCode !== 0) {
+                    const output = initResult.text().trim();
+                    logger.error("Git init failed", { exitCode: initResult.exitCode, output });
+
+                    // Provide helpful error messages for common issues
+                    let friendlyError = output || `Git init failed with exit code ${initResult.exitCode}`;
+                    if (initResult.exitCode === 69) {
+                        friendlyError = "Git is unavailable. You may need to install Xcode Command Line Tools by running 'xcode-select --install' in Terminal.";
+                    } else if (initResult.exitCode === 128) {
+                        friendlyError = "Git permission denied or directory issue. Check that the workspace folder exists and is writable.";
+                    }
+
+                    return Response.json({
+                        success: false,
+                        error: friendlyError
+                    }, { status: 500 });
+                }
                 logger.info("Git repo initialized", { path: getRootPath() });
             }
 
@@ -409,6 +443,28 @@ export const gitSetupRemoteRoute: RouteHandler<GitSyncResponse> = {
     }
 };
 
+// Check if the remote branch exists
+async function remoteBranchExists(branch: string): Promise<boolean> {
+    try {
+        const authUrl = await getAuthenticatedRemoteUrl();
+        const targetUrl = authUrl || "origin";
+
+        const lsResult = await $`cd ${getRootPath()} && git ls-remote --heads ${targetUrl} ${branch} 2>&1`.nothrow();
+
+        logger.info("Remote branch check", {
+            branch,
+            exitCode: lsResult.exitCode,
+            output: lsResult.text().substring(0, 100),
+            hasOutput: lsResult.text().trim().length > 0
+        });
+
+        return lsResult.exitCode === 0 && lsResult.text().trim().length > 0;
+    } catch (error) {
+        logger.error("Failed to check remote branch", { error: String(error) });
+        return false;
+    }
+}
+
 // Pull from remote
 export const gitPullRoute: RouteHandler<GitSyncResponse> = {
     POST: async (_req) => {
@@ -424,6 +480,16 @@ export const gitPullRoute: RouteHandler<GitSyncResponse> = {
                     success: false,
                     error: "Not on any branch"
                 }, { status: 400 });
+            }
+
+            // Check if remote branch exists - if not, this is an empty repo, skip pull
+            const remoteExists = await remoteBranchExists(branch);
+            if (!remoteExists) {
+                logger.info("Remote branch doesn't exist (empty repo), skipping pull", { branch });
+                return Response.json({
+                    success: true,
+                    message: "No remote branch yet, skipping pull"
+                });
             }
 
             // Get authenticated URL (with PAT if available)
@@ -454,7 +520,12 @@ export const gitPullRoute: RouteHandler<GitSyncResponse> = {
                 } else if (pullError.includes("Repository not found")) {
                     friendlyError = "Repository not found. Check the remote URL.";
                 } else if (pullError.includes("Couldn't find remote ref")) {
-                    friendlyError = `Branch '${branch}' not found on remote. Check the branch name.`;
+                    // This shouldn't happen now since we check first, but handle gracefully
+                    logger.info("Remote ref not found, treating as empty repo");
+                    return Response.json({
+                        success: true,
+                        message: "No remote branch yet, skipping pull"
+                    });
                 } else if (!pullError) {
                     friendlyError = `Pull failed with exit code ${pullResult.exitCode}`;
                 }
@@ -639,6 +710,10 @@ export const gitPushRoute: RouteHandler<GitSyncResponse> = {
             // Get authenticated URL (with PAT if available)
             const authUrl = await getAuthenticatedRemoteUrl();
 
+            // Check if remote branch exists (empty repo check)
+            const remoteHasBranch = await remoteBranchExists(branch);
+            logger.info("Remote branch check", { branch, exists: remoteHasBranch });
+
             // Check if upstream is set
             let hasUpstream = false;
             try {
@@ -651,7 +726,13 @@ export const gitPushRoute: RouteHandler<GitSyncResponse> = {
             // Push changes using authenticated URL if available
             let pushResult;
             if (authUrl) {
-                pushResult = await $`cd ${getRootPath()} && git push ${authUrl} ${branch} 2>&1`.nothrow();
+                // For empty repos or first push, use HEAD:branch syntax to create the branch
+                if (!remoteHasBranch) {
+                    logger.info("Remote branch doesn't exist, doing initial push");
+                    pushResult = await $`cd ${getRootPath()} && git push ${authUrl} HEAD:${branch} 2>&1`.nothrow();
+                } else {
+                    pushResult = await $`cd ${getRootPath()} && git push ${authUrl} ${branch} 2>&1`.nothrow();
+                }
                 if (pushResult.exitCode === 0 && !hasUpstream) {
                     // Set upstream tracking after successful push
                     try {
@@ -683,6 +764,8 @@ export const gitPushRoute: RouteHandler<GitSyncResponse> = {
                     friendlyError = "Permission denied. Check your repository access permissions.";
                 } else if (pushError.includes("Repository not found")) {
                     friendlyError = "Repository not found. Check the remote URL.";
+                } else if (pushError.includes("src refspec") && pushError.includes("does not match any")) {
+                    friendlyError = "No commits to push. Make some changes first.";
                 } else if (!pushError) {
                     friendlyError = `Push failed with exit code ${pushResult.exitCode}`;
                 }
@@ -769,8 +852,16 @@ export const gitFetchStatusRoute: RouteHandler<GitFetchStatusResponse> = {
                     friendlyError = "Permission denied. Check your repository access permissions.";
                 } else if (fetchError.includes("Repository not found")) {
                     friendlyError = "Repository not found. Check the remote URL.";
-                } else if (fetchError.includes("Couldn't find remote ref")) {
-                    friendlyError = `Branch '${branch}' not found on remote.`;
+                } else if (fetchError.includes("Couldn't find remote ref") || fetchError.includes("couldn't find remote ref")) {
+                    // Empty repo - no remote branch yet, this is fine
+                    logger.info("Remote branch doesn't exist (empty repo), returning empty status", { branch });
+                    return Response.json({
+                        success: true,
+                        behindCount: 0,
+                        aheadCount: 0,
+                        incomingCommits: [],
+                        incomingFiles: [],
+                    });
                 } else if (fetchError.includes("Could not resolve host")) {
                     friendlyError = "Network error. Could not connect to remote repository.";
                 } else if (!fetchError) {
