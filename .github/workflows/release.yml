@@ -163,16 +163,27 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           ZIP_NAME="Noetect-${VERSION}.zip"
 
-          # Sign with Sparkle and capture signature
-          SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | ./Frameworks/Sparkle/bin/sign_update "$ZIP_NAME" -f /dev/stdin 2>&1 | grep "sparkle:edSignature" | sed 's/.*sparkle:edSignature="\([^"]*\)".*/\1/')
+          # Write key to temp file
+          KEY_FILE=$(mktemp)
+          echo "$SPARKLE_PRIVATE_KEY" > "$KEY_FILE"
 
-          # If that didn't work, try the simpler approach
+          # Sign with Sparkle
+          SIGN_OUTPUT=$(./Frameworks/Sparkle/bin/sign_update "$ZIP_NAME" -f "$KEY_FILE" 2>&1)
+          echo "$SIGN_OUTPUT"
+
+          # Extract signature
+          SIGNATURE=$(echo "$SIGN_OUTPUT" | grep "sparkle:edSignature" | sed 's/.*sparkle:edSignature="\([^"]*\)".*/\1/')
+
+          # Clean up
+          rm -f "$KEY_FILE"
+
           if [[ -z "$SIGNATURE" ]]; then
-            SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | ./Frameworks/Sparkle/bin/sign_update "$ZIP_NAME" -f /dev/stdin)
+            echo "Failed to extract signature"
+            exit 1
           fi
 
           echo "SPARKLE_SIGNATURE=$SIGNATURE" >> $GITHUB_ENV
-          echo "Sparkle signature generated"
+          echo "Sparkle signature generated successfully"
 
       - name: Generate appcast entry
         run: |
