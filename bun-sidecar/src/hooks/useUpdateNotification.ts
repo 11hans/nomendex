@@ -1,68 +1,38 @@
 import { useEffect } from "react";
-import { toast } from "sonner";
 
-// Extend Window interface for update notification global function
-declare global {
-    interface Window {
-        __notifyUpdateAvailable?: (info: { version: string }) => void;
-    }
-}
+const UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 /**
- * Trigger the native Sparkle update flow.
- * This tells Swift to show the Sparkle update dialog.
+ * Trigger the native Sparkle update dialog.
+ * This always shows the UI and checks for updates.
  */
-function triggerNativeUpdate() {
+export function triggerNativeUpdate() {
     if (window.webkit?.messageHandlers?.triggerAppUpdate) {
+        console.log("[UpdateNotification] Triggering update check...");
         window.webkit.messageHandlers.triggerAppUpdate.postMessage({});
     }
 }
 
 /**
- * Check for any pending update that was detected before the web view was ready.
- */
-function checkForPendingUpdate() {
-    if (window.webkit?.messageHandlers?.checkForPendingUpdate) {
-        window.webkit.messageHandlers.checkForPendingUpdate.postMessage({});
-    }
-}
-
-/**
- * Hook that listens for update availability notifications from the native Mac app.
+ * Hook that manages automatic update checking.
  *
- * When Sparkle detects an update, Swift calls `window.__notifyUpdateAvailable({ version })`.
- * This hook shows a toast notification with an "Update" button that triggers
- * the native Sparkle update dialog.
- *
- * On mount, it also checks for any pending updates that were detected before
- * the web view was ready (e.g., during app launch).
+ * - Checks for updates on mount
+ * - Polls every minute and shows Sparkle UI if update available
  *
  * Should be called once at the app root level.
  */
 export function useUpdateNotification() {
     useEffect(() => {
-        // Handler called by Swift when an update is available
-        const notifyUpdateAvailable = (info: { version: string }) => {
-            toast.info(`Update available: v${info.version}`, {
-                duration: Infinity, // Keep visible until dismissed
-                action: {
-                    label: "Update",
-                    onClick: () => {
-                        triggerNativeUpdate();
-                    },
-                },
-                dismissible: true,
-            });
-        };
+        // Check for updates immediately on mount
+        triggerNativeUpdate();
 
-        // Register global function for Swift to call
-        window.__notifyUpdateAvailable = notifyUpdateAvailable;
-
-        // Check for any pending update that was detected before we were ready
-        checkForPendingUpdate();
+        // Poll for updates every minute
+        const intervalId = setInterval(() => {
+            triggerNativeUpdate();
+        }, UPDATE_CHECK_INTERVAL_MS);
 
         return () => {
-            delete window.__notifyUpdateAvailable;
+            clearInterval(intervalId);
         };
     }, []);
 }

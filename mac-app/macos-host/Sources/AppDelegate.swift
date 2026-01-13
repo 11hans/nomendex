@@ -2,22 +2,21 @@ import Cocoa
 import WebKit
 import Sparkle
 
-class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowController: WebViewWindowController?
     private var statusBar: StatusBarController?
     private var hotKey: GlobalHotKey?
     private let sidecar = SidecarLauncher()
     private var localEventMonitor: Any?
     private var updaterController: SPUStandardUpdaterController!
-    private var pendingUpdateVersion: String?  // Store update until web view is ready
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log("App launching...")
 
-        // Initialize Sparkle for auto-updates with delegate for update notifications
+        // Initialize Sparkle for auto-updates
         updaterController = SPUStandardUpdaterController(
             startingUpdater: true,
-            updaterDelegate: self,
+            updaterDelegate: nil,
             userDriverDelegate: nil
         )
 
@@ -212,41 +211,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         }
     }
 
-    // MARK: - SPUUpdaterDelegate
+    // MARK: - Sparkle Updates
 
-    /// Called when Sparkle finds a valid update
-    func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
-        log("Update found: \(item.displayVersionString)")
-        pendingUpdateVersion = item.displayVersionString
-        notifyWebViewOfUpdate(version: item.displayVersionString)
-    }
-
-    /// Notify the web view that an update is available
-    private func notifyWebViewOfUpdate(version: String) {
-        guard let windowController = self.windowController,
-              let webView = windowController.window?.contentView as? WKWebView else {
-            return
-        }
-
-        let escapedVersion = version.replacingOccurrences(of: "'", with: "\\'")
-        let script = "window.__notifyUpdateAvailable && window.__notifyUpdateAvailable({ version: '\(escapedVersion)' });"
-        webView.evaluateJavaScript(script) { _, error in
-            if let error = error {
-                log("Error notifying web view of update: \(error)")
-            }
-        }
-    }
-
-    /// Trigger the Sparkle update UI - called from web view via message handler
+    /// Trigger the Sparkle update UI - called from web view
     func triggerAppUpdate() {
+        log("Triggering update check...")
         updaterController.checkForUpdates(nil)
-    }
-
-    /// Check for pending update - called when web view is ready
-    func checkForPendingUpdate() {
-        if let version = pendingUpdateVersion {
-            log("Web view ready, notifying of pending update: \(version)")
-            notifyWebViewOfUpdate(version: version)
-        }
     }
 }

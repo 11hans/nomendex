@@ -13,9 +13,6 @@ interface WebKitMessageHandlers {
     triggerAppUpdate?: {
         postMessage: (data: Record<string, never>) => void;
     };
-    checkForPendingUpdate?: {
-        postMessage: (data: Record<string, never>) => void;
-    };
 }
 
 declare global {

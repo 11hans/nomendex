@@ -9,10 +9,11 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { KeyboardIndicator } from "@/components/ui/keyboard-indicator";
 import { useTheme } from "@/hooks/useTheme";
+import { triggerNativeUpdate } from "@/hooks/useUpdateNotification";
 import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 
-import { RotateCcw, Eye, EyeOff, Check, X, Key } from "lucide-react";
+import { RotateCcw, Eye, EyeOff, Check, X, Key, RefreshCw, Info } from "lucide-react";
 import { Input } from "../components/ui/input";
 
 type SecretInfo = {
@@ -39,6 +40,10 @@ function SettingsContent() {
     const [secretsLoading, setSecretsLoading] = useState(true);
     const [savingSecret, setSavingSecret] = useState(false);
 
+    // Version state
+    const [versionInfo, setVersionInfo] = useState<{ version: string; buildNumber: string } | null>(null);
+    const [checkingForUpdates, setCheckingForUpdates] = useState(false);
+
     // Load secrets on mount
     useEffect(() => {
         async function loadSecrets() {
@@ -56,6 +61,30 @@ function SettingsContent() {
         }
         loadSecrets();
     }, []);
+
+    // Load version info on mount
+    useEffect(() => {
+        async function loadVersion() {
+            try {
+                const response = await fetch("/api/version");
+                if (response.ok) {
+                    const data = await response.json();
+                    setVersionInfo(data);
+                }
+            } catch (error) {
+                console.error("Failed to load version:", error);
+            }
+        }
+        loadVersion();
+    }, []);
+
+    // Trigger native Sparkle update check (shows UI)
+    const handleCheckForUpdates = () => {
+        setCheckingForUpdates(true);
+        triggerNativeUpdate();
+        // Reset after a short delay (Sparkle UI will take over)
+        setTimeout(() => setCheckingForUpdates(false), 1000);
+    };
 
     const handleSaveSecret = async (key: string) => {
         setSavingSecret(true);
@@ -175,6 +204,7 @@ function SettingsContent() {
                     <TabsTrigger value="keyboard">Keyboard Shortcuts</TabsTrigger>
                     <TabsTrigger value="theme">Theme</TabsTrigger>
                     <TabsTrigger value="secrets">API Keys</TabsTrigger>
+                    <TabsTrigger value="about">About</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="keyboard">
@@ -599,6 +629,63 @@ function SettingsContent() {
                                     ))}
                                 </div>
                             )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="about">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <Info className="h-5 w-5" />
+                                About Noetect
+                            </CardTitle>
+                            <CardDescription>
+                                Version information and updates
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            {/* Version Info */}
+                            <div
+                                className="p-4 rounded-lg border"
+                                style={{
+                                    backgroundColor: currentTheme.styles.surfaceSecondary,
+                                    borderColor: currentTheme.styles.borderDefault,
+                                }}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <h4 className="font-medium" style={{ color: currentTheme.styles.contentPrimary }}>
+                                            Current Version
+                                        </h4>
+                                        {versionInfo ? (
+                                            <p className="text-sm mt-1" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                v{versionInfo.version} (build {versionInfo.buildNumber})
+                                            </p>
+                                        ) : (
+                                            <p className="text-sm mt-1" style={{ color: currentTheme.styles.contentTertiary }}>
+                                                Loading...
+                                            </p>
+                                        )}
+                                    </div>
+                                    <Button
+                                        onClick={handleCheckForUpdates}
+                                        disabled={checkingForUpdates}
+                                        variant="outline"
+                                    >
+                                        <RefreshCw className={`mr-2 h-4 w-4 ${checkingForUpdates ? "animate-spin" : ""}`} />
+                                        Check for Updates
+                                    </Button>
+                                </div>
+                            </div>
+
+                            {/* Update Settings Info */}
+                            <div className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                <p>
+                                    Noetect automatically checks for updates every 15 minutes.
+                                    When an update is available, you'll see a notification.
+                                </p>
+                            </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
