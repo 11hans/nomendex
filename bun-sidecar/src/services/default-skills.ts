@@ -98,7 +98,7 @@ Always start by getting the server port, then use the appropriate endpoint.
             "SKILL.md": `---
 name: manage-skills
 description: Manages Claude Code skills - creates, updates, and maintains skills following established design principles. Use when the user asks to create a skill, update a skill, refactor a skill, or wants to teach Claude a new capability.
-version: 1
+version: 2
 ---
 
 # Skill Management
@@ -139,6 +139,63 @@ version: 1
 2. Create SKILL.md with frontmatter and documentation
 3. Optionally add a shell script for automation
 4. Make scripts executable with \`chmod +x\`
+
+## Rendering Custom UI
+
+Skills can render interactive HTML UI using the \`mcp__noetect-ui__render_ui\` tool. This displays rich content (forms, charts, tables, widgets) directly in the chat.
+
+### Tool Usage
+
+\`\`\`
+Tool: mcp__noetect-ui__render_ui
+Input:
+  html: "<div class='card'><h2>Hello</h2><button class='primary'>Click me</button></div>"
+  title: "My Widget"  # Optional - displayed above the UI
+  height: 300         # Optional - pixel height (default: auto-resize)
+\`\`\`
+
+### Theme CSS Variables
+
+The UI automatically inherits the app's theme. Use these CSS variables:
+
+**Surfaces (backgrounds):**
+\`var(--surface-primary)\`, \`var(--surface-secondary)\`, \`var(--surface-tertiary)\`, \`var(--surface-muted)\`
+
+**Content (text):**
+\`var(--content-primary)\`, \`var(--content-secondary)\`, \`var(--content-tertiary)\`, \`var(--content-accent)\`
+
+**Borders:**
+\`var(--border-default)\`, \`var(--border-accent)\`
+
+**Semantic colors:**
+\`var(--semantic-primary)\`, \`var(--semantic-destructive)\`, \`var(--semantic-success)\`
+
+**Design tokens:**
+\`var(--border-radius)\`, \`var(--shadow-sm)\`, \`var(--shadow-md)\`, \`var(--shadow-lg)\`
+
+### Built-in Classes
+
+- \`.card\` - Styled container with border and padding
+- \`.text-primary\`, \`.text-secondary\`, \`.text-muted\`, \`.text-accent\`
+- \`.bg-primary\`, \`.bg-secondary\`, \`.bg-muted\`
+- \`button\` (default), \`button.primary\`, \`button.destructive\`
+
+### Example: Interactive Form
+
+\`\`\`html
+<div class="card">
+  <h3 style="margin: 0 0 12px 0;">Contact Form</h3>
+  <input type="text" placeholder="Your name" style="width: 100%; margin-bottom: 8px;">
+  <textarea placeholder="Message" style="width: 100%; height: 80px; margin-bottom: 12px;"></textarea>
+  <button class="primary" onclick="alert('Submitted!')">Send</button>
+</div>
+\`\`\`
+
+### Security Notes
+
+- UI renders in a sandboxed iframe (no access to parent window)
+- Scripts can run but cannot access localStorage, cookies, or parent DOM
+- Forms work but submissions stay within the iframe
 `,
         },
     },
