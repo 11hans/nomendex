@@ -8,7 +8,6 @@ const UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
  */
 export function checkForUpdatesInBackground() {
     if (window.webkit?.messageHandlers?.checkForUpdatesInBackground) {
-        console.log("[UpdateNotification] Checking for updates in background...");
         window.webkit.messageHandlers.checkForUpdatesInBackground.postMessage({});
     }
 }
@@ -19,7 +18,6 @@ export function checkForUpdatesInBackground() {
  */
 export function triggerNativeUpdate() {
     if (window.webkit?.messageHandlers?.triggerAppUpdate) {
-        console.log("[UpdateNotification] Triggering update check (with UI)...");
         window.webkit.messageHandlers.triggerAppUpdate.postMessage({});
     }
 }
