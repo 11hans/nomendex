@@ -50,7 +50,7 @@ To build and install Noetect locally:
 # Build and install to /Applications/Noetect.app
 ./build-install.sh
 
-# Or install as dev version to /Applications/Noetect Dev.app
+# Or install as dev version (no .sh extension)
 ./build-install-dev
 ```
 
