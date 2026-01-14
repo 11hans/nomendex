@@ -81,17 +81,48 @@ export async function getUserMcpServer(input: {
 }
 
 /**
+ * Generate a URL-safe slug from a name
+ */
+function slugify(name: string): string {
+    return name
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "-") // Replace non-alphanumeric with hyphens
+        .replace(/^-+|-+$/g, "")     // Remove leading/trailing hyphens
+        .substring(0, 50);            // Limit length
+}
+
+/**
+ * Generate a unique ID from a name, appending a number if needed
+ */
+function generateUniqueId(name: string, existingIds: Set<string>): string {
+    const baseSlug = slugify(name) || "mcp-server";
+
+    if (!existingIds.has(baseSlug)) {
+        return baseSlug;
+    }
+
+    // Find an available suffix
+    let counter = 2;
+    while (existingIds.has(`${baseSlug}-${counter}`)) {
+        counter++;
+    }
+    return `${baseSlug}-${counter}`;
+}
+
+/**
  * Create a new MCP server
  */
 export async function createUserMcpServer(
     input: CreateMcpServerInput
 ): Promise<UserMcpServer> {
     const file = await loadMcpServersFile();
+    const existingIds = new Set(file.servers.map((s) => s.id));
 
     const now = new Date().toISOString();
     const server: UserMcpServer = {
         ...input,
-        id: `mcp-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        id: generateUniqueId(input.name, existingIds),
         createdAt: now,
         updatedAt: now,
         enabled: input.enabled ?? true,
