@@ -31,7 +31,7 @@ export const WorkspaceStateSchema = z.object({
     themeName: z.string().default("Light"),
     projectPreferences: z.record(z.string(), ProjectPreferencesSchema).default({}),
     gitAuthMode: GitAuthModeSchema.default("local"),
-    notesLocation: NotesLocationSchema.default("subfolder"),
+    notesLocation: NotesLocationSchema.default("root"),
 });
 
 export type WorkspaceTab = z.infer<typeof WorkspaceTabSchema>;

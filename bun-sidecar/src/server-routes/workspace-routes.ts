@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Result, ErrorCodes } from "../types/Result";
 import { WorkspaceState, WorkspaceStateSchema } from "../types/Workspace";
-import { getNomendexPath, getRootPath, getNotesPath, getTodosPath, getUploadsPath, getSkillsPath, hasActiveWorkspace } from "../storage/root-path";
+import { getNomendexPath, getRootPath, getNotesPath, getTodosPath, getUploadsPath, getSkillsPath, hasActiveWorkspace, initializePaths } from "../storage/root-path";
 
 const ThemeRequestSchema = z.object({
     themeName: z.string(),
@@ -24,7 +24,7 @@ export const workspaceRoutes = {
                         themeName: "Light",
                         projectPreferences: {},
                         gitAuthMode: "local",
-                        notesLocation: "subfolder",
+                        notesLocation: "root",
                     };
                     await Bun.write(`${getNomendexPath()}/workspace.json`, JSON.stringify(defaultWorkspace, null, 2));
 
@@ -136,7 +136,7 @@ export const workspaceRoutes = {
                         themeName: "Light",
                         projectPreferences: {},
                         gitAuthMode: "local",
-                        notesLocation: "subfolder",
+                        notesLocation: "root",
                     };
                 }
 
@@ -192,6 +192,28 @@ export const workspaceRoutes = {
                     success: false,
                     code: ErrorCodes.INTERNAL_SERVER_ERROR,
                     message: `Failed to get workspace paths: ${message}`,
+                    error,
+                };
+                return Response.json(response, { status: 500 });
+            }
+        },
+    },
+
+    "/api/workspace/reinitialize": {
+        async POST() {
+            try {
+                await initializePaths();
+                const response: Result<{ success: boolean }> = {
+                    success: true,
+                    data: { success: true },
+                };
+                return Response.json(response);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                const response: Result = {
+                    success: false,
+                    code: ErrorCodes.INTERNAL_SERVER_ERROR,
+                    message: `Failed to reinitialize paths: ${message}`,
                     error,
                 };
                 return Response.json(response, { status: 500 });

@@ -40,11 +40,14 @@ function StorageSettings() {
         setPendingChange(newLocation);
     };
 
-    const applyChange = () => {
+    const applyChange = async () => {
         if (pendingChange) {
             setNotesLocation(pendingChange);
             setPendingChange(null);
-            // Reload the page to reinitialize paths
+            // Wait a moment for the workspace state to save, then reinitialize paths on the server
+            await new Promise(resolve => setTimeout(resolve, 100));
+            await fetch("/api/workspace/reinitialize", { method: "POST" });
+            // Reload the page to pick up the new paths
             window.location.reload();
         }
     };
@@ -93,7 +96,7 @@ function StorageSettings() {
                                     Notes Subfolder
                                 </Label>
                                 <p className="text-sm" style={{ color: currentTheme.styles.contentTertiary }}>
-                                    Store notes in <code className="px-1 py-0.5 rounded" style={{ backgroundColor: currentTheme.styles.surfaceTertiary }}>/notes</code> folder (default)
+                                    Store notes in <code className="px-1 py-0.5 rounded" style={{ backgroundColor: currentTheme.styles.surfaceTertiary }}>/notes</code> subfolder
                                 </p>
                             </div>
                         </div>
@@ -104,7 +107,7 @@ function StorageSettings() {
                                     Workspace Root
                                 </Label>
                                 <p className="text-sm" style={{ color: currentTheme.styles.contentTertiary }}>
-                                    Store notes at workspace root (Obsidian-compatible)
+                                    Store notes at workspace root (default, Obsidian-compatible)
                                 </p>
                             </div>
                         </div>

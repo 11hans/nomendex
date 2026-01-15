@@ -14,7 +14,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         themeName: "Light",
         projectPreferences: {},
         gitAuthMode: "local",
-        notesLocation: "subfolder",
+        notesLocation: "root",
     });
     const [loading, setLoading] = useState(true);
     const initialRouteHandledRef = useRef(false);
