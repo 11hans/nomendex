@@ -22,13 +22,13 @@ async function getNotesLocationSetting(nomendexPath: string): Promise<NotesLocat
         const file = Bun.file(path.join(nomendexPath, "workspace.json"));
         const exists = await file.exists();
         if (!exists) {
-            return "subfolder"; // default
+            return "root"; // default (Obsidian-compatible)
         }
         const workspaceRaw = await file.json();
         const workspace = WorkspaceStateSchema.parse(workspaceRaw);
         return workspace.notesLocation;
     } catch {
-        return "subfolder"; // default on error
+        return "root"; // default (Obsidian-compatible) on error
     }
 }
 
