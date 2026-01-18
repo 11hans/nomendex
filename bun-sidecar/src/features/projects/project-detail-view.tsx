@@ -69,7 +69,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
         async (todoId: string) => {
             const newTab = await addNewTab({
                 pluginMeta: todosPluginSerial,
-                view: "detail",
+                view: "editor",
                 props: { todoId },
             });
             if (newTab) {
@@ -125,6 +125,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
     const inProgressTodos = todos.filter((t) => t.status === "in_progress");
     const todoTodos = todos.filter((t) => t.status === "todo");
     const doneTodos = todos.filter((t) => t.status === "done");
+    const otherTodos = todos.filter((t) => !["in_progress", "todo", "done"].includes(t.status));
 
     // Stats
     const totalItems = todos.length + notes.length;
@@ -439,10 +440,27 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                                 </div>
                             </div>
                         )}
+
+                        {/* Other Section */}
+                        {otherTodos.length > 0 && (
+                            <div>
+                                <SectionHeader
+                                    icon={Circle}
+                                    title="Other"
+                                    count={otherTodos.length}
+                                    color={currentTheme.styles.contentTertiary}
+                                />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
+                                    {otherTodos.map((todo) => (
+                                        <TodoCard key={todo.id} todo={todo} />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </>
                 )}
             </div>
-        </div>
+        </div >
     );
 }
 
