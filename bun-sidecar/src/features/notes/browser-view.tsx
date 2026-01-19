@@ -159,20 +159,6 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
         [addNewTab, setActiveTabId, placement, setSidebarTabId]
     );
 
-    const handleDeleteNote = useCallback(async (noteFileName: string) => {
-        try {
-            await notesAPI.deleteNote({ fileName: noteFileName });
-            const result = await notesAPI.getNotes();
-            setNotes(result);
-            if (selectedNote?.fileName === noteFileName) {
-                setSelectedNote(result[0] || null);
-            }
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : "Failed to delete note";
-            setError(errorMessage);
-        }
-    }, [notesAPI, selectedNote, setError]);
-
     const requestDeleteNote = useCallback((noteFileName: string) => {
         openDialog({
             content: (
@@ -212,7 +198,6 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
             content: (
                 <DeleteFolderDialog
                     folderName={folder.name}
-                    folderPath={folder.path}
                     onDelete={async () => {
                         await notesAPI.deleteFolder({ folderPath: folder.path });
                         toast.success(`Deleted folder "${folder.name}"`);

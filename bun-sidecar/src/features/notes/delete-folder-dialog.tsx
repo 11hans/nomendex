@@ -5,11 +5,10 @@ import { useCommandDialog } from "@/components/CommandDialogProvider";
 
 interface DeleteFolderDialogProps {
     folderName: string;
-    folderPath: string;
     onDelete: () => Promise<void>;
 }
 
-export function DeleteFolderDialog({ folderName, folderPath, onDelete }: DeleteFolderDialogProps) {
+export function DeleteFolderDialog({ folderName, onDelete }: DeleteFolderDialogProps) {
     const [isDeleting, setIsDeleting] = React.useState(false);
     const { closeDialog } = useCommandDialog();
 
