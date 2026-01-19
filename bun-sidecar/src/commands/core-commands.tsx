@@ -393,10 +393,9 @@ export function getCoreCommands(context: CoreCommandContext): Command[] {
             icon: "AlertTriangle",
             callback: () => {
                 context.closeCommandMenu();
-                // Give the menu time to close before throwing
-                setTimeout(() => {
-                    throw new Error("Test error triggered from dev command");
-                }, 100);
+                // Dispatch event that DevErrorTrigger listens to
+                // This triggers a render-time error that ErrorBoundary can catch
+                window.dispatchEvent(new CustomEvent("dev:trigger-error"));
             },
         },
     ];

@@ -1,7 +1,7 @@
 import React, { Component, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { AlertCircle, Copy, RotateCcw } from "lucide-react";
+import { AlertCircle, Copy, RotateCcw, Play } from "lucide-react";
 import { toast } from "sonner";
 
 interface ErrorBoundaryProps {
@@ -31,7 +31,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         };
     }
 
-    componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    override componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
         console.error("ErrorBoundary caught an error:", error, errorInfo);
         this.setState({
             error,
@@ -60,7 +60,18 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         window.location.reload();
     };
 
-    render() {
+    handleContinue = () => {
+        // Dispatch event to reset any error triggers (like DevErrorTrigger)
+        window.dispatchEvent(new CustomEvent("error-boundary:reset"));
+        // Reset error boundary state to attempt recovery
+        this.setState({
+            hasError: false,
+            error: null,
+            errorInfo: null,
+        });
+    };
+
+    override render() {
         if (this.state.hasError) {
             const { error } = this.state;
 
@@ -100,11 +111,15 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                         <CardFooter className="flex gap-2">
                             <Button variant="outline" onClick={this.handleCopyError}>
                                 <Copy className="h-4 w-4 mr-2" />
-                                Copy Error Details
+                                Copy Error
                             </Button>
-                            <Button onClick={this.handleReload}>
+                            <Button variant="outline" onClick={this.handleReload}>
                                 <RotateCcw className="h-4 w-4 mr-2" />
-                                Reload Application
+                                Reload
+                            </Button>
+                            <Button onClick={this.handleContinue}>
+                                <Play className="h-4 w-4 mr-2" />
+                                Try to Continue
                             </Button>
                         </CardFooter>
                     </Card>

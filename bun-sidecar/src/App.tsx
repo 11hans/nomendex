@@ -1,3 +1,4 @@
+import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { RoutingProvider } from "./hooks/useRouting";
 import { ThemeProvider } from "./hooks/useTheme";
@@ -30,6 +31,29 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 // Bridge component for native Mac app keyboard handling
 function NativeKeyboardBridge() {
     useNativeKeyboardBridge();
+    return null;
+}
+
+// Dev component that throws during render to test ErrorBoundary
+// Listens for 'dev:trigger-error' custom event
+function DevErrorTrigger() {
+    const [shouldThrow, setShouldThrow] = React.useState(false);
+
+    React.useEffect(() => {
+        const triggerHandler = () => setShouldThrow(true);
+        const resetHandler = () => setShouldThrow(false);
+        window.addEventListener("dev:trigger-error", triggerHandler);
+        window.addEventListener("error-boundary:reset", resetHandler);
+        return () => {
+            window.removeEventListener("dev:trigger-error", triggerHandler);
+            window.removeEventListener("error-boundary:reset", resetHandler);
+        };
+    }, []);
+
+    if (shouldThrow) {
+        throw new Error("Test error triggered from dev command");
+    }
+
     return null;
 }
 
@@ -67,8 +91,9 @@ function WorkspaceGuard({ children }: { children: React.ReactNode }) {
 
 export function App() {
     return (
-        <ErrorBoundary>
-            <ThemeProvider>
+        <ThemeProvider>
+            <ErrorBoundary>
+                <DevErrorTrigger />
                 <NativeKeyboardBridge />
                 <UpdateNotificationBridge />
                 <BrowserRouter>
@@ -110,8 +135,8 @@ export function App() {
                     </RoutingProvider>
                 </BrowserRouter>
                 <Toaster position="top-right" richColors />
-            </ThemeProvider>
-        </ErrorBoundary>
+            </ErrorBoundary>
+        </ThemeProvider>
     );
 }
 
