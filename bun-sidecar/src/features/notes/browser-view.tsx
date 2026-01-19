@@ -17,6 +17,8 @@ import { CreateFolderDialog, RenameFolderDialog, MoveToFolderDialog } from "./No
 import { toast } from "sonner";
 import { useCommandDialog } from "@/components/CommandDialogProvider";
 import { CreateNoteDialog } from "./create-note-dialog";
+import { DeleteNoteDialog } from "./delete-note-dialog";
+import { DeleteFolderDialog } from "./delete-folder-dialog";
 
 export function NotesBrowserView({ tabId }: { tabId: string }) {
     if (!tabId) {
@@ -171,6 +173,25 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
         }
     }, [notesAPI, selectedNote, setError]);
 
+    const requestDeleteNote = useCallback((noteFileName: string) => {
+        openDialog({
+            content: (
+                <DeleteNoteDialog
+                    noteFileName={noteFileName}
+                    onSuccess={() => {
+                        // Refresh notes list after deletion
+                        notesAPI.getNotes().then(result => {
+                            setNotes(result);
+                            if (selectedNote?.fileName === noteFileName) {
+                                setSelectedNote(result[0] || null);
+                            }
+                        });
+                    }}
+                />
+            ),
+        });
+    }, [openDialog, notesAPI, selectedNote]);
+
     const handleSelectNote = useCallback((note: Note) => {
         setSelectedNote(note);
     }, []);
@@ -186,19 +207,23 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
         setRenameFolderDialogOpen(true);
     }, []);
 
-    const handleDeleteFolder = useCallback(async (folder: NoteFolder) => {
-        if (!confirm(`Delete folder "${folder.name}" and all its contents?`)) return;
-        try {
-            await notesAPI.deleteFolder({ folderPath: folder.path });
-            toast.success(`Deleted folder "${folder.name}"`);
-            await loadFolders();
-            const result = await notesAPI.getNotes();
-            setNotes(result);
-        } catch (err) {
-            console.error("Failed to delete folder:", err);
-            toast.error("Failed to delete folder");
-        }
-    }, [notesAPI, loadFolders]);
+    const handleDeleteFolder = useCallback((folder: NoteFolder) => {
+        openDialog({
+            content: (
+                <DeleteFolderDialog
+                    folderName={folder.name}
+                    folderPath={folder.path}
+                    onDelete={async () => {
+                        await notesAPI.deleteFolder({ folderPath: folder.path });
+                        toast.success(`Deleted folder "${folder.name}"`);
+                        await loadFolders();
+                        const result = await notesAPI.getNotes();
+                        setNotes(result);
+                    }}
+                />
+            ),
+        });
+    }, [openDialog, notesAPI, loadFolders]);
 
     const handleFolderCreate = useCallback(async (name: string, parentPath: string | null) => {
         try {
@@ -288,8 +313,8 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                 name: "Delete Note",
                 combo: { key: "Backspace", cmd: true },
                 handler: () => {
-                    if (selectedNote && confirm(`Delete "${selectedNote.fileName}"?`)) {
-                        handleDeleteNote(selectedNote.fileName);
+                    if (selectedNote) {
+                        requestDeleteNote(selectedNote.fileName);
                     }
                 },
                 when: () => selectedNote !== null,
@@ -317,7 +342,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
         {
             context: "plugin:notes",
             onlyWhenActive: true,
-            deps: [selectedNote, searchQuery, handleOpenNote, handleDeleteNote],
+            deps: [selectedNote, searchQuery, handleOpenNote, requestDeleteNote],
         }
     );
 
@@ -436,7 +461,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                             selectedNoteFileName={selectedNote?.fileName ?? null}
                             onSelectNote={handleSelectNote}
                             onOpenNote={handleOpenNote}
-                            onDeleteNote={handleDeleteNote}
+                            onDeleteNote={requestDeleteNote}
                             onCreateFolder={handleCreateFolder}
                             onCreateNoteInFolder={handleCreateNoteInFolder}
                             onRenameFolder={handleRenameFolder}
