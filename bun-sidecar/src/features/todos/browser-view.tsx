@@ -803,26 +803,35 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         }
     }, [selectedTodoId, getTodoPosition, todosByColumn, todosAPI, loadTodos]);
 
-    // Toggle done status for a todo with optimistic update
+    // Toggle done status and move to matching column if in custom board mode
     const toggleDoneWithToast = useCallback(async (todo: Todo) => {
         const newStatus = todo.status === "done" ? "todo" : "done";
 
+        // Find target column with matching status (if in custom board mode)
+        const targetColumn = boardConfig?.columns.find(c => c.status === newStatus);
+        const newColumnId = targetColumn?.id;
+
         // Optimistic update
         setTodos(prev => prev.map(t =>
-            t.id === todo.id ? { ...t, status: newStatus } : t
+            t.id === todo.id
+                ? { ...t, status: newStatus, ...(newColumnId && { customColumnId: newColumnId }) }
+                : t
         ));
 
         try {
             await todosAPI.updateTodo({
                 todoId: todo.id,
-                updates: { status: newStatus },
+                updates: {
+                    status: newStatus,
+                    ...(newColumnId && { customColumnId: newColumnId }),
+                },
             });
         } catch (error) {
             console.error("Failed to toggle todo status:", error);
             toast.error("Failed to update status");
             await loadTodos();
         }
-    }, [todosAPI, loadTodos]);
+    }, [todosAPI, loadTodos, boardConfig]);
 
     // Update selection when filtered todos change
     useEffect(() => {
