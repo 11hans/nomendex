@@ -1,6 +1,6 @@
 import { serve, type ServerWebSocket, type Terminal, type Subprocess } from "bun";
 import index from "./index.html";
-import { createServiceLogger, getLogFile } from "./lib/logger";
+import { createServiceLogger, getLogFile, startupLog, markStartupComplete, isInStartupMode } from "./lib/logger";
 import { initializeWorkspaceServices } from "./services/workspace-init";
 import { appendFile } from "node:fs/promises";
 import { baseDirRoute } from "./server-routes/base-dir";
@@ -49,13 +49,30 @@ const terminalSessions = new Map<string, TerminalSession>();
 const wsToSessionMap = new Map<ServerWebSocket<TerminalWSData>, string>();
 
 // Initialize workspace paths, secrets, and feature services
-await initializeWorkspaceServices();
+startupLog.info('Initializing workspace services...');
+try {
+    await initializeWorkspaceServices();
+    startupLog.info('Workspace services initialized successfully');
+} catch (error) {
+    startupLog.error('Failed to initialize workspace services', {
+        error: error instanceof Error ? error.message : String(error)
+    });
+    throw error;
+}
 
 const server = serve<WSData>({
     port: process.env.PORT ? parseInt(process.env.PORT) : 1234,
     idleTimeout: 255, // Maximum timeout in seconds (prevents "request timed out after 10 seconds" errors)
 
     routes: {
+        // Health check endpoint - called by native app to confirm server is ready
+        "/health": {
+            GET() {
+                startupLog.info('Health check passed - server ready');
+                markStartupComplete();
+                return new Response("OK", { status: 200 });
+            },
+        },
         ...workspaceRoutes,
         ...workspacesRoutes,
         ...filesystemRoutes,
@@ -448,12 +465,19 @@ const server = serve<WSData>({
     },
 });
 
-// Log server startup
-serverLogger.info(`Bun sidecar server started on port ${server.port}`, { port: server.port });
-serverLogger.info(`Environment: ${process.env.NODE_ENV || "development"}`, { environment: process.env.NODE_ENV || "development" });
-serverLogger.info(`Centralized logging initialized to ${getLogFile()}`);
+// Log server startup (to file during startup)
+startupLog.info(`Server listening on port ${server.port}`, { port: server.port });
+startupLog.info('Waiting for health check from native app...');
 
 // Write server port to discoverable location for external tools (e.g., Claude skills)
 const serverPortPath = `${process.env.HOME}/Library/Application Support/com.firstloop.nomendex/serverport.json`;
 await Bun.write(serverPortPath, JSON.stringify({ port: server.port, startedAt: new Date().toISOString() }));
-serverLogger.info(`Server port written to ${serverPortPath}`);
+startupLog.info(`Server port written to ${serverPortPath}`);
+
+// Warn if health check not received within 10 seconds (helps diagnose connectivity issues)
+setTimeout(() => {
+    if (isInStartupMode()) {
+        startupLog.warn('Health check not received after 10 seconds - native app may not be connecting');
+        startupLog.info('Server is running but native app health check has not been called');
+    }
+}, 10000);
