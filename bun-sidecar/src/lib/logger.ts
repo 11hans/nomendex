@@ -1,19 +1,13 @@
-import winston from 'winston';
 import { join } from 'path';
 import { homedir } from 'os';
-
-// Define log levels
-const logLevels = {
-  error: 0,
-  warn: 1,
-  info: 2,
-  http: 3,
-  debug: 4,
-};
+import { mkdirSync, appendFileSync, writeFileSync } from 'fs';
 
 // Centralized log directory in app support (shared across all workspaces)
 const LOG_DIR = join(homedir(), 'Library/Application Support/com.firstloop.nomendex');
 const LOG_FILE = join(LOG_DIR, 'logs.txt');
+
+// Startup mode flag - only log to file during startup
+let isStartupMode = true;
 
 function getLogDir(): string {
   return LOG_DIR;
@@ -23,76 +17,101 @@ function getLogFile(): string {
   return LOG_FILE;
 }
 
-// Custom format for console output
-const consoleFormat = winston.format.combine(
-  winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-  winston.format.colorize({ all: true }),
-  winston.format.printf(({ timestamp, level, message, service, ...meta }) => {
-    const serviceTag = service ? `[${service}]` : '';
-    const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
-    return `${timestamp} ${level} ${serviceTag} ${message}${metaStr}`;
-  })
-);
+// Mark startup as complete - stops file logging
+export function markStartupComplete(): void {
+  if (isStartupMode) {
+    writeStartupLog('STARTUP', 'Startup complete - file logging disabled');
+    isStartupMode = false;
+  }
+}
 
-// JSON format for file output
-const fileFormat = winston.format.combine(
-  winston.format.timestamp(),
-  winston.format.json()
-);
-
-// Create the logger
-const logger = winston.createLogger({
-  levels: logLevels,
-  level: process.env.LOG_LEVEL || 'info',
-  transports: [
-    // Console transport for development
-    new winston.transports.Console({
-      format: consoleFormat,
-    }),
-    // File transport for persistent logs
-    new winston.transports.File({
-      filename: LOG_FILE,
-      format: fileFormat,
-    }),
-  ],
-  // Don't exit on handled exceptions
-  exitOnError: false,
-});
-
-// Create service-specific loggers
-export const createServiceLogger = (service: string) => {
-  return {
-    error: (message: string, meta?: Record<string, unknown>) => logger.error(message, { service, ...meta }),
-    warn: (message: string, meta?: Record<string, unknown>) => logger.warn(message, { service, ...meta }),
-    info: (message: string, meta?: Record<string, unknown>) => logger.info(message, { service, ...meta }),
-    http: (message: string, meta?: Record<string, unknown>) => logger.http(message, { service, ...meta }),
-    debug: (message: string, meta?: Record<string, unknown>) => logger.debug(message, { service, ...meta }),
-  };
-};
-
-// Default logger without service tag
-export const log = {
-  error: (message: string, meta?: Record<string, unknown>) => logger.error(message, meta),
-  warn: (message: string, meta?: Record<string, unknown>) => logger.warn(message, meta),
-  info: (message: string, meta?: Record<string, unknown>) => logger.info(message, meta),
-  http: (message: string, meta?: Record<string, unknown>) => logger.http(message, meta),
-  debug: (message: string, meta?: Record<string, unknown>) => logger.debug(message, meta),
-};
+// Check if still in startup mode
+export function isInStartupMode(): boolean {
+  return isStartupMode;
+}
 
 // Ensure log directory exists
-import { mkdirSync } from 'fs';
 try {
   mkdirSync(LOG_DIR, { recursive: true });
 } catch (error) {
   console.error('Failed to create log directory:', error);
 }
 
-// Log the initialization
-log.info('Logger initialized', { 
-  logFile: LOG_FILE, 
-  logLevel: logger.level,
+// Clear previous startup logs and start fresh
+try {
+  writeFileSync(LOG_FILE, '');
+} catch (error) {
+  console.error('Failed to clear log file:', error);
+}
+
+// Write a startup log entry (only during startup mode)
+function writeStartupLog(level: string, message: string, meta?: Record<string, unknown>): void {
+  if (!isStartupMode) return;
+
+  const timestamp = new Date().toISOString();
+  const metaStr = meta ? ` ${JSON.stringify(meta)}` : '';
+  const logEntry = `${timestamp} [${level}] ${message}${metaStr}\n`;
+
+  try {
+    appendFileSync(LOG_FILE, logEntry);
+  } catch (error) {
+    console.error('Failed to write startup log:', error);
+  }
+}
+
+// Console logging (always active)
+function consoleLog(level: string, message: string, meta?: Record<string, unknown>): void {
+  const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const metaStr = meta && Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
+  console.log(`${timestamp} [${level}] ${message}${metaStr}`);
+}
+
+// Startup logger - writes to both console and file (during startup only)
+export const startupLog = {
+  error: (message: string, meta?: Record<string, unknown>) => {
+    consoleLog('ERROR', message, meta);
+    writeStartupLog('ERROR', message, meta);
+  },
+  warn: (message: string, meta?: Record<string, unknown>) => {
+    consoleLog('WARN', message, meta);
+    writeStartupLog('WARN', message, meta);
+  },
+  info: (message: string, meta?: Record<string, unknown>) => {
+    consoleLog('INFO', message, meta);
+    writeStartupLog('INFO', message, meta);
+  },
+  debug: (message: string, meta?: Record<string, unknown>) => {
+    consoleLog('DEBUG', message, meta);
+    writeStartupLog('DEBUG', message, meta);
+  },
+};
+
+// Create service-specific loggers (console only after startup)
+export const createServiceLogger = (service: string) => {
+  return {
+    error: (message: string, meta?: Record<string, unknown>) => consoleLog('ERROR', `[${service}] ${message}`, meta),
+    warn: (message: string, meta?: Record<string, unknown>) => consoleLog('WARN', `[${service}] ${message}`, meta),
+    info: (message: string, meta?: Record<string, unknown>) => consoleLog('INFO', `[${service}] ${message}`, meta),
+    http: (message: string, meta?: Record<string, unknown>) => consoleLog('HTTP', `[${service}] ${message}`, meta),
+    debug: (message: string, meta?: Record<string, unknown>) => consoleLog('DEBUG', `[${service}] ${message}`, meta),
+  };
+};
+
+// Default logger without service tag (console only after startup)
+export const log = {
+  error: (message: string, meta?: Record<string, unknown>) => consoleLog('ERROR', message, meta),
+  warn: (message: string, meta?: Record<string, unknown>) => consoleLog('WARN', message, meta),
+  info: (message: string, meta?: Record<string, unknown>) => consoleLog('INFO', message, meta),
+  http: (message: string, meta?: Record<string, unknown>) => consoleLog('HTTP', message, meta),
+  debug: (message: string, meta?: Record<string, unknown>) => consoleLog('DEBUG', message, meta),
+};
+
+// Log startup initialization
+startupLog.info('Server starting', {
+  logFile: LOG_FILE,
+  port: process.env.PORT || '1234',
   environment: process.env.NODE_ENV || 'development'
 });
 
-export default logger;
+export default { log, startupLog, markStartupComplete, isInStartupMode };
 export { LOG_FILE, LOG_DIR, getLogDir, getLogFile };
