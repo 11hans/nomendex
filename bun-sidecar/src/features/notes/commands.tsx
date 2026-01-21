@@ -6,6 +6,7 @@ import { RenameNoteDialog } from "./rename-note-dialog";
 import { MoveToFolderDialog } from "./move-to-folder-dialog";
 import { getTodayDailyNoteFileName, getYesterdayDailyNoteFileName, getTomorrowDailyNoteFileName } from "./date-utils";
 import { DailyNoteDatePickerDialog } from "./daily-note-date-picker-dialog";
+import { SearchNotesDialog } from "./search-notes-dialog";
 import { notesAPI } from "@/hooks/useNotesAPI";
 import { notesPluginSerial } from "./index";
 import { WorkspaceTab } from "@/types/Workspace";
@@ -26,6 +27,20 @@ interface CommandContext {
 
 export function getNotesCommands(context: CommandContext): Command[] {
     return [
+        {
+            id: "notes.search",
+            name: "Search Notes",
+            description: "Search across all notes (Cmd+Shift+F)",
+            icon: "Search",
+            callback: () => {
+                context.closeCommandMenu();
+                context.openDialog({
+                    title: "Search Notes",
+                    description: "Search for text across all your notes",
+                    content: <SearchNotesDialog />,
+                });
+            },
+        },
         {
             id: "notes.create",
             name: "Create New Note",
