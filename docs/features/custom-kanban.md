@@ -37,12 +37,25 @@ interface BoardColumn {
 
 ### BoardConfig
 
+Now embedded directly within the Project configuration.
+
 ```typescript
 interface BoardConfig {
-    id: string;           // FileDatabase ID
-    projectId: string;    // Project name ("" = no project)
     columns: BoardColumn[];
-    showDone: boolean;    // Future: hide completed items
+    showDone: boolean;    // Hide completed items
+}
+```
+
+### ProjectConfig
+
+```typescript
+interface ProjectConfig {
+    id: string;           // "proj-abc123"
+    name: string;         // "Nomendex"
+    description?: string;
+    board?: BoardConfig;  // Embedded board configuration
+    createdAt: string;
+    updatedAt: string;
 }
 ```
 
@@ -50,14 +63,14 @@ interface BoardConfig {
 
 ```typescript
 // Added to TodoSchema
-customColumnId?: string;  // ID from BoardConfig.columns
+customColumnId?: string;  // ID from ProjectConfig.board.columns
 ```
 
 ## Storage
 
 | File | Purpose |
 |------|---------|
-| `{workspace}/noetic-data/board-configs/*.json` | Per-project board configs |
+| `{workspace}/.nomendex/projects.json` | Centralized file for all projects and their board configs |
 | `{workspace}/noetic-data/todos/*.json` | Todos with `customColumnId` field |
 
 ## UI Components
@@ -69,57 +82,33 @@ Accessed via project dropdown menu → "Setup Custom Board" or "Board Settings".
 Features:
 - Add/remove/rename columns
 - Set auto-status per column
-- Drag to reorder (future)
-
-### Kanban View Modes
-
-| Context | Behavior |
-|---------|----------|
-| Project with config | Custom columns from BoardConfig |
-| Project without config | Legacy status columns (todo/in_progress/done) |
-| All Projects / No Project | Legacy status columns |
-
-## Fallback Logic
-
-When a todo doesn't have `customColumnId`, it's mapped using fallback:
-
-```typescript
-function getColumnForTodo(todo: Todo): string {
-    if (boardConfig && todo.customColumnId) {
-        return todo.customColumnId;
-    }
-    if (todo.status === "done") {
-        return lastColumn.id;  // Last column
-    }
-    return firstColumn.id;     // First column
-}
-```
+- Drag to reorder
 
 ## API Endpoints
 
-### Get Board Config
+Board configuration is now part of the Project entity. To change the board, you update the project.
+
+### Get Project (matches by name or ID)
 
 ```
-POST /api/todos/board-config/get
-Body: { "projectId": "My Project" }
-Response: BoardConfig | null
+POST /api/projects/get
+Body: { "name": "My Project" }
+Response: ProjectConfig | null
 ```
 
-### Save Board Config
+### Save Project (updates board config)
 
 ```
-POST /api/todos/board-config/save
-Body: { "config": BoardConfig }
-Response: BoardConfig
+POST /api/projects/save
+Body: { "project": ProjectConfig }
+Response: ProjectConfig
 ```
 
-### Delete Column
-
-Moves orphaned todos to first remaining column.
+### Delete Project
 
 ```
-POST /api/todos/column/delete
-Body: { "projectId": "My Project", "columnId": "col-old" }
+POST /api/projects/delete
+Body: { "id": "proj-123" }
 Response: { "success": true }
 ```
 
@@ -140,19 +129,12 @@ This enables workflows like:
 ## File Structure
 
 ```
-bun-sidecar/src/features/todos/
-├── board-types.ts           # BoardColumn, BoardConfig schemas
-├── fx.ts                    # Backend: getBoardConfig, saveBoardConfig, deleteColumn
-├── index.ts                 # Function stubs
-├── browser-view.tsx         # Kanban UI with custom column support
-├── BoardSettingsDialog.tsx  # Column management UI
-└── TodoCard.tsx             # Card with toggle checkbox
-
-bun-sidecar/src/server-routes/
-└── todos-routes.ts          # API endpoints
-
-bun-sidecar/src/hooks/
-└── useTodosAPI.ts           # Frontend API methods
+bun-sidecar/src/features/projects/
+├── projects-types.ts        # ProjectConfig, BoardConfig schemas
+├── projects-service.ts      # Backend: getAllProjects, saveProject
+├── index.ts                 # Plugin definition
+├── project-detail-view.tsx  # Kanban UI with custom column support
+└── CreateProjectDialog.tsx  # Project creation UI
 ```
 
 ## Default Columns

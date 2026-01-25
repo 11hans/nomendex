@@ -60,6 +60,8 @@ export const todosAPI = {
     getBoardConfig: (args: { projectId: string }) => fetchAPI<BoardConfig | null>("board-config/get", args),
     saveBoardConfig: (args: { config: BoardConfig }) => fetchAPI<BoardConfig>("board-config/save", args),
     deleteColumn: (args: { projectId: string; columnId: string }) => fetchAPI<{ success: boolean }>("column/delete", args),
+    // New projects service API
+    getProjectsList: () => fetch("/api/projects/list", { method: "POST" }).then(r => r.json() as Promise<any[]>),
 };
 
 // Hook wrapper for use in React components
