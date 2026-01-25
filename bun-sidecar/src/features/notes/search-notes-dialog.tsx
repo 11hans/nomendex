@@ -213,23 +213,13 @@ export function SearchNotesDialog({ onSuccess }: SearchNotesDialogProps) {
                     return (
                         <div
                             key={index}
-                            className="flex"
+                            className="px-1"
                             style={{
                                 backgroundColor: isMatchLine ? styles.surfaceAccent : "transparent",
+                                color: styles.contentPrimary,
                             }}
                         >
-                            <span
-                                className="select-none pr-3 text-right shrink-0"
-                                style={{
-                                    color: styles.contentTertiary,
-                                    width: "3rem",
-                                }}
-                            >
-                                {lineNumber}
-                            </span>
-                            <span style={{ color: styles.contentPrimary }}>
-                                {isMatchLine ? highlightMatches(line) : line || " "}
-                            </span>
+                            {isMatchLine ? highlightMatches(line) : line || " "}
                         </div>
                     );
                 })}
@@ -363,10 +353,10 @@ export function SearchNotesDialog({ onSuccess }: SearchNotesDialogProps) {
                     {!isLoadingPreview && previewNote && (
                         <div className="p-4">
                             <div
-                                className="font-semibold text-base mb-1 truncate"
+                                className="font-semibold text-base mb-1"
                                 style={{ color: styles.contentPrimary }}
                             >
-                                {previewNote.fileName.replace(/\.md$/, "")}
+                                {highlightMatches(previewNote.fileName.replace(/\.md$/, ""))}
                             </div>
                             {selectedResult?.folderPath && (
                                 <div

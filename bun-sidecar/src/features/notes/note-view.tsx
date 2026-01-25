@@ -809,32 +809,40 @@ export function NotesView(props: NotesViewProps) {
         initializedContentRef.current = contentToUse;
         currentNoteFileNameRef.current = noteFileName;
 
-        // Helper to scroll to a specific line number
+        // Helper to scroll to a specific line number with context above
         const scrollToLineNumber = (lineNum: number) => {
             const doc = view.state.doc;
-            let currentLine = 1;
-            let targetPos = 0;
+            const linePositions: number[] = [0]; // Position of each line start (1-indexed, so [0] is unused)
 
-            // Walk through document nodes to find the position at the target line
+            // Build array of line start positions
             doc.descendants((node, pos) => {
-                if (currentLine >= lineNum) {
-                    return false; // Stop traversing
-                }
                 if (node.isBlock && node.type.name !== "doc") {
-                    currentLine++;
-                    if (currentLine === lineNum) {
-                        targetPos = pos;
-                        return false;
-                    }
+                    linePositions.push(pos);
                 }
                 return true;
             });
 
-            // Set selection to the target position and scroll into view
-            const tr = view.state.tr.setSelection(
-                TextSelection.create(view.state.doc, targetPos)
+            // Calculate scroll target (a few lines before the match for context)
+            const contextLines = 5;
+            const scrollTargetLine = Math.max(1, lineNum - contextLines);
+            const scrollTargetPos = linePositions[scrollTargetLine] ?? 0;
+
+            // Get the actual target position for cursor placement
+            const targetPos = linePositions[lineNum] ?? linePositions[linePositions.length - 1] ?? 0;
+
+            // First scroll the context line into view at the top
+            const scrollTr = view.state.tr.setSelection(
+                TextSelection.create(view.state.doc, scrollTargetPos)
             );
-            view.dispatch(tr.scrollIntoView());
+            view.dispatch(scrollTr.scrollIntoView());
+
+            // Then set cursor at the actual target line (without scrolling again)
+            requestAnimationFrame(() => {
+                const cursorTr = view.state.tr.setSelection(
+                    TextSelection.create(view.state.doc, targetPos)
+                );
+                view.dispatch(cursorTr);
+            });
         };
 
         // Focus editor and handle cursor/scroll position
