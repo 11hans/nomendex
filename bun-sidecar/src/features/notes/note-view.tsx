@@ -1221,174 +1221,165 @@ export function NotesView(props: NotesViewProps) {
         };
     }, [isMinimapFocused, headings, focusedHeadingIndex, activeHeadingId, scrollToHeading, scrollToHeadingPreview]);
 
-    // Single wrapper - ref stays on the same element across all states
+    // Single OverlayScrollbar stays mounted across all states for scroll persistence
     return (
         <div className="h-full overflow-hidden flex flex-col">
-            {(loading || !note) ? (
-                // Loading placeholder - keep OverlayScrollbar for consistent ref
-                <OverlayScrollbar
-                    scrollRef={scrollRef}
-                    className="flex-1 h-full"
-                    style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
+            {/* Header: only visible when content is loaded */}
+            {!loading && !error && note && (
+                <div
+                    className="shrink-0"
+                    style={{
+                        backgroundColor: currentTheme.styles.surfacePrimary,
+                        borderBottom: `1px solid ${currentTheme.styles.borderDefault}`,
+                    }}
                 >
-                    <div className="h-full" />
-                </OverlayScrollbar>
-            ) : error ? (
-                // Error state - keep OverlayScrollbar for consistent ref
-                <OverlayScrollbar
-                    scrollRef={scrollRef}
-                    className="flex-1 h-full"
-                    style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
-                >
-                    <div className="p-4">
-                        <Alert variant="destructive">
-                            <AlertDescription>Error: {error}</AlertDescription>
-                        </Alert>
-                    </div>
-                </OverlayScrollbar>
-            ) : (
-                // Content
-                <>
-            {/* Header: filename + toolbar + mode/save */}
-            <div
-                className="shrink-0"
-                style={{
-                    backgroundColor: currentTheme.styles.surfacePrimary,
-                    borderBottom: `1px solid ${currentTheme.styles.borderDefault}`,
-                }}
-            >
-                <div className="px-4 py-2 flex items-center gap-3">
-                    <div className="flex flex-col items-start gap-1 min-w-0">
-                        {/* Breadcrumb for folder path */}
-                        {(() => {
-                            const pathWithoutExt = noteFileName.replace(/\.md$/, "");
-                            const parts = pathWithoutExt.split("/");
-                            const fileName = parts.pop() || pathWithoutExt;
-                            const folderPath = parts;
+                    <div className="px-4 py-2 flex items-center gap-3">
+                        <div className="flex flex-col items-start gap-1 min-w-0">
+                            {/* Breadcrumb for folder path */}
+                            {(() => {
+                                const pathWithoutExt = noteFileName.replace(/\.md$/, "");
+                                const parts = pathWithoutExt.split("/");
+                                const fileName = parts.pop() || pathWithoutExt;
+                                const folderPath = parts;
 
-                            return (
-                                <>
-                                    {folderPath.length > 0 && (
-                                        <Breadcrumb>
-                                            <BreadcrumbList className="text-xs">
-                                                {folderPath.map((folder, index) => (
-                                                    <BreadcrumbItem key={index}>
-                                                        <span style={{ color: currentTheme.styles.contentTertiary }}>
-                                                            {folder}
-                                                        </span>
-                                                        {index < folderPath.length - 1 && <BreadcrumbSeparator />}
-                                                    </BreadcrumbItem>
-                                                ))}
-                                            </BreadcrumbList>
-                                        </Breadcrumb>
-                                    )}
-                                    <div
-                                        className="text-3xl font-bold"
-                                        style={{ color: currentTheme.styles.contentPrimary }}
-                                    >
-                                        {fileName}
-                                    </div>
-                                </>
-                            );
-                        })()}
+                                return (
+                                    <>
+                                        {folderPath.length > 0 && (
+                                            <Breadcrumb>
+                                                <BreadcrumbList className="text-xs">
+                                                    {folderPath.map((folder, index) => (
+                                                        <BreadcrumbItem key={index}>
+                                                            <span style={{ color: currentTheme.styles.contentTertiary }}>
+                                                                {folder}
+                                                            </span>
+                                                            {index < folderPath.length - 1 && <BreadcrumbSeparator />}
+                                                        </BreadcrumbItem>
+                                                    ))}
+                                                </BreadcrumbList>
+                                            </Breadcrumb>
+                                        )}
+                                        <div
+                                            className="text-3xl font-bold"
+                                            style={{ color: currentTheme.styles.contentPrimary }}
+                                        >
+                                            {fileName}
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </div>
+
+                    {/* Project and Tags row */}
+                    <div className="px-4 pb-2 flex items-center gap-4">
+                        <ProjectInput project={project} onProjectChange={handleProjectChange} />
+                        <TagInput tags={tags} onTagsChange={handleTagsChange} placeholder="Add tag..." />
                     </div>
                 </div>
+            )}
 
-                {/* Project and Tags row */}
-                <div className="px-4 pb-2 flex items-center gap-4">
-                    <ProjectInput project={project} onProjectChange={handleProjectChange} />
-                    <TagInput tags={tags} onTagsChange={handleTagsChange} placeholder="Add tag..." />
-                </div>
-            </div>
-
-            {/* Editor with inline TOC */}
+            {/* Main content area with flex layout */}
             <div className="flex-1 overflow-hidden flex min-h-0">
-                {/* Main editor area - this is the scrollable content */}
+                {/* Main scrollable area */}
                 <div className="flex-1 h-full relative">
-                    {/* Search Panel - positioned relative to main editor area, not the sidebar */}
-                    {viewRef.current && (
+                    {/* Search Panel - only visible when content is loaded */}
+                    {!loading && !error && note && viewRef.current && (
                         <SearchPanel
                             view={viewRef.current}
                             isOpen={isSearchOpen}
                             onClose={() => setIsSearchOpen(false)}
                         />
                     )}
+
+                    {/* Single OverlayScrollbar - always mounted to preserve scroll position */}
                     <OverlayScrollbar
-                    scrollRef={scrollRef}
-                    className="flex-1 h-full"
-                    style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
-                >
-                    {isRichTextMode ? (
-                        <div className={compact ? 'compact-editor' : ''}>
-                            <div className="w-full max-w-4xl mx-auto px-6 py-4">
-                                <div
-                                    ref={editorRef}
-                                    className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none editor-content"
-                                    style={
-                                        {
-                                            "--tw-prose-body": currentTheme.styles.contentPrimary,
-                                            "--tw-prose-headings": currentTheme.styles.contentPrimary,
-                                            "--tw-prose-links": currentTheme.styles.contentAccent,
-                                            "--tw-prose-bold": currentTheme.styles.contentPrimary,
-                                            "--tw-prose-counters": currentTheme.styles.contentSecondary,
-                                            "--tw-prose-bullets": currentTheme.styles.contentSecondary,
-                                            "--tw-prose-hr": currentTheme.styles.borderDefault,
-                                            "--tw-prose-quotes": currentTheme.styles.contentPrimary,
-                                            "--tw-prose-quote-borders": currentTheme.styles.borderDefault,
-                                            "--tw-prose-captions": currentTheme.styles.contentSecondary,
-                                            "--tw-prose-code": currentTheme.styles.contentPrimary,
-                                            "--tw-prose-pre-code": currentTheme.styles.contentPrimary,
-                                            "--tw-prose-pre-bg": currentTheme.styles.surfaceMuted,
-                                            "--tw-prose-th-borders": currentTheme.styles.borderDefault,
-                                            "--tw-prose-td-borders": currentTheme.styles.borderDefault,
-                                            // Todo checkbox theme variables
-                                            "--todo-border": currentTheme.styles.borderDefault,
-                                            "--todo-bg": currentTheme.styles.surfacePrimary,
-                                            "--todo-checked-bg": currentTheme.styles.semanticPrimary,
-                                            "--todo-checked-fg": currentTheme.styles.semanticPrimaryForeground,
-                                            "--todo-completed-text": currentTheme.styles.contentTertiary,
-                                            // Tag theme variables
-                                            "--tag-color": currentTheme.styles.contentAccent,
-                                            "--tag-hover-bg": currentTheme.styles.surfaceAccent,
-                                            color: currentTheme.styles.contentPrimary,
-                                        } as React.CSSProperties
-                                    }
-                                />
-                                {/* Wiki link popup */}
-                                {viewRef.current && wikiLinkState.active && (
-                                    <WikiLinkPopup
-                                        view={viewRef.current}
-                                        pluginState={wikiLinkState}
-                                    />
-                                )}
-                                {/* Tag link popup */}
-                                {viewRef.current && tagLinkState.active && (
-                                    <TagLinkPopup
-                                        view={viewRef.current}
-                                        pluginState={tagLinkState}
-                                    />
-                                )}
+                        scrollRef={scrollRef}
+                        className="flex-1 h-full"
+                        style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
+                    >
+                        {(loading || !note) ? (
+                            // Loading placeholder
+                            <div className="h-full" />
+                        ) : error ? (
+                            // Error state
+                            <div className="p-4">
+                                <Alert variant="destructive">
+                                    <AlertDescription>Error: {error}</AlertDescription>
+                                </Alert>
                             </div>
-                        </div>
-                    ) : (
-                        <div className="h-full bg-background">
-                            <div className="w-full max-w-4xl mx-auto px-6 py-4">
-                                <textarea
-                                    value={content}
-                                    onChange={(e) => updateContent(e.target.value)}
-                                    onBlur={() => saveImmediately(content)}
-                                    placeholder="Write your markdown here..."
-                                    className="w-full h-full min-h-[calc(100vh-200px)] bg-transparent border-0 resize-none font-mono text-sm focus:outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground"
-                                    autoFocus
-                                />
+                        ) : isRichTextMode ? (
+                            // Rich text editor
+                            <div className={compact ? 'compact-editor' : ''}>
+                                <div className="w-full max-w-4xl mx-auto px-6 py-4">
+                                    <div
+                                        ref={editorRef}
+                                        className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none editor-content"
+                                        style={
+                                            {
+                                                "--tw-prose-body": currentTheme.styles.contentPrimary,
+                                                "--tw-prose-headings": currentTheme.styles.contentPrimary,
+                                                "--tw-prose-links": currentTheme.styles.contentAccent,
+                                                "--tw-prose-bold": currentTheme.styles.contentPrimary,
+                                                "--tw-prose-counters": currentTheme.styles.contentSecondary,
+                                                "--tw-prose-bullets": currentTheme.styles.contentSecondary,
+                                                "--tw-prose-hr": currentTheme.styles.borderDefault,
+                                                "--tw-prose-quotes": currentTheme.styles.contentPrimary,
+                                                "--tw-prose-quote-borders": currentTheme.styles.borderDefault,
+                                                "--tw-prose-captions": currentTheme.styles.contentSecondary,
+                                                "--tw-prose-code": currentTheme.styles.contentPrimary,
+                                                "--tw-prose-pre-code": currentTheme.styles.contentPrimary,
+                                                "--tw-prose-pre-bg": currentTheme.styles.surfaceMuted,
+                                                "--tw-prose-th-borders": currentTheme.styles.borderDefault,
+                                                "--tw-prose-td-borders": currentTheme.styles.borderDefault,
+                                                // Todo checkbox theme variables
+                                                "--todo-border": currentTheme.styles.borderDefault,
+                                                "--todo-bg": currentTheme.styles.surfacePrimary,
+                                                "--todo-checked-bg": currentTheme.styles.semanticPrimary,
+                                                "--todo-checked-fg": currentTheme.styles.semanticPrimaryForeground,
+                                                "--todo-completed-text": currentTheme.styles.contentTertiary,
+                                                // Tag theme variables
+                                                "--tag-color": currentTheme.styles.contentAccent,
+                                                "--tag-hover-bg": currentTheme.styles.surfaceAccent,
+                                                color: currentTheme.styles.contentPrimary,
+                                            } as React.CSSProperties
+                                        }
+                                    />
+                                    {/* Wiki link popup */}
+                                    {viewRef.current && wikiLinkState.active && (
+                                        <WikiLinkPopup
+                                            view={viewRef.current}
+                                            pluginState={wikiLinkState}
+                                        />
+                                    )}
+                                    {/* Tag link popup */}
+                                    {viewRef.current && tagLinkState.active && (
+                                        <TagLinkPopup
+                                            view={viewRef.current}
+                                            pluginState={tagLinkState}
+                                        />
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        ) : (
+                            // Plain text editor
+                            <div className="h-full bg-background">
+                                <div className="w-full max-w-4xl mx-auto px-6 py-4">
+                                    <textarea
+                                        value={content}
+                                        onChange={(e) => updateContent(e.target.value)}
+                                        onBlur={() => saveImmediately(content)}
+                                        placeholder="Write your markdown here..."
+                                        className="w-full h-full min-h-[calc(100vh-200px)] bg-transparent border-0 resize-none font-mono text-sm focus:outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground"
+                                        autoFocus
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </OverlayScrollbar>
                 </div>
 
-                {/* Sidebar with TOC and Backlinks */}
-                {isRichTextMode && !compact && (
+                {/* Sidebar with TOC and Backlinks - only visible when content is loaded */}
+                {!loading && !error && note && isRichTextMode && !compact && (
                     <div
                         ref={minimapRef}
                         tabIndex={-1}
@@ -1488,8 +1479,6 @@ export function NotesView(props: NotesViewProps) {
                     </div>
                 )}
             </div>
-                </>
-            )}
         </div>
     );
 }
