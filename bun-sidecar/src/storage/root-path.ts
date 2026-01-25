@@ -68,6 +68,14 @@ export function hasActiveWorkspace(): boolean {
 }
 
 /**
+ * Get the active workspace path, or null if no workspace is active.
+ * Safe to call without checking hasActiveWorkspace() first.
+ */
+export function getActiveWorkspacePath(): string | null {
+    return paths?.rootPath ?? null;
+}
+
+/**
  * Get the root path of the active workspace.
  * @throws Error if no workspace is active
  */

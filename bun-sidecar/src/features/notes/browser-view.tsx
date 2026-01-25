@@ -27,6 +27,8 @@ import { CreateFolderDialog, RenameFolderDialog, MoveToFolderDialog } from "./No
 import { toast } from "sonner";
 import { useCommandDialog } from "@/components/CommandDialogProvider";
 import { CreateNoteDialog } from "./create-note-dialog";
+import { DeleteNoteDialog } from "./delete-note-dialog";
+import { DeleteFolderDialog } from "./delete-folder-dialog";
 
 export function NotesBrowserView({ tabId }: { tabId: string }) {
     if (!tabId) {
@@ -52,10 +54,6 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     const [folderToRename, setFolderToRename] = useState<NoteFolder | null>(null);
     const [moveToFolderDialogOpen, setMoveToFolderDialogOpen] = useState(false);
     const [noteToMove, setNoteToMove] = useState<Note | null>(null);
-
-    // Delete confirmation state (for WKWebView compatibility - native confirm() doesn't work)
-    const [deleteNoteFileName, setDeleteNoteFileName] = useState<string | null>(null);
-    const [deleteFolderData, setDeleteFolderData] = useState<NoteFolder | null>(null);
 
     const searchInputRef = useRef<HTMLInputElement>(null);
     const hasSetTabNameRef = useRef<boolean>(false);
@@ -171,31 +169,24 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
         [addNewTab, setActiveTabId, placement, setSidebarTabId]
     );
 
-    const handleDeleteNote = useCallback(async (noteFileName: string) => {
-        try {
-            await notesAPI.deleteNote({ fileName: noteFileName });
-            const result = await notesAPI.getNotes();
-            setNotes(result);
-            if (selectedNote?.fileName === noteFileName) {
-                setSelectedNote(result[0] || null);
-            }
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : "Failed to delete note";
-            setError(errorMessage);
-        }
-    }, [notesAPI, selectedNote, setError]);
-
-    // Show delete confirmation dialog instead of native confirm() for WKWebView compatibility
     const requestDeleteNote = useCallback((noteFileName: string) => {
-        setDeleteNoteFileName(noteFileName);
-    }, []);
-
-    const confirmDeleteNote = useCallback(async () => {
-        if (!deleteNoteFileName) return;
-        const fileName = deleteNoteFileName;
-        setDeleteNoteFileName(null);
-        await handleDeleteNote(fileName);
-    }, [deleteNoteFileName, handleDeleteNote]);
+        openDialog({
+            content: (
+                <DeleteNoteDialog
+                    noteFileName={noteFileName}
+                    onSuccess={() => {
+                        // Refresh notes list after deletion
+                        notesAPI.getNotes().then(result => {
+                            setNotes(result);
+                            if (selectedNote?.fileName === noteFileName) {
+                                setSelectedNote(result[0] || null);
+                            }
+                        });
+                    }}
+                />
+            ),
+        });
+    }, [openDialog, notesAPI, selectedNote]);
 
     const handleSelectNote = useCallback((note: Note) => {
         setSelectedNote(note);
@@ -213,25 +204,21 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     }, []);
 
     const handleDeleteFolder = useCallback((folder: NoteFolder) => {
-        // Show AlertDialog instead of native confirm() for WKWebView compatibility
-        setDeleteFolderData(folder);
-    }, []);
-
-    const confirmDeleteFolder = useCallback(async () => {
-        if (!deleteFolderData) return;
-        const folder = deleteFolderData;
-        setDeleteFolderData(null);
-        try {
-            await notesAPI.deleteFolder({ folderPath: folder.path });
-            toast.success(`Deleted folder "${folder.name}"`);
-            await loadFolders();
-            const result = await notesAPI.getNotes();
-            setNotes(result);
-        } catch (err) {
-            console.error("Failed to delete folder:", err);
-            toast.error("Failed to delete folder");
-        }
-    }, [deleteFolderData, notesAPI, loadFolders]);
+        openDialog({
+            content: (
+                <DeleteFolderDialog
+                    folderName={folder.name}
+                    onDelete={async () => {
+                        await notesAPI.deleteFolder({ folderPath: folder.path });
+                        toast.success(`Deleted folder "${folder.name}"`);
+                        await loadFolders();
+                        const result = await notesAPI.getNotes();
+                        setNotes(result);
+                    }}
+                />
+            ),
+        });
+    }, [openDialog, notesAPI, loadFolders]);
 
     const handleFolderCreate = useCallback(async (name: string, parentPath: string | null) => {
         try {
@@ -322,7 +309,6 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                 combo: { key: "Backspace", cmd: true },
                 handler: () => {
                     if (selectedNote) {
-                        // Use AlertDialog instead of native confirm() for WKWebView compatibility
                         requestDeleteNote(selectedNote.fileName);
                     }
                 },
@@ -538,37 +524,6 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                 onMove={handleMoveNoteToFolder}
             />
 
-            {/* Delete Note Confirmation Dialog - uses React dialog instead of native confirm() for WKWebView compatibility */}
-            <AlertDialog open={!!deleteNoteFileName} onOpenChange={(open) => !open && setDeleteNoteFileName(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete "{deleteNoteFileName}"?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action cannot be undone. The note will be permanently deleted.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmDeleteNote}>Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-
-            {/* Delete Folder Confirmation Dialog */}
-            <AlertDialog open={!!deleteFolderData} onOpenChange={(open) => !open && setDeleteFolderData(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete folder "{deleteFolderData?.name}"?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action cannot be undone. The folder and all its contents will be permanently deleted.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmDeleteFolder}>Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </div>
     );
 }

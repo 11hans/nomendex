@@ -27,6 +27,7 @@ import {
     ToolInput,
     ToolOutput,
 } from "@/components/ai-elements/tool";
+import { RenderedUI, parseNoetectUIData } from "@/components/ai-elements/rendered-ui";
 import {
     ChainOfThought,
     ChainOfThoughtContent,
@@ -62,7 +63,7 @@ export type ChatViewProps = {
 
 export default function ChatView({ sessionId: initialSessionId, tabId, initialPrompt }: ChatViewProps) {
     const { currentTheme } = useTheme();
-    const { setTabName, activeTab, setActiveTabId } = useWorkspaceContext();
+    const { setTabName, activeTab, setActiveTabId, chatInputEnterToSend } = useWorkspaceContext();
 
     // Chat state
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -828,6 +829,21 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
 
                                     if (block.type === "tool") {
                                         const toolCall = block.toolCall;
+
+                                        // Check if this is a render_ui tool with UI data
+                                        const uiData = parseNoetectUIData(toolCall.output);
+                                        if (uiData) {
+                                            return (
+                                                <div key={block.id} className="mb-2">
+                                                    <RenderedUI
+                                                        html={uiData.html}
+                                                        title={uiData.title}
+                                                        height={uiData.height}
+                                                    />
+                                                </div>
+                                            );
+                                        }
+
                                         return (
                                             <Tool key={block.id} defaultOpen={false} className="mb-2">
                                                 <ToolHeader
@@ -955,6 +971,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                         ref={inputRef}
                         placeholder={isLoading ? "Type to queue next message..." : "Message..."}
                         disabled={!!pendingPermission}
+                        enterToSend={chatInputEnterToSend}
                     />
                     <ProseMirrorPromptFooter className="justify-between">
                         <div className="flex items-center gap-1">

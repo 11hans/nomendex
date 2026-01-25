@@ -9,6 +9,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private let sidecar = SidecarLauncher()
     private var localEventMonitor: Any?
     private var updaterController: SPUStandardUpdaterController!
+    private var logsWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log("App launching...")
@@ -161,6 +162,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         appMenu.addItem(checkForUpdatesItem)
 
         appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(NSMenuItem(title: "View Startup Logs...", action: #selector(showStartupLogs), keyEquivalent: ""))
+        appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(NSMenuItem(title: "Quit Nomendex", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         
         // Edit menu (for copy/paste)
@@ -208,6 +211,83 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
                     }
                 }
             }
+        }
+    }
+
+    @objc private func showStartupLogs() {
+        // If window already exists, just bring it to front and refresh content
+        if let existingWindow = logsWindow {
+            refreshLogsWindow(existingWindow)
+            existingWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let logPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/com.firstloop.nomendex/logs.txt")
+
+        var logContent = "No startup logs found."
+        if FileManager.default.fileExists(atPath: logPath.path) {
+            do {
+                logContent = try String(contentsOf: logPath, encoding: .utf8)
+                if logContent.isEmpty {
+                    logContent = "Startup log file is empty."
+                }
+            } catch {
+                logContent = "Error reading logs: \(error.localizedDescription)"
+            }
+        }
+
+        // Create a simple window to display logs
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 700, height: 500),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Startup Logs"
+        window.center()
+        window.isReleasedWhenClosed = false
+
+        let scrollView = NSScrollView(frame: window.contentView!.bounds)
+        scrollView.autoresizingMask = [.width, .height]
+        scrollView.hasVerticalScroller = true
+        scrollView.hasHorizontalScroller = true
+
+        let textView = NSTextView(frame: scrollView.bounds)
+        textView.autoresizingMask = [.width, .height]
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        textView.string = logContent
+        textView.backgroundColor = NSColor(red: 0.1, green: 0.1, blue: 0.1, alpha: 1.0)
+        textView.textColor = NSColor.white
+
+        scrollView.documentView = textView
+        window.contentView = scrollView
+
+        logsWindow = window
+        window.makeKeyAndOrderFront(nil)
+    }
+
+    private func refreshLogsWindow(_ window: NSWindow) {
+        let logPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/com.firstloop.nomendex/logs.txt")
+
+        var logContent = "No startup logs found."
+        if FileManager.default.fileExists(atPath: logPath.path) {
+            do {
+                logContent = try String(contentsOf: logPath, encoding: .utf8)
+                if logContent.isEmpty {
+                    logContent = "Startup log file is empty."
+                }
+            } catch {
+                logContent = "Error reading logs: \(error.localizedDescription)"
+            }
+        }
+
+        if let scrollView = window.contentView as? NSScrollView,
+           let textView = scrollView.documentView as? NSTextView {
+            textView.string = logContent
         }
     }
 

@@ -101,7 +101,73 @@ function toggleTodoWithinRange(
   range: ParagraphRange,
   selectionOffsets?: SelectionOffsets,
 ): boolean {
-  const lineText = state.doc.textBetween(range.lineStart, range.lineEnd);
+  // Use leafText: "" so atom nodes (wiki_link) don't interfere with regex matching
+  const lineText = state.doc.textBetween(range.lineStart, range.lineEnd, undefined, "");
+
+  // Check if this is an existing todo - if so, only replace the checkbox character
+  // to preserve inline nodes (like wiki_link)
+  const todoMatch = lineText.match(TODO_REGEX);
+  const listTodoMatch = lineText.match(LIST_TODO_REGEX);
+
+  if (todoMatch) {
+    // Standalone paragraph todo: "- [ ] text" -> "- [x] text"
+    // Preserve inline nodes by only replacing the checkbox character
+    const indent = todoMatch[1] ?? "";
+    const currentChecked = (todoMatch[2] ?? "").trim().toLowerCase();
+    const newChecked = currentChecked === "x" ? " " : "x";
+
+    // Position of space/x in "- [ ]" is at indent.length + 3
+    const checkboxPos = range.lineStart + indent.length + 3;
+
+    let transaction = state.tr.replaceWith(
+      checkboxPos,
+      checkboxPos + 1,
+      state.schema.text(newChecked),
+    );
+
+    if (selectionOffsets) {
+      const maxOffset = lineText.length;
+      const anchorPos = range.lineStart + clampOffset(selectionOffsets.anchor, maxOffset);
+      const headPos = range.lineStart + clampOffset(selectionOffsets.head, maxOffset);
+      transaction = transaction.setSelection(TextSelection.create(transaction.doc, anchorPos, headPos));
+    }
+
+    if (dispatch) {
+      dispatch(transaction);
+    }
+
+    return true;
+  } else if (listTodoMatch) {
+    // List item todo: "[ ] text" -> "[x] text"
+    // Preserve inline nodes by only replacing the checkbox character
+    const currentChecked = (listTodoMatch[1] ?? "").trim().toLowerCase();
+    const newChecked = currentChecked === "x" ? " " : "x";
+
+    // Position of space/x in "[ ]" is at position 1
+    const checkboxPos = range.lineStart + 1;
+
+    let transaction = state.tr.replaceWith(
+      checkboxPos,
+      checkboxPos + 1,
+      state.schema.text(newChecked),
+    );
+
+    if (selectionOffsets) {
+      const maxOffset = lineText.length;
+      const anchorPos = range.lineStart + clampOffset(selectionOffsets.anchor, maxOffset);
+      const headPos = range.lineStart + clampOffset(selectionOffsets.head, maxOffset);
+      transaction = transaction.setSelection(TextSelection.create(transaction.doc, anchorPos, headPos));
+    }
+
+    if (dispatch) {
+      dispatch(transaction);
+    }
+
+    return true;
+  }
+
+  // For non-todo lines (bullets, plain text), use full text replacement
+  // since there are no inline nodes to preserve
   const replacement = computeTodoReplacement(lineText);
 
   if (!replacement) {
@@ -151,6 +217,7 @@ export const toggleTodoAtLine: Command = (state, dispatch) => {
 /**
  * Handle Backspace key on todo lines:
  * - If cursor is at the start of todo content (right after "- [ ] "), remove the marker
+ * - If todo is empty/whitespace-only and cursor is anywhere in it, remove the marker
  */
 export const handleTodoBackspace: Command = (state, dispatch) => {
   const { selection } = state;
@@ -172,50 +239,102 @@ export const handleTodoBackspace: Command = (state, dispatch) => {
     return false;
   }
 
-  const lineText = state.doc.textBetween(paragraphRange.lineStart, paragraphRange.lineEnd);
-
-  // Check if this is a todo line
-  const todoMatch = lineText.match(TODO_REGEX);
-  if (!todoMatch) {
-    return false;
-  }
-
-  const indent = todoMatch[1] ?? "";
-  const contentText = todoMatch[3] ?? "";
+  // Use leafText: "" so atom nodes (wiki_link) don't interfere with regex matching
+  const lineText = state.doc.textBetween(paragraphRange.lineStart, paragraphRange.lineEnd, undefined, "");
 
   // Calculate cursor position relative to line start
   const cursorOffsetInLine = selection.from - paragraphRange.lineStart;
 
-  // Calculate actual marker length: "- [ ]" is 5 chars, plus optional trailing space
-  const hasTrailingSpace = lineText.charAt(indent.length + 5) === " ";
-  const actualMarkerLength = hasTrailingSpace ? 6 : 5;
-  const contentStartOffset = indent.length + actualMarkerLength;
+  // Check for standalone paragraph todo: "- [ ] text"
+  const todoMatch = lineText.match(TODO_REGEX);
+  if (todoMatch) {
+    const indent = todoMatch[1] ?? "";
+    const contentText = todoMatch[3] ?? "";
 
-  // Only handle backspace if cursor is at the very start of the content
-  if (cursorOffsetInLine !== contentStartOffset) {
-    return false;
-  }
+    // Calculate actual marker length: "- [ ]" is 5 chars, plus optional trailing space
+    const hasTrailingSpace = lineText.charAt(indent.length + 5) === " ";
+    const actualMarkerLength = hasTrailingSpace ? 6 : 5;
+    const contentStartOffset = indent.length + actualMarkerLength;
 
-  if (dispatch) {
-    // Replace the todo line with just the content (removing "- [ ] " marker)
-    const replacement = indent + contentText;
-    let tr: Transaction;
-    if (replacement) {
-      tr = state.tr.replaceWith(
-        paragraphRange.lineStart,
-        paragraphRange.lineEnd,
-        state.schema.text(replacement)
-      );
-    } else {
-      // Empty replacement - just delete the content (ProseMirror doesn't allow empty text nodes)
-      tr = state.tr.delete(paragraphRange.lineStart, paragraphRange.lineEnd);
+    // Check if todo content is empty or whitespace-only
+    const isEmptyTodo = !contentText.trim();
+
+    // Handle backspace if:
+    // 1. Cursor is at the very start of the content, OR
+    // 2. Todo is empty/whitespace-only and cursor is at or after content start
+    const atContentStart = cursorOffsetInLine === contentStartOffset;
+    const inEmptyTodo = isEmptyTodo && cursorOffsetInLine >= contentStartOffset;
+
+    if (!atContentStart && !inEmptyTodo) {
+      return false;
     }
-    // Position cursor at the start of the remaining content
-    const newCursorPos = paragraphRange.lineStart + indent.length;
-    dispatch(tr.setSelection(TextSelection.create(tr.doc, newCursorPos)));
+
+    if (dispatch) {
+      // Replace the todo line with just the content (removing "- [ ] " marker)
+      const replacement = indent + contentText;
+      let tr: Transaction;
+      if (replacement.trim()) {
+        tr = state.tr.replaceWith(
+          paragraphRange.lineStart,
+          paragraphRange.lineEnd,
+          state.schema.text(replacement)
+        );
+      } else {
+        // Empty replacement - just delete the content (ProseMirror doesn't allow empty text nodes)
+        tr = state.tr.delete(paragraphRange.lineStart, paragraphRange.lineEnd);
+      }
+      // Position cursor at the start of the remaining content
+      const newCursorPos = paragraphRange.lineStart + indent.length;
+      dispatch(tr.setSelection(TextSelection.create(tr.doc, newCursorPos)));
+    }
+
+    return true;
   }
 
-  return true;
+  // Check for list item todo: "[ ] text" (no leading "- ")
+  const listTodoMatch = lineText.match(LIST_TODO_REGEX);
+  if (listTodoMatch) {
+    const contentText = listTodoMatch[2] ?? "";
+
+    // Calculate actual marker length: "[ ]" is 3 chars, plus optional trailing space
+    const hasTrailingSpace = lineText.charAt(3) === " ";
+    const actualMarkerLength = hasTrailingSpace ? 4 : 3;
+    const contentStartOffset = actualMarkerLength;
+
+    // Check if todo content is empty or whitespace-only
+    const isEmptyTodo = !contentText.trim();
+
+    // Handle backspace if:
+    // 1. Cursor is at the very start of the content, OR
+    // 2. Todo is empty/whitespace-only and cursor is at or after content start
+    const atContentStart = cursorOffsetInLine === contentStartOffset;
+    const inEmptyTodo = isEmptyTodo && cursorOffsetInLine >= contentStartOffset;
+
+    if (!atContentStart && !inEmptyTodo) {
+      return false;
+    }
+
+    if (dispatch) {
+      // Replace the todo line with just the content (removing "[ ] " marker)
+      let tr: Transaction;
+      if (contentText.trim()) {
+        tr = state.tr.replaceWith(
+          paragraphRange.lineStart,
+          paragraphRange.lineEnd,
+          state.schema.text(contentText)
+        );
+      } else {
+        // Empty replacement - just delete the content
+        tr = state.tr.delete(paragraphRange.lineStart, paragraphRange.lineEnd);
+      }
+      // Position cursor at the start
+      dispatch(tr.setSelection(TextSelection.create(tr.doc, paragraphRange.lineStart)));
+    }
+
+    return true;
+  }
+
+  return false;
 };
 
 /**
@@ -243,7 +362,8 @@ export const handleTodoEnter: Command = (state, dispatch) => {
     return false;
   }
 
-  const lineText = state.doc.textBetween(paragraphRange.lineStart, paragraphRange.lineEnd);
+  // Use leafText: "" so atom nodes (wiki_link) don't interfere with regex matching
+  const lineText = state.doc.textBetween(paragraphRange.lineStart, paragraphRange.lineEnd, undefined, "");
 
   // Check if this is an empty todo line
   const emptyMatch = lineText.match(EMPTY_TODO_REGEX);
@@ -257,44 +377,57 @@ export const handleTodoEnter: Command = (state, dispatch) => {
     return true;
   }
 
-  // Check if this is a todo line with content
+  // Check if this is a todo line with content (standalone paragraph)
   const todoMatch = lineText.match(TODO_REGEX);
   if (todoMatch) {
     if (dispatch) {
       const indent = todoMatch[1] ?? "";
-      const cursorOffsetInLine = selection.from - paragraphRange.lineStart;
-
-      // Get the content after the cursor position
-      const textAfterCursor = lineText.slice(cursorOffsetInLine);
-
-      // Build the new todo line content
-      // Add a space after the marker if no content, so cursor isn't right against checkbox
-      const contentAfter = textAfterCursor || " ";
-      const newTodoContent = `${indent}- [ ] ${contentAfter}`;
 
       // Get the paragraph end position (one level up from text position)
       const paragraphEndPos = $from.after($from.depth);
 
+      // For simplicity, always create a new empty todo when pressing Enter
+      // This avoids complex position mapping issues with inline nodes (wiki_links)
+      // Any content after cursor stays on current line
+      const newTodoContent = `${indent}- [ ] `;
+
       // Create the new paragraph with todo content
       const newParagraph = state.schema.nodes.paragraph.create(
         null,
-        newTodoContent ? state.schema.text(newTodoContent) : null
+        state.schema.text(newTodoContent)
       );
 
       let tr = state.tr;
 
-      // First, delete text after cursor in current paragraph
-      if (selection.from < paragraphRange.lineEnd) {
-        tr = tr.delete(selection.from, paragraphRange.lineEnd);
-      }
-
       // Insert new paragraph after current one
-      // After deletion, the paragraph end position might have shifted
-      const insertPos = tr.mapping.map(paragraphEndPos);
+      const insertPos = paragraphEndPos;
       tr = tr.insert(insertPos, newParagraph);
 
       // Position cursor at start of new todo content (after "- [ ] ")
       const newCursorPos = insertPos + 1 + indent.length + TODO_MARKER_LENGTH;
+      dispatch(tr.setSelection(TextSelection.create(tr.doc, newCursorPos)));
+    }
+    return true;
+  }
+
+  // Check if this is a list item todo ([ ] text without the leading "- ")
+  const listTodoMatch = lineText.match(LIST_TODO_REGEX);
+  if (listTodoMatch) {
+    if (dispatch) {
+      // For list item todos, create a new list item with a todo
+      const paragraphEndPos = $from.after($from.depth);
+      const newTodoContent = "[ ] ";
+
+      const newParagraph = state.schema.nodes.paragraph.create(
+        null,
+        state.schema.text(newTodoContent)
+      );
+
+      let tr = state.tr;
+      tr = tr.insert(paragraphEndPos, newParagraph);
+
+      // Position cursor after "[ ] "
+      const newCursorPos = paragraphEndPos + 1 + 4; // +1 for paragraph start, +4 for "[ ] "
       dispatch(tr.setSelection(TextSelection.create(tr.doc, newCursorPos)));
     }
     return true;
@@ -327,7 +460,8 @@ function buildTodoDecorations(doc: PMNode): DecorationSet {
       return;
     }
 
-    const text = node.textBetween(0, node.content.size, undefined, "\n");
+    // Use empty string for leafText so atom nodes (like wiki_link) don't break regex matching
+    const text = node.textBetween(0, node.content.size, undefined, "");
 
     // Try matching standalone paragraph todo first: "- [ ] text"
     const match = text.match(TODO_REGEX);
@@ -431,7 +565,8 @@ function handleTodoClick(view: EditorView, pos: number, event: MouseEvent): bool
     return false;
   }
 
-  const text = state.doc.textBetween(paragraphRange.lineStart, paragraphRange.lineEnd);
+  // Use leafText: "" so atom nodes (wiki_link) don't interfere with regex matching
+  const text = state.doc.textBetween(paragraphRange.lineStart, paragraphRange.lineEnd, undefined, "");
 
   // Check for either standalone todo or list item todo
   const match = text.match(TODO_REGEX) || text.match(LIST_TODO_REGEX);
@@ -588,7 +723,8 @@ export const handleTodoIndent: Command = (state, dispatch) => {
     return false;
   }
 
-  const lineText = state.doc.textBetween(paragraphRange.lineStart, paragraphRange.lineEnd);
+  // Use leafText: "" so atom nodes (wiki_link) don't interfere with regex matching
+  const lineText = state.doc.textBetween(paragraphRange.lineStart, paragraphRange.lineEnd, undefined, "");
 
   // Check if this is a todo or bullet line
   const todoMatch = lineText.match(TODO_REGEX);
@@ -642,7 +778,8 @@ export const handleTodoOutdent: Command = (state, dispatch) => {
     return false;
   }
 
-  const lineText = state.doc.textBetween(paragraphRange.lineStart, paragraphRange.lineEnd);
+  // Use leafText: "" so atom nodes (wiki_link) don't interfere with regex matching
+  const lineText = state.doc.textBetween(paragraphRange.lineStart, paragraphRange.lineEnd, undefined, "");
 
   // Check if this is a todo or bullet line
   const todoMatch = lineText.match(TODO_REGEX);

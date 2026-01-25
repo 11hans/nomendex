@@ -5,17 +5,9 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Search, MessageCircle, Plus, Trash2, Maximize2 } from "lucide-react";
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { useCommandDialog } from "@/components/CommandDialogProvider";
 import { useTheme } from "@/hooks/useTheme";
+import { DeleteChatSessionDialog } from "./delete-chat-session-dialog";
 import { reconstructMessages, type SessionMetadata, type ChatMessage } from "./sessionUtils";
 
 type SessionWithSnippet = SessionMetadata & {
@@ -80,6 +72,7 @@ function highlightMatches(
 export default function ChatBrowserView({ tabId }: { tabId: string }) {
     const { setTabName, addNewTab, setActiveTabId, getViewSelfPlacement, setSidebarTabId, activeTab } = useWorkspaceContext();
     const { currentTheme } = useTheme();
+    const { openDialog } = useCommandDialog();
 
     const [sessions, setSessions] = useState<SessionMetadata[]>([]);
     const [filteredSessions, setFilteredSessions] = useState<SessionWithSnippet[]>([]);
@@ -90,7 +83,6 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
     const [selectedSession, setSelectedSession] = useState<SessionWithSnippet | null>(null);
     const [selectedMessages, setSelectedMessages] = useState<ChatMessage[]>([]);
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-    const [deleteSessionId, setDeleteSessionId] = useState<string | null>(null);
 
     const searchInputRef = useRef<HTMLInputElement>(null);
     const selectedRowRef = useRef<HTMLDivElement | null>(null);
@@ -245,29 +237,11 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
         }
     }, [addNewTab, setActiveTabId, placement, setSidebarTabId]);
 
-    const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
+    const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
-        // Show AlertDialog instead of native confirm()
-        setDeleteSessionId(sessionId);
-    };
 
-    const confirmDeleteSession = async () => {
-        if (!deleteSessionId) return;
-        const sessionId = deleteSessionId;
-        setDeleteSessionId(null);
-
-        try {
-            const response = await fetch("/api/chat/sessions/delete", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ id: sessionId }),
-            });
-
-            if (!response.ok) {
-                throw new Error("Failed to delete session");
-            }
-
+        const handleSuccess = () => {
             // Remove from local state
             setSessions(prev => prev.filter(s => s.id !== sessionId));
             setFilteredSessions(prev => prev.filter(s => s.id !== sessionId));
@@ -282,9 +256,16 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                     setSelectedSession(null);
                 }
             }
-        } catch (error) {
-            console.error("[ChatBrowser] Failed to delete session:", error);
-        }
+        };
+
+        openDialog({
+            content: (
+                <DeleteChatSessionDialog
+                    sessionId={sessionId}
+                    onSuccess={handleSuccess}
+                />
+            ),
+        });
     };
 
     // Keyboard navigation
@@ -551,22 +532,6 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                     ) : null}
                 </div>
             </div>
-
-            {/* Delete Confirmation Dialog - uses React dialog instead of native confirm() for WKWebView compatibility */}
-            <AlertDialog open={!!deleteSessionId} onOpenChange={(open) => !open && setDeleteSessionId(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Delete this chat session?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action cannot be undone. The session will be removed from your history.
-                        </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={confirmDeleteSession}>Delete</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
         </div>
     );
 }

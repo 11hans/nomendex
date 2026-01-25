@@ -21,10 +21,11 @@ export const workspaceRoutes = {
                         sidebarTabId: null,
                         sidebarOpen: false,
                         mcpServerConfigs: [],
-                        themeName: "Light",
                         projectPreferences: {},
                         gitAuthMode: "local",
                         notesLocation: "root",
+                        autoSync: { enabled: true, syncOnChanges: true, intervalSeconds: 60, paused: false },
+                        chatInputEnterToSend: true,
                     };
                     await Bun.write(`${getNomendexPath()}/workspace.json`, JSON.stringify(defaultWorkspace, null, 2));
 
@@ -83,7 +84,7 @@ export const workspaceRoutes = {
     "/api/theme": {
         async GET() {
             try {
-                const file = Bun.file(`${getNomendexPath()}/workspace.json`);
+                const file = Bun.file(`${getNomendexPath()}/theme.json`);
                 const exists = await file.exists();
 
                 if (!exists) {
@@ -94,12 +95,12 @@ export const workspaceRoutes = {
                     return Response.json(response);
                 }
 
-                const workspaceRaw = await file.json();
-                const workspaceValidated = WorkspaceStateSchema.parse(workspaceRaw);
+                const themeData = await file.json();
+                const themeName = ThemeRequestSchema.parse(themeData).themeName;
 
                 const response: Result<{ themeName: string }> = {
                     success: true,
-                    data: { themeName: workspaceValidated.themeName },
+                    data: { themeName },
                 };
                 return Response.json(response);
             } catch (error) {
@@ -119,29 +120,7 @@ export const workspaceRoutes = {
                 const body = await req.json();
                 const { themeName } = ThemeRequestSchema.parse(body);
 
-                const file = Bun.file(`${getNomendexPath()}/workspace.json`);
-                const exists = await file.exists();
-
-                let workspace: WorkspaceState;
-                if (exists) {
-                    const workspaceRaw = await file.json();
-                    workspace = WorkspaceStateSchema.parse(workspaceRaw);
-                } else {
-                    workspace = {
-                        tabs: [],
-                        activeTabId: null,
-                        sidebarTabId: null,
-                        sidebarOpen: false,
-                        mcpServerConfigs: [],
-                        themeName: "Light",
-                        projectPreferences: {},
-                        gitAuthMode: "local",
-                        notesLocation: "root",
-                    };
-                }
-
-                workspace.themeName = themeName;
-                await Bun.write(`${getNomendexPath()}/workspace.json`, JSON.stringify(workspace, null, 2));
+                await Bun.write(`${getNomendexPath()}/theme.json`, JSON.stringify({ themeName }, null, 2));
 
                 const response: Result<{ themeName: string }> = {
                     success: true,
