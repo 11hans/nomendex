@@ -27,9 +27,9 @@ export type BoardConfig = z.infer<typeof BoardConfigSchema>;
  */
 export function getDefaultColumns(): BoardColumn[] {
     return [
-        { id: "col-backlog", title: "Backlog", order: 1, status: "todo" },
-        { id: "col-this-week", title: "This Week", order: 2, status: "in_progress" },
-        { id: "col-today", title: "Today", order: 3, status: "in_progress" },
-        { id: "col-done", title: "Done", order: 4, status: "done" },
+        { id: "col-todo", title: "To Do", order: 1, status: "todo" },
+        { id: "col-in_progress", title: "In Progress", order: 2, status: "in_progress" },
+        { id: "col-done", title: "Done", order: 3, status: "done" },
+        { id: "col-later", title: "Later", order: 4, status: "later" },
     ];
 }

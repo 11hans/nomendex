@@ -13,6 +13,7 @@ export function TodoCard({
     onArchive,
     hideProject,
     onToggleDone,
+    hideStatusIcon,
 }: {
     todo: Todo;
     selected?: boolean;
@@ -21,6 +22,7 @@ export function TodoCard({
     onArchive?: (todo: Todo) => void;
     hideProject?: boolean;
     onToggleDone?: (todo: Todo) => void;
+    hideStatusIcon?: boolean;
 }) {
     const handleCopy = async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -50,18 +52,20 @@ export function TodoCard({
             <CardHeader className="pb-1 pt-2 px-3">
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2 flex-1">
-                        <button
-                            type="button"
-                            onClick={handleToggleDone}
-                            className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                            title={todo.status === "done" ? "Mark as incomplete" : "Mark as done"}
-                        >
-                            {todo.status === "done" ? (
-                                <CheckCircle2 className="size-4 text-green-600" />
-                            ) : (
-                                <Circle className="size-4" />
-                            )}
-                        </button>
+                        {!hideStatusIcon && (
+                            <button
+                                type="button"
+                                onClick={handleToggleDone}
+                                className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                                title={todo.status === "done" ? "Mark as incomplete" : "Mark as done"}
+                            >
+                                {todo.status === "done" ? (
+                                    <CheckCircle2 className="size-4 text-green-600" />
+                                ) : (
+                                    <Circle className="size-4" />
+                                )}
+                            </button>
+                        )}
                         <CardTitle className={`text-sm font-medium leading-tight ${todo.status === "done" ? "line-through text-muted-foreground" : ""
                             }`}>
                             {todo.title}
@@ -89,7 +93,7 @@ export function TodoCard({
                 {todo.dueDate ? (
                     <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <CalendarDays className="size-3" />
-                        {parseLocalDateString(todo.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {parseLocalDateString(todo.dueDate).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                     </p>
                 ) : (
                     <div />

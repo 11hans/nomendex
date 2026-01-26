@@ -1412,6 +1412,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                         onArchive={archiveTodoWithToast}
                         onToggleDone={toggleDoneWithToast}
                         hideProject={hideProject}
+                        hideStatusIcon={true}
                     />
                 </div>
             </div>
@@ -1685,6 +1686,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                 onDelete={() => { }}
                                 onArchive={() => { }}
                                 hideProject={!!filterProject}
+                                hideStatusIcon={true}
                             />
                         </div>
                     ) : null}
