@@ -18,11 +18,19 @@ export async function migrateProjects() {
 
         logger.info(`Found ${projectNames.length} unique projects to migrate`);
 
+        if (projectNames.length === 0) {
+            // Create empty projects file if no projects found
+            const file = { version: 1, projects: [] };
+            await Bun.write(getProjectsFilePath(), JSON.stringify(file, null, 2));
+            logger.info("Created empty projects.json (no projects to migrate)");
+            return;
+        }
+
         for (const name of projectNames) {
             if (!name) continue;
 
             await saveProject({
-                id: `proj-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                id: crypto.randomUUID(),
                 name: name,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
