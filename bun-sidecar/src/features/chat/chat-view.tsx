@@ -65,7 +65,11 @@ export type ChatViewProps = {
 
 export default function ChatView({ sessionId: initialSessionId, tabId, initialPrompt }: ChatViewProps) {
     const { currentTheme } = useTheme();
-    const { setTabName, activeTab, setActiveTabId, chatInputEnterToSend } = useWorkspaceContext();
+    const { setTabName, updateTabProps, activeTab, setActiveTabId, chatInputEnterToSend } = useWorkspaceContext();
+
+    // Capture the initial sessionId at mount time - don't react to prop changes
+    // This prevents reloading history when updateTabProps adds sessionId during conversation
+    const initialSessionIdRef = useRef(initialSessionId);
 
     // Chat state
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -92,10 +96,11 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
         activeTabIdRef.current = activeTab?.id ?? null;
     }, [activeTab?.id]);
 
-    // Load session history if we have a sessionId, or load agent preferences for new sessions
+    // Load session history if we have a sessionId at mount, or load agent preferences for new sessions
+    // Only runs once on mount - uses ref to avoid reacting to prop changes from updateTabProps
     useEffect(() => {
-        if (initialSessionId) {
-            loadSessionHistory(initialSessionId);
+        if (initialSessionIdRef.current) {
+            loadSessionHistory(initialSessionIdRef.current);
         } else {
             // New session - load last used agent from preferences
             agentsAPI.getPreferences().then((prefs) => {
@@ -105,7 +110,8 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                 setCurrentAgentId("default");
             });
         }
-    }, [initialSessionId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Auto-focus input when tab becomes active or on initial load
     useEffect(() => {
@@ -391,6 +397,9 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
 
                             if (data.sessionId && !sessionId) {
                                 setSessionId(data.sessionId);
+
+                                // Update tab props with the new sessionId so the tab persists across switches
+                                updateTabProps(tabId, { sessionId: data.sessionId });
 
                                 // Save session immediately when we get the ID (not waiting for done)
                                 if (!sessionSaved) {
