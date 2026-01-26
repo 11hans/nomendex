@@ -149,21 +149,78 @@ export function useWorkspace(_initialRoute?: RouteParams) {
     );
 
     // Opens a new tab AND sets it as active in a single atomic update
+    // If a matching tab already exists, focus it instead of creating a duplicate
     const openTab = useCallback(
         ({ pluginMeta, view = "default", props = {} }: { pluginMeta: SerializablePlugin; view: string; props?: Record<string, unknown> }) => {
+            let resultTab: WorkspaceTab | null = null;
+
             try {
-                const pluginInstance = createPluginInstance({ pluginMeta, viewId: view, props });
-                const newTab: WorkspaceTab = {
-                    id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-                    title: pluginInstance.plugin.name,
-                    pluginInstance,
-                };
-                updateWorkspace((prev) => ({
-                    ...prev,
-                    tabs: [...prev.tabs, newTab],
-                    activeTabId: newTab.id,
-                }));
-                return newTab;
+                updateWorkspace((prev) => {
+                    // Check if a matching tab already exists (using latest state from prev)
+                    const existingTab = prev.tabs.find(tab => {
+                        const instance = tab.pluginInstance;
+
+                        // Match on plugin ID and view
+                        if (instance.plugin.id !== pluginMeta.id || instance.viewId !== view) {
+                            return false;
+                        }
+
+                        // Match on props - do a deep comparison of the key properties
+                        const existingProps = instance.instanceProps ?? {};
+
+                        // For notes: match on noteFileName
+                        if (pluginMeta.id === "notes" && props.noteFileName) {
+                            return existingProps.noteFileName === props.noteFileName;
+                        }
+
+                        // For todos: match on project and view type
+                        if (pluginMeta.id === "todos") {
+                            // For browser/kanban views, match on project filter
+                            if (view === "browser" || view === "kanban") {
+                                return existingProps.project === props.project;
+                            }
+                            // For other views (projects, default), just match the view type
+                            return true;
+                        }
+
+                        // For tags: match on tagName
+                        if (pluginMeta.id === "tags" && props.tagName) {
+                            return existingProps.tagName === props.tagName;
+                        }
+
+                        // For other plugins, match if view is the same and props are empty or match
+                        if (Object.keys(props).length === 0 && Object.keys(existingProps).length === 0) {
+                            return true;
+                        }
+
+                        return false;
+                    });
+
+                    // If matching tab exists, focus it instead of creating new one
+                    if (existingTab) {
+                        resultTab = existingTab;
+                        return {
+                            ...prev,
+                            activeTabId: existingTab.id,
+                        };
+                    }
+
+                    // Otherwise create new tab
+                    const pluginInstance = createPluginInstance({ pluginMeta, viewId: view, props });
+                    const newTab: WorkspaceTab = {
+                        id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                        title: pluginInstance.plugin.name,
+                        pluginInstance,
+                    };
+                    resultTab = newTab;
+                    return {
+                        ...prev,
+                        tabs: [...prev.tabs, newTab],
+                        activeTabId: newTab.id,
+                    };
+                });
+
+                return resultTab;
             } catch {
                 return null;
             }

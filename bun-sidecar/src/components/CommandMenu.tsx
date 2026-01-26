@@ -15,7 +15,7 @@ import { SearchNotesDialog } from "@/features/notes/search-notes-dialog";
 
 export function CommandMenu() {
     const [open, setOpen] = React.useState(false);
-    const { addNewTab, setActiveTabId, workspace, closeTab, closeAllTabs, setSidebarTabId, sidebarTabId, setSidebarOpen, sidebarOpen, activeTab } =
+    const { addNewTab, openTab, setActiveTabId, workspace, closeTab, closeAllTabs, setSidebarTabId, sidebarTabId, setSidebarOpen, sidebarOpen, activeTab } =
         useWorkspaceContext();
     const { navigate, currentPath } = useRouting();
     const { openDialog, closeDialog } = useCommandDialog();
@@ -83,6 +83,7 @@ export function CommandMenu() {
                     closeDialog,
                     closeCommandMenu: () => setOpen(false),
                     addNewTab,
+                    openTab,
                     setActiveTabId,
                     closeTab,
                     activeTab,
@@ -103,6 +104,7 @@ export function CommandMenu() {
                 closeDialog,
                 closeCommandMenu: () => setOpen(false),
                 addNewTab,
+                openTab,
                 setActiveTabId,
                 closeTab,
                 activeTab,
@@ -118,6 +120,7 @@ export function CommandMenu() {
             const chatCommands = getChatCommands({
                 closeCommandMenu: () => setOpen(false),
                 addNewTab,
+                openTab,
                 setActiveTabId,
                 navigate,
                 currentPath,
@@ -133,6 +136,7 @@ export function CommandMenu() {
         loadCommands();
     }, [
         addNewTab,
+        openTab,
         setActiveTabId,
         navigate,
         currentPath,
