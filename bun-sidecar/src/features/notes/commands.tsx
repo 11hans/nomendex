@@ -18,6 +18,7 @@ interface CommandContext {
     closeDialog: () => void;
     closeCommandMenu: () => void;
     addNewTab: (tab: { pluginMeta: SerializablePlugin; view: string; props?: Record<string, unknown> }) => WorkspaceTab | null;
+    openTab: (tab: { pluginMeta: SerializablePlugin; view: string; props?: Record<string, unknown> }) => WorkspaceTab | null;
     setActiveTabId: (id: string) => void;
     closeTab: (id: string) => void;
     activeTab?: WorkspaceTab | null;
@@ -75,15 +76,12 @@ export function getNotesCommands(context: CommandContext): Command[] {
                     await notesAPI.createNote({ fileName });
                 }
 
-                const newTab = context.addNewTab({
+                context.openTab({
                     pluginMeta: notesPluginSerial,
                     view: "editor",
                     props: { noteFileName: fileName },
                 });
 
-                if (newTab) {
-                    context.setActiveTabId(newTab.id);
-                }
                 // Navigate to workspace if not already there
                 if (context.currentPath !== "/") {
                     context.navigate("/");
@@ -109,15 +107,12 @@ export function getNotesCommands(context: CommandContext): Command[] {
                     await notesAPI.createNote({ fileName });
                 }
 
-                const newTab = context.addNewTab({
+                context.openTab({
                     pluginMeta: notesPluginSerial,
                     view: "editor",
                     props: { noteFileName: fileName },
                 });
 
-                if (newTab) {
-                    context.setActiveTabId(newTab.id);
-                }
                 // Navigate to workspace if not already there
                 if (context.currentPath !== "/") {
                     context.navigate("/");
@@ -143,15 +138,12 @@ export function getNotesCommands(context: CommandContext): Command[] {
                     await notesAPI.createNote({ fileName });
                 }
 
-                const newTab = context.addNewTab({
+                context.openTab({
                     pluginMeta: notesPluginSerial,
                     view: "editor",
                     props: { noteFileName: fileName },
                 });
 
-                if (newTab) {
-                    context.setActiveTabId(newTab.id);
-                }
                 // Navigate to workspace if not already there
                 if (context.currentPath !== "/") {
                     context.navigate("/");
@@ -179,15 +171,12 @@ export function getNotesCommands(context: CommandContext): Command[] {
             icon: "FileText",
             callback: () => {
                 context.closeCommandMenu();
-                const newTab = context.addNewTab({
+                context.openTab({
                     pluginMeta: notesPluginSerial,
                     view: "browser",
                     props: {},
                 });
 
-                if (newTab) {
-                    context.setActiveTabId(newTab.id);
-                }
                 // Navigate to workspace if not already there
                 if (context.currentPath !== "/") {
                     context.navigate("/");
