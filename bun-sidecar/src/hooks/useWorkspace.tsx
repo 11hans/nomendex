@@ -166,7 +166,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                         }
 
                         // Match on props - do a deep comparison of the key properties
-                        const existingProps = instance.instanceProps;
+                        const existingProps = instance.instanceProps ?? {};
 
                         // For notes: match on noteFileName
                         if (pluginMeta.id === "notes" && props.noteFileName) {
