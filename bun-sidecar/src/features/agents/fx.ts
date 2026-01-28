@@ -87,7 +87,7 @@ async function getAgent(input: { agentId: string }): Promise<AgentConfig | null>
         }
 
         agentsLogger.error(`Invalid agent file for ${input.agentId}`, {
-            errors: parseResult.error.errors
+            issues: parseResult.error.issues
         });
         return null;
     } catch (error) {
@@ -121,7 +121,7 @@ async function listAgents(): Promise<AgentConfig[]> {
                     agents.push(parseResult.data);
                 } else {
                     agentsLogger.error(`Invalid agent file ${fileName}`, {
-                        errors: parseResult.error.errors
+                        issues: parseResult.error.issues
                     });
                 }
             } catch (error) {
@@ -165,6 +165,7 @@ async function createAgent(input: {
             systemPrompt: input.systemPrompt,
             model: input.model,
             mcpServers: input.mcpServers,
+            allowedTools: [],
             createdAt: now,
             updatedAt: now,
         };
