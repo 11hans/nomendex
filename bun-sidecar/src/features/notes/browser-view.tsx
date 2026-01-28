@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, FileText, FilePlus, FolderPlus, Maximize2, Eye, EyeOff } from "lucide-react";
+import { Search, FileText, FilePlus, FolderPlus, Maximize2 } from "lucide-react";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
 import { Note, NoteFolder, notesPluginSerial } from "./index";
@@ -24,7 +24,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     if (!tabId) {
         throw new Error("tabId is required");
     }
-    const { activeTab, setTabName, addNewTab, setActiveTabId, getViewSelfPlacement, setSidebarTabId, showHiddenFiles, setShowHiddenFiles } = useWorkspaceContext();
+    const { activeTab, setTabName, addNewTab, setActiveTabId, getViewSelfPlacement, setSidebarTabId, showHiddenFiles } = useWorkspaceContext();
     const { loading, error, setLoading, setError } = usePlugin();
     const [notes, setNotes] = useState<Array<Note>>([]);
     const [folders, setFolders] = useState<NoteFolder[]>([]);
@@ -416,15 +416,6 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                                 />
                             </div>
                             <div className="flex items-center">
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7"
-                                    onClick={() => setShowHiddenFiles(!showHiddenFiles)}
-                                    title={showHiddenFiles ? "Hide hidden files" : "Show hidden files"}
-                                >
-                                    {showHiddenFiles ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                                </Button>
                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
                                     openDialog({
                                         title: "Create New Note",
