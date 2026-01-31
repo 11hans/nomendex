@@ -110,7 +110,6 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                 setCurrentAgentId("default");
             });
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Auto-focus input when tab becomes active or on initial load

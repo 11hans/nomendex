@@ -176,7 +176,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                 />
             ),
         });
-    }, [openDialog, notesAPI, selectedNote]);
+    }, [openDialog, notesAPI, selectedNote, showHiddenFiles]);
 
     const handleSelectNote = useCallback((note: Note) => {
         setSelectedNote(note);
@@ -208,7 +208,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                 />
             ),
         });
-    }, [openDialog, notesAPI, loadFolders]);
+    }, [openDialog, notesAPI, loadFolders, showHiddenFiles]);
 
     const handleFolderCreate = useCallback(async (name: string, parentPath: string | null) => {
         try {
