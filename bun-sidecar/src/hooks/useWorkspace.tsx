@@ -464,6 +464,29 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                 const pluginInstance = createPluginInstance({ pluginMeta, viewId: view, props });
                 let replaced: WorkspaceTab | null = null;
                 updateWorkspace((prev) => {
+                    // In split mode, look for the tab in panes
+                    if (prev.layoutMode === "split") {
+                        for (const pane of prev.panes) {
+                            const currentTab = pane.tabs.find((tab) => tab.id === currentTabId);
+                            if (currentTab) {
+                                const newTab: WorkspaceTab = {
+                                    id: currentTab.id,
+                                    title: pluginInstance.plugin.name,
+                                    pluginInstance,
+                                };
+                                replaced = newTab;
+                                const newPanes = prev.panes.map((p) =>
+                                    p.id === pane.id
+                                        ? { ...p, tabs: p.tabs.map((tab) => (tab.id === currentTabId ? newTab : tab)) }
+                                        : p
+                                );
+                                return { ...prev, panes: newPanes };
+                            }
+                        }
+                        return prev;
+                    }
+
+                    // Single mode: use legacy tabs
                     const currentTab = prev.tabs.find((tab) => tab.id === currentTabId);
                     if (!currentTab) {
                         return prev;
@@ -500,6 +523,15 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         // Single mode: use legacy tabs
         return workspace.tabs.find((tab) => tab.id === workspace.activeTabId) ?? null;
     }, [workspace.tabs, workspace.activeTabId, workspace.layoutMode, workspace.panes, workspace.activePaneId]);
+
+    // Computed activeTabId - returns the correct ID based on layout mode
+    const currentActiveTabId = useMemo<string | null>(() => {
+        if (workspace.layoutMode === "split") {
+            const activePane = workspace.panes.find((p) => p.id === workspace.activePaneId) ?? workspace.panes[0];
+            return activePane?.activeTabId ?? null;
+        }
+        return workspace.activeTabId;
+    }, [workspace.layoutMode, workspace.panes, workspace.activePaneId, workspace.activeTabId]);
 
     const sidebarTab = useMemo<WorkspaceTab | null>(
         () => workspace.tabs.find((tab) => tab.id === workspace.sidebarTabId) ?? null,
@@ -1032,7 +1064,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         activeTab,
         sidebarTab,
         setSidebarTabId,
-        activeTabId: workspace.activeTabId,
+        activeTabId: currentActiveTabId,
         setActiveTabId,
         sidebarTabId: workspace.sidebarTabId,
         replaceTabWithNewView,
