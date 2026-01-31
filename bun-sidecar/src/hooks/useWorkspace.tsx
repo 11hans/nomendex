@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { PluginInstance, PluginBase, SerializablePlugin } from "@/types/Plugin";
-import { WorkspaceState, WorkspaceTab, WorkspaceStateSchema, ProjectPreferences, GitAuthMode, NotesLocation, AutoSyncConfig } from "@/types/Workspace";
+import { WorkspaceState, WorkspaceTab, WorkspaceStateSchema, ProjectPreferences, GitAuthMode, NotesLocation, AutoSyncConfig, Pane, LayoutMode } from "@/types/Workspace";
 import { type RouteParams } from "./useRouting";
 import { emit } from "@/lib/events";
+
+// Helper to generate unique IDs
+const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 export function useWorkspace(_initialRoute?: RouteParams) {
     const [workspace, setWorkspace] = useState<WorkspaceState>({
@@ -10,6 +13,10 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         activeTabId: null,
         sidebarOpen: false,
         sidebarTabId: null,
+        panes: [],
+        activePaneId: null,
+        splitRatio: 0.5,
+        layoutMode: "single",
         mcpServerConfigs: [],
         projectPreferences: {},
         gitAuthMode: "local",
@@ -577,6 +584,319 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         [updateWorkspace]
     );
 
+    // === Pane Operations ===
+
+    // Create a new pane
+    const createPane = useCallback(
+        (initialTabs: WorkspaceTab[] = []): Pane => {
+            const newPane: Pane = {
+                id: generateId("pane"),
+                tabs: initialTabs,
+                activeTabId: initialTabs[0]?.id ?? null,
+            };
+            return newPane;
+        },
+        []
+    );
+
+    // Toggle between single and split layout modes
+    const toggleLayoutMode = useCallback(() => {
+        updateWorkspace((prev) => {
+            if (prev.layoutMode === "single") {
+                // Switching to split mode
+                // If we have no panes, create two: first with existing tabs, second empty
+                if (prev.panes.length === 0) {
+                    const leftPane: Pane = {
+                        id: generateId("pane"),
+                        tabs: prev.tabs,
+                        activeTabId: prev.activeTabId,
+                    };
+                    const rightPane: Pane = {
+                        id: generateId("pane"),
+                        tabs: [],
+                        activeTabId: null,
+                    };
+                    return {
+                        ...prev,
+                        layoutMode: "split" as LayoutMode,
+                        panes: [leftPane, rightPane],
+                        activePaneId: leftPane.id,
+                    };
+                }
+                // Panes already exist from previous split, just switch mode
+                return {
+                    ...prev,
+                    layoutMode: "split" as LayoutMode,
+                };
+            } else {
+                // Switching to single mode
+                // Merge all pane tabs back into the main tabs array
+                const allTabs = prev.panes.flatMap((pane) => pane.tabs);
+                const activePane = prev.panes.find((p) => p.id === prev.activePaneId) ?? prev.panes[0];
+                const newActiveTabId = activePane?.activeTabId ?? allTabs[0]?.id ?? null;
+                return {
+                    ...prev,
+                    layoutMode: "single" as LayoutMode,
+                    tabs: allTabs,
+                    activeTabId: newActiveTabId,
+                };
+            }
+        });
+    }, [updateWorkspace]);
+
+    // Set the layout mode directly
+    const setLayoutMode = useCallback(
+        (mode: LayoutMode) => {
+            if (mode === workspace.layoutMode) return;
+            toggleLayoutMode();
+        },
+        [workspace.layoutMode, toggleLayoutMode]
+    );
+
+    // Set the active pane
+    const setActivePaneId = useCallback(
+        (paneId: string | null) => {
+            updateWorkspace((prev) => ({ ...prev, activePaneId: paneId }));
+        },
+        [updateWorkspace]
+    );
+
+    // Set the split ratio between panes
+    const setSplitRatio = useCallback(
+        (ratio: number) => {
+            const clampedRatio = Math.max(0.2, Math.min(0.8, ratio));
+            updateWorkspace((prev) => ({ ...prev, splitRatio: clampedRatio }));
+        },
+        [updateWorkspace]
+    );
+
+    // Move a tab from one pane to another (or within the same pane)
+    const moveTabToPane = useCallback(
+        (tabId: string, targetPaneId: string, insertIndex?: number) => {
+            updateWorkspace((prev) => {
+                // Find the source pane and tab
+                let sourcePane: Pane | undefined;
+                let tab: WorkspaceTab | undefined;
+
+                for (const pane of prev.panes) {
+                    const foundTab = pane.tabs.find((t) => t.id === tabId);
+                    if (foundTab) {
+                        sourcePane = pane;
+                        tab = foundTab;
+                        break;
+                    }
+                }
+
+                if (!sourcePane || !tab) return prev;
+
+                const targetPane = prev.panes.find((p) => p.id === targetPaneId);
+                if (!targetPane) return prev;
+
+                // Remove from source pane
+                const newSourceTabs = sourcePane.tabs.filter((t) => t.id !== tabId);
+                let newSourceActiveTabId = sourcePane.activeTabId;
+                if (sourcePane.activeTabId === tabId) {
+                    // Select the prior tab, or next, or null
+                    const closedIndex = sourcePane.tabs.findIndex((t) => t.id === tabId);
+                    const priorIndex = closedIndex - 1;
+                    newSourceActiveTabId = priorIndex >= 0 ? newSourceTabs[priorIndex]?.id ?? null : newSourceTabs[0]?.id ?? null;
+                }
+
+                // Add to target pane
+                const newTargetTabs = [...targetPane.tabs];
+                const actualIndex = insertIndex !== undefined ? insertIndex : newTargetTabs.length;
+                newTargetTabs.splice(actualIndex, 0, tab);
+
+                // Update panes
+                const newPanes = prev.panes.map((pane) => {
+                    if (pane.id === sourcePane!.id && pane.id === targetPaneId) {
+                        // Moving within the same pane
+                        return {
+                            ...pane,
+                            tabs: newTargetTabs,
+                            activeTabId: tab!.id, // Set moved tab as active
+                        };
+                    }
+                    if (pane.id === sourcePane!.id) {
+                        return {
+                            ...pane,
+                            tabs: newSourceTabs,
+                            activeTabId: newSourceActiveTabId,
+                        };
+                    }
+                    if (pane.id === targetPaneId) {
+                        return {
+                            ...pane,
+                            tabs: newTargetTabs,
+                            activeTabId: tab!.id, // Set moved tab as active
+                        };
+                    }
+                    return pane;
+                });
+
+                return {
+                    ...prev,
+                    panes: newPanes,
+                    activePaneId: targetPaneId, // Focus the target pane
+                };
+            });
+        },
+        [updateWorkspace]
+    );
+
+    // Close a tab in a specific pane
+    const closeTabInPane = useCallback(
+        (paneId: string, tabId: string) => {
+            updateWorkspace((prev) => {
+                const pane = prev.panes.find((p) => p.id === paneId);
+                if (!pane) return prev;
+
+                const closedIndex = pane.tabs.findIndex((t) => t.id === tabId);
+                const newTabs = pane.tabs.filter((t) => t.id !== tabId);
+
+                let newActiveTabId = pane.activeTabId;
+                if (pane.activeTabId === tabId) {
+                    const priorIndex = closedIndex - 1;
+                    newActiveTabId = priorIndex >= 0 ? newTabs[priorIndex]?.id ?? null : newTabs[0]?.id ?? null;
+                }
+
+                const newPanes = prev.panes.map((p) =>
+                    p.id === paneId ? { ...p, tabs: newTabs, activeTabId: newActiveTabId } : p
+                );
+
+                return { ...prev, panes: newPanes };
+            });
+        },
+        [updateWorkspace]
+    );
+
+    // Set the active tab in a specific pane
+    const setActiveTabInPane = useCallback(
+        (paneId: string, tabId: string | null) => {
+            updateWorkspace((prev) => {
+                const newPanes = prev.panes.map((pane) =>
+                    pane.id === paneId ? { ...pane, activeTabId: tabId } : pane
+                );
+                return { ...prev, panes: newPanes, activePaneId: paneId };
+            });
+        },
+        [updateWorkspace]
+    );
+
+    // Open a tab in a specific pane (for split mode)
+    const openTabInPane = useCallback(
+        (
+            paneId: string,
+            { pluginMeta, view = "default", props = {} }: { pluginMeta: SerializablePlugin; view: string; props?: Record<string, unknown> }
+        ) => {
+            let resultTab: WorkspaceTab | null = null;
+
+            updateWorkspace((prev) => {
+                const pane = prev.panes.find((p) => p.id === paneId);
+                if (!pane) return prev;
+
+                // Check for existing matching tab in this pane
+                const existingTab = pane.tabs.find((tab) => {
+                    const instance = tab.pluginInstance;
+                    if (instance.plugin.id !== pluginMeta.id || instance.viewId !== view) {
+                        return false;
+                    }
+                    const existingProps = instance.instanceProps ?? {};
+                    if (pluginMeta.id === "notes" && props.noteFileName) {
+                        return existingProps.noteFileName === props.noteFileName;
+                    }
+                    if (pluginMeta.id === "todos") {
+                        if (view === "browser" || view === "kanban") {
+                            return existingProps.project === props.project;
+                        }
+                        return true;
+                    }
+                    if (pluginMeta.id === "tags" && props.tagName) {
+                        return existingProps.tagName === props.tagName;
+                    }
+                    if (pluginMeta.id === "chat" && view === "chat") {
+                        if (props.sessionId) {
+                            return existingProps.sessionId === props.sessionId;
+                        }
+                        return false;
+                    }
+                    if (Object.keys(props).length === 0 && Object.keys(existingProps).length === 0) {
+                        return true;
+                    }
+                    return false;
+                });
+
+                if (existingTab) {
+                    resultTab = existingTab;
+                    const newPanes = prev.panes.map((p) =>
+                        p.id === paneId ? { ...p, activeTabId: existingTab.id } : p
+                    );
+                    return { ...prev, panes: newPanes, activePaneId: paneId };
+                }
+
+                // Create new tab
+                const pluginInstance = createPluginInstance({ pluginMeta, viewId: view, props });
+                const newTab: WorkspaceTab = {
+                    id: generateId("tab"),
+                    title: pluginInstance.plugin.name,
+                    pluginInstance,
+                };
+                resultTab = newTab;
+
+                const newPanes = prev.panes.map((p) =>
+                    p.id === paneId ? { ...p, tabs: [...p.tabs, newTab], activeTabId: newTab.id } : p
+                );
+
+                return { ...prev, panes: newPanes, activePaneId: paneId };
+            });
+
+            return resultTab;
+        },
+        [createPluginInstance, updateWorkspace]
+    );
+
+    // Reorder tabs within a pane
+    const reorderTabsInPane = useCallback(
+        (paneId: string, fromIndex: number, toIndex: number) => {
+            if (fromIndex === toIndex) return;
+            updateWorkspace((prev) => {
+                const pane = prev.panes.find((p) => p.id === paneId);
+                if (!pane) return prev;
+
+                const newTabs = [...pane.tabs];
+                const [movedTab] = newTabs.splice(fromIndex, 1);
+                if (movedTab) {
+                    newTabs.splice(toIndex, 0, movedTab);
+                }
+
+                const newPanes = prev.panes.map((p) =>
+                    p.id === paneId ? { ...p, tabs: newTabs } : p
+                );
+
+                return { ...prev, panes: newPanes };
+            });
+        },
+        [updateWorkspace]
+    );
+
+    // Get pane by ID
+    const getPane = useCallback(
+        (paneId: string): Pane | undefined => {
+            return workspace.panes.find((p) => p.id === paneId);
+        },
+        [workspace.panes]
+    );
+
+    // Get the active pane
+    const activePane = useMemo<Pane | null>(() => {
+        if (workspace.layoutMode === "single") return null;
+        return workspace.panes.find((p) => p.id === workspace.activePaneId) ?? workspace.panes[0] ?? null;
+    }, [workspace.panes, workspace.activePaneId, workspace.layoutMode]);
+
+    // Get left and right panes
+    const leftPane = useMemo<Pane | null>(() => workspace.panes[0] ?? null, [workspace.panes]);
+    const rightPane = useMemo<Pane | null>(() => workspace.panes[1] ?? null, [workspace.panes]);
+
     return {
         // State
         workspace,
@@ -637,5 +957,25 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         // Show hidden files
         showHiddenFiles: workspace.showHiddenFiles,
         setShowHiddenFiles,
+
+        // Pane operations
+        panes: workspace.panes,
+        activePaneId: workspace.activePaneId,
+        activePane,
+        leftPane,
+        rightPane,
+        splitRatio: workspace.splitRatio,
+        layoutMode: workspace.layoutMode,
+        createPane,
+        toggleLayoutMode,
+        setLayoutMode,
+        setActivePaneId,
+        setSplitRatio,
+        moveTabToPane,
+        closeTabInPane,
+        setActiveTabInPane,
+        openTabInPane,
+        reorderTabsInPane,
+        getPane,
     };
 }
