@@ -7,6 +7,7 @@
 
 import { mkdir } from "node:fs/promises";
 import { join } from "path";
+import yaml from "js-yaml";
 import { getNomendexPath, getNotesPath, getTodosPath, hasActiveWorkspace } from "@/storage/root-path";
 import { StringSet } from "./backlinks-types";
 import { TagsIndex, TagSuggestion, createEmptyTagsIndex, ExplicitTagDefinition } from "./tags-types";
@@ -21,12 +22,43 @@ let index: TagsIndex | null = null;
 const TAG_REGEX = /(?:^|[\s\[\(])#([a-zA-Z_][a-zA-Z0-9_-]*)/g;
 
 /**
- * Extract tags from markdown content
+ * Extract tags from YAML frontmatter
+ */
+function extractFrontmatterTags(content: string): string[] {
+    const frontMatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n/;
+    const match = content.match(frontMatterRegex);
+
+    if (!match) {
+        return [];
+    }
+
+    try {
+        const frontMatterYaml = match[1];
+        const frontMatter = yaml.load(frontMatterYaml) as Record<string, unknown>;
+
+        if (frontMatter && Array.isArray(frontMatter.tags)) {
+            return frontMatter.tags
+                .filter((tag): tag is string => typeof tag === "string")
+                .map(tag => tag.toLowerCase());
+        }
+        return [];
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * Extract tags from markdown content (both frontmatter and inline #hashtags)
  */
 export function extractTags(content: string): string[] {
     const tags: string[] = [];
     let match;
 
+    // 1. Extract tags from YAML frontmatter
+    const frontmatterTags = extractFrontmatterTags(content);
+    tags.push(...frontmatterTags);
+
+    // 2. Extract inline #tags from body content
     // Reset regex state
     TAG_REGEX.lastIndex = 0;
 

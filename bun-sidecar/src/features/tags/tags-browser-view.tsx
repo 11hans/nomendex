@@ -335,19 +335,19 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                                         >
                                             {tagItem.count}
                                         </span>
-                                        {tagItem.count === 0 && (
-                                            <button
-                                                onClick={(e) => handleDeleteTag(tagItem.tag, e)}
-                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
-                                                title="Delete explicit tag"
-                                            >
-                                                <Trash2
-                                                    size={14}
-                                                    style={{ color: currentTheme.styles.contentDestructive }}
-                                                />
-                                            </button>
-                                        )}
                                     </div>
+                                    {tagItem.count === 0 && (
+                                        <button
+                                            onClick={(e) => handleDeleteTag(tagItem.tag, e)}
+                                            className="absolute right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
+                                            title="Delete explicit tag"
+                                        >
+                                            <Trash2
+                                                size={14}
+                                                style={{ color: currentTheme.styles.semanticDestructive }}
+                                            />
+                                        </button>
+                                    )}
                                 </button>
                             </div>
                         ))}
