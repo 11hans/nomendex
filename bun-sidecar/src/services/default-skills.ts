@@ -21,8 +21,8 @@ const DEFAULT_SKILLS: DefaultSkill[] = [
         files: {
             "SKILL.md": `---
 name: todos
-description: Manages project todos via REST API. Use when the user asks to create, view, update, or delete todos, list tasks by project, check task status, or filter by due date. Requires the Nomendex app to be running.
-version: 3
+description: Manages project todos via REST API. BEFORE using this skill, you must THINK: "Does the user mention a project? Does the user imply a specific column like Today?". Use when the user asks to create, view, update, or delete todos.
+version: 4
 ---
 
 # Todos Management
@@ -122,18 +122,62 @@ curl -s -X POST "http://localhost:$PORT/api/todos/list" \\
   -d '{"project": "work"}'
 \`\`\`
 
-## Update Todo
+## Mandatory Execution Protocol
 
+Follow this checklist exactly for every request:
+
+1.  **Context Analysis**:
+    *   **Project Extraction**: Identify project name (e.g. "Nomendex dev").
+    *   **Column Extraction**: Identify urgency/column (e.g. "today").
+    *   **Title Cleaning**: Remove project and column words from the user's sentence to get the core task title.
+        *   *Bad*: "Today I need to fix a UI bug in Nomedex dev"
+        *   *Good*: "Fix a UI bug"
+
+2.  **Verification (BLOCKING STEP)**:
+    *   **STOP!** You cannot create the task yet.
+    *   \`POST /api/todos/projects\` -> Check exact case-sensitive project name.
+    *   \`POST /api/projects/get-by-name\` -> Load board config to find column IDs.
+
+3.  **Execution**:
+    *   Create using the **Cleaned Title**.
+    *   Updates MUST happen immediately after to move to custom columns.
+
+## Anti-Patterns (DO NOT DO)
+
+*   ❌ **DO NOT use raw input as title**: Clean it first! "Add task X to project Y" -> Title: "X".
+*   ❌ **DO NOT guess IDs**: Never use \`col-today\`. Look it up!
+*   ❌ **DO NOT create with customColumnId**: API ignores it. Create then Update.
+
+## Golden Example (Few-Shot)
+
+**User**: "Today I need to fix a UI bug in Nomedex dev: tag deletion icon UI"
+
+**Agent Thought Process**:
+1.  *Analyze*:
+    *   Project: "Nomedex dev" (needs verification)
+    *   Column: "Dneska" -> Today
+    *   **Clean Title**: "Fix a UI bug: tag deletion icon UI" (Removed project/time context)
+2.  *Verify*: Must check project list for "Nomedex dev".
+
+**Agent Actions**:
 \`\`\`bash
-# Update status
-curl -s -X POST "http://localhost:$PORT/api/todos/update" \\
-  -H "Content-Type: application/json" \\
-  -d '{"todoId": "todo-123", "updates": {"status": "done"}}'
+# 1. List projects to find REAL name
+curl -s -X POST "http://localhost:$PORT/api/todos/projects" -d '{}'
+# Result: ["Nomendex dev"] (Note capital N!)
 
-# Update multiple fields
+# 2. Get board for "Nomendex dev" to find "Today" column
+curl -s -X POST "http://localhost:$PORT/api/projects/get-by-name" -d '{"name": "Nomendex dev"}'
+# Result: columns: [{ "title": "Today", "id": "col-8f9a..." }]
+
+# 3. Create Task with CLEAN TITLE and CORRECT PROJECT
+# Title is NOT "Today I need...", it is just the task itself.
+TODO=$(curl -s -X POST "http://localhost:$PORT/api/todos/create" \\
+  -d '{"title": "Fix a UI bug: tag deletion icon UI", "project": "Nomendex dev"}')
+ID=$(echo $TODO | jq -r '.id')
+
+# 4. Move to Target Column
 curl -s -X POST "http://localhost:$PORT/api/todos/update" \\
-  -H "Content-Type: application/json" \\
-  -d '{"todoId": "todo-123", "updates": {"title": "New title", "status": "in_progress"}}'
+  -d '{"todoId": "$ID", "updates": {"customColumnId": "col-8f9a..."}}'
 \`\`\`
 
 ## How Claude Should Use This Skill
@@ -220,8 +264,8 @@ For rendering interactive HTML interfaces in chat, use the **create-interface** 
         files: {
             "SKILL.md": `---
 name: projects
-description: Working with projects and custom Kanban boards. Use when the user mentions a project name, wants to move an item to a column, configure board columns, or asks about project structure.
-version: 2
+description: Working with projects and custom Kanban boards. BEFORE using this skill, you must THINK: "Does the user assume the project already exists? Am I creating a duplicate because of case sensitivity?". Use when the user mentions a project name.
+version: 3
 ---
 
 # Projects Skill
@@ -229,6 +273,18 @@ version: 2
 ## Overview
 
 Projects are stored in \`.nomendex/projects.json\` - the source of truth for all project data including custom Kanban board configurations. Each project can have custom columns with optional status mapping.
+
+## Mandatory Verification Protocol
+
+1.  **List First**: Always call \`/api/projects/list\` before creating a new project.
+2.  **Case Check**: Compare user input ("nomendex") with existing list ("Nomendex").
+3.  **Reuse**: If a match (even case-insensitive) exists, USE IT. Do not create a duplicate.
+
+## Anti-Patterns (DO NOT DO)
+
+*   ❌ **DO NOT create blindly**: "Create project X" -> List first!
+*   ❌ **DO NOT duplicate**: "nomendex" and "Nomendex" should not coexist.
+
 
 ## Port Discovery
 
