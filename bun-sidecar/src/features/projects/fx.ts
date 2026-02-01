@@ -4,6 +4,7 @@ import { getTodos, updateTodo, deleteTodo } from "@/features/todos/fx";
 import { getNotes, updateNoteProject, deleteNote } from "@/features/notes/fx";
 import path from "path";
 import {
+    BoardConfig,
     ProjectConfig,
     ProjectConfigSchema,
     ProjectsFile,
@@ -238,6 +239,7 @@ export async function updateProject(input: {
         description?: string;
         color?: string;
         archived?: boolean;
+        board?: BoardConfig;
     };
 }): Promise<ProjectConfig> {
     projectsLogger.info(`Updating project: ${input.projectId}`);
@@ -441,4 +443,27 @@ export async function ensureProject(input: { name: string }): Promise<ProjectCon
     }
 
     return createProject({ name: input.name });
+}
+
+/**
+ * Get board configuration for a project
+ */
+export async function getBoardConfig(input: { projectId: string }): Promise<BoardConfig | null> {
+    projectsLogger.info(`Getting board config for: ${input.projectId}`);
+    const project = await getProject({ projectId: input.projectId });
+    return project?.board || null;
+}
+
+/**
+ * Save board configuration for a project
+ */
+export async function saveBoardConfig(input: {
+    projectId: string;
+    board: BoardConfig;
+}): Promise<ProjectConfig> {
+    projectsLogger.info(`Saving board config for: ${input.projectId}`);
+    return updateProject({
+        projectId: input.projectId,
+        updates: { board: input.board },
+    });
 }
