@@ -35,3 +35,14 @@ export const ProjectsFileSchema = z.object({
 });
 
 export type ProjectsFile = z.infer<typeof ProjectsFileSchema>;
+
+/**
+ * Get default columns for a new kanban board
+ */
+export function getDefaultColumns(): BoardColumn[] {
+    return [
+        { id: "col-todo", title: "To Do", order: 1, status: "todo" },
+        { id: "col-progress", title: "In Progress", order: 2, status: "in_progress" },
+        { id: "col-done", title: "Done", order: 3, status: "done" },
+    ];
+}

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, GripVertical } from "lucide-react";
-import { BoardConfig, BoardColumn } from "./board-types";
+import { BoardConfig, BoardColumn } from "@/features/projects/project-types";
 
 interface BoardSettingsDialogProps {
     open: boolean;

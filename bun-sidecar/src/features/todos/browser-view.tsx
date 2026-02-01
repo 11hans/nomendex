@@ -14,7 +14,7 @@ import { CreateTodoDialog } from "./CreateTodoDialog";
 import { TaskCardEditor } from "./TaskCardEditor";
 import { TagFilter } from "./TagFilter";
 import { Todo } from "./todo-types";
-import { BoardConfig, BoardColumn, getDefaultColumns } from "./board-types";
+import { BoardConfig, BoardColumn, getDefaultColumns } from "@/features/projects/project-types";
 import { BoardSettingsDialog } from "./BoardSettingsDialog";
 import type { Attachment } from "@/types/attachments";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
@@ -1702,15 +1702,16 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     open={boardSettingsOpen}
                     onOpenChange={setBoardSettingsOpen}
                     config={boardConfig || {
-                        id: `board-${filterProject}-${Date.now()}`,
-                        projectId: filterProject,
                         columns: getDefaultColumns(),
                         showDone: true,
                     }}
                     onSave={async (newConfig) => {
                         try {
-                            const saved = await todosAPI.saveBoardConfig({ config: newConfig });
-                            setBoardConfig(saved);
+                            const savedProject = await todosAPI.saveBoardConfig({
+                                projectId: filterProject,
+                                board: newConfig
+                            });
+                            setBoardConfig(savedProject.board || null);
                             toast.success(boardConfig ? "Board settings saved" : "Custom board created!");
                             // Reload todos in case custom column IDs were mapped or logic changed
                             await loadTodos();
@@ -1719,19 +1720,9 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                             toast.error("Failed to save settings");
                         }
                     }}
-                    onDeleteColumn={async (columnId) => {
-                        if (!filterProject) return;
-                        try {
-                            await todosAPI.deleteColumn({
-                                projectId: filterProject,
-                                columnId
-                            });
-                            toast.success("Column deleted");
-                        } catch (error) {
-                            console.error("Failed to delete column", error);
-                            toast.error("Failed to delete column");
-                            throw error;
-                        }
+                    onDeleteColumn={async (_columnId) => {
+                        // Column deletion is now handled as part of saving the full config
+                        // No separate API call needed
                     }}
                 />
             )}
