@@ -82,6 +82,11 @@ curl -s -X POST "http://localhost:$PORT/api/todos/create" \\
 curl -s -X POST "http://localhost:$PORT/api/todos/create" \\
   -H "Content-Type: application/json" \\
   -d '{"title": "My todo", "status": "in_progress", "project": "work"}'
+
+# With custom column (e.g. "Someday") - FIRST lookup column ID (e.g. "col-8f9a") using projects skill
+curl -s -X POST "http://localhost:$PORT/api/todos/create" \\
+  -H "Content-Type: application/json" \\
+  -d '{"title": "My todo", "customColumnId": "col-8f9a", "project": "work"}'
 \`\`\`
 
 ## List Todos
@@ -121,8 +126,10 @@ Always start by getting the server port, then use the appropriate endpoint.
 Projects can have custom Kanban columns beyond the default statuses. To work with custom columns:
 
 1. Use the **projects** skill to load the project and its board configuration
-2. Get the column ID from the board config
+2. Get the column ID from the board config (e.g. map "Someday" -> "col-8f9a")
 3. Update the todo with \`customColumnId\`
+
+> **IMPORTANT**: Column IDs are dynamic generated UUIDs. NEVER guess an ID like "col-today". ALWAYS map the user's requested column name to the actual ID found in the project configuration.
 
 Example: Moving a todo to a "Code Review" column:
 \`\`\`bash
@@ -250,7 +257,7 @@ Response example:
 \`\`\`json
 {
   "columns": [
-    {"id": "col-todo", "title": "To Do", "order": 1, "status": "todo"},
+    {"id": "col-today", "title": "Today", "order": 1, "status": "todo"},
     {"id": "col-review", "title": "Code Review", "order": 2},
     {"id": "col-done", "title": "Done", "order": 3, "status": "done"}
   ],
@@ -279,7 +286,7 @@ curl -s -X POST "http://localhost:$PORT/api/projects/board/save" \\\\
     "projectId": "PROJECT_ID",
     "board": {
       "columns": [
-        {"id": "col-1", "title": "Backlog", "order": 1, "status": "todo"},
+        {"id": "col-1", "title": "Today", "order": 1, "status": "todo"},
         {"id": "col-2", "title": "In Progress", "order": 2, "status": "in_progress"},
         {"id": "col-3", "title": "Review", "order": 3},
         {"id": "col-4", "title": "Done", "order": 4, "status": "done"}
