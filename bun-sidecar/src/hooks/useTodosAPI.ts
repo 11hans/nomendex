@@ -70,8 +70,8 @@ export const todosAPI = {
     getArchivedTodos: (args: { project?: string } = {}) => fetchAPI<Todo[]>("archived", args),
     getTags: () => fetchAPI<string[]>("tags"),
     // Board config - now uses projects API
-    getBoardConfig: (args: { projectId: string }) => fetchProjectsAPI<BoardConfig | null>("board/get", args),
-    saveBoardConfig: (args: { projectId: string; board: BoardConfig }) => fetchProjectsAPI<ProjectConfig>("board/save", args),
+    getBoardConfig: (args: { projectId?: string; projectName?: string }) => fetchProjectsAPI<BoardConfig | null>("board/get", args),
+    saveBoardConfig: (args: { projectId?: string; projectName?: string; board: BoardConfig }) => fetchProjectsAPI<ProjectConfig>("board/save", args),
     // Projects service API
     getProjectsList: () => fetch("/api/projects/list", { method: "POST" }).then(r => r.json() as Promise<any[]>),
 };

@@ -165,7 +165,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
 
             try {
                 const config = await todosAPI.getBoardConfig({
-                    projectId: filterProject
+                    projectName: filterProject
                 });
                 setBoardConfig(config);
             } catch (error) {
@@ -1708,7 +1708,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     onSave={async (newConfig) => {
                         try {
                             const savedProject = await todosAPI.saveBoardConfig({
-                                projectId: filterProject,
+                                projectName: filterProject,
                                 board: newConfig
                             });
                             setBoardConfig(savedProject.board || null);

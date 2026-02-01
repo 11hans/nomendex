@@ -446,24 +446,60 @@ export async function ensureProject(input: { name: string }): Promise<ProjectCon
 }
 
 /**
- * Get board configuration for a project
+ * Get board configuration for a project.
+ * Accepts either projectId (ID) or projectName (name).
  */
-export async function getBoardConfig(input: { projectId: string }): Promise<BoardConfig | null> {
-    projectsLogger.info(`Getting board config for: ${input.projectId}`);
-    const project = await getProject({ projectId: input.projectId });
+export async function getBoardConfig(input: { projectId?: string; projectName?: string }): Promise<BoardConfig | null> {
+    const identifier = input.projectId || input.projectName;
+    projectsLogger.info(`Getting board config for: ${identifier}`);
+
+    let project: ProjectConfig | null = null;
+
+    if (input.projectId) {
+        project = await getProject({ projectId: input.projectId });
+    }
+
+    if (!project && input.projectName) {
+        project = await getProjectByName({ name: input.projectName });
+    }
+
     return project?.board || null;
 }
 
 /**
- * Save board configuration for a project
+ * Save board configuration for a project.
+ * Accepts either projectId (ID) or projectName (name).
+ * If the project doesn't exist, it will be created.
  */
 export async function saveBoardConfig(input: {
-    projectId: string;
+    projectId?: string;
+    projectName?: string;
     board: BoardConfig;
 }): Promise<ProjectConfig> {
-    projectsLogger.info(`Saving board config for: ${input.projectId}`);
+    const identifier = input.projectId || input.projectName;
+    projectsLogger.info(`Saving board config for: ${identifier}`);
+
+    // First, find or create the project
+    let project: ProjectConfig | null = null;
+
+    if (input.projectId) {
+        project = await getProject({ projectId: input.projectId });
+    }
+
+    if (!project && input.projectName) {
+        project = await getProjectByName({ name: input.projectName });
+    }
+
+    // If project doesn't exist, create it
+    if (!project) {
+        const name = input.projectName || input.projectId || "Untitled";
+        projectsLogger.info(`Project not found, creating: ${name}`);
+        project = await ensureProject({ name });
+    }
+
+    // Now update the project with the board config
     return updateProject({
-        projectId: input.projectId,
+        projectId: project.id,
         updates: { board: input.board },
     });
 }
