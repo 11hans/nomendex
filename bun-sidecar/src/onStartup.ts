@@ -188,16 +188,8 @@ export async function onStartup(): Promise<SkillUpdateCheckResult | null> {
         // Non-fatal - continue startup
     }
 
-    // Initialize projects (migration)
-    startupLog.info("Checking project migration status...");
-    try {
-        const { migrateProjects } = await import("./features/projects/projects-migration");
-        await migrateProjects();
-    } catch (error) {
-        startupLog.error("Failed to run project migration", {
-            error: error instanceof Error ? error.message : String(error),
-        });
-    }
+    // Initialize projects (migration) - already done above, skip duplicate
+    // Note: This duplicate was removed as migration happens at line 167-176
 
     startupLog.info("Initialization complete");
     startupLog.info("=== Startup Sequence Complete ===");
