@@ -14,7 +14,7 @@ import { CreateTodoDialog } from "./CreateTodoDialog";
 import { TaskCardEditor } from "./TaskCardEditor";
 import { TagFilter } from "./TagFilter";
 import { Todo } from "./todo-types";
-import { BoardConfig, BoardColumn, getDefaultColumns } from "./board-types";
+import { BoardConfig, BoardColumn, getDefaultColumns } from "@/features/projects/project-types";
 import { BoardSettingsDialog } from "./BoardSettingsDialog";
 import type { Attachment } from "@/types/attachments";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
@@ -165,7 +165,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
 
             try {
                 const config = await todosAPI.getBoardConfig({
-                    projectId: filterProject
+                    projectName: filterProject
                 });
                 setBoardConfig(config);
             } catch (error) {
@@ -1702,15 +1702,16 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     open={boardSettingsOpen}
                     onOpenChange={setBoardSettingsOpen}
                     config={boardConfig || {
-                        id: `board-${filterProject}-${Date.now()}`,
-                        projectId: filterProject,
                         columns: getDefaultColumns(),
                         showDone: true,
                     }}
                     onSave={async (newConfig) => {
                         try {
-                            const saved = await todosAPI.saveBoardConfig({ config: newConfig });
-                            setBoardConfig(saved);
+                            const savedProject = await todosAPI.saveBoardConfig({
+                                projectName: filterProject,
+                                board: newConfig
+                            });
+                            setBoardConfig(savedProject.board || null);
                             toast.success(boardConfig ? "Board settings saved" : "Custom board created!");
                             // Reload todos in case custom column IDs were mapped or logic changed
                             await loadTodos();
@@ -1720,17 +1721,18 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                         }
                     }}
                     onDeleteColumn={async (columnId) => {
-                        if (!filterProject) return;
                         try {
+                            // Backend migration of todos + column deletion
                             await todosAPI.deleteColumn({
                                 projectId: filterProject,
-                                columnId
+                                columnId: columnId,
                             });
-                            toast.success("Column deleted");
+                            // Refresh todos to see them in new columns
+                            await loadTodos();
                         } catch (error) {
                             console.error("Failed to delete column", error);
                             toast.error("Failed to delete column");
-                            throw error;
+                            throw error; // Re-throw to let dialog handle UI state if needed
                         }
                     }}
                 />

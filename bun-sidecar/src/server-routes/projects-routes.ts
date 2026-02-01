@@ -8,6 +8,8 @@ import {
     ensureProject,
     getProjectStats,
     renameProject,
+    getBoardConfig,
+    saveBoardConfig,
 } from "@/features/projects/fx";
 
 export const projectsRoutes = {
@@ -72,6 +74,21 @@ export const projectsRoutes = {
             const args = await req.json();
             const result = await renameProject(args);
             return Response.json(result);
+        },
+    },
+    "/api/projects/board/get": {
+        async POST(req: Request) {
+            const args = await req.json();
+            const result = await getBoardConfig(args);
+            return Response.json(result);
+        },
+    },
+    "/api/projects/board/save": {
+        async POST(req: Request) {
+            const args = await req.json();
+            const result = await saveBoardConfig(args);
+            return Response.json(result);
+
         },
     },
 };

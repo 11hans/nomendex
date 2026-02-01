@@ -22,6 +22,7 @@ import { versionRoutes } from "./server-routes/version-routes";
 import { logsRoutes } from "./server-routes/logs-routes";
 import { dictionariesRoutes } from "./server-routes/dictionaries-routes";
 
+
 // Terminal WebSocket data type
 interface TerminalWSData {
     isTerminal: true;
@@ -237,6 +238,20 @@ const server = serve<WSData>({
         "/api/git/abort-merge": gitAbortMergeRoute,
         "/api/git/continue-merge": gitContinueMergeRoute,
         "/api/git/conflict-content": gitConflictContentRoute,
+
+        // Catch-all for unknown API routes - return JSON 404 instead of HTML
+        "/api/*": {
+            GET(req: Request) {
+                const url = new URL(req.url);
+                serverLogger.warn(`Unknown API endpoint: ${url.pathname}`, { method: "GET" });
+                return Response.json({ error: "Not found", path: url.pathname }, { status: 404 });
+            },
+            POST(req: Request) {
+                const url = new URL(req.url);
+                serverLogger.warn(`Unknown API endpoint: ${url.pathname}`, { method: "POST" });
+                return Response.json({ error: "Not found", path: url.pathname }, { status: 404 });
+            },
+        },
 
         // This add end to catch all routes and route to frontend
         "/*": index,

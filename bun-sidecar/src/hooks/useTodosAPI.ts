@@ -1,6 +1,6 @@
 import { Todo } from "@/features/todos/todo-types";
 import type { Attachment } from "@/types/attachments";
-import type { BoardConfig } from "@/features/todos/board-types";
+import type { BoardConfig, ProjectConfig } from "@/features/projects/project-types";
 
 interface CreateTodoInput {
     title: string;
@@ -44,6 +44,18 @@ async function fetchAPI<T>(endpoint: string, body: object = {}): Promise<T> {
     return response.json();
 }
 
+async function fetchProjectsAPI<T>(endpoint: string, body: object = {}): Promise<T> {
+    const response = await fetch(`/api/projects/${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+    }
+    return response.json();
+}
+
 // Standalone API object for use outside React components
 export const todosAPI = {
     getTodos: (args: { project?: string } = {}) => fetchAPI<Todo[]>("list", args),
@@ -57,10 +69,11 @@ export const todosAPI = {
     unarchiveTodo: (args: { todoId: string }) => fetchAPI<Todo>("unarchive", args),
     getArchivedTodos: (args: { project?: string } = {}) => fetchAPI<Todo[]>("archived", args),
     getTags: () => fetchAPI<string[]>("tags"),
-    getBoardConfig: (args: { projectId: string }) => fetchAPI<BoardConfig | null>("board-config/get", args),
-    saveBoardConfig: (args: { config: BoardConfig }) => fetchAPI<BoardConfig>("board-config/save", args),
-    deleteColumn: (args: { projectId: string; columnId: string }) => fetchAPI<{ success: boolean }>("column/delete", args),
-    // New projects service API
+    // Board config - now uses projects API
+    getBoardConfig: (args: { projectId?: string; projectName?: string }) => fetchProjectsAPI<BoardConfig | null>("board/get", args),
+    saveBoardConfig: (args: { projectId?: string; projectName?: string; board: BoardConfig }) => fetchProjectsAPI<ProjectConfig>("board/save", args),
+    deleteColumn: (args: { projectId: string; columnId: string }) => fetchProjectsAPI<{ success: boolean }>("column/delete", args),
+    // Projects service API
     getProjectsList: () => fetch("/api/projects/list", { method: "POST" }).then(r => r.json() as Promise<any[]>),
 };
 
