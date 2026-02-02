@@ -72,3 +72,6 @@ bun.lockb
 
 # Nomendex workspace data
 .nomendex/
+
+.GIT_WORKFLOW.md
+
