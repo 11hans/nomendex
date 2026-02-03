@@ -110,6 +110,15 @@ async function createTodo(input: {
     todosLogger.info(`Creating new todo: ${input.title}`);
 
     try {
+        // Validate that the project exists BEFORE creating the todo
+        if (input.project && input.project.trim() !== "") {
+            const { getProjectByName } = await import("@/features/projects/fx");
+            const project = await getProjectByName({ name: input.project });
+            if (!project) {
+                throw new Error(`Project '${input.project}' does not exist. Please ask the user to create it manually: Open the 'Projects' view from the sidebar and click 'New Project'.`);
+            }
+        }
+
         // Get existing todos to determine next order
         const existingTodos = await getDb().findAll();
         const status = input.status || "todo";
@@ -164,6 +173,15 @@ async function updateTodo(input: {
     todosLogger.info(`Updating todo: ${input.todoId}`);
 
     try {
+        // Validate that the project exists if it's being updated
+        if (input.updates.project && input.updates.project.trim() !== "") {
+            const { getProjectByName } = await import("@/features/projects/fx");
+            const project = await getProjectByName({ name: input.updates.project });
+            if (!project) {
+                throw new Error(`Project '${input.updates.project}' does not exist. Please ask the user to create it manually: Open the 'Projects' view from the sidebar and click 'New Project'.`);
+            }
+        }
+
         let updates = {
             ...input.updates,
             updatedAt: new Date().toISOString(),

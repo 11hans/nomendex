@@ -210,6 +210,12 @@ curl -s -X POST "http://localhost:$PORT/api/todos/update" \\
   -d '{"todoId": "$ID", "updates": {"customColumnId": "col-8f9a..."}}'
 \`\`\`
 
+## Important Constraints
+
+**Project Creation is Disabled**: You cannot create new projects programmatically. 
+Before assigning a todo to a project, verify the project exists using /api/todos/projects or /api/projects/list.
+If the project doesn't exist, tell the user: "Please open the 'Projects' view from the sidebar and click 'New Project' to create it."
+
 ## How Claude Should Use This Skill
 
 Always start by getting the server port, then use the appropriate endpoint.
