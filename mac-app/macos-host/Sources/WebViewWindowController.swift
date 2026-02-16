@@ -56,6 +56,7 @@ class WebViewWindowController: NSWindowController, WKNavigationDelegate, NSWindo
         userContentController.add(self, name: "setNativeTheme")
         userContentController.add(self, name: "triggerAppUpdate")
         userContentController.add(self, name: "checkForUpdatesInBackground")
+        userContentController.add(self, name: "calendarSync")
         config.userContentController = userContentController
         config.preferences.javaScriptEnabled = true
         let webView = WKWebView(frame: .zero, configuration: config)
@@ -218,6 +219,12 @@ class WebViewWindowController: NSWindowController, WKNavigationDelegate, NSWindo
             // Check for updates silently in background
             if let appDelegate = NSApplication.shared.delegate as? AppDelegate {
                 appDelegate.checkForUpdatesInBackground()
+            }
+        } else if message.name == "calendarSync" {
+            // Calendar sync via EventKit
+            if let taskData = message.body as? [String: Any] {
+                let callback = taskData["callback"] as? String
+                CalendarManager.shared.syncTask(taskData, webView: webView, callback: callback)
             }
         }
     }

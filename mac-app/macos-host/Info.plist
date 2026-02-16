@@ -29,6 +29,12 @@
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
 
+  <!-- Calendar access (EventKit) -->
+  <key>NSCalendarsUsageDescription</key>
+  <string>Nomendex needs access to your calendar to sync tasks with due dates as calendar events.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>Nomendex needs full calendar access to create, update, and delete task events.</string>
+
   <!-- Sparkle Auto-Update Configuration -->
   <key>SUFeedURL</key>
   <string>https://releases.nomendex.com/appcast.xml</string>
