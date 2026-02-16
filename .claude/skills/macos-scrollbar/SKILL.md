@@ -92,20 +92,40 @@ Key constants:
 
 When implementing scroll persistence for workspace tabs, use `useTabScrollPersistence` with `OverlayScrollbar`.
 
+### Critical Constraint: Radix TabsContent Unmounts Inactive Tabs
+
+Radix UI's `TabsContent` (used by shadcn `Tabs`) **unmounts** content when the tab is not active (unless `forceMount` is set). This means:
+- Switching away from a tab **destroys** the component and its DOM (including scroll containers)
+- Switching back **remounts** the component fresh (new refs, new state, new effects)
+- You CANNOT rely on `isActive` state transitions to detect tab switches — the component always mounts fresh with `isActive=true`
+
+This is why scroll position must be saved to a **module-level Map** (survives unmounts) rather than component state or refs.
+
 ### How It Works
 
-1. `useTabScrollPersistence(tabId)` returns a ref and:
-   - Saves scroll position to a module-level Map on every scroll event
-   - Restores position when the component mounts (using ResizeObserver/MutationObserver for async content)
+`useTabScrollPersistence(tabId)` returns a ref and manages two concerns:
 
-2. Pass the ref to `OverlayScrollbar`:
-   ```tsx
-   const scrollRef = useTabScrollPersistence(tabId);
+**Saving** (scroll listener):
+- Attaches a scroll event listener to save `scrollTop` to a module-level `Map<string, number>`
+- The listener is **disabled** during the restoration window to prevent overwriting the saved position with `scrollTop=0` from the fresh mount
 
-   <OverlayScrollbar scrollRef={scrollRef} className="flex-1">
-       {/* content */}
-   </OverlayScrollbar>
-   ```
+**Restoring** (settling window):
+- On mount, reads the saved position from the Map
+- Tries to restore immediately, on the next animation frame, and on every DOM mutation/resize
+- Keeps retrying for a **1.5-second settling window** to handle async content (e.g., chat history loading via API)
+- After the window closes, stops restoring and re-enables the scroll save listener
+
+### Usage
+
+```tsx
+const scrollRef = useTabScrollPersistence(tabId);
+
+<OverlayScrollbar scrollRef={scrollRef} className="flex-1">
+    {/* content */}
+</OverlayScrollbar>
+```
+
+**Do NOT pass an `isActive` parameter.** The hook only takes `tabId`. Since Radix unmounts inactive tabs, `isActive` transition detection is impossible (dead code).
 
 ### Critical Rule: Keep OverlayScrollbar Mounted
 
@@ -141,31 +161,29 @@ return (
 );
 ```
 
-### Why This Matters
+### Common Pitfalls
 
-The `useTabScrollPersistence` hook runs its effect on mount with `[tabId]` dependency:
+| Pitfall | Why It Breaks | Fix |
+|---------|---------------|-----|
+| Saving scroll during restoration | Fresh mount fires scroll events with `scrollTop=0`, overwriting saved position | `isRestoringRef` guard blocks saves during settling window |
+| Single-shot restoration (`hasRestoredRef`) | Restores once before async content renders, then stops | Settling window keeps retrying for 1.5s |
+| `isActive` transition detection | Component unmounts/remounts, so `wasActiveRef` always starts fresh — transition is never detected | Don't use `isActive`; rely on mount-time restoration |
+| Rendering OverlayScrollbar conditionally | `scrollRef.current` is null when the restoration effect runs | Always keep OverlayScrollbar in the tree; swap children instead |
 
-```tsx
-useEffect(() => {
-    const element = scrollRef.current;
-    if (!element) return;  // Early return if ref not set!
+### Debugging
 
-    // Set up observers and attempt restoration...
-}, [tabId]);
-```
-
-If the element isn't mounted when the effect runs:
-1. `scrollRef.current` is `null`
-2. Effect returns early without setting up observers
-3. When content loads and OverlayScrollbar mounts, the effect doesn't re-run
-4. No scroll restoration happens
+The hook has a `DEBUG` flag at the top of `useTabScrollPersistence.ts`. Set it to `true` to see `[ScrollPersistence]` logs in the console showing:
+- Mount: saved position and container dimensions
+- Each restoration attempt and whether it succeeded
+- When the settling window closes and the final scroll position
 
 ### Checklist for Scroll Persistence
 
 - [ ] Use `OverlayScrollbar` (not native `overflow-y-auto`) for the scroll container
-- [ ] Pass `scrollRef` from `useTabScrollPersistence` to `OverlayScrollbar`
+- [ ] Pass `scrollRef` from `useTabScrollPersistence(tabId)` to `OverlayScrollbar`
 - [ ] Keep `OverlayScrollbar` in the component tree during ALL render states (loading, error, etc.)
 - [ ] Render loading/error states as CHILDREN of `OverlayScrollbar`, not as alternative returns
+- [ ] Do NOT pass an `isActive` parameter to the hook
 
 ### Key Files
 
@@ -173,8 +191,8 @@ If the element isn't mounted when the effect runs:
 |------|---------|
 | `src/hooks/useTabScrollPersistence.ts` | Hook that saves/restores scroll position per tab |
 | `src/components/OverlayScrollbar.tsx` | Custom scrollbar with `scrollRef` prop |
-| `src/features/notes/note-view.tsx` | Reference implementation (lines 1370-1457) |
-| `src/features/chat/chat-view.tsx` | Chat implementation with loading state handling |
+| `src/features/notes/note-view.tsx` | Reference implementation |
+| `src/features/chat/chat-view.tsx` | Chat implementation with async history loading |
 
 ## References
 

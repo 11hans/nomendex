@@ -86,8 +86,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
     const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
     const [queuePaused, setQueuePaused] = useState(false);
 
-    const isTabActive = activeTab?.id === tabId;
-    const scrollRef = useTabScrollPersistence(tabId, isTabActive);
+    const scrollRef = useTabScrollPersistence(tabId);
     const inputRef = useRef<ProseMirrorPromptTextareaHandle>(null);
     const activeTabIdRef = useRef<string | null>(null);
     const isProcessingQueueRef = useRef(false);
