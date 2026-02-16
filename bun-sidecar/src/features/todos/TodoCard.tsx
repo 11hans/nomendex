@@ -36,8 +36,19 @@ export function TodoCard({
             toast("Failed to copy to clipboard");
         }
     };
+
+    const priorityColors: Record<string, string> = {
+        high: "#ef4444",
+        medium: "#f59e0b",
+        low: "#3b82f6",
+    };
+    const borderColor = todo.priority ? priorityColors[todo.priority] : undefined;
+
     return (
-        <Card className={`mb-2 hover:shadow-md transition-shadow duration-150 ${todo.archived ? 'opacity-60 bg-muted/30' : ''}`}>
+        <Card
+            className={`mb-2 hover:shadow-md transition-shadow duration-150 ${todo.archived ? 'opacity-60 bg-muted/30' : ''}`}
+            style={borderColor ? { borderLeft: `3px solid ${borderColor}` } : undefined}
+        >
             <CardHeader className="pb-1 pt-2 px-3">
                 <div className="flex items-start justify-between gap-2">
                     <CardTitle className="text-sm font-medium leading-tight flex-1">{todo.title}</CardTitle>
@@ -63,7 +74,14 @@ export function TodoCard({
                 {todo.dueDate ? (
                     <p className="text-[10px] text-muted-foreground flex items-center gap-1">
                         <CalendarDays className="size-3" />
-                        {parseLocalDateString(todo.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {parseLocalDateString(todo.dueDate.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {(() => {
+                            const startTime = todo.startDate?.includes('T') ? todo.startDate.split('T')[1] : null;
+                            const dueTime = todo.dueDate.includes('T') ? todo.dueDate.split('T')[1] : null;
+                            if (startTime && dueTime) return ` ${startTime}–${dueTime}`;
+                            if (dueTime) return ` ${dueTime}`;
+                            return null;
+                        })()}
                     </p>
                 ) : (
                     <div />

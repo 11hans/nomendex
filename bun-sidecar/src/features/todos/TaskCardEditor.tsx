@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Save, Circle, Loader2, CheckCircle2, Clock, Folder, Tag, X, Plus, CalendarDays, Paperclip } from "lucide-react";
+import { Save, Circle, Loader2, CheckCircle2, Clock, Folder, Tag, X, Plus, CalendarDays, Paperclip, Flag, ArrowRight } from "lucide-react";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { useTheme } from "@/hooks/useTheme";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
@@ -32,10 +32,18 @@ const statusConfig = [
     { value: "later", label: "Later", icon: Clock },
 ] as const;
 
+const priorityConfig = [
+    { value: "high", label: "High", color: "#ef4444" },
+    { value: "medium", label: "Medium", color: "#f59e0b" },
+    { value: "low", label: "Low", color: "#3b82f6" },
+    { value: "none", label: "None", color: undefined },
+] as const;
+
 export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, availableTags, availableProjects }: TaskCardEditorProps) {
     const [editedTodo, setEditedTodo] = useState<Todo | null>(null);
     const [statusOpen, setStatusOpen] = useState(false);
     const [statusHighlightIndex, setStatusHighlightIndex] = useState(-1);
+    const [priorityOpen, setPriorityOpen] = useState(false);
     const [projectOpen, setProjectOpen] = useState(false);
     const [projectHighlightIndex, setProjectHighlightIndex] = useState(-1);
     const [projectInput, setProjectInput] = useState("");
@@ -43,6 +51,8 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, avail
     const [tagInput, setTagInput] = useState("");
     const [dueDateOpen, setDueDateOpen] = useState(false);
     const [dueDateInput, setDueDateInput] = useState("");
+    const [startDateOpen, setStartDateOpen] = useState(false);
+    const [startDateInput, setStartDateInput] = useState("");
     const [isUploading, setIsUploading] = useState(false);
     const projectInputRef = useRef<HTMLInputElement>(null);
     const statusTriggerRef = useRef<HTMLButtonElement>(null);
@@ -414,6 +424,54 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, avail
                             </PopoverContent>
                         </Popover>
 
+                        {/* Priority Pill */}
+                        <Popover open={priorityOpen} onOpenChange={setPriorityOpen}>
+                            <PopoverTrigger asChild>
+                                <button
+                                    type="button"
+                                    className="flex items-center justify-center p-2 rounded-md text-sm font-medium transition-colors hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1"
+                                    style={{
+                                        backgroundColor: styles.surfaceTertiary,
+                                        color: editedTodo.priority && editedTodo.priority !== "none"
+                                            ? priorityConfig.find(p => p.value === editedTodo.priority)?.color
+                                            : styles.contentTertiary,
+                                    }}
+                                >
+                                    <Flag className="size-4" />
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                                className="w-40 p-1"
+                                align="start"
+                                style={{
+                                    backgroundColor: styles.surfacePrimary,
+                                    borderColor: styles.borderDefault,
+                                }}
+                            >
+                                {priorityConfig.map((priority) => {
+                                    const isActive = (editedTodo.priority || "none") === priority.value;
+                                    return (
+                                        <button
+                                            key={priority.value}
+                                            type="button"
+                                            onClick={() => {
+                                                setEditedTodo({ ...editedTodo, priority: priority.value });
+                                                setPriorityOpen(false);
+                                            }}
+                                            className="flex items-center gap-2 w-full px-2.5 py-2 rounded text-sm transition-colors text-left"
+                                            style={{
+                                                backgroundColor: isActive ? styles.surfaceTertiary : 'transparent',
+                                                color: priority.color || styles.contentPrimary,
+                                            }}
+                                        >
+                                            <Flag className="size-4" style={{ color: priority.color || styles.contentTertiary }} />
+                                            {priority.label}
+                                        </button>
+                                    );
+                                })}
+                            </PopoverContent>
+                        </Popover>
+
                         {/* Project Pill */}
                         <Popover open={projectOpen} onOpenChange={handleProjectOpenChange}>
                             <PopoverTrigger asChild>
@@ -610,7 +668,8 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, avail
                                     {editedTodo.dueDate && (
                                         <>
                                             <span className="whitespace-nowrap">
-                                                {parseLocalDateString(editedTodo.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                                {parseLocalDateString(editedTodo.dueDate.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                                {editedTodo.dueDate.includes('T') && ` ${editedTodo.dueDate.split('T')[1]}`}
                                             </span>
                                             <button
                                                 type="button"
@@ -641,7 +700,9 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, avail
                                             setDueDateInput(e.target.value);
                                             const parsed = parseDateFromInput(e.target.value);
                                             if (parsed) {
-                                                setEditedTodo({ ...editedTodo, dueDate: toLocalDateString(parsed) });
+                                                const time = editedTodo.dueDate?.includes('T') ? editedTodo.dueDate.split('T')[1] : undefined;
+                                                const dateStr = toLocalDateString(parsed);
+                                                setEditedTodo({ ...editedTodo, dueDate: time ? `${dateStr}T${time}` : dateStr });
                                             }
                                         }}
                                         placeholder="tomorrow, next wed, 1/15..."
@@ -656,16 +717,138 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, avail
                                     />
                                     <Calendar
                                         mode="single"
-                                        selected={editedTodo.dueDate ? parseLocalDateString(editedTodo.dueDate) : undefined}
+                                        selected={editedTodo.dueDate ? parseLocalDateString(editedTodo.dueDate.split('T')[0]) : undefined}
                                         onSelect={(date) => {
                                             if (date) {
-                                                setEditedTodo({ ...editedTodo, dueDate: toLocalDateString(date) });
+                                                const time = editedTodo.dueDate?.includes('T') ? editedTodo.dueDate.split('T')[1] : undefined;
+                                                const dateStr = toLocalDateString(date);
+                                                setEditedTodo({ ...editedTodo, dueDate: time ? `${dateStr}T${time}` : dateStr });
                                                 setDueDateInput("");
                                                 setDueDateOpen(false);
                                             }
                                         }}
-                                        defaultMonth={editedTodo.dueDate ? parseLocalDateString(editedTodo.dueDate) : new Date()}
+                                        defaultMonth={editedTodo.dueDate ? parseLocalDateString(editedTodo.dueDate.split('T')[0]) : new Date()}
                                     />
+                                    <div className="flex items-center gap-2">
+                                        <Clock className="size-3.5" style={{ color: styles.contentTertiary }} />
+                                        <Input
+                                            type="time"
+                                            value={editedTodo.dueDate?.includes('T') ? editedTodo.dueDate.split('T')[1] : ''}
+                                            onChange={(e) => {
+                                                if (!editedTodo.dueDate) return;
+                                                const dateStr = editedTodo.dueDate.split('T')[0];
+                                                if (e.target.value) {
+                                                    setEditedTodo({ ...editedTodo, dueDate: `${dateStr}T${e.target.value}` });
+                                                } else {
+                                                    setEditedTodo({ ...editedTodo, dueDate: dateStr });
+                                                }
+                                            }}
+                                            className="h-8 text-sm flex-1"
+                                            disabled={!editedTodo.dueDate}
+                                            placeholder="--:--"
+                                        />
+                                    </div>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+
+                        {/* Start Date Pill */}
+                        <Popover open={startDateOpen} onOpenChange={setStartDateOpen}>
+                            <PopoverTrigger asChild>
+                                <button
+                                    type="button"
+                                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-sm font-medium transition-colors hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1"
+                                    style={{
+                                        backgroundColor: styles.surfaceTertiary,
+                                        color: editedTodo.startDate ? styles.contentPrimary : styles.contentTertiary,
+                                    }}
+                                >
+                                    <ArrowRight className="size-4 shrink-0" />
+                                    {editedTodo.startDate ? (
+                                        <>
+                                            <span className="whitespace-nowrap">
+                                                {parseLocalDateString(editedTodo.startDate.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                                {editedTodo.startDate.includes('T') && ` ${editedTodo.startDate.split('T')[1]}`}
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setEditedTodo({ ...editedTodo, startDate: undefined });
+                                                }}
+                                                className="p-0.5 rounded-full hover:bg-black/10 transition-colors"
+                                            >
+                                                <X className="size-3" />
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <span>Start</span>
+                                    )}
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                                className="w-auto p-3 z-[100]"
+                                align="start"
+                                style={{
+                                    backgroundColor: styles.surfacePrimary,
+                                    borderColor: styles.borderDefault,
+                                }}
+                            >
+                                <div className="space-y-3">
+                                    <Input
+                                        value={startDateInput}
+                                        onChange={(e) => {
+                                            setStartDateInput(e.target.value);
+                                            const parsed = parseDateFromInput(e.target.value);
+                                            if (parsed) {
+                                                const time = editedTodo.startDate?.includes('T') ? editedTodo.startDate.split('T')[1] : undefined;
+                                                const dateStr = toLocalDateString(parsed);
+                                                setEditedTodo({ ...editedTodo, startDate: time ? `${dateStr}T${time}` : dateStr });
+                                            }
+                                        }}
+                                        placeholder="tomorrow, next wed, 1/15..."
+                                        className="h-9 text-sm"
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                setStartDateOpen(false);
+                                            }
+                                        }}
+                                    />
+                                    <Calendar
+                                        mode="single"
+                                        selected={editedTodo.startDate ? parseLocalDateString(editedTodo.startDate.split('T')[0]) : undefined}
+                                        onSelect={(date) => {
+                                            if (date) {
+                                                const time = editedTodo.startDate?.includes('T') ? editedTodo.startDate.split('T')[1] : undefined;
+                                                const dateStr = toLocalDateString(date);
+                                                setEditedTodo({ ...editedTodo, startDate: time ? `${dateStr}T${time}` : dateStr });
+                                                setStartDateInput("");
+                                                setStartDateOpen(false);
+                                            }
+                                        }}
+                                        defaultMonth={editedTodo.startDate ? parseLocalDateString(editedTodo.startDate.split('T')[0]) : new Date()}
+                                    />
+                                    <div className="flex items-center gap-2">
+                                        <Clock className="size-3.5" style={{ color: styles.contentTertiary }} />
+                                        <Input
+                                            type="time"
+                                            value={editedTodo.startDate?.includes('T') ? editedTodo.startDate.split('T')[1] : ''}
+                                            onChange={(e) => {
+                                                if (!editedTodo.startDate) return;
+                                                const dateStr = editedTodo.startDate.split('T')[0];
+                                                if (e.target.value) {
+                                                    setEditedTodo({ ...editedTodo, startDate: `${dateStr}T${e.target.value}` });
+                                                } else {
+                                                    setEditedTodo({ ...editedTodo, startDate: dateStr });
+                                                }
+                                            }}
+                                            className="h-8 text-sm flex-1"
+                                            disabled={!editedTodo.startDate}
+                                            placeholder="--:--"
+                                        />
+                                    </div>
                                 </div>
                             </PopoverContent>
                         </Popover>

@@ -13,7 +13,9 @@ import { TodoCard } from "./TodoCard";
 import { CreateTodoDialog } from "./CreateTodoDialog";
 import { TaskCardEditor } from "./TaskCardEditor";
 import { TagFilter } from "./TagFilter";
+import { PriorityFilter } from "./PriorityFilter";
 import { Todo } from "./todo-types";
+import { syncTaskToCalendar, removeTaskFromCalendar } from "./calendar-bridge";
 import type { Attachment } from "@/types/attachments";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -52,6 +54,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const [selectedPriority, setSelectedPriority] = useState<"high" | "medium" | "low" | "none" | null>(null);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [todoToEdit, setTodoToEdit] = useState<Todo | null>(null);
@@ -131,7 +134,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             } else if (filterProject === "") {
                 tabName = "Todos: No Project";
             }
-            
+
             setTabName(activeTab.id, tabName);
             hasSetTabNameRef.current = true;
         }
@@ -259,12 +262,17 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     project: updatedTodo.project,
                     tags: updatedTodo.tags,
                     dueDate: updatedTodo.dueDate,
+                    priority: updatedTodo.priority,
+                    startDate: updatedTodo.startDate,
+                    duration: updatedTodo.duration,
                     attachments: updatedTodo.attachments,
                 },
             });
             setEditDialogOpen(false);
             setTodoToEdit(null);
             await loadTodos();
+            // Sync to calendar (fire-and-forget)
+            syncTaskToCalendar(updatedTodo).catch(() => { });
         } catch (error) {
             console.error("Failed to save todo:", error);
         } finally {
@@ -322,122 +330,125 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             const activeTodo = todos[activeIndex];
             if (!activeTodo) return;
 
-        // Determine if this is a cross-column drop or same-column reorder
-        if (overId.startsWith('column-')) {
-            // Cross-column drop - change status
-            const newStatus = overId.replace('column-', '') as "todo" | "in_progress" | "done" | "later";
-            if (newStatus !== activeTodo.status) {
-                // Optimistic update - update local state immediately
-                setTodos(prev => prev.map(t =>
-                    t.id === activeId ? { ...t, status: newStatus } : t
-                ));
+            // Determine if this is a cross-column drop or same-column reorder
+            if (overId.startsWith('column-')) {
+                // Cross-column drop - change status
+                const newStatus = overId.replace('column-', '') as "todo" | "in_progress" | "done" | "later";
+                if (newStatus !== activeTodo.status) {
+                    // Optimistic update - update local state immediately
+                    setTodos(prev => prev.map(t =>
+                        t.id === activeId ? { ...t, status: newStatus } : t
+                    ));
 
-                // Then sync with server
-                try {
-                    await todosAPI.updateTodo({
-                        todoId: activeId,
-                        updates: { status: newStatus },
-                    });
-                } catch (error) {
-                    console.error("Failed to update todo status:", error);
-                    // Revert on error
-                    await loadTodos();
-                }
-            }
-        } else {
-            // Dropping on a specific card - either same column reorder or cross-column with position
-            const overIndex = todos.findIndex(t => t.id === overId);
-            if (overIndex === -1) return;
-
-            const overTodo = todos[overIndex];
-            if (!overTodo) return;
-
-            const isCrossColumn = activeTodo.status !== overTodo.status;
-
-            if (isCrossColumn) {
-                // Cross-column drop onto a specific card - update status AND position
-                const targetStatus = overTodo.status;
-
-                // Get todos in the target column (excluding the dragged item)
-                const targetColumnTodos = todos.filter(t => t.status === targetStatus);
-                const overIndexInColumn = targetColumnTodos.findIndex(t => t.id === overId);
-
-                // Insert the dragged todo at the position of the hovered card
-                const updatedActiveTodo = { ...activeTodo, status: targetStatus, order: overIndexInColumn + 1 };
-
-                // Build the new order for the target column
-                const newColumnTodos = [...targetColumnTodos];
-                newColumnTodos.splice(overIndexInColumn, 0, updatedActiveTodo);
-
-                // Create reorder updates for the target column
-                const reorders = newColumnTodos.map((todo, index) => ({
-                    todoId: todo.id,
-                    order: index + 1,
-                }));
-
-                // Optimistic update
-                setTodos(prev => {
-                    const updated = prev.map(t => {
-                        if (t.id === activeId) {
-                            return { ...t, status: targetStatus, order: overIndexInColumn + 1 };
-                        }
-                        // Update order for items in target column
-                        const reorder = reorders.find(r => r.todoId === t.id);
-                        if (reorder) {
-                            return { ...t, order: reorder.order };
-                        }
-                        return t;
-                    });
-                    return updated;
-                });
-
-                try {
-                    // Update status first
-                    await todosAPI.updateTodo({
-                        todoId: activeId,
-                        updates: { status: targetStatus },
-                    });
-                    // Then reorder
-                    await todosAPI.reorderTodos({ reorders });
-                } catch (error) {
-                    console.error("Failed to move todo:", error);
-                    await loadTodos();
+                    // Then sync with server
+                    try {
+                        await todosAPI.updateTodo({
+                            todoId: activeId,
+                            updates: { status: newStatus },
+                        });
+                        // Sync updated status to calendar
+                        const updated = { ...activeTodo, status: newStatus };
+                        syncTaskToCalendar(updated).catch(() => { });
+                    } catch (error) {
+                        console.error("Failed to update todo status:", error);
+                        // Revert on error
+                        await loadTodos();
+                    }
                 }
             } else {
-                // Same column reorder
-                if (activeIndex !== overIndex) {
-                    const statusTodos = todos.filter(t => t.status === activeTodo.status);
-                    const reorderedTodos = arrayMove(
-                        statusTodos,
-                        statusTodos.findIndex(t => t.id === activeId),
-                        statusTodos.findIndex(t => t.id === overId)
-                    );
+                // Dropping on a specific card - either same column reorder or cross-column with position
+                const overIndex = todos.findIndex(t => t.id === overId);
+                if (overIndex === -1) return;
 
-                    // Create reorder updates
-                    const reorders = reorderedTodos.map((todo, index) => ({
+                const overTodo = todos[overIndex];
+                if (!overTodo) return;
+
+                const isCrossColumn = activeTodo.status !== overTodo.status;
+
+                if (isCrossColumn) {
+                    // Cross-column drop onto a specific card - update status AND position
+                    const targetStatus = overTodo.status;
+
+                    // Get todos in the target column (excluding the dragged item)
+                    const targetColumnTodos = todos.filter(t => t.status === targetStatus);
+                    const overIndexInColumn = targetColumnTodos.findIndex(t => t.id === overId);
+
+                    // Insert the dragged todo at the position of the hovered card
+                    const updatedActiveTodo = { ...activeTodo, status: targetStatus, order: overIndexInColumn + 1 };
+
+                    // Build the new order for the target column
+                    const newColumnTodos = [...targetColumnTodos];
+                    newColumnTodos.splice(overIndexInColumn, 0, updatedActiveTodo);
+
+                    // Create reorder updates for the target column
+                    const reorders = newColumnTodos.map((todo, index) => ({
                         todoId: todo.id,
                         order: index + 1,
                     }));
 
-                    // Optimistic update for reorder
-                    const newTodos = [...todos];
-                    reorderedTodos.forEach((todo, index) => {
-                        const idx = newTodos.findIndex(t => t.id === todo.id);
-                        if (idx !== -1) {
-                            newTodos[idx] = { ...newTodos[idx], order: index + 1 };
-                        }
+                    // Optimistic update
+                    setTodos(prev => {
+                        const updated = prev.map(t => {
+                            if (t.id === activeId) {
+                                return { ...t, status: targetStatus, order: overIndexInColumn + 1 };
+                            }
+                            // Update order for items in target column
+                            const reorder = reorders.find(r => r.todoId === t.id);
+                            if (reorder) {
+                                return { ...t, order: reorder.order };
+                            }
+                            return t;
+                        });
+                        return updated;
                     });
-                    setTodos(newTodos);
 
                     try {
+                        // Update status first
+                        await todosAPI.updateTodo({
+                            todoId: activeId,
+                            updates: { status: targetStatus },
+                        });
+                        // Then reorder
                         await todosAPI.reorderTodos({ reorders });
                     } catch (error) {
-                        console.error("Failed to reorder todos:", error);
+                        console.error("Failed to move todo:", error);
                         await loadTodos();
+                    }
+                } else {
+                    // Same column reorder
+                    if (activeIndex !== overIndex) {
+                        const statusTodos = todos.filter(t => t.status === activeTodo.status);
+                        const reorderedTodos = arrayMove(
+                            statusTodos,
+                            statusTodos.findIndex(t => t.id === activeId),
+                            statusTodos.findIndex(t => t.id === overId)
+                        );
+
+                        // Create reorder updates
+                        const reorders = reorderedTodos.map((todo, index) => ({
+                            todoId: todo.id,
+                            order: index + 1,
+                        }));
+
+                        // Optimistic update for reorder
+                        const newTodos = [...todos];
+                        reorderedTodos.forEach((todo, index) => {
+                            const idx = newTodos.findIndex(t => t.id === todo.id);
+                            if (idx !== -1) {
+                                newTodos[idx] = { ...newTodos[idx], order: index + 1 };
+                            }
+                        });
+                        setTodos(newTodos);
+
+                        try {
+                            await todosAPI.reorderTodos({ reorders });
+                        } catch (error) {
+                            console.error("Failed to reorder todos:", error);
+                            await loadTodos();
+                        }
                     }
                 }
             }
-        }
         } catch (error) {
             console.error("Error in drag end handler:", error);
             // Reload todos to ensure consistent state
@@ -482,6 +493,13 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             );
         }
 
+        // Apply priority filtering
+        if (selectedPriority) {
+            filteredTodos = filteredTodos.filter((todo) =>
+                (todo.priority || "none") === selectedPriority
+            );
+        }
+
         // Sort by order field (ascending), with undefined/null orders at the end
         const sortByOrder = (a: Todo, b: Todo) => {
             const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
@@ -495,7 +513,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             done: filteredTodos.filter((t) => t.status === "done").sort(sortByOrder),
             later: filteredTodos.filter((t) => t.status === "later").sort(sortByOrder),
         };
-    }, [todos, selectedTags, searchQuery]);
+    }, [todos, selectedTags, selectedPriority, searchQuery]);
 
     // Column order for keyboard navigation
     const columnOrder = useMemo(() => {
@@ -549,6 +567,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
 
         try {
             await todosAPI.deleteTodo({ todoId: todo.id });
+            // Remove from calendar
+            removeTaskFromCalendar(todo.id).catch(() => { });
 
             const truncatedTitle = todo.title.length > 30
                 ? todo.title.slice(0, 30) + "…"
@@ -1340,6 +1360,10 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                         onTagToggle={handleTagToggle}
                         onClearAll={handleClearAllTags}
                     />
+                    <PriorityFilter
+                        selectedPriority={selectedPriority}
+                        onPriorityChange={setSelectedPriority}
+                    />
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" size="sm">
@@ -1429,9 +1453,9 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                         <div className="transform rotate-2 opacity-80">
                             <TodoCard
                                 todo={draggedTodo}
-                                onEdit={() => {}}
-                                onDelete={() => {}}
-                                onArchive={() => {}}
+                                onEdit={() => { }}
+                                onDelete={() => { }}
+                                onArchive={() => { }}
                                 hideProject={!!filterProject}
                             />
                         </div>
