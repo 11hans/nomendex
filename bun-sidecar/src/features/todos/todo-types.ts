@@ -13,6 +13,10 @@ export const TodoSchema = z.object({
     order: z.number().optional(),
     tags: z.array(z.string()).optional(),
     dueDate: z.string().optional(),
+    priority: z.enum(["high", "medium", "low", "none"]).optional(),
+    completedAt: z.string().optional(),
+    startDate: z.string().optional(),
+    duration: z.number().optional(),
     attachments: z.array(AttachmentSchema).optional(),
 });
 

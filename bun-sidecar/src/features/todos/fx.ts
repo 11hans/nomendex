@@ -36,12 +36,12 @@ function getDb(): FileDatabase<Todo> {
 
 async function getTodos(input: { project?: string }) {
     todosLogger.info(`Getting todos${input.project !== undefined ? ` for project: ${input.project || 'No Project'}` : ''}`);
-    
+
     try {
         const todos = await getDb().findAll();
-        
+
         let activeTodos = todos.filter(t => !t.archived);
-        
+
         // Filter by project if specified
         if (input.project !== undefined) {
             if (input.project === "") {
@@ -70,15 +70,15 @@ async function getTodos(input: { project?: string }) {
 
 async function getTodoById(input: { todoId: string }) {
     todosLogger.info(`Getting todo by ID: ${input.todoId}`);
-    
+
     try {
         const todo = await getDb().findById(input.todoId);
-        
+
         if (!todo) {
             todosLogger.warn(`Todo not found: ${input.todoId}`);
             throw new Error(`Todo with ID ${input.todoId} not found`);
         }
-        
+
         todosLogger.info(`Retrieved todo: ${input.todoId}`);
         return todo;
     } catch (error) {
@@ -94,6 +94,9 @@ async function createTodo(input: {
     status?: "todo" | "in_progress" | "done" | "later";
     tags?: string[];
     dueDate?: string;
+    priority?: "high" | "medium" | "low" | "none";
+    startDate?: string;
+    duration?: number;
     attachments?: Attachment[];
 }) {
     todosLogger.info(`Creating new todo: ${input.title}`);
@@ -122,6 +125,10 @@ async function createTodo(input: {
             order: maxOrder + 1,
             tags: input.tags,
             dueDate: input.dueDate,
+            priority: input.priority,
+            completedAt: status === "done" ? now : undefined,
+            startDate: input.startDate,
+            duration: input.duration,
             attachments: input.attachments,
         };
 
@@ -146,6 +153,10 @@ async function updateTodo(input: {
         order?: number;
         tags?: string[];
         dueDate?: string;
+        priority?: "high" | "medium" | "low" | "none";
+        completedAt?: string;
+        startDate?: string;
+        duration?: number;
         attachments?: Attachment[];
     };
 }) {
@@ -172,16 +183,23 @@ async function updateTodo(input: {
 
                 updates.order = maxOrder + 1;
                 todosLogger.info(`Status changed, assigning new order: ${updates.order}`);
+
+                // Auto-set completedAt when status changes to/from done
+                if (input.updates.status === "done") {
+                    updates.completedAt = new Date().toISOString();
+                } else if (currentTodo.status === "done") {
+                    updates.completedAt = undefined;
+                }
             }
         }
 
         const updated = await getDb().update(input.todoId, updates);
-        
+
         if (!updated) {
             todosLogger.warn(`Todo not found for update: ${input.todoId}`);
             throw new Error(`Todo with ID ${input.todoId} not found`);
         }
-        
+
         todosLogger.info(`Updated todo: ${input.todoId}`);
         return updated;
     } catch (error) {
@@ -192,15 +210,15 @@ async function updateTodo(input: {
 
 async function deleteTodo(input: { todoId: string }) {
     todosLogger.info(`Deleting todo: ${input.todoId}`);
-    
+
     try {
         const deleted = await getDb().delete(input.todoId);
-        
+
         if (!deleted) {
             todosLogger.warn(`Todo not found for deletion: ${input.todoId}`);
             throw new Error(`Todo with ID ${input.todoId} not found`);
         }
-        
+
         todosLogger.info(`Deleted todo: ${input.todoId}`);
         return { success: true };
     } catch (error) {
@@ -211,11 +229,11 @@ async function deleteTodo(input: { todoId: string }) {
 
 async function getProjects() {
     todosLogger.info(`Getting unique projects`);
-    
+
     try {
         const todos = await getDb().findAll();
         const activeTodos = todos.filter(t => !t.archived);
-        
+
         // Extract unique projects
         const projectSet = new Set<string>();
         for (const todo of activeTodos) {
@@ -223,7 +241,7 @@ async function getProjects() {
                 projectSet.add(todo.project);
             }
         }
-        
+
         const projects = Array.from(projectSet).sort();
         todosLogger.info(`Found ${projects.length} unique projects`);
         return projects;

@@ -8,6 +8,9 @@ interface CreateTodoInput {
     status?: "todo" | "in_progress" | "done" | "later";
     tags?: string[];
     dueDate?: string;
+    priority?: "high" | "medium" | "low" | "none";
+    startDate?: string;
+    duration?: number;
     attachments?: Attachment[];
 }
 
@@ -21,6 +24,9 @@ interface UpdateTodoInput {
         archived?: boolean;
         tags?: string[];
         dueDate?: string;
+        priority?: "high" | "medium" | "low" | "none";
+        startDate?: string;
+        duration?: number;
         attachments?: Attachment[];
     };
 }
