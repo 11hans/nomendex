@@ -1,19 +1,23 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Save, Circle, Loader2, CheckCircle2, Clock, Folder, Tag, X, Plus, CalendarDays, Paperclip, Flag, ArrowRight } from "lucide-react";
+import { Save, X } from "lucide-react";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { useTheme } from "@/hooks/useTheme";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
-import { Calendar } from "@/components/ui/calendar";
-import { parseDateFromInput, toLocalDateString, parseLocalDateString } from "@/features/notes/date-utils";
 import { Todo } from "./todo-types";
-import type { Attachment } from "@/types/attachments";
 import { AttachmentThumbnail } from "@/components/AttachmentThumbnail";
+import {
+    StatusPicker,
+    PriorityPicker,
+    ProjectPicker,
+    TagsPicker,
+    DateTimePicker,
+    AttachmentPicker,
+} from "./pickers";
 
 interface TaskCardEditorProps {
     todo: Todo | null;
@@ -25,98 +29,10 @@ interface TaskCardEditorProps {
     availableProjects: string[];
 }
 
-const statusConfig = [
-    { value: "todo", label: "Todo", icon: Circle },
-    { value: "in_progress", label: "In Progress", icon: Loader2 },
-    { value: "done", label: "Done", icon: CheckCircle2 },
-    { value: "later", label: "Later", icon: Clock },
-] as const;
-
-const priorityConfig = [
-    { value: "high", label: "High", color: "#ef4444" },
-    { value: "medium", label: "Medium", color: "#f59e0b" },
-    { value: "low", label: "Low", color: "#3b82f6" },
-    { value: "none", label: "None", color: undefined },
-] as const;
-
 export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, availableTags, availableProjects }: TaskCardEditorProps) {
     const [editedTodo, setEditedTodo] = useState<Todo | null>(null);
-    const [statusOpen, setStatusOpen] = useState(false);
-    const [statusHighlightIndex, setStatusHighlightIndex] = useState(-1);
-    const [priorityOpen, setPriorityOpen] = useState(false);
-    const [projectOpen, setProjectOpen] = useState(false);
-    const [projectHighlightIndex, setProjectHighlightIndex] = useState(-1);
-    const [projectInput, setProjectInput] = useState("");
-    const [tagsOpen, setTagsOpen] = useState(false);
-    const [tagInput, setTagInput] = useState("");
-    const [dueDateOpen, setDueDateOpen] = useState(false);
-    const [dueDateInput, setDueDateInput] = useState("");
-    // startDateOpen/Input removed as they are now unified
-    const [isUploading, setIsUploading] = useState(false);
-    const projectInputRef = useRef<HTMLInputElement>(null);
-    const statusTriggerRef = useRef<HTMLButtonElement>(null);
-    const projectTriggerRef = useRef<HTMLButtonElement>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
-
-    // Handle file upload
-    const uploadFile = useCallback(async (file: File): Promise<Attachment | null> => {
-        try {
-            const formData = new FormData();
-            formData.append("file", file);
-
-            const response = await fetch("/api/uploads", {
-                method: "POST",
-                body: formData,
-            });
-
-            const result = await response.json();
-            if (result.success && result.data) {
-                return result.data as Attachment;
-            }
-            console.error("Upload failed:", result.error);
-            return null;
-        } catch (error) {
-            console.error("Upload error:", error);
-            return null;
-        }
-    }, []);
-
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = Array.from(e.target.files || []);
-        if (files.length === 0 || !editedTodo) return;
-
-        setIsUploading(true);
-        const newAttachments: Attachment[] = [];
-
-        for (const file of files) {
-            if (file.type.startsWith("image/")) {
-                const attachment = await uploadFile(file);
-                if (attachment) {
-                    newAttachments.push(attachment);
-                }
-            }
-        }
-
-        if (newAttachments.length > 0) {
-            setEditedTodo({
-                ...editedTodo,
-                attachments: [...(editedTodo.attachments || []), ...newAttachments],
-            });
-        }
-
-        setIsUploading(false);
-        e.target.value = "";
-    };
-
-    const removeAttachment = (attachmentId: string) => {
-        if (!editedTodo) return;
-        setEditedTodo({
-            ...editedTodo,
-            attachments: (editedTodo.attachments || []).filter(a => a.id !== attachmentId),
-        });
-    };
 
     // Handle Cmd+Enter from native Mac app
     useNativeSubmit(() => {
@@ -124,110 +40,6 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, avail
             document.querySelector<HTMLButtonElement>('[data-task-editor-save]')?.click();
         }
     });
-
-    // Filter projects based on input
-    const filteredProjects = availableProjects.filter(p =>
-        p.toLowerCase().includes(projectInput.toLowerCase())
-    );
-
-    // Reset highlight index when status popover opens
-    const handleStatusOpenChange = (open: boolean) => {
-        setStatusOpen(open);
-        if (open && editedTodo) {
-            const currentIndex = statusConfig.findIndex(s => s.value === editedTodo.status);
-            setStatusHighlightIndex(currentIndex >= 0 ? currentIndex : 0);
-        }
-    };
-
-    // Reset project state when popover opens
-    const handleProjectOpenChange = (open: boolean) => {
-        setProjectOpen(open);
-        if (open) {
-            setProjectInput(editedTodo?.project || "");
-            setProjectHighlightIndex(-1);
-            setTimeout(() => projectInputRef.current?.focus(), 0);
-        }
-    };
-
-    // Handle keyboard navigation for status
-    const handleStatusKeyDown = (e: React.KeyboardEvent) => {
-        if (!statusOpen) {
-            if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleStatusOpenChange(true);
-            }
-            return;
-        }
-
-        if (!editedTodo) return;
-
-        switch (e.key) {
-            case "ArrowDown":
-                e.preventDefault();
-                setStatusHighlightIndex(prev =>
-                    prev < statusConfig.length - 1 ? prev + 1 : 0
-                );
-                break;
-            case "ArrowUp":
-                e.preventDefault();
-                setStatusHighlightIndex(prev =>
-                    prev > 0 ? prev - 1 : statusConfig.length - 1
-                );
-                break;
-            case "Enter":
-            case " ":
-                e.preventDefault();
-                if (statusHighlightIndex >= 0 && statusHighlightIndex < statusConfig.length) {
-                    setEditedTodo({ ...editedTodo, status: statusConfig[statusHighlightIndex].value });
-                    setStatusOpen(false);
-                    statusTriggerRef.current?.focus();
-                }
-                break;
-            case "Escape":
-                e.preventDefault();
-                setStatusOpen(false);
-                statusTriggerRef.current?.focus();
-                break;
-        }
-    };
-
-    // Handle keyboard navigation for projects
-    const handleProjectKeyDown = (e: React.KeyboardEvent) => {
-        if (!editedTodo) return;
-        const items = filteredProjects;
-
-        switch (e.key) {
-            case "ArrowDown":
-                e.preventDefault();
-                setProjectHighlightIndex(prev =>
-                    prev < items.length - 1 ? prev + 1 : 0
-                );
-                break;
-            case "ArrowUp":
-                e.preventDefault();
-                setProjectHighlightIndex(prev =>
-                    prev > 0 ? prev - 1 : items.length - 1
-                );
-                break;
-            case "Enter":
-                e.preventDefault();
-                if (projectHighlightIndex >= 0 && projectHighlightIndex < items.length) {
-                    setEditedTodo({ ...editedTodo, project: items[projectHighlightIndex] });
-                    setProjectOpen(false);
-                    projectTriggerRef.current?.focus();
-                } else if (projectInput.trim()) {
-                    setEditedTodo({ ...editedTodo, project: projectInput.trim() });
-                    setProjectOpen(false);
-                    projectTriggerRef.current?.focus();
-                }
-                break;
-            case "Escape":
-                e.preventDefault();
-                setProjectOpen(false);
-                projectTriggerRef.current?.focus();
-                break;
-        }
-    };
 
     useEffect(() => {
         setEditedTodo(todo);
@@ -252,26 +64,19 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, avail
         }
     };
 
-    const currentStatus = statusConfig.find(s => s.value === editedTodo?.status) || statusConfig[0];
-    const StatusIcon = currentStatus.icon;
-
-    const addTag = (tag: string) => {
-        if (!editedTodo) return;
-        const trimmed = tag.trim();
-        if (trimmed && !editedTodo.tags?.includes(trimmed)) {
-            setEditedTodo({
-                ...editedTodo,
-                tags: [...(editedTodo.tags || []), trimmed],
-            });
-        }
-        setTagInput("");
-    };
-
     const removeTag = (tagToRemove: string) => {
         if (!editedTodo) return;
         setEditedTodo({
             ...editedTodo,
             tags: editedTodo.tags?.filter(t => t !== tagToRemove) || [],
+        });
+    };
+
+    const removeAttachment = (attachmentId: string) => {
+        if (!editedTodo) return;
+        setEditedTodo({
+            ...editedTodo,
+            attachments: (editedTodo.attachments || []).filter(a => a.id !== attachmentId),
         });
     };
 
@@ -283,7 +88,7 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, avail
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 className="p-0 overflow-hidden gap-0"
-                showCloseButton={true}
+                showCloseButton={false}
                 style={{
                     backgroundColor: styles.surfacePrimary,
                     width: '700px',
@@ -310,10 +115,11 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, avail
                         value={editedTodo.description || ""}
                         onChange={(e) => setEditedTodo({ ...editedTodo, description: e.target.value })}
                         placeholder="Add description..."
-                        className="resize-none text-sm border-0 px-0 focus-visible:ring-0 placeholder:text-muted-foreground/40"
+                        className="resize-none text-sm px-3 py-2.5 rounded-lg focus-visible:ring-1 placeholder:text-muted-foreground/40"
                         style={{
                             color: styles.contentPrimary,
-                            backgroundColor: 'transparent',
+                            backgroundColor: styles.surfaceSecondary,
+                            border: `1px solid ${styles.borderDefault}`,
                             minHeight: '180px',
                         }}
                     />
@@ -366,516 +172,41 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, avail
                         borderTop: `1px solid ${styles.borderDefault}`,
                     }}
                 >
-                    {/* Metadata Pills */}
+                    {/* Metadata Pills — grouped with separator */}
                     <div className="flex items-center gap-2">
-                        {/* Status Pill */}
-                        <Popover open={statusOpen} onOpenChange={handleStatusOpenChange}>
-                            <PopoverTrigger asChild>
-                                <button
-                                    ref={statusTriggerRef}
-                                    type="button"
-                                    className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1"
-                                    style={{
-                                        backgroundColor: styles.surfaceTertiary,
-                                        color: styles.contentPrimary,
-                                        minWidth: '110px',
-                                    }}
-                                    onKeyDown={handleStatusKeyDown}
-                                >
-                                    <StatusIcon className="size-4 shrink-0" />
-                                    <span className="whitespace-nowrap">{currentStatus.label}</span>
-                                </button>
-                            </PopoverTrigger>
-                            <PopoverContent
-                                className="w-40 p-1"
-                                align="start"
-                                style={{
-                                    backgroundColor: styles.surfacePrimary,
-                                    borderColor: styles.borderDefault,
-                                }}
-                                onKeyDown={handleStatusKeyDown}
-                            >
-                                {statusConfig.map((status, index) => {
-                                    const Icon = status.icon;
-                                    const isActive = editedTodo.status === status.value;
-                                    const isHighlighted = index === statusHighlightIndex;
-                                    return (
-                                        <button
-                                            key={status.value}
-                                            type="button"
-                                            onClick={() => {
-                                                setEditedTodo({ ...editedTodo, status: status.value });
-                                                setStatusOpen(false);
-                                                statusTriggerRef.current?.focus();
-                                            }}
-                                            className="flex items-center gap-2 w-full px-2.5 py-2 rounded text-sm transition-colors text-left"
-                                            style={{
-                                                backgroundColor: isHighlighted ? styles.surfaceTertiary : isActive ? styles.surfaceTertiary : 'transparent',
-                                                color: styles.contentPrimary,
-                                                outline: isHighlighted ? `2px solid ${styles.borderDefault}` : 'none',
-                                            }}
-                                        >
-                                            <Icon className="size-4" />
-                                            {status.label}
-                                        </button>
-                                    );
-                                })}
-                            </PopoverContent>
-                        </Popover>
-
-                        {/* Priority Pill */}
-                        <Popover open={priorityOpen} onOpenChange={setPriorityOpen}>
-                            <PopoverTrigger asChild>
-                                <button
-                                    type="button"
-                                    className="flex items-center justify-center p-2 rounded-md text-sm font-medium transition-colors hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1"
-                                    style={{
-                                        backgroundColor: styles.surfaceTertiary,
-                                        color: editedTodo.priority && editedTodo.priority !== "none"
-                                            ? priorityConfig.find(p => p.value === editedTodo.priority)?.color
-                                            : styles.contentTertiary,
-                                    }}
-                                >
-                                    <Flag className="size-4" />
-                                </button>
-                            </PopoverTrigger>
-                            <PopoverContent
-                                className="w-40 p-1"
-                                align="start"
-                                style={{
-                                    backgroundColor: styles.surfacePrimary,
-                                    borderColor: styles.borderDefault,
-                                }}
-                            >
-                                {priorityConfig.map((priority) => {
-                                    const isActive = (editedTodo.priority || "none") === priority.value;
-                                    return (
-                                        <button
-                                            key={priority.value}
-                                            type="button"
-                                            onClick={() => {
-                                                setEditedTodo({ ...editedTodo, priority: priority.value });
-                                                setPriorityOpen(false);
-                                            }}
-                                            className="flex items-center gap-2 w-full px-2.5 py-2 rounded text-sm transition-colors text-left"
-                                            style={{
-                                                backgroundColor: isActive ? styles.surfaceTertiary : 'transparent',
-                                                color: priority.color || styles.contentPrimary,
-                                            }}
-                                        >
-                                            <Flag className="size-4" style={{ color: priority.color || styles.contentTertiary }} />
-                                            {priority.label}
-                                        </button>
-                                    );
-                                })}
-                            </PopoverContent>
-                        </Popover>
-
-                        {/* Project Pill */}
-                        <Popover open={projectOpen} onOpenChange={handleProjectOpenChange}>
-                            <PopoverTrigger asChild>
-                                <button
-                                    ref={projectTriggerRef}
-                                    type="button"
-                                    className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1"
-                                    style={{
-                                        backgroundColor: styles.surfaceTertiary,
-                                        color: editedTodo.project ? styles.contentPrimary : styles.contentTertiary,
-                                    }}
-                                >
-                                    <Folder className="size-4 shrink-0" />
-                                    <span className="truncate max-w-[100px]">{editedTodo.project || "Project"}</span>
-                                </button>
-                            </PopoverTrigger>
-                            <PopoverContent
-                                className="w-52 p-2"
-                                align="start"
-                                style={{
-                                    backgroundColor: styles.surfacePrimary,
-                                    borderColor: styles.borderDefault,
-                                }}
-                            >
-                                <div className="space-y-2">
-                                    <Input
-                                        ref={projectInputRef}
-                                        value={projectInput}
-                                        onChange={(e) => {
-                                            setProjectInput(e.target.value);
-                                            setProjectHighlightIndex(-1);
-                                        }}
-                                        placeholder="Search or create project..."
-                                        className="h-9 text-sm"
-                                        onKeyDown={handleProjectKeyDown}
-                                    />
-                                    {filteredProjects.length > 0 && (
-                                        <div className="max-h-40 overflow-y-auto">
-                                            {filteredProjects.map((project, index) => {
-                                                const isHighlighted = index === projectHighlightIndex;
-                                                const isActive = editedTodo.project === project;
-                                                return (
-                                                    <button
-                                                        key={project}
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setEditedTodo({ ...editedTodo, project });
-                                                            setProjectOpen(false);
-                                                            projectTriggerRef.current?.focus();
-                                                        }}
-                                                        className="flex items-center gap-2 w-full px-2.5 py-2 rounded text-sm transition-colors text-left"
-                                                        style={{
-                                                            backgroundColor: isHighlighted ? styles.surfaceTertiary : isActive ? styles.surfaceTertiary : 'transparent',
-                                                            color: styles.contentPrimary,
-                                                            outline: isHighlighted ? `2px solid ${styles.borderDefault}` : 'none',
-                                                        }}
-                                                    >
-                                                        <Folder className="size-4" />
-                                                        {project}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
-                                    {projectInput.trim() && !filteredProjects.includes(projectInput.trim()) && (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setEditedTodo({ ...editedTodo, project: projectInput.trim() });
-                                                setProjectOpen(false);
-                                                projectTriggerRef.current?.focus();
-                                            }}
-                                            className="flex items-center gap-2 w-full px-2.5 py-2 rounded text-sm transition-colors text-left"
-                                            style={{
-                                                backgroundColor: 'transparent',
-                                                color: styles.contentSecondary,
-                                            }}
-                                        >
-                                            <Plus className="size-4" />
-                                            Create "{projectInput.trim()}"
-                                        </button>
-                                    )}
-                                </div>
-                            </PopoverContent>
-                        </Popover>
-
-                        {/* Tags Pill */}
-                        <Popover open={tagsOpen} onOpenChange={setTagsOpen}>
-                            <PopoverTrigger asChild>
-                                <button
-                                    type="button"
-                                    className="flex items-center justify-center p-2 rounded-md text-sm font-medium transition-colors hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1"
-                                    style={{
-                                        backgroundColor: styles.surfaceTertiary,
-                                        color: editedTodo.tags?.length ? styles.contentPrimary : styles.contentTertiary,
-                                    }}
-                                >
-                                    <Tag className="size-4" />
-                                </button>
-                            </PopoverTrigger>
-                            <PopoverContent
-                                className="w-60 p-3"
-                                align="start"
-                                style={{
-                                    backgroundColor: styles.surfacePrimary,
-                                    borderColor: styles.borderDefault,
-                                }}
-                            >
-                                <div className="space-y-3">
-                                    {/* Add tag input */}
-                                    <Input
-                                        value={tagInput}
-                                        onChange={(e) => setTagInput(e.target.value)}
-                                        placeholder="Type and press Enter..."
-                                        className="h-9 text-sm"
-                                        autoFocus
-                                        onKeyDown={(e) => {
-                                            if (e.key === "Enter" && tagInput.trim()) {
-                                                e.preventDefault();
-                                                addTag(tagInput);
-                                            }
-                                        }}
-                                    />
-                                    {/* Suggestions */}
-                                    {availableTags.length > 0 && (
-                                        <div className="space-y-1.5">
-                                            <p className="text-xs font-medium" style={{ color: styles.contentTertiary }}>
-                                                Suggestions
-                                            </p>
-                                            <div className="flex flex-wrap gap-1.5">
-                                                {availableTags
-                                                    .filter(t => !editedTodo.tags?.includes(t))
-                                                    .slice(0, 6)
-                                                    .map((tag) => (
-                                                        <button
-                                                            key={tag}
-                                                            type="button"
-                                                            onClick={() => addTag(tag)}
-                                                            className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors hover:opacity-80"
-                                                            style={{
-                                                                backgroundColor: styles.surfaceTertiary,
-                                                                color: styles.contentSecondary,
-                                                            }}
-                                                        >
-                                                            {tag}
-                                                        </button>
-                                                    ))}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </PopoverContent>
-                        </Popover>
-
-                        {/* Attachment Pill */}
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            onChange={handleFileChange}
-                            className="hidden"
+                        {/* Group 1: Status & Priority */}
+                        <StatusPicker
+                            value={editedTodo.status}
+                            onChange={(status) => setEditedTodo({ ...editedTodo, status })}
                         />
-                        <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={isUploading}
-                            className="flex items-center justify-center p-2 rounded-md text-sm font-medium transition-colors hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1"
-                            style={{
-                                backgroundColor: styles.surfaceTertiary,
-                                color: (editedTodo.attachments?.length || 0) > 0 ? styles.contentPrimary : styles.contentTertiary,
-                            }}
-                            title="Add attachment"
-                        >
-                            {isUploading ? (
-                                <Loader2 className="size-4 animate-spin" />
-                            ) : (
-                                <Paperclip className="size-4" />
-                            )}
-                        </button>
+                        <PriorityPicker
+                            value={editedTodo.priority}
+                            onChange={(priority) => setEditedTodo({ ...editedTodo, priority })}
+                        />
 
-                        {/* Date & Time Pill (Unified) */}
-                        <div
-                            className="flex items-center gap-0.5 p-0.5 rounded-md transition-colors"
-                            style={{
-                                backgroundColor: styles.surfaceTertiary,
-                            }}
-                        >
-                            <Popover open={dueDateOpen} onOpenChange={setDueDateOpen}>
-                                <PopoverTrigger asChild>
-                                    <button
-                                        type="button"
-                                        className="flex items-center gap-1.5 px-2 py-1 rounded text-sm font-medium transition-colors hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-offset-1"
-                                        style={{
-                                            color: editedTodo.dueDate ? styles.contentPrimary : styles.contentTertiary,
-                                        }}
-                                    >
-                                        <CalendarDays className="size-4 shrink-0" />
-                                        {editedTodo.dueDate ? (
-                                            <span className="whitespace-nowrap">
-                                                {editedTodo.startDate ? (
-                                                    // Range format: "Feb 16, 14:00 - 15:00"
-                                                    <>
-                                                        {parseLocalDateString(editedTodo.startDate.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                                                        {editedTodo.startDate.includes('T') && `, ${editedTodo.startDate.split('T')[1]}`}
-                                                        {' - '}
-                                                        {editedTodo.dueDate.includes('T') ? editedTodo.dueDate.split('T')[1] : 'End'}
-                                                    </>
-                                                ) : (
-                                                    // Single date format: "Feb 16" or "Feb 16 14:00"
-                                                    <>
-                                                        {parseLocalDateString(editedTodo.dueDate.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                                                        {editedTodo.dueDate.includes('T') && ` ${editedTodo.dueDate.split('T')[1]}`}
-                                                    </>
-                                                )}
-                                            </span>
-                                        ) : (
-                                            <span>Date & Time</span>
-                                        )}
-                                    </button>
-                                </PopoverTrigger>
-                                <PopoverContent
-                                    className="w-auto p-3 z-[100]"
-                                    align="start"
-                                    style={{
-                                        backgroundColor: styles.surfacePrimary,
-                                        borderColor: styles.borderDefault,
-                                    }}
-                                >
-                                    <div className="space-y-3">
-                                        <Input
-                                            value={dueDateInput}
-                                            onChange={(e) => {
-                                                setDueDateInput(e.target.value);
-                                                const parsed = parseDateFromInput(e.target.value);
-                                                if (parsed) {
-                                                    const time = editedTodo.dueDate?.includes('T') ? editedTodo.dueDate.split('T')[1] : undefined;
-                                                    const dateStr = toLocalDateString(parsed);
-                                                    // If updating date, keep time for both start and due if they exist
-                                                    const newDueDate = time ? `${dateStr}T${time}` : dateStr;
+                        {/* Separator */}
+                        <div className="h-5 w-px mx-0.5" style={{ backgroundColor: styles.borderDefault }} />
 
-                                                    let newStartDate: string | undefined = undefined;
-                                                    if (editedTodo.startDate) {
-                                                        const startTime = editedTodo.startDate.includes('T') ? editedTodo.startDate.split('T')[1] : undefined;
-                                                        newStartDate = startTime ? `${dateStr}T${startTime}` : dateStr;
-                                                    }
-
-                                                    setEditedTodo({ ...editedTodo, dueDate: newDueDate, startDate: newStartDate });
-                                                }
-                                            }}
-                                            placeholder="tomorrow, next wed, 1/15..."
-                                            className="h-9 text-sm"
-                                            autoFocus
-                                            onKeyDown={(e) => {
-                                                if (e.key === "Enter") {
-                                                    e.preventDefault();
-                                                    setDueDateOpen(false);
-                                                }
-                                            }}
-                                        />
-                                        <Calendar
-                                            mode="single"
-                                            selected={editedTodo.dueDate ? parseLocalDateString(editedTodo.dueDate.split('T')[0]) : undefined}
-                                            onSelect={(date) => {
-                                                if (date) {
-                                                    const dateStr = toLocalDateString(date);
-
-                                                    // Preserve existing times if present
-                                                    const dueTime = editedTodo.dueDate?.includes('T') ? editedTodo.dueDate.split('T')[1] : undefined;
-                                                    const newDueDate = dueTime ? `${dateStr}T${dueTime}` : dateStr;
-
-                                                    let newStartDate: string | undefined = undefined;
-                                                    if (editedTodo.startDate) {
-                                                        const startTime = editedTodo.startDate.includes('T') ? editedTodo.startDate.split('T')[1] : undefined;
-                                                        newStartDate = startTime ? `${dateStr}T${startTime}` : dateStr;
-                                                    }
-
-                                                    setEditedTodo({ ...editedTodo, dueDate: newDueDate, startDate: newStartDate });
-                                                    setDueDateInput("");
-                                                    // Don't close immediately to allow time selection
-                                                }
-                                            }}
-                                            defaultMonth={editedTodo.dueDate ? parseLocalDateString(editedTodo.dueDate.split('T')[0]) : new Date()}
-                                        />
-
-                                        <div className="pt-2 border-t" style={{ borderColor: styles.surfaceTertiary }}>
-                                            {!editedTodo.startDate ? (
-                                                // Single Date Mode
-                                                <div className="flex items-center gap-2">
-                                                    <Clock className="size-3.5 shrink-0" style={{ color: styles.contentTertiary }} />
-                                                    <Input
-                                                        type="time"
-                                                        value={editedTodo.dueDate?.includes('T') ? editedTodo.dueDate.split('T')[1] : ''}
-                                                        onChange={(e) => {
-                                                            if (!editedTodo.dueDate) return;
-                                                            const dateStr = editedTodo.dueDate.split('T')[0];
-                                                            if (e.target.value) {
-                                                                setEditedTodo({ ...editedTodo, dueDate: `${dateStr}T${e.target.value}` });
-                                                            } else {
-                                                                setEditedTodo({ ...editedTodo, dueDate: dateStr });
-                                                            }
-                                                        }}
-                                                        className="h-8 text-sm flex-1"
-                                                        disabled={!editedTodo.dueDate}
-                                                        placeholder="Add time"
-                                                    />
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="h-8 text-xs px-2"
-                                                        onClick={() => {
-                                                            if (!editedTodo.dueDate) return;
-
-                                                            // Initialize range: Start = current due time (or 9:00), End = Start + 1h
-                                                            const dateStr = editedTodo.dueDate.split('T')[0];
-                                                            let startTime = "09:00";
-
-                                                            if (editedTodo.dueDate.includes('T')) {
-                                                                startTime = editedTodo.dueDate.split('T')[1];
-                                                            }
-
-                                                            // Calculate end time (+1 hour)
-                                                            const [hours, minutes] = startTime.split(':').map(Number);
-                                                            const endHours = (hours! + 1) % 24;
-                                                            const endTime = `${endHours.toString().padStart(2, '0')}:${minutes!.toString().padStart(2, '0')}`;
-
-                                                            setEditedTodo({
-                                                                ...editedTodo,
-                                                                startDate: `${dateStr}T${startTime}`,
-                                                                dueDate: `${dateStr}T${endTime}`
-                                                            });
-                                                        }}
-                                                    >
-                                                        Add End Time
-                                                    </Button>
-                                                </div>
-                                            ) : (
-                                                // Range Mode
-                                                <div className="space-y-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs font-medium w-8" style={{ color: styles.contentSecondary }}>Start</span>
-                                                        <Input
-                                                            type="time"
-                                                            value={editedTodo.startDate?.includes('T') ? editedTodo.startDate.split('T')[1] : ''}
-                                                            onChange={(e) => {
-                                                                if (!editedTodo.startDate) return;
-                                                                const dateStr = editedTodo.startDate.split('T')[0];
-                                                                if (e.target.value) {
-                                                                    setEditedTodo({ ...editedTodo, startDate: `${dateStr}T${e.target.value}` });
-                                                                }
-                                                            }}
-                                                            className="h-8 text-sm flex-1"
-                                                        />
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xs font-medium w-8" style={{ color: styles.contentSecondary }}>End</span>
-                                                        <Input
-                                                            type="time"
-                                                            value={editedTodo.dueDate?.includes('T') ? editedTodo.dueDate.split('T')[1] : ''}
-                                                            onChange={(e) => {
-                                                                if (!editedTodo.dueDate) return;
-                                                                const dateStr = editedTodo.dueDate.split('T')[0];
-                                                                if (e.target.value) {
-                                                                    setEditedTodo({ ...editedTodo, dueDate: `${dateStr}T${e.target.value}` });
-                                                                }
-                                                            }}
-                                                            className="h-8 text-sm flex-1"
-                                                        />
-                                                        <Button
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            className="h-8 text-xs p-1 hover:bg-red-100 hover:text-red-600"
-                                                            onClick={() => {
-                                                                // Remove start date, keep due date
-                                                                setEditedTodo({ ...editedTodo, startDate: undefined });
-                                                            }}
-                                                            title="Remove start time"
-                                                        >
-                                                            <X className="size-3" />
-                                                        </Button>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </PopoverContent>
-                            </Popover>
-
-                            {editedTodo.dueDate && (
-                                <button
-                                    type="button"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setEditedTodo({ ...editedTodo, dueDate: undefined, startDate: undefined });
-                                    }}
-                                    className="p-1 rounded-sm hover:bg-black/10 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1"
-                                    style={{
-                                        color: styles.contentTertiary,
-                                    }}
-                                    title="Clear date"
-                                >
-                                    <X className="size-3" />
-                                </button>
-                            )}
-                        </div>
+                        {/* Group 2: Context & Metadata */}
+                        <ProjectPicker
+                            value={editedTodo.project}
+                            onChange={(project) => setEditedTodo({ ...editedTodo, project })}
+                            availableProjects={availableProjects}
+                        />
+                        <TagsPicker
+                            value={editedTodo.tags || []}
+                            onChange={(tags) => setEditedTodo({ ...editedTodo, tags })}
+                            availableTags={availableTags}
+                        />
+                        <AttachmentPicker
+                            attachments={editedTodo.attachments || []}
+                            onChange={(attachments) => setEditedTodo({ ...editedTodo, attachments })}
+                        />
+                        <DateTimePicker
+                            dueDate={editedTodo.dueDate}
+                            startDate={editedTodo.startDate}
+                            onChange={({ dueDate, startDate }) => setEditedTodo({ ...editedTodo, dueDate, startDate })}
+                        />
                     </div>
 
                     {/* Action Buttons */}
