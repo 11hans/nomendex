@@ -69,8 +69,107 @@ interface GitClientConfig {
     author?: { name: string; email: string };
 }
 
-interface AuthConfig {
-    token: string;
+export type AuthConfig =
+    | { mode: "token"; token: string }
+    | { mode: "local" };
+
+/**
+ * Get credentials from the system git credential manager (macOS Keychain, etc.)
+ * Shells out to `git credential fill` which talks to whatever credential helper
+ * the user has configured (osxkeychain, gh auth, etc.)
+ */
+async function getSystemCredentials(url: string): Promise<{ username: string; password: string } | null> {
+    try {
+        const parsed = new URL(url);
+        const input = `protocol=${parsed.protocol.replace(":", "")}\nhost=${parsed.host}\n\n`;
+
+        const proc = Bun.spawn(["git", "credential", "fill"], {
+            stdin: "pipe",
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+
+        proc.stdin.write(input);
+        proc.stdin.end();
+
+        // Timeout after 5 seconds to prevent hanging if credential helper prompts
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
+        const outputPromise = new Response(proc.stdout).text();
+
+        const output = await Promise.race([outputPromise, timeoutPromise]);
+        if (!output) {
+            proc.kill();
+            logger.warn("System credential lookup timed out", { host: parsed.host });
+            return null;
+        }
+
+        await proc.exited;
+        if (proc.exitCode !== 0) {
+            logger.debug("System credential lookup failed", { exitCode: proc.exitCode, host: parsed.host });
+            return null;
+        }
+
+        const creds: Record<string, string> = {};
+        for (const line of output.split("\n")) {
+            const eqIdx = line.indexOf("=");
+            if (eqIdx > 0) {
+                creds[line.slice(0, eqIdx)] = line.slice(eqIdx + 1);
+            }
+        }
+
+        if (creds.username && creds.password) {
+            logger.info("Got credentials from system credential manager", { host: parsed.host, username: creds.username });
+            return { username: creds.username, password: creds.password };
+        }
+
+        logger.debug("No credentials returned from system credential manager", { host: parsed.host });
+        return null;
+    } catch (e) {
+        logger.debug("System credential lookup error", { error: String(e) });
+        return null;
+    }
+}
+
+/**
+ * Inform the system credential manager that credentials were accepted
+ */
+async function approveSystemCredentials(url: string, auth: { username: string; password: string }): Promise<void> {
+    try {
+        const parsed = new URL(url);
+        const input = `protocol=${parsed.protocol.replace(":", "")}\nhost=${parsed.host}\nusername=${auth.username}\npassword=${auth.password}\n\n`;
+
+        const proc = Bun.spawn(["git", "credential", "approve"], {
+            stdin: "pipe",
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+        proc.stdin.write(input);
+        proc.stdin.end();
+        await proc.exited;
+    } catch {
+        // Best effort — don't fail the operation
+    }
+}
+
+/**
+ * Inform the system credential manager that credentials were rejected
+ */
+async function rejectSystemCredentials(url: string, auth: { username: string; password: string }): Promise<void> {
+    try {
+        const parsed = new URL(url);
+        const input = `protocol=${parsed.protocol.replace(":", "")}\nhost=${parsed.host}\nusername=${auth.username}\npassword=${auth.password}\n\n`;
+
+        const proc = Bun.spawn(["git", "credential", "reject"], {
+            stdin: "pipe",
+            stdout: "pipe",
+            stderr: "pipe",
+        });
+        proc.stdin.write(input);
+        proc.stdin.end();
+        await proc.exited;
+    } catch {
+        // Best effort — don't fail the operation
+    }
 }
 
 /**
@@ -79,10 +178,66 @@ interface AuthConfig {
 export function createGitClient(config: GitClientConfig) {
     const { dir, author = DEFAULT_AUTHOR } = config;
 
-    // Helper to create onAuth callback
-    const createOnAuth = (auth: AuthConfig) => () => ({
-        username: auth.token,
-    });
+    // Ensure pack files are writable so isomorphic-git can operate on repos
+    // created by the system git CLI (which makes pack files read-only)
+    const ensurePackFilesWritable = async () => {
+        const packDir = `${dir}/.git/objects/pack`;
+        try {
+            const dirEntries = await fs.promises.readdir(packDir);
+            for (const entry of dirEntries) {
+                const fullPath = `${packDir}/${entry}`;
+                try {
+                    const stat = await fs.promises.stat(fullPath);
+                    // If file is not owner-writable, make it writable
+                    if (stat.isFile() && (stat.mode & 0o200) === 0) {
+                        await fs.promises.chmod(fullPath, stat.mode | 0o200);
+                        logger.debug("Made pack file writable", { path: entry });
+                    }
+                } catch {
+                    // Skip individual files that fail
+                }
+            }
+        } catch {
+            // Pack directory might not exist yet — that's fine
+        }
+    };
+
+    // Helper to create auth callbacks for isomorphic-git operations
+    // Returns an object with onAuth (and optionally onAuthSuccess/onAuthFailure) to spread into options
+    const createAuthCallbacks = (auth: AuthConfig) => {
+        if (auth.mode === "token") {
+            return {
+                onAuth: () => ({ username: auth.token }),
+            };
+        }
+
+        // Local mode — use system git credentials
+        let lastUrl = "";
+        let lastAuth: { username: string; password: string } | null = null;
+
+        return {
+            onAuth: async (url: string) => {
+                lastUrl = url;
+                const creds = await getSystemCredentials(url);
+                if (creds) {
+                    lastAuth = creds;
+                    return { username: creds.username, password: creds.password };
+                }
+                // Return empty object — isomorphic-git will try unauthenticated
+                return {};
+            },
+            onAuthSuccess: async () => {
+                if (lastAuth && lastUrl) {
+                    await approveSystemCredentials(lastUrl, lastAuth);
+                }
+            },
+            onAuthFailure: async () => {
+                if (lastAuth && lastUrl) {
+                    await rejectSystemCredentials(lastUrl, lastAuth);
+                }
+            },
+        };
+    };
 
     return {
         /**
@@ -295,6 +450,7 @@ export function createGitClient(config: GitClientConfig) {
          */
         async fetch(auth: AuthConfig, remote = "origin", ref?: string): Promise<void> {
             logger.info("Fetching from remote", { remote, ref });
+            await ensurePackFilesWritable();
             await git.fetch({
                 fs,
                 http,
@@ -302,7 +458,7 @@ export function createGitClient(config: GitClientConfig) {
                 remote,
                 ref,
                 singleBranch: !!ref,
-                onAuth: createOnAuth(auth),
+                ...createAuthCallbacks(auth),
             });
             logger.info("Fetch completed");
         },
@@ -322,6 +478,7 @@ export function createGitClient(config: GitClientConfig) {
             }
 
             // Step 1: Fetch from remote
+            await ensurePackFilesWritable();
             await git.fetch({
                 fs,
                 http,
@@ -329,7 +486,7 @@ export function createGitClient(config: GitClientConfig) {
                 remote,
                 ref: branch,
                 singleBranch: true,
-                onAuth: createOnAuth(auth),
+                ...createAuthCallbacks(auth),
             });
             logger.info("Fetch completed");
 
@@ -435,13 +592,14 @@ export function createGitClient(config: GitClientConfig) {
          */
         async push(auth: AuthConfig, remote = "origin", ref?: string): Promise<void> {
             logger.info("Pushing to remote", { remote, ref });
+            await ensurePackFilesWritable();
             await git.push({
                 fs,
                 http,
                 dir,
                 remote,
                 ref,
-                onAuth: createOnAuth(auth),
+                ...createAuthCallbacks(auth),
             });
             logger.info("Push completed");
         },
@@ -458,7 +616,7 @@ export function createGitClient(config: GitClientConfig) {
                     http,
                     url,
                     prefix: `refs/heads/${branch}`,
-                    onAuth: createOnAuth(auth),
+                    ...createAuthCallbacks(auth),
                 });
                 return refs.length > 0;
             } catch (e) {

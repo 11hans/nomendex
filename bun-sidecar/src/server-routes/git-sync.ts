@@ -1,7 +1,8 @@
 import { RouteHandler } from "../types/Routes";
-import { getRootPath } from "../storage/root-path";
+import { getRootPath, getNomendexPath } from "../storage/root-path";
 import { createServiceLogger } from "../lib/logger";
-import { createGitClient, CommitInfo, ConflictFile } from "../lib/git";
+import { createGitClient, CommitInfo, ConflictFile, AuthConfig } from "../lib/git";
+import { GitAuthModeSchema } from "../types/Workspace";
 
 const logger = createServiceLogger("GIT-SYNC");
 
@@ -22,11 +23,36 @@ function getGitClient() {
     return createGitClient({ dir: getRootPath() });
 }
 
-// Get auth config from PAT
-function getAuthConfig(): { token: string } | null {
+// Read gitAuthMode from workspace state
+async function getGitAuthMode(): Promise<"pat" | "local"> {
+    try {
+        const file = Bun.file(`${getNomendexPath()}/workspace.json`);
+        if (await file.exists()) {
+            const data = await file.json();
+            const parsed = GitAuthModeSchema.safeParse(data.gitAuthMode);
+            return parsed.success ? parsed.data : "local";
+        }
+    } catch {
+        // Default to local
+    }
+    return "local";
+}
+
+// Get auth config based on workspace gitAuthMode setting
+// Returns null only when PAT mode is selected but no PAT is configured
+async function getAuthConfig(): Promise<AuthConfig | null> {
     const pat = getGitHubPAT();
-    if (!pat) return null;
-    return { token: pat };
+    if (pat) {
+        return { mode: "token", token: pat };
+    }
+
+    const authMode = await getGitAuthMode();
+    if (authMode === "local") {
+        return { mode: "local" };
+    }
+
+    // PAT mode but no PAT configured
+    return null;
 }
 
 interface GitStatusResponse {
@@ -244,7 +270,7 @@ export const gitSetupRemoteRoute: RouteHandler<GitSyncResponse> = {
             }
 
             const git = getGitClient();
-            const auth = getAuthConfig();
+            const auth = await getAuthConfig();
             logger.info("Setting up remote repository", { repoUrl, branch });
 
             const branchName = branch || "main";
@@ -316,7 +342,7 @@ export const gitPullRoute: RouteHandler<GitSyncResponse> = {
     POST: async (_req) => {
         try {
             const git = getGitClient();
-            const auth = getAuthConfig();
+            const auth = await getAuthConfig();
             logger.info("Pulling from remote", { path: getRootPath() });
 
             if (!auth) {
@@ -455,7 +481,7 @@ export const gitPushRoute: RouteHandler<GitSyncResponse> = {
     POST: async (_req) => {
         try {
             const git = getGitClient();
-            const auth = getAuthConfig();
+            const auth = await getAuthConfig();
             logger.info("Pushing to remote", { path: getRootPath() });
 
             if (!auth) {
@@ -568,7 +594,7 @@ export const gitFetchStatusRoute: RouteHandler<GitFetchStatusResponse> = {
     POST: async (_req) => {
         try {
             const git = getGitClient();
-            const auth = getAuthConfig();
+            const auth = await getAuthConfig();
             logger.info("Fetching status from remote", { path: getRootPath() });
 
             if (!auth) {

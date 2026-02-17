@@ -261,11 +261,13 @@ export function GHSyncProvider(props: { children: React.ReactNode }) {
     }, [recheckSetup]);
 
     // Start polling when ready
+    // In local mode, we don't need a PAT — system credentials are used
+    const authReady = gitAuthMode === "local" || setupStatus.hasPAT;
     useEffect(() => {
-        if (isReady && setupStatus.hasPAT) {
+        if (isReady && authReady) {
             checkForChanges();
         }
-    }, [isReady, setupStatus.hasPAT, checkForChanges]);
+    }, [isReady, authReady, checkForChanges]);
 
     // Scheduled polling for remote changes (configurable interval)
     // Also pauses when there's an active merge conflict
