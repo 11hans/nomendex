@@ -172,11 +172,11 @@ async function updateTodo(input: {
         archived?: boolean;
         order?: number;
         tags?: string[];
-        dueDate?: string;
+        dueDate?: string | null;
         priority?: "high" | "medium" | "low" | "none";
         completedAt?: string;
-        startDate?: string;
-        duration?: number;
+        startDate?: string | null;
+        duration?: number | null;
         attachments?: Attachment[];
         customColumnId?: string;
     };
@@ -223,7 +223,7 @@ async function updateTodo(input: {
             }
         }
 
-        const updated = await getDb().update(input.todoId, updates);
+        const updated = await getDb().update(input.todoId, updates as Partial<Todo>);
 
         if (!updated) {
             todosLogger.warn(`Todo not found for update: ${input.todoId}`);

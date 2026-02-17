@@ -150,6 +150,12 @@ export class FileDatabase<T extends DatabaseRecord> {
         }
 
         const updated = { ...existing, ...updates, id }; // Ensure ID doesn't change
+        // Remove null/undefined values so cleared fields don't persist in YAML
+        for (const key of Object.keys(updated)) {
+            if ((updated as any)[key] === null || (updated as any)[key] === undefined) {
+                delete (updated as any)[key];
+            }
+        }
         const filePath = this.getFilePath(id);
         const content = this.recordToFile(updated);
 

@@ -27,8 +27,8 @@ interface UpdateTodoInput {
         tags?: string[];
         dueDate?: string | null;
         priority?: "high" | "medium" | "low" | "none";
-        startDate?: string;
-        duration?: number;
+        startDate?: string | null;
+        duration?: number | null;
         attachments?: Attachment[];
         customColumnId?: string;
     };
