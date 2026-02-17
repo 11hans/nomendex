@@ -153,14 +153,8 @@ class CalendarManager {
             return
         }
         
-        // Priority → Calendar alarm
-        if let priority = taskData["priority"] as? String {
-            switch priority {
-            case "high": event.addAlarm(EKAlarm(relativeOffset: -900))  // 15 min before
-            case "medium": event.addAlarm(EKAlarm(relativeOffset: -1800)) // 30 min before
-            default: break
-            }
-        }
+        // Priority → Calendar alarm (Disabled per user feedback)
+        // if let priority = taskData["priority"] as? String { ... }
         
         // Store task ID in event URL for lookup
         event.url = URL(string: "nomendex://task/\(taskId)")
