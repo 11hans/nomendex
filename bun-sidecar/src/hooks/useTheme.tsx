@@ -16,6 +16,9 @@ interface WebKitMessageHandlers {
     checkForUpdatesInBackground?: {
         postMessage: (data: Record<string, never>) => void;
     };
+    calendarSync?: {
+        postMessage: (data: Record<string, unknown>) => void;
+    };
 }
 
 declare global {

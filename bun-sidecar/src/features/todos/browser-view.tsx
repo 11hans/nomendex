@@ -13,9 +13,11 @@ import { TodoCard } from "./TodoCard";
 import { CreateTodoDialog } from "./CreateTodoDialog";
 import { TaskCardEditor } from "./TaskCardEditor";
 import { TagFilter } from "./TagFilter";
+import { PriorityFilter } from "./PriorityFilter";
 import { Todo } from "./todo-types";
 import { BoardConfig, BoardColumn, getDefaultColumns } from "@/features/projects/project-types";
 import { BoardSettingsDialog } from "./BoardSettingsDialog";
+import { syncTaskToCalendar, removeTaskFromCalendar } from "./calendar-bridge";
 import type { Attachment } from "@/types/attachments";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -54,6 +56,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
     const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const [selectedPriority, setSelectedPriority] = useState<"high" | "medium" | "low" | "none" | null>(null);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [todoToEdit, setTodoToEdit] = useState<Todo | null>(null);
@@ -309,6 +312,9 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     project: updatedTodo.project,
                     tags: updatedTodo.tags,
                     dueDate: updatedTodo.dueDate,
+                    priority: updatedTodo.priority,
+                    startDate: updatedTodo.startDate,
+                    duration: updatedTodo.duration,
                     attachments: updatedTodo.attachments,
                     customColumnId: updatedTodo.customColumnId,
                 },
@@ -316,6 +322,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             setEditDialogOpen(false);
             setTodoToEdit(null);
             await loadTodos();
+            // Sync to calendar (fire-and-forget)
+            syncTaskToCalendar(updatedTodo).catch(() => { });
         } catch (error) {
             console.error("Failed to save todo:", error);
         } finally {
@@ -401,6 +409,11 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                     ...(newStatus && { status: newStatus }),
                                 },
                             });
+                            // Sync updated status to calendar if status changed
+                            if (newStatus && newStatus !== activeTodo.status) {
+                                const updated = { ...activeTodo, status: newStatus, customColumnId: newColumnId };
+                                syncTaskToCalendar(updated).catch(() => { });
+                            }
                         } catch (error) {
                             console.error("Failed to update todo column:", error);
                             await loadTodos();
@@ -419,6 +432,9 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                 todoId: activeId,
                                 updates: { status: newStatus },
                             });
+                            // Sync updated status to calendar
+                            const updated = { ...activeTodo, status: newStatus };
+                            syncTaskToCalendar(updated).catch(() => { });
                         } catch (error) {
                             console.error("Failed to update todo status:", error);
                             await loadTodos();
@@ -490,6 +506,11 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                 },
                             });
                             await todosAPI.reorderTodos({ reorders });
+                            // Sync updated status to calendar if status changed
+                            if (newStatus && newStatus !== activeTodo.status) {
+                                const updated = { ...activeTodo, status: newStatus, customColumnId: overColumnId };
+                                syncTaskToCalendar(updated).catch(() => { });
+                            }
                         } catch (error) {
                             console.error("Failed to move todo:", error);
                             await loadTodos();
@@ -529,6 +550,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                 updates: { status: targetStatus },
                             });
                             await todosAPI.reorderTodos({ reorders });
+                            // Sync updated status to calendar
+                            syncTaskToCalendar({ ...activeTodo, status: targetStatus }).catch(() => { });
                         } catch (error) {
                             console.error("Failed to move todo:", error);
                             await loadTodos();
@@ -639,6 +662,13 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             );
         }
 
+        // Apply priority filtering
+        if (selectedPriority) {
+            filteredTodos = filteredTodos.filter((todo) =>
+                (todo.priority || "none") === selectedPriority
+            );
+        }
+
         // Sort by order field (ascending), with undefined/null orders at the end
         const sortByOrder = (a: Todo, b: Todo) => {
             const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
@@ -659,20 +689,14 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             } else {
                 // If column doesn't exist (e.g. legacy status "later" but column hidden), 
                 // maybe ignore or put in default? 
-                // For "Later" column toggling logic: 
-                // In legacy mode, if showLaterColumn is false, we don't have "later" key.
-                // So todos with status "later" won't be shown.
-                // This matches current behavior.
+                // For now, let's put in the first column or todo
+                if (grouped['todo']) grouped['todo'].push(todo);
             }
         });
 
-        // Sort each column
-        Object.keys(grouped).forEach(key => {
-            grouped[key].sort(sortByOrder);
-        });
-
         return grouped;
-    }, [todos, selectedTags, searchQuery, displayColumns, getColumnForTodo]);
+    }, [todos, selectedTags, selectedPriority, searchQuery, displayColumns, getColumnForTodo]);
+
 
     // Flattened list of all visible todos for keyboard navigation
     const flattenedTodos = useMemo(() => {
@@ -718,6 +742,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
 
         try {
             await todosAPI.deleteTodo({ todoId: todo.id });
+            // Remove from calendar
+            removeTaskFromCalendar(todo.id).catch(() => { });
 
             const truncatedTitle = todo.title.length > 30
                 ? todo.title.slice(0, 30) + "…"
@@ -1588,6 +1614,10 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                         selectedTags={selectedTags}
                         onTagToggle={handleTagToggle}
                         onClearAll={handleClearAllTags}
+                    />
+                    <PriorityFilter
+                        selectedPriority={selectedPriority}
+                        onPriorityChange={setSelectedPriority}
                     />
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>

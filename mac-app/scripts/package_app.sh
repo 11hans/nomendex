@@ -36,8 +36,8 @@ else
   cp -f sidecar/server.ts "$APP_DIR/Contents/Resources/sidecar/server.ts"
 fi
 
-# Optional: codesign ad-hoc (skipped by default). Uncomment to sign locally.
-# codesign --force --deep --sign - --entitlements macos-host/entitlements.plist "$APP_DIR"
+# Codesign ad-hoc with entitlements (required for EventKit calendar access)
+codesign --force --deep --sign - --entitlements macos-host/entitlements.plist "$APP_DIR"
 
 echo "[pkg] done: $APP_DIR"
 

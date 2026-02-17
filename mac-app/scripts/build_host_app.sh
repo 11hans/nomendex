@@ -20,11 +20,12 @@ SWIFT_FILES=(
   macos-host/Sources/WebViewWindowController.swift
   macos-host/Sources/GlobalHotKey.swift
   macos-host/Sources/SidecarLauncher.swift
+  macos-host/Sources/CalendarManager.swift
 )
 
 echo "[host] compiling Swift sources..."
 xcrun swiftc "${SWIFT_FILES[@]}" \
-  -framework Cocoa -framework WebKit -framework Carbon \
+  -framework Cocoa -framework WebKit -framework Carbon -framework EventKit \
   -F "$SPARKLE_DIR" -framework Sparkle \
   -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
   -o "$BUILD_DIR/$BIN_NAME"

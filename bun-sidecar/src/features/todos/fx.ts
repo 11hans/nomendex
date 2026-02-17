@@ -105,6 +105,9 @@ async function createTodo(input: {
     status?: "todo" | "in_progress" | "done" | "later";
     tags?: string[];
     dueDate?: string;
+    priority?: "high" | "medium" | "low" | "none";
+    startDate?: string;
+    duration?: number;
     attachments?: Attachment[];
 }) {
     todosLogger.info(`Creating new todo: ${input.title}`);
@@ -142,6 +145,10 @@ async function createTodo(input: {
             order: maxOrder + 1,
             tags: input.tags,
             dueDate: input.dueDate,
+            priority: input.priority,
+            completedAt: status === "done" ? now : undefined,
+            startDate: input.startDate,
+            duration: input.duration,
             attachments: input.attachments,
         };
 
@@ -166,6 +173,10 @@ async function updateTodo(input: {
         order?: number;
         tags?: string[];
         dueDate?: string;
+        priority?: "high" | "medium" | "low" | "none";
+        completedAt?: string;
+        startDate?: string;
+        duration?: number;
         attachments?: Attachment[];
         customColumnId?: string;
     };
@@ -202,6 +213,13 @@ async function updateTodo(input: {
 
                 updates.order = maxOrder + 1;
                 todosLogger.info(`Status changed, assigning new order: ${updates.order}`);
+
+                // Auto-set completedAt when status changes to/from done
+                if (input.updates.status === "done") {
+                    updates.completedAt = new Date().toISOString();
+                } else if (currentTodo.status === "done") {
+                    updates.completedAt = undefined;
+                }
             }
         }
 
