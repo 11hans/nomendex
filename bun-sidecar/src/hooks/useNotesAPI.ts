@@ -96,7 +96,7 @@ export const notesAPI = {
         return note;
     },
     updateNoteTags: (args: { fileName: string; tags: string[] }) => fetchAPI<Note>("update-tags", args),
-    getDailyNoteName: () => fetchAPI<{ fileName: string }>("daily-name"),
+    getDailyNoteName: (args?: { date?: string }) => fetchAPI<{ fileName: string }>("daily-name", args),
     getRecentDailyNotes: (args: { days?: number } = {}) =>
         fetchAPI<
             Array<{

@@ -2,8 +2,11 @@ import { TypedPluginWithFunctions } from "@/types/Plugin";
 import { functionStubs, NotesPluginBase } from "./index";
 import { FunctionsFromStubs } from "@/types/Functions";
 import { FeatureStorage } from "@/storage/FeatureStorage";
-import { getNotesPath, hasActiveWorkspace } from "@/storage/root-path";
+import { getNotesPath, getDailyNotesPath, hasActiveWorkspace } from "@/storage/root-path";
+import { getDailyNoteFileName } from "./date-utils";
 import yaml from "js-yaml";
+import path from "path";
+import { mkdir } from "node:fs/promises";
 
 // Lazy-initialized storage for notes
 let storage: FeatureStorage | null = null;
@@ -17,6 +20,10 @@ export async function initializeNotesService(): Promise<void> {
     }
     storage = new FeatureStorage(getNotesPath());
     await getStorage().initialize();
+
+    // Ensure the daily notes subfolder exists
+    const dailyPath = getDailyNotesPath();
+    await mkdir(dailyPath, { recursive: true });
 }
 
 function getStorage(): FeatureStorage {
@@ -64,6 +71,7 @@ function serializeFrontMatter(frontMatter: Record<string, unknown> | undefined, 
 const ALWAYS_HIDDEN_FOLDERS = ["todos", ".nomendex", ".git", ".github"];
 // Files that should always be hidden from the notes browser
 const ALWAYS_HIDDEN_FILES = [".DS_Store"];
+
 
 function shouldSkipFolder(folderPath: string): boolean {
     // Check if the folder path starts with or contains any of the always-hidden folders
@@ -385,16 +393,22 @@ async function getNoteMtime(args: { fileName: string }) {
     return { mtime };
 }
 
-async function getDailyNoteName() {
-    const date = new Date();
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-    const year = date.getFullYear();
-    return { fileName: `${month}-${day}-${year}` };
+export async function getDailyNoteName(args?: { date?: string }) {
+    const dailyPath = getDailyNotesPath();
+    const notesPath = getNotesPath();
+    const dailyNotesSubfolder = path.relative(notesPath, dailyPath);
+
+    const dateObj = args?.date ? new Date(args.date) : new Date();
+    const name = getDailyNoteFileName(dateObj);
+    return { fileName: path.join(dailyNotesSubfolder, name) };
 }
 
 async function getRecentDailyNotes(args: { days?: number }) {
     const days = args.days ?? 7;
+    const dailyPath = getDailyNotesPath();
+    const notesPath = getNotesPath();
+    const dailyNotesSubfolder = path.relative(notesPath, dailyPath);
+
     const results: Array<{
         date: string;
         fileName: string;
@@ -407,24 +421,22 @@ async function getRecentDailyNotes(args: { days?: number }) {
         const date = new Date();
         date.setDate(date.getDate() - i);
 
-        const month = date.getMonth() + 1;
-        const day = date.getDate();
-        const year = date.getFullYear();
-        const fileName = `${month}-${day}-${year}.md`;
+        const fileName = getDailyNoteFileName(date);
+        const relativePath = path.join(dailyNotesSubfolder, fileName);
         const dateStr = date.toISOString().split("T")[0] || "";
 
-        const exists = await getStorage().fileExists(fileName);
+        const exists = await getStorage().fileExists(relativePath);
 
         if (exists) {
-            const rawContent = await getStorage().readFile(fileName);
+            const rawContent = await getStorage().readFile(relativePath);
             if (rawContent) {
                 const { frontMatter, content } = parseFrontMatter(rawContent);
-                results.push({ date: dateStr, fileName, exists: true, content, frontMatter });
+                results.push({ date: dateStr, fileName: relativePath, exists: true, content, frontMatter });
             } else {
-                results.push({ date: dateStr, fileName, exists: true, content: "" });
+                results.push({ date: dateStr, fileName: relativePath, exists: true, content: "" });
             }
         } else {
-            results.push({ date: dateStr, fileName, exists: false });
+            results.push({ date: dateStr, fileName: relativePath, exists: false });
         }
     }
 

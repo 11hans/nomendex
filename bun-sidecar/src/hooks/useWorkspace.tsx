@@ -32,7 +32,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
     useEffect(() => {
         fetchWorkspace();
     }, []);
-    
+
 
     // Open initial route if provided (first-load deep link), after workspace loads
     useEffect(() => {
@@ -356,17 +356,17 @@ export function useWorkspace(_initialRoute?: RouteParams) {
 
                 // If active tab was closed, switch to first remaining tab
                 const closedActiveTab = prev.tabs.find(
-                    tab => tab.id === prev.activeTabId && 
-                    tab.pluginInstance.plugin.id === 'notes' &&
-                    tab.pluginInstance.instanceProps?.noteFileName === noteFileName
+                    tab => tab.id === prev.activeTabId &&
+                        tab.pluginInstance.plugin.id === 'notes' &&
+                        tab.pluginInstance.instanceProps?.noteFileName === noteFileName
                 );
                 const newActiveTabId = closedActiveTab ? (tabsToKeep[0]?.id ?? null) : prev.activeTabId;
 
                 // Clear sidebar if it had this note
                 const closedSidebarTab = prev.tabs.find(
-                    tab => tab.id === prev.sidebarTabId && 
-                    tab.pluginInstance.plugin.id === 'notes' &&
-                    tab.pluginInstance.instanceProps?.noteFileName === noteFileName
+                    tab => tab.id === prev.sidebarTabId &&
+                        tab.pluginInstance.plugin.id === 'notes' &&
+                        tab.pluginInstance.instanceProps?.noteFileName === noteFileName
                 );
                 const newSidebarTabId = closedSidebarTab ? null : prev.sidebarTabId;
 
@@ -459,7 +459,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
     }, [updateWorkspace]);
 
     const replaceTabWithNewView = useCallback(
-        (currentTabId: string, pluginMeta: SerializablePlugin, { view = "default", ...props }: { view?: string; [key: string]: unknown } = {}) => {
+        (currentTabId: string, pluginMeta: SerializablePlugin, { view = "default", ...props }: { view?: string;[key: string]: unknown } = {}) => {
             try {
                 const pluginInstance = createPluginInstance({ pluginMeta, viewId: view, props });
                 let replaced: WorkspaceTab | null = null;
@@ -569,14 +569,14 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         (id: string | null) => {
             updateWorkspace((prev) => {
                 let newActiveTabId = prev.activeTabId;
-                
+
                 // If setting sidebar to same ID as current active tab, unset active tab
                 if (id && id === prev.activeTabId) {
                     // Find next available tab that's not the sidebar tab
                     const availableTabs = prev.tabs.filter(tab => tab.id !== id);
                     newActiveTabId = availableTabs.length > 0 ? availableTabs[0]?.id ?? null : null;
                 }
-                
+
                 return { ...prev, sidebarTabId: id, activeTabId: newActiveTabId };
             });
         },
@@ -712,6 +712,8 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         },
         [updateWorkspace]
     );
+
+
 
     // === Pane Operations ===
 
@@ -1094,6 +1096,8 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         // Show hidden files
         showHiddenFiles: workspace.showHiddenFiles,
         setShowHiddenFiles,
+
+
 
         // Pane operations
         panes: workspace.panes,
