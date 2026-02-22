@@ -39,6 +39,7 @@ export const functionStubs = {
             startDate: z.string().optional(),
             duration: z.number().optional(),
             attachments: z.array(AttachmentSchema).optional(),
+            customColumnId: z.string().optional(),
         }),
         output: TodoSchema,
     },

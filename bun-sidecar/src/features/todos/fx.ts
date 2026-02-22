@@ -109,6 +109,7 @@ async function createTodo(input: {
     startDate?: string;
     duration?: number;
     attachments?: Attachment[];
+    customColumnId?: string;
 }) {
     todosLogger.info(`Creating new todo: ${input.title}`);
 
@@ -150,6 +151,7 @@ async function createTodo(input: {
             startDate: input.startDate,
             duration: input.duration,
             attachments: input.attachments,
+            customColumnId: input.customColumnId,
         };
 
         const created = await getDb().create(newTodo);
