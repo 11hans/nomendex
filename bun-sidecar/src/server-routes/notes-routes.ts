@@ -95,8 +95,9 @@ export const notesRoutes = {
         },
     },
     "/api/notes/daily-name": {
-        async POST() {
-            const result = await functions.getDailyNoteName.fx({});
+        async POST(req: Request) {
+            const args = await req.json().catch(() => ({}));
+            const result = await functions.getDailyNoteName.fx(args);
             return Response.json(result);
         },
     },
@@ -107,6 +108,7 @@ export const notesRoutes = {
             return Response.json(result);
         },
     },
+
     // Folder routes
     "/api/notes/folders": {
         async POST(req: Request) {

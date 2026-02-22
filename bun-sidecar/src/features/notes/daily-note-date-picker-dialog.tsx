@@ -10,7 +10,7 @@ import { useRouting } from "@/hooks/useRouting";
 import { notesAPI } from "@/hooks/useNotesAPI";
 import { notesPluginSerial } from "@/features/notes";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
-import { getDailyNoteFileName, parseDateFromInput } from "./date-utils";
+import { parseDateFromInput } from "./date-utils";
 
 interface DailyNoteDatePickerDialogProps {
     onSuccess?: (fileName: string) => void;
@@ -50,11 +50,11 @@ export function DailyNoteDatePickerDialog({ onSuccess }: DailyNoteDatePickerDial
 
         setIsOpening(true);
         try {
-            const fileName = getDailyNoteFileName(selectedDate);
+            const { fileName } = await notesAPI.getDailyNoteName({ date: selectedDate.toISOString() });
 
-            // See if note exists
+            // See if note exists in daily notes subfolder
             const output = await notesAPI.getNoteByFileName({ fileName });
-            if (!output) {
+            if (!output || !output.content) {
                 await notesAPI.createNote({ fileName });
             }
 

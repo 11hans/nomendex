@@ -374,43 +374,30 @@ Set a fixed \`height\` parameter to disable auto-resize.
         files: {
             "SKILL.md": `---
 name: daily-notes
-description: Manages daily notes with M-D-YYYY format (e.g., 1-1-2026.md). Use when the user asks to view recent notes, create daily notes, read today's notes, summarize the week, or references @notes/ or dates. Can fetch last 7 days of notes. Notes location is configurable in Settings > Storage.
-version: 1
+description: Manages daily notes stored in the daily-notes/ subfolder with M-D-YYYY format (e.g., 1-1-2026.md). Use when the user asks to view recent notes, create daily notes, read today's notes, summarize the week, or references dates.
+version: 2
 ---
 
 # Daily Notes Management
 
 ## Overview
 
-This skill manages daily notes stored in the workspace's notes directory using the \`M-D-YYYY.md\` format (e.g., \`1-1-2026.md\`, \`12-31-2025.md\`).
+This skill manages daily notes stored in the \`daily-notes/\` subfolder within the workspace's notes directory using the \`M-D-YYYY.md\` format (e.g., \`1-1-2026.md\`, \`12-31-2025.md\`).
 
 ## Date Format
 
-All daily notes follow this format:
-- **Format**: \`M-D-YYYY.md\`
-- **No leading zeros**: \`1-1-2026.md\` not \`01-01-2026.md\`
-- **Examples**:
-  - January 1, 2026 -> \`1-1-2026.md\`
-  - December 31, 2025 -> \`12-31-2025.md\`
-  - March 5, 2026 -> \`3-5-2026.md\`
+- **Format**: \`M-D-YYYY.md\` (no leading zeros)
+- **Examples**: \`1-1-2026.md\`, \`12-31-2025.md\`, \`3-5-2026.md\`
 
 ## Getting the Notes Directory
 
-The notes location is configurable in Settings > Storage. To get the correct path, query the workspace paths API:
-
-\`\`\`bash
-curl http://localhost:1234/api/workspace/paths
-# Returns: { "success": true, "data": { "notes": "/path/to/notes", ... } }
-\`\`\`
-
-Or use \`jq\` to extract just the notes path:
 \`\`\`bash
 NOTES_DIR=$(curl -s http://localhost:1234/api/workspace/paths | jq -r '.data.notes')
 \`\`\`
 
-## CLI Usage
+Daily notes are stored at \`$NOTES_DIR/daily-notes/\`.
 
-The skill provides a shell script. Set the \`NOTES_DIR\` environment variable to the workspace's notes path (obtained from the API above).
+## CLI Usage
 
 \`\`\`bash
 NOTES_DIR=/path/to/workspace/notes .claude/skills/daily-notes/daily-note.sh <command> [arguments]
@@ -418,34 +405,15 @@ NOTES_DIR=/path/to/workspace/notes .claude/skills/daily-notes/daily-note.sh <com
 
 ### Commands
 
-#### get-today
-Get or create today's daily note.
-\`\`\`bash
-./daily-note.sh get-today
-\`\`\`
-
-#### get-note [date]
-Get a specific date's note.
-\`\`\`bash
-./daily-note.sh get-note 1-1-2026
-\`\`\`
-
-#### get-last-x [duration]
-Get notes from the last N days.
-\`\`\`bash
-./daily-note.sh get-last-x 7days
-./daily-note.sh get-last-x 30days
-\`\`\`
-
-#### get-range [start] [end]
-Get notes between two dates (ISO format).
-\`\`\`bash
-./daily-note.sh get-range 2026-01-01 2026-01-07
-\`\`\`
+| Command | Description |
+|---------|-------------|
+| \`get-today\` | Get or create today's daily note |
+| \`get-note [M-D-YYYY]\` | Get a specific date's note |
+| \`get-last-x [Ndays]\` | Get notes from the last N days |
 
 ## How Claude Should Use This Skill
 
-**Important**: Always set the \`NOTES_DIR\` environment variable to the workspace's notes path before running the script.
+**Important**: Always set \`NOTES_DIR\` to the workspace's notes path before running the script. The script automatically handles the \`daily-notes/\` subfolder.
 
 ### When User Asks About Recent Work
 \`\`\`
@@ -458,7 +426,7 @@ User: "What have I been working on this week?"
 \`\`\`
 User: "Add this to my daily note: Completed feature X"
 -> Run: NOTES_DIR=/path/to/notes ./daily-note.sh get-today
--> Use Edit tool to append content
+-> Use Edit tool to append content to the returned file path
 \`\`\`
 
 ## Best Practices
@@ -466,15 +434,15 @@ User: "Add this to my daily note: Completed feature X"
 1. **Always set NOTES_DIR** - Don't rely on the default path
 2. **Handle missing notes gracefully** - Not every day has a note
 3. **Preserve existing content** - Use Edit tool, not Write when modifying
-4. **Support natural language dates** - Convert to \`M-D-YYYY\` format
 `,
             "daily-note.sh": `#!/bin/bash
 
 # Daily Notes CLI
-# Manages daily notes in M-D-YYYY format (e.g., 1-1-2026.md)
+# Manages daily notes in daily-notes/ subfolder with M-D-YYYY format (e.g., daily-notes/1-1-2026.md)
 
 NOTES_DIR="\${NOTES_DIR:-$HOME/.mcpclient/notes}"
-mkdir -p "$NOTES_DIR"
+DAILY_DIR="$NOTES_DIR/daily-notes"
+mkdir -p "$DAILY_DIR"
 
 format_date() {
     local date_str="$1"
@@ -495,11 +463,7 @@ get_date_n_days_ago() {
 }
 
 get_today() {
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        date "+%-m-%-d-%Y"
-    else
-        date "+%-m-%-d-%Y"
-    fi
+    date "+%-m-%-d-%Y"
 }
 
 display_note() {
@@ -526,7 +490,7 @@ display_note() {
 
 cmd_get_today() {
     local TODAY=$(get_today)
-    local NOTE_PATH="$NOTES_DIR/\${TODAY}.md"
+    local NOTE_PATH="$DAILY_DIR/\${TODAY}.md"
 
     if [[ ! -f "$NOTE_PATH" ]]; then
         touch "$NOTE_PATH"
@@ -544,7 +508,7 @@ cmd_get_note() {
         echo "Error: Date required" >&2
         exit 1
     fi
-    local NOTE_FILE="$NOTES_DIR/\${date_input}.md"
+    local NOTE_FILE="$DAILY_DIR/\${date_input}.md"
     if display_note "$NOTE_FILE" "$date_input" "false"; then
         exit 0
     else
@@ -567,7 +531,7 @@ cmd_get_last_x() {
         local DATE_ISO=$(get_date_n_days_ago "$i")
         local DATE_FORMATTED=$(format_date "$DATE_ISO")
         if [[ -n "$DATE_FORMATTED" ]]; then
-            local NOTE_FILE="$NOTES_DIR/\${DATE_FORMATTED}.md"
+            local NOTE_FILE="$DAILY_DIR/\${DATE_FORMATTED}.md"
             if display_note "$NOTE_FILE" "$DATE_FORMATTED"; then
                 FOUND_NOTES=$((FOUND_NOTES + 1))
             fi

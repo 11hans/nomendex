@@ -7,6 +7,7 @@ interface PathCache {
     nomendexPath: string;
     todosPath: string;
     notesPath: string;
+    dailyNotesPath: string;
     agentsPath: string;
     skillsPath: string;
     uploadsPath: string;
@@ -28,7 +29,7 @@ async function getNotesLocationSetting(nomendexPath: string): Promise<NotesLocat
         const workspace = WorkspaceStateSchema.parse(workspaceRaw);
         return workspace.notesLocation;
     } catch {
-        return "root"; // default (Obsidian-compatible) on error
+        return "root"; // default on error
     }
 }
 
@@ -48,12 +49,14 @@ export async function initializePaths(): Promise<void> {
     const notesPath = notesLocation === "root"
         ? workspace.path
         : path.join(workspace.path, "notes");
+    const dailyNotesPath = path.join(notesPath, "daily-notes");
 
     paths = {
         rootPath: workspace.path,
         nomendexPath,
         todosPath: path.join(workspace.path, "todos"),
         notesPath,
+        dailyNotesPath,
         agentsPath: path.join(workspace.path, "agents"),
         skillsPath: path.join(workspace.path, ".claude", "skills"),
         uploadsPath: path.join(workspace.path, "uploads"),
@@ -109,6 +112,15 @@ export function getTodosPath(): string {
 export function getNotesPath(): string {
     if (!paths) throw new Error("No active workspace. Call initializePaths() first.");
     return paths.notesPath;
+}
+
+/**
+ * Get the daily notes path of the active workspace.
+ * @throws Error if no workspace is active
+ */
+export function getDailyNotesPath(): string {
+    if (!paths) throw new Error("No active workspace. Call initializePaths() first.");
+    return paths.dailyNotesPath;
 }
 
 /**
