@@ -390,7 +390,18 @@ export async function renameProject(input: {
     }
     const oldName = existingProject.name;
 
-    // Update todos with this project
+    // Update the project itself FIRST (before cascading to todos/notes)
+    // This is critical because updateTodo validates that the project name exists
+    const updated: ProjectConfig = {
+        ...existingProject,
+        name: input.newName,
+        updatedAt: new Date().toISOString(),
+    };
+
+    data.projects[index] = updated;
+    await writeProjectsFile(data);
+
+    // Now update todos with this project (project name already exists in projects.json)
     const allTodos = await getTodos({});
     const projectTodos = allTodos.filter((t) => t.project === oldName);
     let updatedTodos = 0;
@@ -415,16 +426,6 @@ export async function renameProject(input: {
         updatedNotes++;
     }
     projectsLogger.info(`Updated ${updatedNotes} notes to new project name: ${input.newName}`);
-
-    // Update the project itself
-    const updated: ProjectConfig = {
-        ...existingProject,
-        name: input.newName,
-        updatedAt: new Date().toISOString(),
-    };
-
-    data.projects[index] = updated;
-    await writeProjectsFile(data);
 
     projectsLogger.info(`Renamed project: ${input.projectId} to ${input.newName}`);
     return { project: updated, updatedTodos, updatedNotes };
