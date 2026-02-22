@@ -12,7 +12,6 @@ import { useTheme } from "@/hooks/useTheme";
 import { triggerNativeUpdate } from "@/hooks/useUpdateNotification";
 import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-
 import { RotateCcw, Eye, EyeOff, Check, X, Key, RefreshCw, Info, Plus, Trash2, FolderOpen } from "lucide-react";
 import { Input } from "../components/ui/input";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
@@ -149,6 +148,7 @@ function StorageSettings() {
                         </div>
                     )}
                 </div>
+
 
                 {/* Show Hidden Files Setting */}
                 <div
@@ -494,12 +494,12 @@ function SettingsContent() {
 
             // Normalize key names
             let key = e.key.toLowerCase();
-            if (key === "[" ) key = "bracketleft";
-            if (key === "]" ) key = "bracketright";
-            if (key === "arrowleft" ) key = "left";
-            if (key === "arrowright" ) key = "right";
-            if (key === "arrowup" ) key = "up";
-            if (key === "arrowdown" ) key = "down";
+            if (key === "[") key = "bracketleft";
+            if (key === "]") key = "bracketright";
+            if (key === "arrowleft") key = "left";
+            if (key === "arrowright") key = "right";
+            if (key === "arrowup") key = "up";
+            if (key === "arrowdown") key = "down";
 
             if (!["meta", "control", "alt", "shift"].includes(e.key.toLowerCase())) {
                 keys.push(key);

@@ -4,7 +4,7 @@ import { CreateNoteDialog } from "./create-note-dialog";
 import { DeleteNoteDialog } from "./delete-note-dialog";
 import { RenameNoteDialog } from "./rename-note-dialog";
 import { MoveToFolderDialog } from "./move-to-folder-dialog";
-import { getTodayDailyNoteFileName, getYesterdayDailyNoteFileName, getTomorrowDailyNoteFileName } from "./date-utils";
+
 import { DailyNoteDatePickerDialog } from "./daily-note-date-picker-dialog";
 import { SearchNotesDialog } from "./search-notes-dialog";
 import { notesAPI } from "@/hooks/useNotesAPI";
@@ -64,15 +64,11 @@ export function getNotesCommands(context: CommandContext): Command[] {
             icon: "Calendar",
             callback: async () => {
                 context.closeCommandMenu();
-                const fileName = getTodayDailyNoteFileName();
-                console.log("Daily note file name");
-                console.log({ fileName });
+                const { fileName } = await notesAPI.getDailyNoteName();
 
-                // See if note exists
+                // See if note exists in daily notes subfolder
                 const output = await notesAPI.getNoteByFileName({ fileName });
-                console.log("Daily note output");
-                console.log({ output });
-                if (!output) {
+                if (!output || !output.content) {
                     await notesAPI.createNote({ fileName });
                 }
 
@@ -95,15 +91,13 @@ export function getNotesCommands(context: CommandContext): Command[] {
             icon: "CalendarMinus",
             callback: async () => {
                 context.closeCommandMenu();
-                const fileName = getYesterdayDailyNoteFileName();
-                console.log("Yesterday's daily note file name");
-                console.log({ fileName });
+                const date = new Date();
+                date.setDate(date.getDate() - 1);
+                const { fileName } = await notesAPI.getDailyNoteName({ date: date.toISOString() });
 
-                // See if note exists
+                // See if note exists in daily notes subfolder
                 const output = await notesAPI.getNoteByFileName({ fileName });
-                console.log("Yesterday's daily note output");
-                console.log({ output });
-                if (!output) {
+                if (!output || !output.content) {
                     await notesAPI.createNote({ fileName });
                 }
 
@@ -126,15 +120,13 @@ export function getNotesCommands(context: CommandContext): Command[] {
             icon: "CalendarPlus",
             callback: async () => {
                 context.closeCommandMenu();
-                const fileName = getTomorrowDailyNoteFileName();
-                console.log("Tomorrow's daily note file name");
-                console.log({ fileName });
+                const date = new Date();
+                date.setDate(date.getDate() + 1);
+                const { fileName } = await notesAPI.getDailyNoteName({ date: date.toISOString() });
 
-                // See if note exists
+                // See if note exists in daily notes subfolder
                 const output = await notesAPI.getNoteByFileName({ fileName });
-                console.log("Tomorrow's daily note output");
-                console.log({ output });
-                if (!output) {
+                if (!output || !output.content) {
                     await notesAPI.createNote({ fileName });
                 }
 

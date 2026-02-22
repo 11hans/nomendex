@@ -78,7 +78,7 @@ interface Heading {
 }
 
 export function NotesView(props: NotesViewProps) {
-    const { noteFileName, tabId, autoFocus = true, compact = false, scrollToLine } = props;
+    const { noteFileName, tabId, autoFocus = true, compact = false, scrollToLine} = props;
     if (!tabId) {
         throw new Error("tabId is required");
     }
@@ -1514,81 +1514,81 @@ export function NotesView(props: NotesViewProps) {
                     >
                         <OverlayScrollbar className="h-full">
                             <div className="p-3 pt-4 space-y-4">
-                            {/* Table of Contents (On This Page) */}
-                            {headings.length > 0 && (
-                                <CollapsibleSection title="On This Page" count={headings.length} defaultOpen={true}>
-                                    <nav
-                                        ref={(el) => {
-                                            // Auto-scroll to keep focused item in view
-                                            if (el && isMinimapFocused && focusedHeadingIndex >= 0) {
-                                                const buttons = el.querySelectorAll('button');
-                                                const focusedButton = buttons[focusedHeadingIndex];
-                                                if (focusedButton) {
-                                                    focusedButton.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                                {/* Table of Contents (On This Page) */}
+                                {headings.length > 0 && (
+                                    <CollapsibleSection title="On This Page" count={headings.length} defaultOpen={true}>
+                                        <nav
+                                            ref={(el) => {
+                                                // Auto-scroll to keep focused item in view
+                                                if (el && isMinimapFocused && focusedHeadingIndex >= 0) {
+                                                    const buttons = el.querySelectorAll('button');
+                                                    const focusedButton = buttons[focusedHeadingIndex];
+                                                    if (focusedButton) {
+                                                        focusedButton.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                                                    }
                                                 }
-                                            }
-                                        }}
-                                    >
-                                        {isMinimapFocused && (
-                                            <div className="flex justify-end mb-1">
-                                                <span className="text-[9px] px-1 py-0.5 rounded bg-accent" style={{ color: currentTheme.styles.contentSecondary }}>
-                                                    ↑↓
-                                                </span>
-                                            </div>
-                                        )}
-                                        {headings.map((heading, index) => {
-                                            const isActive = activeHeadingId === heading.id;
-                                            const isFocused = isMinimapFocused && index === focusedHeadingIndex;
+                                            }}
+                                        >
+                                            {isMinimapFocused && (
+                                                <div className="flex justify-end mb-1">
+                                                    <span className="text-[9px] px-1 py-0.5 rounded bg-accent" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                        ↑↓
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {headings.map((heading, index) => {
+                                                const isActive = activeHeadingId === heading.id;
+                                                const isFocused = isMinimapFocused && index === focusedHeadingIndex;
 
-                                            return (
-                                                <button
-                                                    key={heading.id}
-                                                    onClick={() => {
-                                                        scrollToHeading(heading.id);
-                                                        setFocusedHeadingIndex(index);
-                                                    }}
-                                                    className={cn(
-                                                        "w-full text-left px-2 py-1 rounded text-xs transition-colors truncate",
-                                                        heading.level === 1 && "font-medium",
-                                                        heading.level === 2 && "pl-4",
-                                                        heading.level >= 3 && "pl-6 opacity-70",
-                                                        !isActive && !isFocused && "hover:bg-accent/50",
-                                                        isActive && !isFocused && "font-medium",
-                                                        isFocused && "bg-accent ring-1 ring-primary/50"
-                                                    )}
-                                                    style={{
-                                                        color: isFocused ? currentTheme.styles.contentPrimary : (isActive ? currentTheme.styles.contentAccent : currentTheme.styles.contentSecondary),
-                                                    }}
-                                                >
-                                                    {heading.text}
-                                                </button>
-                                            );
-                                        })}
-                                    </nav>
-                                </CollapsibleSection>
-                            )}
+                                                return (
+                                                    <button
+                                                        key={heading.id}
+                                                        onClick={() => {
+                                                            scrollToHeading(heading.id);
+                                                            setFocusedHeadingIndex(index);
+                                                        }}
+                                                        className={cn(
+                                                            "w-full text-left px-2 py-1 rounded text-xs transition-colors truncate",
+                                                            heading.level === 1 && "font-medium",
+                                                            heading.level === 2 && "pl-4",
+                                                            heading.level >= 3 && "pl-6 opacity-70",
+                                                            !isActive && !isFocused && "hover:bg-accent/50",
+                                                            isActive && !isFocused && "font-medium",
+                                                            isFocused && "bg-accent ring-1 ring-primary/50"
+                                                        )}
+                                                        style={{
+                                                            color: isFocused ? currentTheme.styles.contentPrimary : (isActive ? currentTheme.styles.contentAccent : currentTheme.styles.contentSecondary),
+                                                        }}
+                                                    >
+                                                        {heading.text}
+                                                    </button>
+                                                );
+                                            })}
+                                        </nav>
+                                    </CollapsibleSection>
+                                )}
 
-                            {/* Backlinks Panel */}
-                            <BacklinksPanel
-                                noteFileName={noteFileName}
-                                onOpenNote={(fileName) => {
-                                    openTab({
-                                        pluginMeta: { id: "notes", name: "Notes", icon: "file" },
-                                        view: "editor",
-                                        props: { noteFileName: fileName },
-                                    });
-                                }}
-                                onCreateNote={async (noteName) => {
-                                    // Create the note and open it
-                                    const newFileName = `${noteName}.md`;
-                                    await notesAPI.createNote({ fileName: newFileName, content: `# ${noteName}\n\n` });
-                                    openTab({
-                                        pluginMeta: { id: "notes", name: "Notes", icon: "file" },
-                                        view: "editor",
-                                        props: { noteFileName: newFileName },
-                                    });
-                                }}
-                            />
+                                {/* Backlinks Panel */}
+                                <BacklinksPanel
+                                    noteFileName={noteFileName}
+                                    onOpenNote={(fileName) => {
+                                        openTab({
+                                            pluginMeta: { id: "notes", name: "Notes", icon: "file" },
+                                            view: "editor",
+                                            props: { noteFileName: fileName },
+                                        });
+                                    }}
+                                    onCreateNote={async (noteName) => {
+                                        // Create the note and open it
+                                        const newFileName = `${noteName}.md`;
+                                        await notesAPI.createNote({ fileName: newFileName, content: `# ${noteName}\n\n` });
+                                        openTab({
+                                            pluginMeta: { id: "notes", name: "Notes", icon: "file" },
+                                            view: "editor",
+                                            props: { noteFileName: newFileName },
+                                        });
+                                    }}
+                                />
                             </div>
                         </OverlayScrollbar>
                     </div>

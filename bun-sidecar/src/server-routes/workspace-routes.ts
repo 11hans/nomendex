@@ -2,6 +2,7 @@ import { z } from "zod";
 import { Result, ErrorCodes } from "../types/Result";
 import { WorkspaceState, WorkspaceStateSchema } from "../types/Workspace";
 import { getNomendexPath, getRootPath, getNotesPath, getTodosPath, getUploadsPath, getSkillsPath, hasActiveWorkspace, initializePaths } from "../storage/root-path";
+import { initializeNotesService } from "@/features/notes/fx";
 
 const ThemeRequestSchema = z.object({
     themeName: z.string(),
@@ -187,6 +188,7 @@ export const workspaceRoutes = {
         async POST() {
             try {
                 await initializePaths();
+                await initializeNotesService();
                 const response: Result<{ success: boolean }> = {
                     success: true,
                     data: { success: true },
