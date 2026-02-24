@@ -127,6 +127,14 @@ export async function initializeProjectsService(): Promise<void> {
 
     projectsFilePath = path.join(getNomendexPath(), "projects.json");
     await migrateProjectsFromTodos();
+
+    // Ensure Inbox project exists
+    try {
+        await ensureProject({ name: "Inbox" });
+    } catch (e) {
+        projectsLogger.error("Failed to default Inbox project", { error: e });
+    }
+
     projectsLogger.info("Projects service initialized");
 }
 

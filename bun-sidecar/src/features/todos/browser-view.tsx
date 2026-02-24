@@ -137,7 +137,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         if (activeTab && activeTab.pluginInstance.plugin.id === "todos" && !hasSetTabNameRef.current) {
             let tabName = "Todos";
             if (filterProject && filterProject !== "") {
-                tabName = `Todos: ${filterProject}`;
+                tabName = filterProject === "Inbox" ? "Inbox" : `Todos: ${filterProject}`;
             } else if (filterProject === "") {
                 tabName = "Todos: No Project";
             }
@@ -669,12 +669,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             );
         }
 
-        // Sort by order field (ascending), with undefined/null orders at the end
-        const sortByOrder = (a: Todo, b: Todo) => {
-            const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
-            const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
-            return orderA - orderB;
-        };
+
 
         // Group by column
         const grouped: Record<string, Todo[]> = {};
@@ -1724,7 +1719,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             </DndContext>
 
             {/* Edit Todo Modal */}
-            <TaskCardEditor todo={todoToEdit} open={editDialogOpen} onOpenChange={setEditDialogOpen} onSave={handleSaveTodo} saving={editSaving} availableTags={availableTags} availableProjects={availableProjects} />
+            <TaskCardEditor todo={todoToEdit} open={editDialogOpen} onOpenChange={setEditDialogOpen} onSave={handleSaveTodo} onDelete={deleteTodoWithToast} saving={editSaving} availableTags={availableTags} availableProjects={availableProjects} />
 
             {/* Board Settings Dialog - Show for project views */}
             {filterProject && filterProject !== "" && (
