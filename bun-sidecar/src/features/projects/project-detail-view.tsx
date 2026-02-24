@@ -117,6 +117,19 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
         [todosAPI, projectName]
     );
 
+    // Delete todo
+    const handleDeleteTodo = useCallback(
+        async (todo: Todo) => {
+            try {
+                await todosAPI.deleteTodo({ todoId: todo.id });
+                setTodos(prev => prev.filter(t => t.id !== todo.id));
+            } catch (err) {
+                console.error("Failed to delete todo:", err);
+            }
+        },
+        [todosAPI]
+    );
+
     // Open note
     const handleOpenNote = useCallback(
         async (noteFileName: string) => {
@@ -501,6 +514,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                 open={editDialogOpen}
                 onOpenChange={setEditDialogOpen}
                 onSave={handleSaveTodo}
+                onDelete={handleDeleteTodo}
                 saving={editSaving}
                 availableTags={availableTags}
                 availableProjects={availableProjects}

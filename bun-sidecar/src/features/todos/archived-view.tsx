@@ -498,7 +498,7 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
             )}
 
             {/* Edit Todo Modal */}
-            <TaskCardEditor todo={todoToEdit} open={editDialogOpen} onOpenChange={setEditDialogOpen} onSave={handleSaveTodo} saving={editSaving} availableTags={availableTags} availableProjects={availableProjects} />
+            <TaskCardEditor todo={todoToEdit} open={editDialogOpen} onOpenChange={setEditDialogOpen} onSave={handleSaveTodo} onDelete={deleteTodoWithToast} saving={editSaving} availableTags={availableTags} availableProjects={availableProjects} />
         </div>
     );
 }

@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Save, X } from "lucide-react";
+import { Save, X, Trash2 } from "lucide-react";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { useTheme } from "@/hooks/useTheme";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
@@ -24,12 +24,13 @@ interface TaskCardEditorProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onSave: (todo: Todo) => void;
+    onDelete?: (todo: Todo) => void;
     saving: boolean;
     availableTags: string[];
     availableProjects: string[];
 }
 
-export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, availableTags, availableProjects }: TaskCardEditorProps) {
+export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, saving, availableTags, availableProjects }: TaskCardEditorProps) {
     const [editedTodo, setEditedTodo] = useState<Todo | null>(null);
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
@@ -211,6 +212,19 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, saving, avail
 
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2">
+                        {onDelete && (
+                            <Button
+                                onClick={() => {
+                                    onDelete(editedTodo);
+                                    onOpenChange(false);
+                                }}
+                                variant="ghost"
+                                size="sm"
+                                className="h-9 px-3 text-red-500 hover:text-red-600 hover:bg-red-500/10 mr-auto"
+                            >
+                                <Trash2 className="size-4" />
+                            </Button>
+                        )}
                         <Button
                             onClick={() => onOpenChange(false)}
                             variant="ghost"
