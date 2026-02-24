@@ -4,6 +4,7 @@ import { TodosView } from "./view";
 import { TodosBrowserView } from "./browser-view";
 import { ProjectBrowserView } from "./ProjectBrowserView";
 import { ArchivedBrowserView } from "./archived-view";
+import { InboxListView } from "./inbox-view";
 import { FunctionStubs } from "@/types/Functions";
 import { TodoSchema } from "./todo-types";
 import { AttachmentSchema } from "@/types/attachments";
@@ -143,6 +144,11 @@ const views = {
         name: "Archived",
         component: ArchivedBrowserView,
         props: todosBrowserViewPropsSchema,
+    },
+    inbox: {
+        id: "inbox",
+        name: "Inbox",
+        component: InboxListView,
     },
     projects: {
         id: "projects",

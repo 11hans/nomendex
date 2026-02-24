@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Settings, GitBranch, Bot, HelpCircle } from "lucide-react";
+import { Settings, GitBranch, Bot, HelpCircle, Inbox } from "lucide-react";
 import {
     Sidebar,
     SidebarContent,
@@ -69,6 +69,26 @@ export function WorkspaceSidebar() {
                     <SidebarGroupLabel style={{ color: currentTheme.styles.contentSecondary }}>Workspace</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
+                            <SidebarMenuItem>
+                                <SidebarMenuButton
+                                    onClick={() => openTab({
+                                        pluginMeta: plugins.find(p => p.id === 'todos') || plugins[0],
+                                        view: "inbox",
+                                        props: { project: "Inbox" }
+                                    })}
+                                    className="cursor-pointer transition-all duration-200"
+                                    style={{ color: currentTheme.styles.contentPrimary }}
+                                    onMouseEnter={(e) => {
+                                        e.currentTarget.style.backgroundColor = currentTheme.styles.surfaceAccent;
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        e.currentTarget.style.backgroundColor = 'transparent';
+                                    }}
+                                >
+                                    <Inbox className="size-4" />
+                                    <span>Inbox</span>
+                                </SidebarMenuButton>
+                            </SidebarMenuItem>
                             {plugins.filter(p => p.id !== 'chat').map((plugin) => {
                                 const IconComponent = getIcon(plugin.icon);
                                 return (
