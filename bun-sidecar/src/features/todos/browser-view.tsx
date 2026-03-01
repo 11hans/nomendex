@@ -331,6 +331,29 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         }
     };
 
+    // Inline date change from kanban card (optimistic update + save)
+    const handleInlineDateChange = useCallback(async (todo: Todo, dates: { dueDate?: string; startDate?: string }) => {
+        const updatedTodo = { ...todo, dueDate: dates.dueDate, startDate: dates.startDate };
+
+        // Optimistic update
+        setTodos(prev => prev.map(t => t.id === todo.id ? updatedTodo : t));
+
+        try {
+            await todosAPI.updateTodo({
+                todoId: todo.id,
+                updates: {
+                    dueDate: dates.dueDate ?? null,
+                    startDate: dates.startDate ?? null,
+                },
+            });
+            // Sync to calendar (fire-and-forget)
+            syncTaskToCalendar(updatedTodo).catch(() => { });
+        } catch (error) {
+            console.error("Failed to update todo date:", error);
+            await loadTodos(); // Revert on error
+        }
+    }, [todosAPI, loadTodos]);
+
     const openArchivedView = () => {
         openTab({
             pluginMeta: { id: "todos", name: "Todos", icon: "list-todo" },
@@ -1399,7 +1422,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
 
         return (
             <div
-                className="relative"
+                className="relative group/card"
                 ref={isSelected ? selectedCardRef : undefined}
             >
                 {/* Drop indicator line */}
@@ -1434,6 +1457,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                         onToggleDone={toggleDoneWithToast}
                         hideProject={hideProject}
                         hideStatusIcon={true}
+                        onDateChange={handleInlineDateChange}
                     />
                 </div>
             </div>

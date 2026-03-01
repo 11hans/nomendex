@@ -11,9 +11,10 @@ interface DateTimePickerProps {
     dueDate: string | undefined;
     startDate: string | undefined;
     onChange: (dates: { dueDate?: string; startDate?: string }) => void;
+    compact?: boolean;
 }
 
-export function DateTimePicker({ dueDate, startDate, onChange }: DateTimePickerProps) {
+export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTimePickerProps) {
     const [open, setOpen] = useState(false);
     const [dateInput, setDateInput] = useState("");
     const { currentTheme } = useTheme();
@@ -130,19 +131,19 @@ export function DateTimePicker({ dueDate, startDate, onChange }: DateTimePickerP
 
     return (
         <div
-            className="flex items-center gap-0.5 p-0.5 rounded-md transition-colors"
-            style={{ backgroundColor: styles.surfaceTertiary }}
+            className={`flex items-center gap-0.5 ${compact ? 'p-0' : 'p-0.5'} rounded-md transition-colors`}
+            style={compact ? undefined : { backgroundColor: styles.surfaceTertiary }}
         >
             <Popover open={open} onOpenChange={setOpen}>
                 <PopoverTrigger asChild>
                     <button
                         type="button"
-                        className="flex items-center gap-1.5 px-2 py-1 rounded text-sm font-medium transition-colors hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-offset-1"
+                        className={`flex items-center gap-1 ${compact ? 'px-0 py-0 text-[10px]' : 'px-2 py-1 text-sm'} rounded font-medium transition-colors hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-offset-1`}
                         style={{
                             color: dueDate ? styles.contentPrimary : styles.contentTertiary,
                         }}
                     >
-                        <CalendarDays className="size-4 shrink-0" />
+                        <CalendarDays className={compact ? "size-3 shrink-0" : "size-4 shrink-0"} />
                         {renderDateLabel()}
                     </button>
                 </PopoverTrigger>
@@ -235,7 +236,7 @@ export function DateTimePicker({ dueDate, startDate, onChange }: DateTimePickerP
                 </PopoverContent>
             </Popover>
 
-            {dueDate && (
+            {dueDate && !compact && (
                 <button
                     type="button"
                     onClick={(e) => {

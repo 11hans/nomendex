@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { parseLocalDateString } from "@/features/notes/date-utils";
+import { DateTimePicker } from "./pickers";
 
 export function TodoCard({
     todo,
@@ -14,6 +15,7 @@ export function TodoCard({
     hideProject,
     onToggleDone,
     hideStatusIcon,
+    onDateChange,
 }: {
     todo: Todo;
     selected?: boolean;
@@ -23,6 +25,7 @@ export function TodoCard({
     hideProject?: boolean;
     onToggleDone?: (todo: Todo) => void;
     hideStatusIcon?: boolean;
+    onDateChange?: (todo: Todo, dates: { dueDate?: string; startDate?: string }) => void;
 }) {
     const handleCopy = async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -100,20 +103,36 @@ export function TodoCard({
                 </CardContent>
             )}
             <div className="px-3 pb-2 flex items-center justify-between">
-                {todo.dueDate ? (
-                    <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                        <CalendarDays className="size-3" />
-                        {parseLocalDateString(todo.dueDate.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        {(() => {
-                            const startTime = todo.startDate?.includes('T') ? todo.startDate.split('T')[1] : null;
-                            const dueTime = todo.dueDate.includes('T') ? todo.dueDate.split('T')[1] : null;
-                            if (startTime && dueTime) return ` ${startTime}–${dueTime}`;
-                            if (dueTime) return ` ${dueTime}`;
-                            return null;
-                        })()}
-                    </p>
+                {onDateChange ? (
+                    <div
+                        className={`inline-flex ${!todo.dueDate ? 'opacity-0 group-hover/card:opacity-100' : ''} transition-opacity`}
+                        onClick={(e) => { e.stopPropagation(); }}
+                        onDoubleClick={(e) => { e.stopPropagation(); }}
+                        onPointerDown={(e) => { e.stopPropagation(); }}
+                    >
+                        <DateTimePicker
+                            dueDate={todo.dueDate}
+                            startDate={todo.startDate}
+                            onChange={(dates) => onDateChange(todo, dates)}
+                            compact
+                        />
+                    </div>
                 ) : (
-                    <div />
+                    todo.dueDate ? (
+                        <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <CalendarDays className="size-3" />
+                            {parseLocalDateString(todo.dueDate.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            {(() => {
+                                const startTime = todo.startDate?.includes('T') ? todo.startDate.split('T')[1] : null;
+                                const dueTime = todo.dueDate.includes('T') ? todo.dueDate.split('T')[1] : null;
+                                if (startTime && dueTime) return ` ${startTime}–${dueTime}`;
+                                if (dueTime) return ` ${dueTime}`;
+                                return null;
+                            })()}
+                        </p>
+                    ) : (
+                        <div />
+                    )
                 )}
                 {/* Actions - show when selected */}
                 <div className={`flex items-center gap-0.5 transition-opacity duration-0 ${selected ? 'opacity-100' : 'opacity-0'}`}>

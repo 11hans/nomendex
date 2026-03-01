@@ -2340,6 +2340,13 @@
       }
     }
   }
+  .group-hover\/card\:opacity-100 {
+    &:is(:where(.group\/card):hover *) {
+      @media (hover: hover) {
+        opacity: 100%;
+      }
+    }
+  }
   .group-hover\/menu-item\:opacity-100 {
     &:is(:where(.group\/menu-item):hover *) {
       @media (hover: hover) {
