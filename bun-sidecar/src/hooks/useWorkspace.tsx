@@ -226,7 +226,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
     // If a matching tab already exists, focus it instead of creating a duplicate
     // In split mode, opens the tab in the active pane
     const openTab = useCallback(
-        ({ pluginMeta, view = "default", props = {} }: { pluginMeta: SerializablePlugin; view: string; props?: Record<string, unknown> }) => {
+        ({ pluginMeta, view = "default", props = {} }: { pluginMeta: SerializablePlugin; view: string; props?: Record<string, unknown> }): WorkspaceTab | null => {
             let resultTab: WorkspaceTab | null = null;
 
             try {
