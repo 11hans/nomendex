@@ -26,7 +26,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     if (!tabId) {
         throw new Error("tabId is required");
     }
-    const { activeTab, setTabName, addNewTab, setActiveTabId, getViewSelfPlacement, setSidebarTabId, showHiddenFiles } = useWorkspaceContext();
+    const { activeTab, setTabName, openTab, getViewSelfPlacement, setSidebarTabId, showHiddenFiles } = useWorkspaceContext();
     const { loading, error, setLoading, setError } = usePlugin();
     const [notes, setNotes] = useState<Array<Note>>([]);
     const [folders, setFolders] = useState<NoteFolder[]>([]);
@@ -144,21 +144,17 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     }, []);
 
     const handleOpenNote = useCallback(
-        async (noteId: string) => {
-            const newTab = await addNewTab({
+        (noteId: string) => {
+            const tab = openTab({
                 pluginMeta: notesPluginSerial,
                 view: "editor",
                 props: { noteFileName: noteId },
             });
-            if (newTab) {
-                if (placement === "sidebar") {
-                    setSidebarTabId(newTab.id);
-                } else {
-                    setActiveTabId(newTab.id);
-                }
+            if (tab && placement === "sidebar") {
+                setSidebarTabId(tab.id);
             }
         },
-        [addNewTab, setActiveTabId, placement, setSidebarTabId]
+        [openTab, placement, setSidebarTabId]
     );
 
     const requestDeleteNote = useCallback((noteFileName: string) => {
