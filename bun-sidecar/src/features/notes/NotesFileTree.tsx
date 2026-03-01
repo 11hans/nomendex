@@ -36,6 +36,7 @@ interface NotesFileTreeProps {
     onRenameFolder: (folder: NoteFolder) => void;
     onDeleteFolder: (folder: NoteFolder) => void;
     onMoveToFolder: (note: Note) => void;
+    onRenameNote: (noteFileName: string) => void;
     onPreloadNote?: (noteFileName: string) => void;
     searchQuery?: string;
 }
@@ -176,6 +177,7 @@ function TreeItem({
     onRenameFolder,
     onDeleteFolder,
     onMoveToFolder,
+    onRenameNote,
     rowRefs,
 }: {
     node: TreeNode;
@@ -191,6 +193,7 @@ function TreeItem({
     onRenameFolder: (folder: NoteFolder) => void;
     onDeleteFolder: (folder: NoteFolder) => void;
     onMoveToFolder: (note: Note) => void;
+    onRenameNote: (noteFileName: string) => void;
     rowRefs: React.MutableRefObject<Map<string, HTMLDivElement>>;
 }) {
     const { currentTheme } = useTheme();
@@ -319,6 +322,7 @@ function TreeItem({
                             onRenameFolder={onRenameFolder}
                             onDeleteFolder={onDeleteFolder}
                             onMoveToFolder={onMoveToFolder}
+                            onRenameNote={onRenameNote}
                             rowRefs={rowRefs}
                         />
                     ))}
@@ -374,6 +378,20 @@ function TreeItem({
                     className="p-0.5 hover:bg-muted rounded"
                     onClick={(e) => {
                         e.stopPropagation();
+                        onRenameNote(note.fileName);
+                    }}
+                    title="Rename note"
+                >
+                    <Pencil
+                        className="size-3.5"
+                        style={{ color: currentTheme.styles.contentSecondary }}
+                    />
+                </button>
+                <button
+                    type="button"
+                    className="p-0.5 hover:bg-muted rounded"
+                    onClick={(e) => {
+                        e.stopPropagation();
                         onMoveToFolder(note);
                     }}
                     title="Move to folder"
@@ -415,6 +433,7 @@ export function NotesFileTree({
     onRenameFolder,
     onDeleteFolder,
     onMoveToFolder,
+    onRenameNote,
     onPreloadNote,
     searchQuery,
 }: NotesFileTreeProps) {
@@ -694,6 +713,7 @@ export function NotesFileTree({
                             onRenameFolder={onRenameFolder}
                             onDeleteFolder={onDeleteFolder}
                             onMoveToFolder={onMoveToFolder}
+                            onRenameNote={onRenameNote}
                             rowRefs={rowRefs}
                         />
                     ))

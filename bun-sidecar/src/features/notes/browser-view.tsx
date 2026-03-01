@@ -20,6 +20,7 @@ import { useCommandDialog } from "@/components/CommandDialogProvider";
 import { CreateNoteDialog } from "./create-note-dialog";
 import { DeleteNoteDialog } from "./delete-note-dialog";
 import { DeleteFolderDialog } from "./delete-folder-dialog";
+import { RenameNoteDialog } from "./rename-note-dialog";
 
 export function NotesBrowserView({ tabId }: { tabId: string }) {
     if (!tabId) {
@@ -178,6 +179,22 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
             ),
         });
     }, [openDialog, notesAPI, selectedNote, showHiddenFiles]);
+
+    const requestRenameNote = useCallback((noteFileName: string) => {
+        openDialog({
+            content: (
+                <RenameNoteDialog
+                    noteFileName={noteFileName}
+                    onSuccess={() => {
+                        // Refresh notes list after renaming
+                        notesAPI.getNotes({ showHiddenFiles }).then(result => {
+                            setNotes(result);
+                        });
+                    }}
+                />
+            ),
+        });
+    }, [openDialog, notesAPI, showHiddenFiles]);
 
     const handleSelectNote = useCallback((note: Note) => {
         setSelectedNote(note);
@@ -453,6 +470,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                             onRenameFolder={handleRenameFolder}
                             onDeleteFolder={handleDeleteFolder}
                             onMoveToFolder={handleMoveToFolder}
+                            onRenameNote={requestRenameNote}
                             onPreloadNote={notesAPI.preloadNote}
                             searchQuery={searchQuery}
                         />
