@@ -96,8 +96,9 @@ export function WorkspaceSidebar() {
         navigate(path);
     };
 
-    // Determine which plugin is currently active for the accent indicator
+    // Determine which plugin and view are currently active
     const activePluginId = activeTab?.pluginInstance?.plugin?.id ?? null;
+    const activeViewId = activeTab?.pluginInstance?.viewId ?? null;
 
     return (
         <Sidebar
@@ -120,7 +121,7 @@ export function WorkspaceSidebar() {
                 <ActivityBarIcon
                     icon={Inbox}
                     label="Inbox"
-                    isActive={activePluginId === "todos"}
+                    isActive={activePluginId === "todos" && activeViewId === "inbox"}
                     onClick={() => openTab({
                         pluginMeta: plugins.find(p => p.id === 'todos') || plugins[0],
                         view: "inbox",
@@ -129,12 +130,18 @@ export function WorkspaceSidebar() {
                 />
                 {plugins.filter(p => p.id !== 'chat').map((plugin) => {
                     const IconComponent = getIcon(plugin.icon);
+
+                    // For the "todos" plugin icon, it should only be active if we're not in the "inbox" view
+                    const isPluginActive = plugin.id === "todos"
+                        ? activePluginId === "todos" && activeViewId !== "inbox"
+                        : activePluginId === plugin.id;
+
                     return (
                         <ActivityBarIcon
                             key={plugin.id}
                             icon={IconComponent}
                             label={plugin.name || plugin.id}
-                            isActive={activePluginId === plugin.id}
+                            isActive={isPluginActive}
                             onClick={() => handleAddPlugin(plugin)}
                         />
                     );
