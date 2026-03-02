@@ -142,7 +142,7 @@ export function Workspace() {
                     className="flex flex-col h-full min-h-0 overflow-hidden"
                 >
                     <div
-                        className="flex items-center backdrop-blur w-full flex-shrink-0 sticky top-0 z-50"
+                        className="flex items-center w-full flex-shrink-0 sticky top-0 z-50"
                         style={{
                             backgroundColor: currentTheme.styles.surfaceSecondary,
                             height: `${TITLE_BAR_HEIGHT}px`,
@@ -150,7 +150,7 @@ export function Workspace() {
                         id="workspace-tabs-header"
                     >
                         <TabsList
-                            className="h-full bg-transparent p-0 gap-0 flex-1 min-w-0 flex items-center"
+                            className="h-full bg-transparent p-0 gap-0 flex-1 min-w-0 flex items-end"
                         >
                             {visibleTabs.map((tab, index) => {
                                 const noteLock = getNoteLock(tab);
@@ -161,62 +161,63 @@ export function Workspace() {
                                         onDragOver={(e) => handleTabDragOver(e, index)}
                                         onDrop={(e) => handleTabDrop(e, index)}
                                     >
-                                    {/* Left drop indicator */}
-                                    {dropIndicator?.index === index && dropIndicator?.side === 'left' && draggedTabIndex !== index && (
-                                        <div
-                                            className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full z-10"
-                                            style={{ backgroundColor: currentTheme.styles.borderAccent }}
-                                        />
-                                    )}
-                                    <TabsTrigger
-                                        value={tab.id}
-                                        className={`rounded-md h-7 mx-0.5 px-2 gap-1.5 flex items-center transition-all duration-200 min-w-0 max-w-[140px] cursor-grab text-xs ${
-                                            draggedTabIndex === index ? "opacity-50" : ""
-                                        }`}
-                                        style={{
-                                            backgroundColor: activeTab?.id === tab.id ? currentTheme.styles.surfaceAccent : 'transparent',
-                                            color: activeTab?.id === tab.id ? currentTheme.styles.contentPrimary : currentTheme.styles.contentSecondary,
-                                            borderBottom: activeTab?.id === tab.id ? `2px solid ${currentTheme.styles.borderAccent}` : '2px solid transparent',
-                                            fontWeight: activeTab?.id === tab.id ? 500 : 400,
-                                        }}
-                                        draggable
-                                        onDragStart={(e) => handleTabDragStart(e, tab, index)}
-                                        onDragEnd={handleTabDragEnd}
-                                    >
-                                        <span
-                                            className="h-3.5 w-3.5 relative transition-all duration-200 cursor-pointer flex items-center justify-center flex-shrink-0"
-                                            onClick={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                closeTab(tab.id);
-                                            }}
-                                        >
-                                            {(() => {
-                                                const IconComponent = getIcon(tab.pluginInstance.plugin.icon);
-                                                return <IconComponent className="size-3 transition-opacity duration-200 group-hover:opacity-0" />;
-                                            })()}
-                                            <X className="size-3 absolute transition-opacity duration-200 opacity-0 group-hover:opacity-100" style={{ color: currentTheme.styles.semanticDestructive }} />
-                                        </span>
-                                        <span className="truncate">{tab.title}</span>
-                                        {noteLock && (
-                                            <span
-                                                className="flex items-center flex-shrink-0"
-                                                title={`Locked by ${noteLock.agentName}`}
-                                            >
-                                                <Lock
-                                                    className="h-3 w-3"
-                                                    style={{ color: currentTheme.styles.contentSecondary }}
-                                                />
-                                            </span>
+                                        {/* Left drop indicator */}
+                                        {dropIndicator?.index === index && dropIndicator?.side === 'left' && draggedTabIndex !== index && (
+                                            <div
+                                                className="absolute left-0 top-0 bottom-0 w-0.5 z-10"
+                                                style={{ backgroundColor: currentTheme.styles.borderAccent }}
+                                            />
                                         )}
-                                    </TabsTrigger>
-                                    {/* Right drop indicator */}
-                                    {dropIndicator?.index === index && dropIndicator?.side === 'right' && draggedTabIndex !== index && (
-                                        <div
-                                            className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full z-10"
-                                            style={{ backgroundColor: currentTheme.styles.borderAccent }}
-                                        />
-                                    )}
+                                        <TabsTrigger
+                                            value={tab.id}
+                                            className={`rounded-none h-9 px-3 gap-1.5 flex items-center transition-colors duration-100 min-w-0 max-w-[160px] cursor-grab text-xs border-r ${draggedTabIndex === index ? "opacity-50" : ""
+                                                }`}
+                                            style={{
+                                                backgroundColor: activeTab?.id === tab.id ? currentTheme.styles.surfacePrimary : currentTheme.styles.surfaceSecondary,
+                                                color: activeTab?.id === tab.id ? currentTheme.styles.contentPrimary : currentTheme.styles.contentSecondary,
+                                                borderTop: activeTab?.id === tab.id ? `2px solid ${currentTheme.styles.borderAccent}` : '2px solid transparent',
+                                                borderBottom: 'none',
+                                                borderRightColor: currentTheme.styles.borderDefault,
+                                                fontWeight: activeTab?.id === tab.id ? 500 : 400,
+                                            }}
+                                            draggable
+                                            onDragStart={(e) => handleTabDragStart(e, tab, index)}
+                                            onDragEnd={handleTabDragEnd}
+                                        >
+                                            <span
+                                                className="h-3.5 w-3.5 relative transition-all duration-200 cursor-pointer flex items-center justify-center flex-shrink-0"
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    closeTab(tab.id);
+                                                }}
+                                            >
+                                                {(() => {
+                                                    const IconComponent = getIcon(tab.pluginInstance.plugin.icon);
+                                                    return <IconComponent className="size-3 transition-opacity duration-200 group-hover:opacity-0" />;
+                                                })()}
+                                                <X className="size-3 absolute transition-opacity duration-200 opacity-0 group-hover:opacity-100" style={{ color: currentTheme.styles.semanticDestructive }} />
+                                            </span>
+                                            <span className="truncate">{tab.title}</span>
+                                            {noteLock && (
+                                                <span
+                                                    className="flex items-center flex-shrink-0"
+                                                    title={`Locked by ${noteLock.agentName}`}
+                                                >
+                                                    <Lock
+                                                        className="h-3 w-3"
+                                                        style={{ color: currentTheme.styles.contentSecondary }}
+                                                    />
+                                                </span>
+                                            )}
+                                        </TabsTrigger>
+                                        {/* Right drop indicator */}
+                                        {dropIndicator?.index === index && dropIndicator?.side === 'right' && draggedTabIndex !== index && (
+                                            <div
+                                                className="absolute right-0 top-0 bottom-0 w-0.5 z-10"
+                                                style={{ backgroundColor: currentTheme.styles.borderAccent }}
+                                            />
+                                        )}
                                     </div>
                                 );
                             })}

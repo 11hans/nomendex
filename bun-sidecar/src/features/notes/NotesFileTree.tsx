@@ -61,7 +61,8 @@ function extractTitle(content: string): string | null {
 
 // Helper: Format filename to display name
 function formatDisplayName(fileName: string): string {
-    return fileName.replace(/\.md$/, "");
+    const baseName = fileName.split('/').pop() || fileName;
+    return baseName.replace(/\.md$/, "");
 }
 
 function buildFileTree(folders: NoteFolder[], notes: Note[]): TreeNode[] {
@@ -104,9 +105,10 @@ function buildFileTree(folders: NoteFolder[], notes: Note[]): TreeNode[] {
 
     // Add notes to appropriate folders or root
     notes.forEach((note) => {
+        const baseName = note.fileName.split('/').pop() || note.fileName;
         const noteNode: TreeNode = {
             type: "note",
-            name: note.fileName,
+            name: baseName,
             path: note.folderPath
                 ? `${note.folderPath}/${note.fileName}`
                 : note.fileName,
@@ -206,7 +208,7 @@ function TreeItem({
             <div>
                 <div
                     className={cn(
-                        "flex items-center gap-1 py-1.5 px-2 rounded-md cursor-pointer group"
+                        "flex items-center gap-1 py-1 px-2 cursor-pointer group"
                     )}
                     style={{
                         paddingLeft: `${depth * 16 + 8}px`,
@@ -257,7 +259,7 @@ function TreeItem({
                         <DropdownMenuTrigger asChild>
                             <button
                                 type="button"
-                                className="p-0.5 hover:bg-muted rounded shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="p-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <MoreHorizontal
@@ -347,12 +349,12 @@ function TreeItem({
                 }
             }}
             className={cn(
-                "flex items-center gap-1 py-1.5 px-2 rounded-md cursor-pointer group"
+                "flex items-center gap-1 py-1 px-2 cursor-pointer group"
             )}
             style={{
                 paddingLeft: `${depth * 16 + 8}px`,
                 backgroundColor: isSelected
-                    ? currentTheme.styles.surfaceSecondary
+                    ? currentTheme.styles.surfaceAccent
                     : undefined,
                 border: isSelected
                     ? `1px solid ${currentTheme.styles.contentAccent}`
@@ -375,7 +377,7 @@ function TreeItem({
             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                     type="button"
-                    className="p-0.5 hover:bg-muted rounded"
+                    className="p-0.5 shrink-0"
                     onClick={(e) => {
                         e.stopPropagation();
                         onRenameNote(note.fileName);
@@ -389,7 +391,7 @@ function TreeItem({
                 </button>
                 <button
                     type="button"
-                    className="p-0.5 hover:bg-muted rounded"
+                    className="p-0.5 shrink-0"
                     onClick={(e) => {
                         e.stopPropagation();
                         onMoveToFolder(note);
@@ -403,7 +405,7 @@ function TreeItem({
                 </button>
                 <button
                     type="button"
-                    className="p-0.5 hover:bg-muted rounded"
+                    className="p-0.5 shrink-0"
                     onClick={(e) => {
                         e.stopPropagation();
                         // onDeleteNote now shows confirmation dialog (handled by parent)

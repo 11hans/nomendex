@@ -403,7 +403,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
             {/* Main Content - Split Layout */}
             <div className="flex-1 flex overflow-hidden">
                 {/* Left Panel - File Tree */}
-                <div className="w-64 border-r flex flex-col h-full" style={{ borderColor: currentTheme.styles.borderDefault }}>
+                <div className="w-64 border-r flex flex-col h-full" style={{ borderColor: currentTheme.styles.borderDefault, backgroundColor: currentTheme.styles.surfaceSecondary }}>
                     {/* Search and Create */}
                     <div className="px-3 py-3 border-b space-y-2" style={{ borderColor: currentTheme.styles.borderDefault }}>
                         <div className="flex items-center gap-2">
