@@ -64,9 +64,11 @@ function ActivityBarIcon({
                     <Icon className="size-5" />
                 </button>
             </TooltipTrigger>
+            {/* 
             <TooltipContent side="right" align="center">
                 {label}
             </TooltipContent>
+            */}
         </Tooltip>
     );
 }
