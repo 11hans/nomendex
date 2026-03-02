@@ -4,7 +4,6 @@ import {
     Sidebar,
     SidebarContent,
     SidebarFooter,
-    SidebarHeader,
 } from "./ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { baseRegistry } from "@/registry/registry";
@@ -108,17 +107,11 @@ export function WorkspaceSidebar() {
             style={{
                 backgroundColor: currentTheme.styles.surfaceTertiary,
                 borderColor: currentTheme.styles.borderDefault,
+                top: `${TITLE_BAR_HEIGHT}px`,
+                height: `calc(100svh - ${TITLE_BAR_HEIGHT}px)`,
             }}
         >
-            <SidebarHeader
-                style={{
-                    height: `${TITLE_BAR_HEIGHT}px`,
-                    minHeight: `${TITLE_BAR_HEIGHT}px`,
-                    padding: 0,
-                }}
-            />
-
-            <SidebarContent className="flex flex-col items-center gap-0 p-0 overflow-hidden">
+            <SidebarContent className="flex flex-col items-center gap-0 p-0 pt-2 overflow-hidden">
                 {/* Main plugin icons */}
                 <ActivityBarIcon
                     icon={Inbox}
