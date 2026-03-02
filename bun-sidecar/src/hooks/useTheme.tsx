@@ -129,10 +129,10 @@ const themes: Theme[] = [
             semanticSuccessForeground: "#ffffff",
 
             // Design tokens
-            borderRadius: "0.5rem",
-            shadowSm: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
-            shadowMd: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-            shadowLg: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+            borderRadius: "0px",
+            shadowSm: "none",
+            shadowMd: "none",
+            shadowLg: "none",
         },
     },
     {
@@ -164,10 +164,10 @@ const themes: Theme[] = [
             semanticSuccessForeground: "#ffffff",
 
             // Design tokens
-            borderRadius: "0.5rem",
-            shadowSm: "0 1px 2px 0 rgba(0, 0, 0, 0.1)",
-            shadowMd: "0 4px 6px -1px rgba(0, 0, 0, 0.4)",
-            shadowLg: "0 10px 15px -3px rgba(0, 0, 0, 0.6)",
+            borderRadius: "0px",
+            shadowSm: "none",
+            shadowMd: "none",
+            shadowLg: "none",
         },
     },
     {
@@ -199,10 +199,10 @@ const themes: Theme[] = [
             semanticSuccessForeground: "#2e3440",
 
             // Design tokens
-            borderRadius: "0.5rem",
-            shadowSm: "0 1px 2px 0 rgba(0, 0, 0, 0.2)",
-            shadowMd: "0 4px 6px -1px rgba(0, 0, 0, 0.4)",
-            shadowLg: "0 10px 15px -3px rgba(0, 0, 0, 0.6)",
+            borderRadius: "0px",
+            shadowSm: "none",
+            shadowMd: "none",
+            shadowLg: "none",
         },
     },
     {
@@ -234,10 +234,10 @@ const themes: Theme[] = [
             semanticSuccessForeground: "#282a36",
 
             // Design tokens
-            borderRadius: "0.5rem",
-            shadowSm: "0 1px 2px 0 rgba(0, 0, 0, 0.3)",
-            shadowMd: "0 4px 6px -1px rgba(0, 0, 0, 0.5)",
-            shadowLg: "0 10px 15px -3px rgba(0, 0, 0, 0.7)",
+            borderRadius: "0px",
+            shadowSm: "none",
+            shadowMd: "none",
+            shadowLg: "none",
         },
     },
     {
@@ -269,10 +269,10 @@ const themes: Theme[] = [
             semanticSuccessForeground: "#fdf6e3",
 
             // Design tokens
-            borderRadius: "0.5rem",
-            shadowSm: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
-            shadowMd: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-            shadowLg: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+            borderRadius: "0px",
+            shadowSm: "none",
+            shadowMd: "none",
+            shadowLg: "none",
         },
     },
     {
@@ -304,10 +304,10 @@ const themes: Theme[] = [
             semanticSuccessForeground: "#fdf6e3",
 
             // Design tokens
-            borderRadius: "0.5rem",
-            shadowSm: "0 1px 2px 0 rgba(0, 0, 0, 0.2)",
-            shadowMd: "0 4px 6px -1px rgba(0, 0, 0, 0.4)",
-            shadowLg: "0 10px 15px -3px rgba(0, 0, 0, 0.6)",
+            borderRadius: "0px",
+            shadowSm: "none",
+            shadowMd: "none",
+            shadowLg: "none",
         },
     },
     {
@@ -339,10 +339,10 @@ const themes: Theme[] = [
             semanticSuccessForeground: "#272822",
 
             // Design tokens
-            borderRadius: "0.5rem",
-            shadowSm: "0 1px 2px 0 rgba(0, 0, 0, 0.3)",
-            shadowMd: "0 4px 6px -1px rgba(0, 0, 0, 0.5)",
-            shadowLg: "0 10px 15px -3px rgba(0, 0, 0, 0.7)",
+            borderRadius: "0px",
+            shadowSm: "none",
+            shadowMd: "none",
+            shadowLg: "none",
         },
     },
     {
@@ -374,10 +374,10 @@ const themes: Theme[] = [
             semanticSuccessForeground: "#1a2332",
 
             // Design tokens
-            borderRadius: "0.5rem",
-            shadowSm: "0 1px 2px 0 rgba(0, 0, 0, 0.2)",
-            shadowMd: "0 4px 6px -1px rgba(0, 0, 0, 0.4)",
-            shadowLg: "0 10px 15px -3px rgba(0, 0, 0, 0.6)",
+            borderRadius: "0px",
+            shadowSm: "none",
+            shadowMd: "none",
+            shadowLg: "none",
         },
     },
 ];

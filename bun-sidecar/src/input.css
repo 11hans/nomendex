@@ -30,7 +30,7 @@
   --chart-3: hsl(197 37% 24%);
   --chart-4: hsl(43 74% 66%);
   --chart-5: hsl(27 87% 67%);
-  --radius: 0.6rem;
+  --radius: 0;
   --sidebar-background: hsl(0 0% 98%);
   --sidebar-foreground: hsl(240 5.3% 26.1%);
   --sidebar-primary: hsl(240 5.9% 10%);
@@ -251,18 +251,16 @@
   }
 
   *::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
 
   *::-webkit-scrollbar-track {
     background: var(--scrollbar-track);
-    border-radius: 4px;
   }
 
   *::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);
-    border-radius: 4px;
   }
 
   *::-webkit-scrollbar-thumb:hover {
@@ -284,8 +282,8 @@
 }
 
 .notes-scroll::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 .notes-scroll::-webkit-scrollbar-track {
@@ -294,7 +292,6 @@
 
 .notes-scroll::-webkit-scrollbar-thumb {
   background: var(--notes-scroll-thumb);
-  border-radius: 4px;
 }
 
 .notes-scroll::-webkit-scrollbar-thumb:hover {
@@ -454,7 +451,7 @@
   padding: 6px 8px !important;
   margin: 0 !important;
   border: none !important;
-  border-radius: 6px !important;
+  border-radius: 0 !important;
   background: transparent !important;
   color: hsl(var(--muted-foreground)) !important;
   cursor: pointer !important;
@@ -483,7 +480,7 @@
   padding: 6px 10px !important;
   min-width: 90px !important;
   border: 1px solid hsl(var(--border)) !important;
-  border-radius: 6px !important;
+  border-radius: 0 !important;
   background: hsl(var(--background)) !important;
   font-size: 12px !important;
 }
