@@ -6,350 +6,353 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(240 10% 3.9%);
-  --card: hsl(0 0% 100%);
-  --card-foreground: hsl(240 10% 3.9%);
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(240 10% 3.9%);
-  --primary: hsl(240 5.9% 10%);
-  --primary-foreground: hsl(0 0% 98%);
-  --secondary: hsl(240 4.8% 95.9%);
-  --secondary-foreground: hsl(240 5.9% 10%);
-  --muted: hsl(240 4.8% 95.9%);
-  --muted-foreground: hsl(240 3.8% 46.1%);
-  --accent: hsl(240 4.8% 95.9%);
-  --accent-foreground: hsl(240 5.9% 10%);
-  --destructive: hsl(0 84.2% 60.2%);
-  --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(240 5.9% 90%);
-  --input: hsl(240 5.9% 90%);
-  --ring: hsl(240 10% 3.9%);
-  --chart-1: hsl(12 76% 61%);
-  --chart-2: hsl(173 58% 39%);
-  --chart-3: hsl(197 37% 24%);
-  --chart-4: hsl(43 74% 66%);
-  --chart-5: hsl(27 87% 67%);
-  --radius: 0;
-  --sidebar-background: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
-  --sidebar: hsl(0 0% 98%);
+	--background: hsl(0 0% 100%);
+	--foreground: hsl(240 10% 3.9%);
+	--card: hsl(0 0% 100%);
+	--card-foreground: hsl(240 10% 3.9%);
+	--popover: hsl(0 0% 100%);
+	--popover-foreground: hsl(240 10% 3.9%);
+	--primary: hsl(240 5.9% 10%);
+	--primary-foreground: hsl(0 0% 98%);
+	--secondary: hsl(240 4.8% 95.9%);
+	--secondary-foreground: hsl(240 5.9% 10%);
+	--muted: hsl(240 4.8% 95.9%);
+	--muted-foreground: hsl(240 3.8% 46.1%);
+	--accent: hsl(240 4.8% 95.9%);
+	--accent-foreground: hsl(240 5.9% 10%);
+	--destructive: hsl(0 84.2% 60.2%);
+	--destructive-foreground: hsl(0 0% 98%);
+	--border: hsl(240 5.9% 90%);
+	--input: hsl(240 5.9% 90%);
+	--ring: hsl(240 10% 3.9%);
+	--chart-1: hsl(12 76% 61%);
+	--chart-2: hsl(173 58% 39%);
+	--chart-3: hsl(197 37% 24%);
+	--chart-4: hsl(43 74% 66%);
+	--chart-5: hsl(27 87% 67%);
+	--radius: 0;
+	--sidebar-background: hsl(0 0% 98%);
+	--sidebar-foreground: hsl(240 5.3% 26.1%);
+	--sidebar-primary: hsl(240 5.9% 10%);
+	--sidebar-primary-foreground: hsl(0 0% 98%);
+	--sidebar-accent: hsl(240 4.8% 95.9%);
+	--sidebar-accent-foreground: hsl(240 5.9% 10%);
+	--sidebar-border: hsl(220 13% 91%);
+	--sidebar-ring: hsl(217.2 91.2% 59.8%);
+	--sidebar: hsl(0 0% 98%);
 }
 
 .dark {
-  --background: hsl(240 10% 3.9%);
-  --foreground: hsl(0 0% 98%);
-  --card: hsl(240 10% 6%);
-  --card-foreground: hsl(0 0% 98%);
-  --popover: hsl(240 10% 6%);
-  --popover-foreground: hsl(0 0% 98%);
-  --primary: hsl(0 0% 98%);
-  --primary-foreground: hsl(240 5.9% 10%);
-  --secondary: hsl(240 3.7% 15.9%);
-  --secondary-foreground: hsl(0 0% 98%);
-  --muted: hsl(240 3.7% 15.9%);
-  --muted-foreground: hsl(240 5% 64.9%);
-  --accent: hsl(240 3.7% 15.9%);
-  --accent-foreground: hsl(0 0% 98%);
-  --destructive: hsl(0 62.8% 30.6%);
-  --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(240 3.7% 15.9%);
-  --input: hsl(240 3.7% 15.9%);
-  --ring: hsl(240 4.9% 83.9%);
-  --chart-1: hsl(220 70% 50%);
-  --chart-2: hsl(160 60% 45%);
-  --chart-3: hsl(30 80% 55%);
-  --chart-4: hsl(280 65% 60%);
-  --chart-5: hsl(340 75% 55%);
-  --sidebar-background: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
-  --sidebar: hsl(240 5.9% 10%);
+	--background: hsl(240 10% 3.9%);
+	--foreground: hsl(0 0% 98%);
+	--card: hsl(240 10% 6%);
+	--card-foreground: hsl(0 0% 98%);
+	--popover: hsl(240 10% 6%);
+	--popover-foreground: hsl(0 0% 98%);
+	--primary: hsl(0 0% 98%);
+	--primary-foreground: hsl(240 5.9% 10%);
+	--secondary: hsl(240 3.7% 15.9%);
+	--secondary-foreground: hsl(0 0% 98%);
+	--muted: hsl(240 3.7% 15.9%);
+	--muted-foreground: hsl(240 5% 64.9%);
+	--accent: hsl(240 3.7% 15.9%);
+	--accent-foreground: hsl(0 0% 98%);
+	--destructive: hsl(0 62.8% 30.6%);
+	--destructive-foreground: hsl(0 0% 98%);
+	--border: hsl(240 3.7% 15.9%);
+	--input: hsl(240 3.7% 15.9%);
+	--ring: hsl(240 4.9% 83.9%);
+	--chart-1: hsl(220 70% 50%);
+	--chart-2: hsl(160 60% 45%);
+	--chart-3: hsl(30 80% 55%);
+	--chart-4: hsl(280 65% 60%);
+	--chart-5: hsl(340 75% 55%);
+	--sidebar-background: hsl(240 5.9% 10%);
+	--sidebar-foreground: hsl(240 4.8% 95.9%);
+	--sidebar-primary: hsl(224.3 76.3% 48%);
+	--sidebar-primary-foreground: hsl(0 0% 100%);
+	--sidebar-accent: hsl(240 3.7% 15.9%);
+	--sidebar-accent-foreground: hsl(240 4.8% 95.9%);
+	--sidebar-border: hsl(240 3.7% 15.9%);
+	--sidebar-ring: hsl(217.2 91.2% 59.8%);
+	--sidebar: hsl(240 5.9% 10%);
 }
 
 .blue {
-  --background: hsl(210 40% 98%);
-  --foreground: hsl(222.2 84% 4.9%);
-  --card: hsl(210 40% 98%);
-  --card-foreground: hsl(222.2 84% 4.9%);
-  --popover: hsl(210 40% 98%);
-  --popover-foreground: hsl(222.2 84% 4.9%);
-  --primary: hsl(221.2 83.2% 53.3%);
-  --primary-foreground: hsl(210 40% 98%);
-  --secondary: hsl(210 40% 96%);
-  --secondary-foreground: hsl(222.2 84% 4.9%);
-  --muted: hsl(210 40% 96%);
-  --muted-foreground: hsl(215.4 16.3% 46.9%);
-  --accent: hsl(210 40% 96%);
-  --accent-foreground: hsl(222.2 84% 4.9%);
-  --destructive: hsl(0 84.2% 60.2%);
-  --destructive-foreground: hsl(210 40% 98%);
-  --border: hsl(214.3 31.8% 91.4%);
-  --input: hsl(214.3 31.8% 91.4%);
-  --ring: hsl(221.2 83.2% 53.3%);
-  --sidebar-background: hsl(210 40% 98%);
-  --sidebar-foreground: hsl(222.2 84% 4.9%);
-  --sidebar-primary: hsl(221.2 83.2% 53.3%);
-  --sidebar-primary-foreground: hsl(210 40% 98%);
-  --sidebar-accent: hsl(210 40% 96%);
-  --sidebar-accent-foreground: hsl(222.2 84% 4.9%);
-  --sidebar-border: hsl(214.3 31.8% 91.4%);
-  --sidebar-ring: hsl(221.2 83.2% 53.3%);
-  --sidebar: hsl(210 40% 98%);
+	--background: hsl(210 40% 98%);
+	--foreground: hsl(222.2 84% 4.9%);
+	--card: hsl(210 40% 98%);
+	--card-foreground: hsl(222.2 84% 4.9%);
+	--popover: hsl(210 40% 98%);
+	--popover-foreground: hsl(222.2 84% 4.9%);
+	--primary: hsl(221.2 83.2% 53.3%);
+	--primary-foreground: hsl(210 40% 98%);
+	--secondary: hsl(210 40% 96%);
+	--secondary-foreground: hsl(222.2 84% 4.9%);
+	--muted: hsl(210 40% 96%);
+	--muted-foreground: hsl(215.4 16.3% 46.9%);
+	--accent: hsl(210 40% 96%);
+	--accent-foreground: hsl(222.2 84% 4.9%);
+	--destructive: hsl(0 84.2% 60.2%);
+	--destructive-foreground: hsl(210 40% 98%);
+	--border: hsl(214.3 31.8% 91.4%);
+	--input: hsl(214.3 31.8% 91.4%);
+	--ring: hsl(221.2 83.2% 53.3%);
+	--sidebar-background: hsl(210 40% 98%);
+	--sidebar-foreground: hsl(222.2 84% 4.9%);
+	--sidebar-primary: hsl(221.2 83.2% 53.3%);
+	--sidebar-primary-foreground: hsl(210 40% 98%);
+	--sidebar-accent: hsl(210 40% 96%);
+	--sidebar-accent-foreground: hsl(222.2 84% 4.9%);
+	--sidebar-border: hsl(214.3 31.8% 91.4%);
+	--sidebar-ring: hsl(221.2 83.2% 53.3%);
+	--sidebar: hsl(210 40% 98%);
 }
 
 .green {
-  --background: hsl(120 20% 98%);
-  --foreground: hsl(120 10% 3.9%);
-  --card: hsl(120 20% 98%);
-  --card-foreground: hsl(120 10% 3.9%);
-  --popover: hsl(120 20% 98%);
-  --popover-foreground: hsl(120 10% 3.9%);
-  --primary: hsl(142.1 76.2% 36.3%);
-  --primary-foreground: hsl(120 20% 98%);
-  --secondary: hsl(120 20% 95%);
-  --secondary-foreground: hsl(120 10% 3.9%);
-  --muted: hsl(120 20% 95%);
-  --muted-foreground: hsl(120 3.8% 46.1%);
-  --accent: hsl(120 20% 95%);
-  --accent-foreground: hsl(120 10% 3.9%);
-  --destructive: hsl(0 84.2% 60.2%);
-  --destructive-foreground: hsl(120 20% 98%);
-  --border: hsl(120 20% 89%);
-  --input: hsl(120 20% 89%);
-  --ring: hsl(142.1 76.2% 36.3%);
-  --sidebar-background: hsl(120 20% 98%);
-  --sidebar-foreground: hsl(120 10% 3.9%);
-  --sidebar-primary: hsl(142.1 76.2% 36.3%);
-  --sidebar-primary-foreground: hsl(120 20% 98%);
-  --sidebar-accent: hsl(120 20% 95%);
-  --sidebar-accent-foreground: hsl(120 10% 3.9%);
-  --sidebar-border: hsl(120 20% 89%);
-  --sidebar-ring: hsl(142.1 76.2% 36.3%);
-  --sidebar: hsl(120 20% 98%);
+	--background: hsl(120 20% 98%);
+	--foreground: hsl(120 10% 3.9%);
+	--card: hsl(120 20% 98%);
+	--card-foreground: hsl(120 10% 3.9%);
+	--popover: hsl(120 20% 98%);
+	--popover-foreground: hsl(120 10% 3.9%);
+	--primary: hsl(142.1 76.2% 36.3%);
+	--primary-foreground: hsl(120 20% 98%);
+	--secondary: hsl(120 20% 95%);
+	--secondary-foreground: hsl(120 10% 3.9%);
+	--muted: hsl(120 20% 95%);
+	--muted-foreground: hsl(120 3.8% 46.1%);
+	--accent: hsl(120 20% 95%);
+	--accent-foreground: hsl(120 10% 3.9%);
+	--destructive: hsl(0 84.2% 60.2%);
+	--destructive-foreground: hsl(120 20% 98%);
+	--border: hsl(120 20% 89%);
+	--input: hsl(120 20% 89%);
+	--ring: hsl(142.1 76.2% 36.3%);
+	--sidebar-background: hsl(120 20% 98%);
+	--sidebar-foreground: hsl(120 10% 3.9%);
+	--sidebar-primary: hsl(142.1 76.2% 36.3%);
+	--sidebar-primary-foreground: hsl(120 20% 98%);
+	--sidebar-accent: hsl(120 20% 95%);
+	--sidebar-accent-foreground: hsl(120 10% 3.9%);
+	--sidebar-border: hsl(120 20% 89%);
+	--sidebar-ring: hsl(142.1 76.2% 36.3%);
+	--sidebar: hsl(120 20% 98%);
 }
 
 .purple {
-  --background: hsl(280 20% 98%);
-  --foreground: hsl(280 10% 3.9%);
-  --card: hsl(280 20% 98%);
-  --card-foreground: hsl(280 10% 3.9%);
-  --popover: hsl(280 20% 98%);
-  --popover-foreground: hsl(280 10% 3.9%);
-  --primary: hsl(262.1 83.3% 57.8%);
-  --primary-foreground: hsl(280 20% 98%);
-  --secondary: hsl(280 20% 95%);
-  --secondary-foreground: hsl(280 10% 3.9%);
-  --muted: hsl(280 20% 95%);
-  --muted-foreground: hsl(280 3.8% 46.1%);
-  --accent: hsl(280 20% 95%);
-  --accent-foreground: hsl(280 10% 3.9%);
-  --destructive: hsl(0 84.2% 60.2%);
-  --destructive-foreground: hsl(280 20% 98%);
-  --border: hsl(280 20% 89%);
-  --input: hsl(280 20% 89%);
-  --ring: hsl(262.1 83.3% 57.8%);
-  --sidebar-background: hsl(280 20% 98%);
-  --sidebar-foreground: hsl(280 10% 3.9%);
-  --sidebar-primary: hsl(262.1 83.3% 57.8%);
-  --sidebar-primary-foreground: hsl(280 20% 98%);
-  --sidebar-accent: hsl(280 20% 95%);
-  --sidebar-accent-foreground: hsl(280 10% 3.9%);
-  --sidebar-border: hsl(280 20% 89%);
-  --sidebar-ring: hsl(262.1 83.3% 57.8%);
-  --sidebar: hsl(280 20% 98%);
+	--background: hsl(280 20% 98%);
+	--foreground: hsl(280 10% 3.9%);
+	--card: hsl(280 20% 98%);
+	--card-foreground: hsl(280 10% 3.9%);
+	--popover: hsl(280 20% 98%);
+	--popover-foreground: hsl(280 10% 3.9%);
+	--primary: hsl(262.1 83.3% 57.8%);
+	--primary-foreground: hsl(280 20% 98%);
+	--secondary: hsl(280 20% 95%);
+	--secondary-foreground: hsl(280 10% 3.9%);
+	--muted: hsl(280 20% 95%);
+	--muted-foreground: hsl(280 3.8% 46.1%);
+	--accent: hsl(280 20% 95%);
+	--accent-foreground: hsl(280 10% 3.9%);
+	--destructive: hsl(0 84.2% 60.2%);
+	--destructive-foreground: hsl(280 20% 98%);
+	--border: hsl(280 20% 89%);
+	--input: hsl(280 20% 89%);
+	--ring: hsl(262.1 83.3% 57.8%);
+	--sidebar-background: hsl(280 20% 98%);
+	--sidebar-foreground: hsl(280 10% 3.9%);
+	--sidebar-primary: hsl(262.1 83.3% 57.8%);
+	--sidebar-primary-foreground: hsl(280 20% 98%);
+	--sidebar-accent: hsl(280 20% 95%);
+	--sidebar-accent-foreground: hsl(280 10% 3.9%);
+	--sidebar-border: hsl(280 20% 89%);
+	--sidebar-ring: hsl(262.1 83.3% 57.8%);
+	--sidebar: hsl(280 20% 98%);
 }
 
 /* Dark variants for colored themes */
 .dark.blue {
-  --background: hsl(220 13% 9%);
-  --foreground: hsl(210 40% 98%);
-  --card: hsl(220 13% 12%);
-  --card-foreground: hsl(210 40% 98%);
-  --muted: hsl(220 13% 15%);
-  --muted-foreground: hsl(215 20% 65%);
-  --accent: hsl(220 13% 15%);
-  --accent-foreground: hsl(210 40% 98%);
-  --border: hsl(220 13% 15%);
-  --primary: hsl(221.2 83.2% 53.3%);
-  --primary-foreground: hsl(210 40% 98%);
+	--background: hsl(220 13% 9%);
+	--foreground: hsl(210 40% 98%);
+	--card: hsl(220 13% 12%);
+	--card-foreground: hsl(210 40% 98%);
+	--muted: hsl(220 13% 15%);
+	--muted-foreground: hsl(215 20% 65%);
+	--accent: hsl(220 13% 15%);
+	--accent-foreground: hsl(210 40% 98%);
+	--border: hsl(220 13% 15%);
+	--primary: hsl(221.2 83.2% 53.3%);
+	--primary-foreground: hsl(210 40% 98%);
 }
 
 .dark.green {
-  --background: hsl(120 6% 9%);
-  --foreground: hsl(120 20% 98%);
-  --card: hsl(120 6% 12%);
-  --card-foreground: hsl(120 20% 98%);
-  --muted: hsl(120 6% 15%);
-  --muted-foreground: hsl(120 10% 65%);
-  --accent: hsl(120 6% 15%);
-  --accent-foreground: hsl(120 20% 98%);
-  --border: hsl(120 6% 15%);
-  --primary: hsl(142.1 76.2% 36.3%);
-  --primary-foreground: hsl(120 20% 98%);
+	--background: hsl(120 6% 9%);
+	--foreground: hsl(120 20% 98%);
+	--card: hsl(120 6% 12%);
+	--card-foreground: hsl(120 20% 98%);
+	--muted: hsl(120 6% 15%);
+	--muted-foreground: hsl(120 10% 65%);
+	--accent: hsl(120 6% 15%);
+	--accent-foreground: hsl(120 20% 98%);
+	--border: hsl(120 6% 15%);
+	--primary: hsl(142.1 76.2% 36.3%);
+	--primary-foreground: hsl(120 20% 98%);
 }
 
 .dark.purple {
-  --background: hsl(280 6% 9%);
-  --foreground: hsl(280 20% 98%);
-  --card: hsl(280 6% 12%);
-  --card-foreground: hsl(280 20% 98%);
-  --muted: hsl(280 6% 15%);
-  --muted-foreground: hsl(280 10% 65%);
-  --accent: hsl(280 6% 15%);
-  --accent-foreground: hsl(280 20% 98%);
-  --border: hsl(280 6% 15%);
-  --primary: hsl(262.1 83.3% 57.8%);
-  --primary-foreground: hsl(280 20% 98%);
+	--background: hsl(280 6% 9%);
+	--foreground: hsl(280 20% 98%);
+	--card: hsl(280 6% 12%);
+	--card-foreground: hsl(280 20% 98%);
+	--muted: hsl(280 6% 15%);
+	--muted-foreground: hsl(280 10% 65%);
+	--accent: hsl(280 6% 15%);
+	--accent-foreground: hsl(280 20% 98%);
+	--border: hsl(280 6% 15%);
+	--primary: hsl(262.1 83.3% 57.8%);
+	--primary-foreground: hsl(280 20% 98%);
 }
 
 @layer base {
-  :root {
-    font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-    /* Scrollbar theme variables - set dynamically by ThemeProvider */
-    --scrollbar-thumb: #c9c9c9;
-    --scrollbar-track: transparent;
-    --scrollbar-thumb-hover: #a3a3a3;
-  }
+	:root {
+		font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+		/* Scrollbar theme variables - set dynamically by ThemeProvider */
+		--scrollbar-thumb: #c9c9c9;
+		--scrollbar-track: transparent;
+		--scrollbar-thumb-hover: #a3a3a3;
+	}
 
-  html, body, #root {
-    height: 100%;
-  }
+	html,
+	body,
+	#root {
+		height: 100%;
+	}
 
-  body {
-    margin: 0;
-    overflow: hidden;
-  }
+	body {
+		margin: 0;
+		overflow: hidden;
+	}
 
-  *:not(input):not(textarea):not(select) {
-    border-color: hsl(var(--border));
-  }
+	*:not(input):not(textarea):not(select) {
+		border-color: hsl(var(--border));
+	}
 
-  * {
-    outline-color: hsl(var(--ring) / 0.5);
-  }
-  body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
-  }
+	* {
+		outline-color: hsl(var(--ring) / 0.5);
+	}
 
-  /* Global scrollbar styling */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-  }
+	body {
+		background-color: hsl(var(--background));
+		color: hsl(var(--foreground));
+	}
 
-  *::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
+	/* Global scrollbar styling */
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+	}
 
-  *::-webkit-scrollbar-track {
-    background: var(--scrollbar-track);
-  }
+	*::-webkit-scrollbar {
+		width: 6px;
+		height: 6px;
+	}
 
-  *::-webkit-scrollbar-thumb {
-    background: var(--scrollbar-thumb);
-  }
+	*::-webkit-scrollbar-track {
+		background: var(--scrollbar-track);
+	}
 
-  *::-webkit-scrollbar-thumb:hover {
-    background: var(--scrollbar-thumb-hover);
-  }
+	*::-webkit-scrollbar-thumb {
+		background: var(--scrollbar-thumb);
+	}
 
-  /* Hide scrollbar corner */
-  *::-webkit-scrollbar-corner {
-    background: transparent;
-  }
+	*::-webkit-scrollbar-thumb:hover {
+		background: var(--scrollbar-thumb-hover);
+	}
+
+	/* Hide scrollbar corner */
+	*::-webkit-scrollbar-corner {
+		background: transparent;
+	}
 }
 
 /* Notes view scrollbar - uses custom properties set on the element */
 .notes-scroll {
-  --notes-scroll-thumb: var(--scrollbar-thumb);
-  --notes-scroll-track: transparent;
-  scrollbar-width: thin;
-  scrollbar-color: var(--notes-scroll-thumb) var(--notes-scroll-track);
+	--notes-scroll-thumb: var(--scrollbar-thumb);
+	--notes-scroll-track: transparent;
+	scrollbar-width: thin;
+	scrollbar-color: var(--notes-scroll-thumb) var(--notes-scroll-track);
 }
 
 .notes-scroll::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+	width: 6px;
+	height: 6px;
 }
 
 .notes-scroll::-webkit-scrollbar-track {
-  background: var(--notes-scroll-track);
+	background: var(--notes-scroll-track);
 }
 
 .notes-scroll::-webkit-scrollbar-thumb {
-  background: var(--notes-scroll-thumb);
+	background: var(--notes-scroll-thumb);
 }
 
 .notes-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--notes-scroll-thumb);
-  opacity: 0.8;
+	background: var(--notes-scroll-thumb);
+	opacity: 0.8;
 }
 
 /* ProseMirror Editor Styles - Scoped to Notes Plugin Only */
 .editor-content .ProseMirror {
-  outline: none;
-  min-height: 300px;
-  line-height: 1.7;
-  color: hsl(var(--foreground));
-  background: transparent;
-  border: none;
+	outline: none;
+	min-height: 300px;
+	line-height: 1.7;
+	color: hsl(var(--foreground));
+	background: transparent;
+	border: none;
 }
 
 /* ProseMirror example-setup-style for lists */
 .editor-content .ProseMirror ul {
-  list-style-type: disc;
+	list-style-type: disc;
 }
 
 .editor-content .ProseMirror ol {
-  list-style-type: decimal;
+	list-style-type: decimal;
 }
 
 .editor-content .ProseMirror ul ul {
-  list-style-type: circle;
+	list-style-type: circle;
 }
 
 .editor-content .ProseMirror ul ul ul {
-  list-style-type: square;
+	list-style-type: square;
 }
 
 .editor-content .ProseMirror li {
-  display: list-item;
-  list-style-position: outside;
-  margin: 0.25em 0;
+	display: list-item;
+	list-style-position: outside;
+	margin: 0.25em 0;
 }
 
-.editor-content .ProseMirror li > p:first-child {
-  margin-top: 0;
+.editor-content .ProseMirror li>p:first-child {
+	margin-top: 0;
 }
 
-.editor-content .ProseMirror li > p:last-child {
-  margin-bottom: 0;
+.editor-content .ProseMirror li>p:last-child {
+	margin-bottom: 0;
 }
 
 .editor-content .ProseMirror p {
-  margin: 1em 0;
+	margin: 1em 0;
 }
 
 .editor-content .ProseMirror p:first-child {
-  margin-top: 0;
+	margin-top: 0;
 }
 
 .editor-content .ProseMirror p:last-child {
-  margin-bottom: 0;
+	margin-bottom: 0;
 }
 
 .editor-content .ProseMirror h1,
@@ -358,9 +361,9 @@
 .editor-content .ProseMirror h4,
 .editor-content .ProseMirror h5,
 .editor-content .ProseMirror h6 {
-  font-weight: 600;
-  margin: 1.5em 0 0.5em 0;
-  color: hsl(var(--foreground));
+	font-weight: 600;
+	margin: 1.5em 0 0.5em 0;
+	color: hsl(var(--foreground));
 }
 
 .editor-content .ProseMirror h1:first-child,
@@ -369,231 +372,259 @@
 .editor-content .ProseMirror h4:first-child,
 .editor-content .ProseMirror h5:first-child,
 .editor-content .ProseMirror h6:first-child {
-  margin-top: 0;
+	margin-top: 0;
 }
 
-.editor-content .ProseMirror h1 { font-size: 2em; }
-.editor-content .ProseMirror h2 { font-size: 1.5em; }
-.editor-content .ProseMirror h3 { font-size: 1.25em; }
+.editor-content .ProseMirror h1 {
+	font-size: 2em;
+}
+
+.editor-content .ProseMirror h2 {
+	font-size: 1.5em;
+}
+
+.editor-content .ProseMirror h3 {
+	font-size: 1.25em;
+}
 
 .editor-content .ProseMirror ul,
 .editor-content .ProseMirror ol {
-  padding-left: 2em;
-  margin: 1em 0;
+	padding-left: 2em;
+	margin: 1em 0;
 }
 
 .editor-content .ProseMirror blockquote {
-  border-left: 3px solid hsl(var(--border));
-  padding-left: 1em;
-  margin: 1.5em 0;
-  font-style: italic;
-  color: hsl(var(--muted-foreground));
+	border-left: 3px solid hsl(var(--border));
+	padding-left: 1em;
+	margin: 1.5em 0;
+	font-style: italic;
+	color: hsl(var(--muted-foreground));
 }
 
 .editor-content .ProseMirror code {
-  background: hsl(var(--muted));
-  color: hsl(var(--foreground));
-  padding: 0.125em 0.375em;
-  border-radius: 0.25em;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 0.875em;
+	background: hsl(var(--muted));
+	color: hsl(var(--foreground));
+	padding: 0.125em 0.375em;
+	border-radius: 0.25em;
+	font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+	font-size: 0.875em;
 }
 
 .editor-content .ProseMirror pre {
-  background: hsl(var(--muted));
-  color: hsl(var(--foreground));
-  padding: 1em;
-  border-radius: 0.5em;
-  overflow-x: auto;
-  margin: 1.5em 0;
-  border: 1px solid hsl(var(--border));
+	background: hsl(var(--muted));
+	color: hsl(var(--foreground));
+	padding: 1em;
+	border-radius: 0.5em;
+	overflow-x: auto;
+	margin: 1.5em 0;
+	border: 1px solid hsl(var(--border));
 }
 
 .editor-content .ProseMirror pre code {
-  background: none;
-  padding: 0;
-  border-radius: 0;
-  font-size: inherit;
+	background: none;
+	padding: 0;
+	border-radius: 0;
+	font-size: inherit;
 }
 
 .editor-content .ProseMirror hr {
-  border: none;
-  border-top: 1px solid hsl(var(--border));
-  margin: 2em 0;
+	border: none;
+	border-top: 1px solid hsl(var(--border));
+	margin: 2em 0;
 }
 
 .editor-content .ProseMirror strong {
-  font-weight: 600;
+	font-weight: 600;
 }
 
 .editor-content .ProseMirror em {
-  font-style: italic;
+	font-style: italic;
 }
 
 /* ProseMirror Toolbar Styles - Scoped to Notes Plugin Only */
 .editor-content .ProseMirror-menubar {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 1px !important;
-  padding: 12px 16px !important;
-  border-bottom: 1px solid hsl(var(--border)) !important;
-  background: hsl(var(--background)) !important;
-  margin-bottom: 0 !important;
-  align-items: center !important;
-  backdrop-blur: 8px !important;
-  supports-backdrop-filter: bg-background/95 !important;
+	display: flex !important;
+	flex-wrap: wrap !important;
+	gap: 1px !important;
+	padding: 12px 16px !important;
+	border-bottom: 1px solid hsl(var(--border)) !important;
+	background: var(--background) !important;
+	margin-bottom: 0 !important;
+	align-items: center !important;
+	backdrop-filter: blur(8px) !important;
+	-webkit-backdrop-filter: blur(8px) !important;
 }
 
 .editor-content .ProseMirror-menubar .ProseMirror-menuitem {
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 6px 8px !important;
-  margin: 0 !important;
-  border: none !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  color: hsl(var(--muted-foreground)) !important;
-  cursor: pointer !important;
-  font-size: 13px !important;
-  font-weight: 400 !important;
-  min-width: 32px !important;
-  height: 32px !important;
-  white-space: nowrap !important;
-  line-height: 1 !important;
-  box-sizing: border-box !important;
-  transition: all 0.2s ease !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	padding: 6px 8px !important;
+	margin: 0 !important;
+	border: none !important;
+	border-radius: 0 !important;
+	background: transparent !important;
+	color: hsl(var(--muted-foreground)) !important;
+	cursor: pointer !important;
+	font-size: 13px !important;
+	font-weight: 400 !important;
+	min-width: 32px !important;
+	height: 32px !important;
+	white-space: nowrap !important;
+	line-height: 1 !important;
+	box-sizing: border-box !important;
+	transition: all 0.2s ease !important;
 }
 
 .editor-content .ProseMirror-menubar .ProseMirror-menuitem:hover {
-  background: hsl(var(--accent)) !important;
-  color: hsl(var(--foreground)) !important;
+	background: hsl(var(--accent)) !important;
+	color: hsl(var(--foreground)) !important;
 }
 
 .editor-content .ProseMirror-menubar .ProseMirror-menuitem.ProseMirror-menu-active {
-  background: hsl(var(--accent)) !important;
-  color: hsl(var(--accent-foreground)) !important;
-  font-weight: 500 !important;
+	background: hsl(var(--accent)) !important;
+	color: hsl(var(--accent-foreground)) !important;
+	font-weight: 500 !important;
 }
 
 .editor-content .ProseMirror-menubar select.ProseMirror-menuitem {
-  padding: 6px 10px !important;
-  min-width: 90px !important;
-  border: 1px solid hsl(var(--border)) !important;
-  border-radius: 0 !important;
-  background: hsl(var(--background)) !important;
-  font-size: 12px !important;
+	padding: 6px 10px !important;
+	min-width: 90px !important;
+	border: 1px solid hsl(var(--border)) !important;
+	border-radius: 0 !important;
+	background: hsl(var(--background)) !important;
+	font-size: 12px !important;
 }
 
 .editor-content .ProseMirror-menubar select.ProseMirror-menuitem:hover {
-  border-color: hsl(var(--ring)) !important;
+	border-color: hsl(var(--ring)) !important;
 }
 
 /* Fix for missing SVG icons - provide fallback text */
 .editor-content .ProseMirror-icon svg {
-  width: 1em !important;
-  height: 1em !important;
-  fill: currentColor !important;
-  stroke: currentColor !important;
+	width: 1em !important;
+	height: 1em !important;
+	fill: currentColor !important;
+	stroke: currentColor !important;
 }
 
 /* Ensure icons inherit text color */
 .editor-content .ProseMirror-menubar .ProseMirror-menuitem .ProseMirror-icon {
-  color: inherit !important;
-  fill: currentColor !important;
+	color: inherit !important;
+	fill: currentColor !important;
 }
 
 /* Dark mode specific fixes */
 .dark .editor-content .ProseMirror-menubar .ProseMirror-menuitem {
-  color: hsl(var(--muted-foreground)) !important;
+	color: hsl(var(--muted-foreground)) !important;
 }
 
 .dark .editor-content .ProseMirror-menubar .ProseMirror-menuitem:hover {
-  color: hsl(var(--foreground)) !important;
+	color: hsl(var(--foreground)) !important;
 }
 
 .dark .editor-content .ProseMirror-menubar .ProseMirror-menuitem.ProseMirror-menu-active {
-  color: hsl(var(--accent-foreground)) !important;
+	color: hsl(var(--accent-foreground)) !important;
 }
 
 /* Force SVG icon colors in dark mode */
 .dark .editor-content .ProseMirror-icon svg {
-  fill: currentColor !important;
-  stroke: currentColor !important;
-  opacity: 1 !important;
+	fill: currentColor !important;
+	stroke: currentColor !important;
+	opacity: 1 !important;
 }
 
 /* Better contrast for dark mode elements */
 .dark .editor-content .ProseMirror-menubar {
-  border-bottom-color: hsl(240 3.7% 25%) !important;
+	border-bottom-color: hsl(240 3.7% 25%) !important;
 }
 
 .dark .editor-content .ProseMirror-menubar .ProseMirror-menuitem:hover {
-  background: hsl(240 3.7% 20%) !important;
+	background: hsl(240 3.7% 20%) !important;
 }
 
 .dark .editor-content .ProseMirror-menubar .ProseMirror-menuitem.ProseMirror-menu-active {
-  background: hsl(240 3.7% 25%) !important;
+	background: hsl(240 3.7% 25%) !important;
 }
 
 .dark .editor-content .ProseMirror-menubar select.ProseMirror-menuitem {
-  border-color: hsl(240 3.7% 25%) !important;
-  background: hsl(240 10% 6%) !important;
+	border-color: hsl(240 3.7% 25%) !important;
+	background: hsl(240 10% 6%) !important;
 }
 
 /* Fallback for missing icons */
 .editor-content .ProseMirror-menuitem[title="Select parent node"] .ProseMirror-icon::before {
-  content: "↑" !important;
-  font-weight: bold !important;
+	content: "↑" !important;
+	font-weight: bold !important;
 }
 
 .editor-content .ProseMirror-menuitem[title="Lift out of enclosing block"] .ProseMirror-icon::before {
-  content: "↤" !important;
-  font-weight: bold !important;
+	content: "↤" !important;
+	font-weight: bold !important;
 }
 
 .editor-content .ProseMirror-menuitem[title="Join with above block"] .ProseMirror-icon::before {
-  content: "↥" !important;
-  font-weight: bold !important;
+	content: "↥" !important;
+	font-weight: bold !important;
 }
 
 /* Hide broken SVG elements when fallback is used */
 .editor-content .ProseMirror-menuitem[title="Select parent node"] .ProseMirror-icon svg,
 .editor-content .ProseMirror-menuitem[title="Lift out of enclosing block"] .ProseMirror-icon svg,
 .editor-content .ProseMirror-menuitem[title="Join with above block"] .ProseMirror-icon svg {
-  display: none !important;
+	display: none !important;
 }
 
 /* Resource URI decorations (e.g., todo://task-123) */
 .editor-content .pm-resource-uri {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  padding: 0 0.25rem;
-  border-radius: 0.25rem;
-  border: 1px solid hsl(var(--border));
-  background: hsl(var(--accent));
-  color: hsl(var(--foreground));
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
-  font-size: 0.9em;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.25rem;
+	padding: 0 0.25rem;
+	border-radius: 0.25rem;
+	border: 1px solid hsl(var(--border));
+	background: hsl(var(--accent));
+	color: hsl(var(--foreground));
+	font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+	font-size: 0.9em;
 }
 
 .editor-content .pm-resource-uri::before {
-  content: "";
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 0.125rem;
-  background: hsl(var(--primary));
+	content: "";
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 0.125rem;
+	background: hsl(var(--primary));
 }
 
 /* Plugin color hints */
-.editor-content .pm-resource-uri[data-plugin="todo"]::before { background: #22c55e; }
-.editor-content .pm-resource-uri[data-plugin="note"]::before { background: #0ea5e9; }
-.editor-content .pm-resource-uri[data-plugin="canvas"]::before { background: #8b5cf6; }
-.editor-content .pm-resource-uri[data-plugin="tldraw"]::before { background: #ec4899; }
-.editor-content .pm-resource-uri[data-plugin="file"]::before { background: #64748b; }
-.editor-content .pm-resource-uri[data-plugin="cmd"]::before { background: #3b82f6; }
-.editor-content .pm-resource-uri[data-plugin="command"]::before { background: #3b82f6; }
+.editor-content .pm-resource-uri[data-plugin="todo"]::before {
+	background: #22c55e;
+}
+
+.editor-content .pm-resource-uri[data-plugin="note"]::before {
+	background: #0ea5e9;
+}
+
+.editor-content .pm-resource-uri[data-plugin="canvas"]::before {
+	background: #8b5cf6;
+}
+
+.editor-content .pm-resource-uri[data-plugin="tldraw"]::before {
+	background: #ec4899;
+}
+
+.editor-content .pm-resource-uri[data-plugin="file"]::before {
+	background: #64748b;
+}
+
+.editor-content .pm-resource-uri[data-plugin="cmd"]::before {
+	background: #3b82f6;
+}
+
+.editor-content .pm-resource-uri[data-plugin="command"]::before {
+	background: #3b82f6;
+}
 
 
 
@@ -1058,11 +1089,11 @@ body {
 	width: 100%;
 }
 
-.agent-action-description > p:first-child {
+.agent-action-description>p:first-child {
 	margin-top: 0;
 }
 
-.agent-action-description > p:last-child {
+.agent-action-description>p:last-child {
 	margin-bottom: 0;
 }
 
@@ -1181,32 +1212,15 @@ button.prompt-tag span {
 }
 
 .diff-shape-create-shadow {
-	filter: drop-shadow(
-			calc(var(--tl-scale) * 1px) calc(var(--tl-scale) * 1px) 0px rgba(0, 200, 0, 50%)
-		)
-		drop-shadow(calc(var(--tl-scale) * -1px) calc(var(--tl-scale) * -1px) 0px rgba(0, 200, 0, 50%))
-		drop-shadow(calc(var(--tl-scale) * 1px) calc(var(--tl-scale) * -1px) 0px rgba(0, 200, 0, 50%))
-		drop-shadow(calc(var(--tl-scale) * -1px) calc(var(--tl-scale) * 1px) 0px rgba(0, 200, 0, 50%));
+	filter: drop-shadow(calc(var(--tl-scale) * 1px) calc(var(--tl-scale) * 1px) 0px rgba(0, 200, 0, 50%)) drop-shadow(calc(var(--tl-scale) * -1px) calc(var(--tl-scale) * -1px) 0px rgba(0, 200, 0, 50%)) drop-shadow(calc(var(--tl-scale) * 1px) calc(var(--tl-scale) * -1px) 0px rgba(0, 200, 0, 50%)) drop-shadow(calc(var(--tl-scale) * -1px) calc(var(--tl-scale) * 1px) 0px rgba(0, 200, 0, 50%));
 }
 
 .diff-shape-delete-shadow {
-	filter: drop-shadow(
-			calc(var(--tl-scale) * 1px) calc(var(--tl-scale) * 1px) 0px rgba(200, 0, 0, 50%)
-		)
-		drop-shadow(calc(var(--tl-scale) * -1px) calc(var(--tl-scale) * -1px) 0px rgba(200, 0, 0, 50%))
-		drop-shadow(calc(var(--tl-scale) * 1px) calc(var(--tl-scale) * -1px) 0px rgba(200, 0, 0, 50%))
-		drop-shadow(calc(var(--tl-scale) * -1px) calc(var(--tl-scale) * 1px) 0px rgba(200, 0, 0, 50%));
+	filter: drop-shadow(calc(var(--tl-scale) * 1px) calc(var(--tl-scale) * 1px) 0px rgba(200, 0, 0, 50%)) drop-shadow(calc(var(--tl-scale) * -1px) calc(var(--tl-scale) * -1px) 0px rgba(200, 0, 0, 50%)) drop-shadow(calc(var(--tl-scale) * 1px) calc(var(--tl-scale) * -1px) 0px rgba(200, 0, 0, 50%)) drop-shadow(calc(var(--tl-scale) * -1px) calc(var(--tl-scale) * 1px) 0px rgba(200, 0, 0, 50%));
 }
 
 .diff-shape-update-after-shadow {
-	filter: drop-shadow(
-			calc(var(--tl-scale) * 1px) calc(var(--tl-scale) * 1px) 0px rgba(0, 100, 255, 50%)
-		)
-		drop-shadow(
-			calc(var(--tl-scale) * -1px) calc(var(--tl-scale) * -1px) 0px rgba(0, 100, 255, 50%)
-		)
-		drop-shadow(calc(var(--tl-scale) * 1px) calc(var(--tl-scale) * -1px) 0px rgba(0, 100, 255, 50%))
-		drop-shadow(calc(var(--tl-scale) * -1px) calc(var(--tl-scale) * 1px) 0px rgba(0, 100, 255, 50%));
+	filter: drop-shadow(calc(var(--tl-scale) * 1px) calc(var(--tl-scale) * 1px) 0px rgba(0, 100, 255, 50%)) drop-shadow(calc(var(--tl-scale) * -1px) calc(var(--tl-scale) * -1px) 0px rgba(0, 100, 255, 50%)) drop-shadow(calc(var(--tl-scale) * 1px) calc(var(--tl-scale) * -1px) 0px rgba(0, 100, 255, 50%)) drop-shadow(calc(var(--tl-scale) * -1px) calc(var(--tl-scale) * 1px) 0px rgba(0, 100, 255, 50%));
 }
 
 /* Chat History Fallback */
