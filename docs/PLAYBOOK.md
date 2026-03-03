@@ -7,7 +7,7 @@ Nomendex is a native macOS desktop app for managing **notes**, **tasks**, and **
 ## Quick Start
 
 1. **Launch the app** — on first run you'll be prompted to choose a workspace folder
-2. **Explore the sidebar** — switch between Notes, Todos, and Chat
+2. **Explore the Activity Bar** — click icons on the left to switch between Inbox, Notes, Todos, Chat, and Settings
 3. **Use tabs** — open multiple items side by side, just like a browser
 4. **Press `⌘K`** — open the command palette for quick actions
 
@@ -103,6 +103,20 @@ Task cards show:
 ### Completion Tracking
 
 When a task is marked as done, the exact completion time is automatically recorded. This enables future productivity analytics and filtering by completion date.
+
+---
+
+## 📥 Inbox
+
+A lightweight list view for quickly capturing tasks without assigning them to a specific project.
+
+- **Quick capture** — create tasks fast, organize later
+- **Flat list** — no Kanban columns, just a simple scrollable list
+- **Search** — fuzzy search across task titles and descriptions
+- **Filters** — same tag and priority filters as the Kanban board
+- **Dedicated icon** — the Inbox has its own icon in the Activity Bar
+
+Tasks created in the Inbox are assigned to the `"Inbox"` project automatically. You can later move them to a different project by editing the task.
 
 ---
 
@@ -248,7 +262,7 @@ Projects can be used in two ways:
 
 ## ⚙️ Settings
 
-Access settings from the sidebar:
+Access settings from the gear icon at the bottom of the Activity Bar:
 
 - **Theme** — customize the app's appearance
 - **Agents** — create and manage AI agent configurations
