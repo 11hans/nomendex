@@ -22,3 +22,13 @@ export const TodoSchema = z.object({
 });
 
 export type Todo = z.infer<typeof TodoSchema>;
+
+// Canonical priority config — single source of truth for labels & colors
+export const PRIORITY_CONFIG = [
+    { value: "high", label: "High", color: "#ef4444" },
+    { value: "medium", label: "Medium", color: "#f59e0b" },
+    { value: "low", label: "Low", color: "#3b82f6" },
+    { value: "none", label: "None", color: undefined },
+] as const;
+
+export type PriorityValue = (typeof PRIORITY_CONFIG)[number]["value"];
