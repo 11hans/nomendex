@@ -1,27 +1,40 @@
-# Apple Calendar Integration (EventKit)
+# Apple Calendar & Reminders Integration (EventKit)
 
-Tasks with dates are automatically synced to Apple Calendar via the native EventKit framework.
+Tasks with dates and priorities are automatically synced to Apple Calendar and Apple Reminders via the native EventKit framework.
 
 ## Overview
 
-When a user saves, moves, or deletes a task that has dates, the app syncs the corresponding event to Apple Calendar. This creates a two-way reflection: tasks in Nomendex appear as events in Calendar.app under a dedicated **"Nomendex Tasks"** calendar.
+1. **Apple Calendar**: When a user saves, moves, or deletes a task that has dates, the app syncs the corresponding event to Apple Calendar under a dedicated **"Nomendex Tasks"** calendar. It also features **Two-Way Sync**, where changes made directly in Calendar.app (e.g. moving or deleting events) are reflected back to Nomendex.
+2. **Apple Reminders**: Tasks with a priority of **high** or **medium** are automatically synced to a dedicated "Nomendex Tasks" list in Apple Reminders, complete with alarms. It also features **Two-Way Sync**, where completing a task in Reminders.app marks it as done in Nomendex, and changing its title or due date updates the markdown file as well.
 
-The integration is macOS-only, using the `WKScriptMessageHandler` bridge pattern to call from the web layer into native Swift code.
+The integration is macOS-only, using the `WKScriptMessageHandler` bridge pattern for outgoing sync and `evaluateJavaScript` for incoming sync.
 
 ## Architecture
 
+### Outgoing Sync (Nomendex → EventKit)
 ```
 React UI (browser-view.tsx)
   ↓ save / delete / drag-drop
-calendar-bridge.ts
-  ↓ window.webkit.messageHandlers.calendarSync.postMessage()
+calendar-bridge.ts / reminder-bridge.ts
+  ↓ window.webkit.messageHandlers.[calendarSync|reminderSync].postMessage()
 WebViewWindowController.swift (WKScriptMessageHandler)
   ↓ dispatch
-CalendarManager.swift (EventKit)
+CalendarManager.swift / ReminderManager.swift (EventKit)
   ↓ EKEventStore.save() / .remove()
-Apple Calendar.app
+Apple Calendar.app / Apple Reminders.app
   ↓ callback via evaluateJavaScript
-calendar-bridge.ts (Promise resolved)
+bridge ts (Promise resolved)
+```
+
+### Incoming Sync (Calendar.app → Nomendex)
+```
+Calendar.app
+  ↓ EKEventStoreChangedNotification
+CalendarManager.swift (detectChanges)
+  ↓ evaluateJavaScript -> window.__onCalendarChange
+calendar-change-bridge.ts
+  ↓ todosAPI.updateTodo
+FileDatabase (markdown updated)
 ```
 
 ## Sync Triggers
@@ -37,6 +50,15 @@ Calendar sync fires automatically on three events:
 The bridge functions are no-ops when:
 - Not running inside the native macOS app (no `window.webkit`)
 - Task has no `dueDate` and no `startDate`
+
+### Manual Sync (Force Sync)
+
+Users can manually trigger a full synchronization of all tasks that have dates configured. This is especially useful after importing tasks or making bulk changes outside of the Nomendex UI.
+
+- Open **Command Palette** (`Cmd+K`)
+- Run **"Force Sync All to Calendar"**
+
+This command fetches all tasks from the local storage and runs `syncTaskToCalendar(todo)` for each task containing a `startDate` or `dueDate`.
 
 ## Calendar Event Behavior
 
@@ -142,12 +164,16 @@ class CalendarManager {
 
 ## Permissions
 
-- macOS prompts **"Nomendex would like to access your calendar"** on first sync
-- Configurable in **System Settings → Privacy & Security → Calendars**
+- macOS prompts **"Nomendex would like to access your calendar"** and **"Nomendex would like to access your reminders"** on first sync
+- Configurable in **System Settings → Privacy & Security → Calendars / Reminders**
 - Required entries in `Info.plist`:
   - `NSCalendarsUsageDescription`
   - `NSCalendarsFullAccessUsageDescription`
-- Required entitlement: `com.apple.security.personal-information.calendars`
+  - `NSRemindersUsageDescription`
+  - `NSRemindersFullAccessUsageDescription`
+- Required entitlements: 
+  - `com.apple.security.personal-information.calendars`
+  - `com.apple.security.personal-information.reminders`
 
 ## File Structure
 
