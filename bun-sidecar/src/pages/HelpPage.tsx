@@ -152,6 +152,33 @@ function HelpContent() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Calendar Sync */}
+                        <div className="space-y-3">
+                            <h3 className="font-semibold flex items-center gap-2" style={{ color: styles.contentPrimary }}>
+                                <CalendarDays className="size-4" />
+                                Calendar Sync
+                            </h3>
+                            <p className="text-sm" style={{ color: styles.contentSecondary }}>
+                                Todos with a Start Date or Due Date sync automatically with Apple Calendar.
+                                However, if you import tasks from an external source, you may need to force a sync:
+                            </p>
+                            <div
+                                className="rounded-lg p-4 space-y-2"
+                                style={{ backgroundColor: styles.surfaceTertiary }}
+                            >
+                                <div className="grid gap-2 text-sm">
+                                    <div className="flex gap-2">
+                                        <code style={{ color: styles.contentPrimary }}>Cmd+K</code>
+                                        <span style={{ color: styles.contentSecondary }}>Open command palette</span>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <code style={{ color: styles.contentPrimary }}>Force Sync All to Calendar</code>
+                                        <span style={{ color: styles.contentSecondary }}>Sync all eligible todos</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
 

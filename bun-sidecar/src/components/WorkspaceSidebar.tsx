@@ -5,7 +5,7 @@ import {
     SidebarContent,
     SidebarFooter,
 } from "./ui/sidebar";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { Tooltip, TooltipTrigger } from "./ui/tooltip";
 import { baseRegistry } from "@/registry/registry";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useRouting } from "@/hooks/useRouting";
@@ -19,7 +19,6 @@ import { TITLE_BAR_HEIGHT } from "./Layout";
  */
 function ActivityBarIcon({
     icon: Icon,
-    label,
     onClick,
     isActive = false,
 }: {

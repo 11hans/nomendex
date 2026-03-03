@@ -11,6 +11,7 @@ import type { Attachment } from "@/types/attachments";
 import { AttachmentThumbnail } from "@/components/AttachmentThumbnail";
 import {
     StatusPicker,
+    PriorityPicker,
     ProjectPicker,
     TagsPicker,
     DateTimePicker,
@@ -24,6 +25,7 @@ interface NewTodo {
     status: "todo" | "in_progress" | "done" | "later";
     tags: string[];
     dueDate?: string;
+    priority?: "high" | "medium" | "low" | "none";
     attachments?: Attachment[];
 }
 
@@ -183,6 +185,10 @@ export function CreateTodoDialog({
                         <StatusPicker
                             value={newTodo.status}
                             onChange={(status) => onNewTodoChange({ ...newTodo, status })}
+                        />
+                        <PriorityPicker
+                            value={newTodo.priority}
+                            onChange={(priority) => onNewTodoChange({ ...newTodo, priority })}
                         />
 
                         {/* Separator */}

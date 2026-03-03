@@ -111,14 +111,40 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
         if (!dueDate) return null;
 
         if (startDate) {
-            return (
-                <span className="whitespace-nowrap">
-                    {parseLocalDateString(startDate.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                    {startDate.includes('T') && `, ${startDate.split('T')[1]}`}
-                    {' - '}
-                    {dueDate.includes('T') ? dueDate.split('T')[1] : 'End'}
-                </span>
-            );
+            const startDay = startDate.split('T')[0];
+            const dueDay = dueDate.split('T')[0];
+
+            const startFormatted = parseLocalDateString(startDay).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+            const dueFormatted = parseLocalDateString(dueDay).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+            const startTime = startDate.includes('T') ? startDate.split('T')[1] : null;
+            const dueTime = dueDate.includes('T') ? dueDate.split('T')[1] : null;
+
+            if (startDay !== dueDay) {
+                // Different days: Mar 3 - Mar 5
+                return (
+                    <span className="whitespace-nowrap">
+                        {startFormatted}{startTime ? `, ${startTime}` : ''}
+                        {' - '}
+                        {dueFormatted}{dueTime ? `, ${dueTime}` : ''}
+                    </span>
+                );
+            } else {
+                // Same day
+                if (!startTime && !dueTime) {
+                    // Just the date (no times)
+                    return <span className="whitespace-nowrap">{startFormatted}</span>;
+                }
+                // Time range on same day: Mar 3, 13:00 - 15:00
+                return (
+                    <span className="whitespace-nowrap">
+                        {startFormatted}
+                        {startTime ? `, ${startTime}` : ''}
+                        {' - '}
+                        {dueTime ? dueTime : '?'}
+                    </span>
+                );
+            }
         }
 
         return (

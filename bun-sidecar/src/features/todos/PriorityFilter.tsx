@@ -2,27 +2,19 @@ import { Flag, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTheme } from "@/hooks/useTheme";
 import { useState } from "react";
-
-type Priority = "high" | "medium" | "low" | "none";
+import { PRIORITY_CONFIG, type PriorityValue } from "./todo-types";
 
 interface PriorityFilterProps {
-    selectedPriority: Priority | null;
-    onPriorityChange: (priority: Priority | null) => void;
+    selectedPriority: PriorityValue | null;
+    onPriorityChange: (priority: PriorityValue | null) => void;
 }
-
-const priorityOptions = [
-    { value: "high" as const, label: "High", color: "#ef4444" },
-    { value: "medium" as const, label: "Medium", color: "#f59e0b" },
-    { value: "low" as const, label: "Low", color: "#3b82f6" },
-    { value: "none" as const, label: "None", color: undefined },
-];
 
 export function PriorityFilter({ selectedPriority, onPriorityChange }: PriorityFilterProps) {
     const [isOpen, setIsOpen] = useState(false);
     const { currentTheme } = useTheme();
 
     const selectedOption = selectedPriority
-        ? priorityOptions.find(p => p.value === selectedPriority)
+        ? PRIORITY_CONFIG.find(p => p.value === selectedPriority)
         : null;
 
     return (
@@ -63,7 +55,7 @@ export function PriorityFilter({ selectedPriority, onPriorityChange }: PriorityF
                         borderColor: currentTheme.styles.borderDefault,
                     }}
                 >
-                    {priorityOptions.map((option) => {
+                    {PRIORITY_CONFIG.map((option) => {
                         const isActive = selectedPriority === option.value;
                         return (
                             <button

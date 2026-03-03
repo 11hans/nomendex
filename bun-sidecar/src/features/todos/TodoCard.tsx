@@ -1,5 +1,5 @@
 import { Settings, Trash2, Archive, ArchiveRestore, Copy, CalendarDays, CheckCircle2, Circle } from "lucide-react";
-import { Todo } from "./todo-types";
+import { Todo, PRIORITY_CONFIG } from "./todo-types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -50,12 +50,7 @@ export function TodoCard({
         onToggleDone?.(todo);
     };
 
-    const priorityColors: Record<string, string> = {
-        high: "#ef4444",
-        medium: "#f59e0b",
-        low: "#3b82f6",
-    };
-    const borderColor = todo.priority ? priorityColors[todo.priority] : undefined;
+    const borderColor = todo.priority ? PRIORITY_CONFIG.find(p => p.value === todo.priority)?.color : undefined;
 
     return (
         <Card

@@ -5,6 +5,8 @@ import { todosPluginSerial } from "./index";
 import { WorkspaceTab } from "@/types/Workspace";
 import { SerializablePlugin } from "@/types/Plugin";
 import { todosAPI } from "@/hooks/useTodosAPI";
+import { syncTaskToCalendar } from "./calendar-bridge";
+import { toast } from "sonner";
 
 interface CommandContext {
     openDialog: (config: { title?: string; description?: string; content?: React.ReactNode; width?: string }) => void;
@@ -98,6 +100,41 @@ export async function getTodosCommands(context: CommandContext): Promise<Command
                     content: <CreateTodoCommandDialog />,
                     width: '700px',
                 });
+            },
+        },
+        {
+            id: "todos.syncCalendar",
+            name: "Force Sync All to Calendar",
+            description: "Sync all todos with dates to Apple Calendar (useful after import)",
+            icon: "CalendarPlus",
+            callback: async () => {
+                context.closeCommandMenu();
+                try {
+                    toast.info("Fetching todos...");
+                    const allTodos = await todosAPI.getTodos();
+                    const toSync = allTodos.filter(t => t.dueDate || t.startDate);
+
+                    if (toSync.length === 0) {
+                        toast.info("No todos with dates found to sync.");
+                        return;
+                    }
+
+                    toast.info(`Syncing ${toSync.length} items to calendar...`);
+
+                    let count = 0;
+                    for (const todo of toSync) {
+                        try {
+                            await syncTaskToCalendar(todo);
+                            count++;
+                        } catch (e) {
+                            console.error("Failed to sync", todo, e);
+                        }
+                    }
+                    toast.success(`Successfully synced ${count} items to Calendar.`);
+                } catch (error) {
+                    console.error("Sync failed", error);
+                    toast.error("Failed to sync to calendar.");
+                }
             },
         },
     ];

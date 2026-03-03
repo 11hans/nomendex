@@ -14,7 +14,8 @@ import { TaskCardEditor } from "./TaskCardEditor";
 import { TagFilter } from "./TagFilter";
 import { PriorityFilter } from "./PriorityFilter";
 import { Todo } from "./todo-types";
-import { removeTaskFromCalendar } from "./calendar-bridge";
+import { syncTaskToCalendar, removeTaskFromCalendar } from "./calendar-bridge";
+import { syncTaskToReminders, removeTaskFromReminders } from "./reminder-bridge";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 
 export function InboxListView() {
@@ -122,6 +123,9 @@ export function InboxListView() {
             setEditDialogOpen(false);
             setTodoToEdit(null);
             await loadTodos();
+            // Sync to calendar and reminders (fire-and-forget)
+            syncTaskToCalendar(updatedTodo).catch(() => { });
+            syncTaskToReminders(updatedTodo).catch(() => { });
         } catch (error) {
             console.error("Failed to save todo:", error);
             toast.error("Failed to save changes");
@@ -164,6 +168,7 @@ export function InboxListView() {
         try {
             await todosAPI.deleteTodo({ todoId: todo.id });
             removeTaskFromCalendar(todo.id).catch(() => { });
+            removeTaskFromReminders(todo.id).catch(() => { });
 
             toast("Deleted task", {
                 action: {
@@ -177,6 +182,9 @@ export function InboxListView() {
                                 project: todo.project,
                                 tags: todo.tags,
                                 dueDate: todo.dueDate,
+                                priority: todo.priority,
+                                startDate: todo.startDate,
+                                duration: todo.duration,
                                 attachments: todo.attachments,
                             });
                             await loadTodos();

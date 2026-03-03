@@ -2,15 +2,9 @@ import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTheme } from "@/hooks/useTheme";
 import { Flag } from "lucide-react";
+import { PRIORITY_CONFIG, type PriorityValue } from "../todo-types";
 
-const priorityConfig = [
-    { value: "high", label: "High", color: "#ef4444" },
-    { value: "medium", label: "Medium", color: "#f59e0b" },
-    { value: "low", label: "Low", color: "#3b82f6" },
-    { value: "none", label: "None", color: undefined },
-] as const;
-
-export type PriorityValue = (typeof priorityConfig)[number]["value"];
+export type { PriorityValue };
 
 interface PriorityPickerProps {
     value: PriorityValue | undefined;
@@ -33,7 +27,7 @@ export function PriorityPicker({ value, onChange }: PriorityPickerProps) {
                     style={{
                         backgroundColor: styles.surfaceTertiary,
                         color: currentValue !== "none"
-                            ? priorityConfig.find(p => p.value === currentValue)?.color
+                            ? PRIORITY_CONFIG.find(p => p.value === currentValue)?.color
                             : styles.contentTertiary,
                     }}
                 >
@@ -48,7 +42,7 @@ export function PriorityPicker({ value, onChange }: PriorityPickerProps) {
                     borderColor: styles.borderDefault,
                 }}
             >
-                {priorityConfig.map((priority) => {
+                {PRIORITY_CONFIG.map((priority) => {
                     const isActive = currentValue === priority.value;
                     return (
                         <button
