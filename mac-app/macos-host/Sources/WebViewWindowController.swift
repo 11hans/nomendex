@@ -57,6 +57,7 @@ class WebViewWindowController: NSWindowController, WKNavigationDelegate, NSWindo
         userContentController.add(self, name: "triggerAppUpdate")
         userContentController.add(self, name: "checkForUpdatesInBackground")
         userContentController.add(self, name: "calendarSync")
+        userContentController.add(self, name: "reminderSync")
         config.userContentController = userContentController
         config.preferences.javaScriptEnabled = true
         let webView = WKWebView(frame: .zero, configuration: config)
@@ -231,6 +232,12 @@ class WebViewWindowController: NSWindowController, WKNavigationDelegate, NSWindo
                 let callback = taskData["callback"] as? String
                 CalendarManager.shared.syncTask(taskData, webView: webView, callback: callback)
             }
+        } else if message.name == "reminderSync" {
+            // Reminder sync via EventKit
+            if let taskData = message.body as? [String: Any] {
+                let callback = taskData["callback"] as? String
+                ReminderManager.shared.syncTask(taskData, webView: webView, callback: callback)
+            }
         }
     }
     
@@ -256,6 +263,13 @@ class WebViewWindowController: NSWindowController, WKNavigationDelegate, NSWindo
         }
 
         decisionHandler(.allow)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        log("WebView finished loading")
+        // Start observing calendar and reminder changes once the webview is ready
+        CalendarManager.shared.startObserving(webView: webView)
+        ReminderManager.shared.startObserving(webView: webView)
     }
 
     // MARK: - NSWindowDelegate
