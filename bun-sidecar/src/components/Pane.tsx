@@ -5,7 +5,6 @@ import { Button } from "./ui/button";
 import { View } from "./View";
 import { useState, useEffect } from "react";
 import { useTheme } from "@/hooks/useTheme";
-import { TITLE_BAR_HEIGHT } from "./Layout";
 import { Pane as PaneType, WorkspaceTab } from "@/types/Workspace";
 import { getIcon } from "./PluginViewIcons";
 import { useFileLocks } from "@/hooks/useFileLocks";
@@ -181,14 +180,13 @@ export function Pane({
                 className="flex flex-col h-full min-h-0 overflow-hidden"
             >
                 <div
-                    className="flex items-center backdrop-blur w-full flex-shrink-0 sticky top-0 z-50"
+                    className="flex items-center w-full flex-shrink-0 sticky top-0 z-50"
                     style={{
                         backgroundColor: currentTheme.styles.surfaceSecondary,
-                        height: `${TITLE_BAR_HEIGHT}px`,
                     }}
                     id={`pane-tabs-header-${pane.id}`}
                 >
-                    <TabsList className="h-full bg-transparent p-0 gap-0 flex-1 min-w-0 flex items-center">
+                    <TabsList className="h-full bg-transparent p-0 gap-0 flex-1 min-w-0 flex items-end">
                         {visibleTabs.map((tab, index) => {
                             const noteLock = getNoteLock(tab);
                             return (
@@ -198,65 +196,65 @@ export function Pane({
                                     onDragOver={(e) => handleTabDragOver(e, index)}
                                     onDrop={(e) => handleTabDrop(e, index)}
                                 >
-                                {/* Left drop indicator */}
-                                {dropIndicator?.index === index && dropIndicator?.side === "left" && draggedTabIndex !== index && (
-                                    <div
-                                        className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full z-10"
-                                        style={{ backgroundColor: currentTheme.styles.borderAccent }}
-                                    />
-                                )}
-                                <TabsTrigger
-                                    value={tab.id}
-                                    className={`rounded-md h-7 mx-0.5 px-2 gap-1.5 flex items-center transition-all duration-200 min-w-0 max-w-[140px] cursor-grab text-xs ${
-                                        isDraggingFromThisPane && draggedTabIndex === index ? "opacity-50" : ""
-                                    }`}
-                                    style={{
-                                        backgroundColor: activeTab?.id === tab.id ? currentTheme.styles.surfaceAccent : "transparent",
-                                        color: activeTab?.id === tab.id ? currentTheme.styles.contentPrimary : currentTheme.styles.contentSecondary,
-                                        borderBottom: activeTab?.id === tab.id ? `2px solid ${currentTheme.styles.borderAccent}` : "2px solid transparent",
-                                        fontWeight: activeTab?.id === tab.id ? 500 : 400,
-                                    }}
-                                    draggable
-                                    onDragStart={(e) => handleTabDragStart(e, tab, index)}
-                                    onDragEnd={handleTabDragEnd}
-                                >
-                                    <span
-                                        className="h-3.5 w-3.5 relative transition-all duration-200 cursor-pointer flex items-center justify-center flex-shrink-0"
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            onTabClose(tab.id);
+                                    {/* Left drop indicator */}
+                                    {dropIndicator?.index === index && dropIndicator?.side === "left" && draggedTabIndex !== index && (
+                                        <div
+                                            className="absolute left-0 top-0 bottom-0 w-0.5 z-10"
+                                            style={{ backgroundColor: currentTheme.styles.borderAccent }}
+                                        />
+                                    )}
+                                    <TabsTrigger
+                                        value={tab.id}
+                                        className={`rounded-none h-9 px-3 gap-1.5 flex items-center transition-colors duration-100 min-w-0 max-w-[160px] cursor-grab text-xs border-r ${isDraggingFromThisPane && draggedTabIndex === index ? "opacity-50" : ""
+                                            }`}
+                                        style={{
+                                            backgroundColor: activeTab?.id === tab.id ? currentTheme.styles.surfacePrimary : currentTheme.styles.surfaceSecondary,
+                                            color: activeTab?.id === tab.id ? currentTheme.styles.contentPrimary : currentTheme.styles.contentSecondary,
+                                            borderTop: activeTab?.id === tab.id ? `2px solid ${currentTheme.styles.borderAccent}` : "2px solid transparent",
+                                            borderBottom: "none",
+                                            borderRightColor: currentTheme.styles.borderDefault,
+                                            fontWeight: activeTab?.id === tab.id ? 500 : 400,
                                         }}
+                                        draggable
+                                        onDragStart={(e) => handleTabDragStart(e, tab, index)}
+                                        onDragEnd={handleTabDragEnd}
                                     >
+                                        {/* Icon – always visible */}
                                         {(() => {
                                             const IconComponent = getIcon(tab.pluginInstance.plugin.icon);
-                                            return <IconComponent className="size-3 transition-opacity duration-200 group-hover:opacity-0" />;
+                                            return <IconComponent className="size-3 flex-shrink-0" />;
                                         })()}
-                                        <X
-                                            className="size-3 absolute transition-opacity duration-200 opacity-0 group-hover:opacity-100"
-                                            style={{ color: currentTheme.styles.semanticDestructive }}
-                                        />
-                                    </span>
-                                    <span className="truncate">{tab.title}</span>
-                                    {noteLock && (
+                                        <span className="truncate">{tab.title}</span>
+                                        {noteLock && (
+                                            <span
+                                                className="flex items-center flex-shrink-0"
+                                                title={`Locked by ${noteLock.agentName}`}
+                                            >
+                                                <Lock
+                                                    className="h-3 w-3"
+                                                    style={{ color: currentTheme.styles.contentSecondary }}
+                                                />
+                                            </span>
+                                        )}
+                                        {/* Close button – visible on hover or when active */}
                                         <span
-                                            className="flex items-center flex-shrink-0"
-                                            title={`Locked by ${noteLock.agentName}`}
+                                            className={`h-4 w-4 flex items-center justify-center flex-shrink-0 cursor-pointer rounded-sm transition-colors duration-100 hover:bg-[rgba(128,128,128,0.2)] ${activeTab?.id === tab.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                onTabClose(tab.id);
+                                            }}
                                         >
-                                            <Lock
-                                                className="h-3 w-3"
-                                                style={{ color: currentTheme.styles.contentSecondary }}
-                                            />
+                                            <X className="size-3" style={{ color: currentTheme.styles.contentSecondary }} />
                                         </span>
+                                    </TabsTrigger>
+                                    {/* Right drop indicator */}
+                                    {dropIndicator?.index === index && dropIndicator?.side === "right" && draggedTabIndex !== index && (
+                                        <div
+                                            className="absolute right-0 top-0 bottom-0 w-0.5 z-10"
+                                            style={{ backgroundColor: currentTheme.styles.borderAccent }}
+                                        />
                                     )}
-                                </TabsTrigger>
-                                {/* Right drop indicator */}
-                                {dropIndicator?.index === index && dropIndicator?.side === "right" && draggedTabIndex !== index && (
-                                    <div
-                                        className="absolute right-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full z-10"
-                                        style={{ backgroundColor: currentTheme.styles.borderAccent }}
-                                    />
-                                )}
                                 </div>
                             );
                         })}

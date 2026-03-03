@@ -94,13 +94,18 @@ class WebViewWindowController: NSWindowController, WKNavigationDelegate, NSWindo
 
             let locationInWindow = event.locationInWindow
             let windowHeight = contentView.bounds.height
-            let isInTitleBar = locationInWindow.y > windowHeight - self.titleBarHeight
-            // Only allow window drag from the sidebar area (left side), not the tabs area
-            let isInSidebarArea = locationInWindow.x < self.sidebarWidth
+            // Check if click is in the top 32 pixels
+            let isInTitleBar = locationInWindow.y > windowHeight - 32
 
             switch event.type {
             case .leftMouseDown:
-                if isInTitleBar && isInSidebarArea {
+                if isInTitleBar {
+                    if event.clickCount == 2 {
+                        // Handle double click in title bar -> zoom/unzoom window
+                        window.zoom(nil)
+                        return nil // Consume event
+                    }
+                    
                     mouseDownEvent = event
                     mouseDownLocation = NSEvent.mouseLocation
                 }

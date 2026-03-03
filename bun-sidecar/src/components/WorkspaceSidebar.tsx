@@ -4,14 +4,8 @@ import {
     Sidebar,
     SidebarContent,
     SidebarFooter,
-    SidebarGroup,
-    SidebarGroupContent,
-    SidebarGroupLabel,
-    SidebarHeader,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
 } from "./ui/sidebar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { baseRegistry } from "@/registry/registry";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useRouting } from "@/hooks/useRouting";
@@ -19,11 +13,68 @@ import { PluginIcon } from "@/types/Plugin";
 import { getIcon } from "./PluginViewIcons";
 import { useTheme } from "@/hooks/useTheme";
 import { TITLE_BAR_HEIGHT } from "./Layout";
-import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+
+/**
+ * VS Code-style Activity Bar icon button with tooltip and left accent border.
+ */
+function ActivityBarIcon({
+    icon: Icon,
+    label,
+    onClick,
+    isActive = false,
+}: {
+    icon: React.ComponentType<{ className?: string }>;
+    label: string;
+    onClick: () => void;
+    isActive?: boolean;
+}) {
+    const { currentTheme } = useTheme();
+
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <button
+                    onClick={onClick}
+                    className="relative flex items-center justify-center w-full h-12 cursor-pointer transition-colors duration-150"
+                    style={{
+                        color: isActive
+                            ? currentTheme.styles.contentPrimary
+                            : currentTheme.styles.contentSecondary,
+                        backgroundColor: "transparent",
+                    }}
+                    onMouseEnter={(e) => {
+                        if (!isActive) {
+                            e.currentTarget.style.color = currentTheme.styles.contentPrimary;
+                        }
+                    }}
+                    onMouseLeave={(e) => {
+                        if (!isActive) {
+                            e.currentTarget.style.color = currentTheme.styles.contentSecondary;
+                        }
+                    }}
+                >
+                    {/* VS Code-style left accent border for active item */}
+                    {isActive && (
+                        <div
+                            className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 rounded-r-sm"
+                            style={{ backgroundColor: currentTheme.styles.borderAccent }}
+                        />
+                    )}
+                    <Icon className="size-5" />
+                </button>
+            </TooltipTrigger>
+            {/* 
+            <TooltipContent side="right" align="center">
+                {label}
+            </TooltipContent>
+            */}
+        </Tooltip>
+    );
+}
 
 export function WorkspaceSidebar() {
     const plugins = Object.values(baseRegistry);
-    const { openTab } = useWorkspaceContext();
+    const { openTab, activeTab } = useWorkspaceContext();
     const { navigate, currentPath } = useRouting();
     const { currentTheme } = useTheme();
     const [appVersion, setAppVersion] = useState("...");
@@ -39,8 +90,6 @@ export function WorkspaceSidebar() {
         if (currentPath != "/") {
             navigate("/");
         }
-
-        // openTab handles both single and split mode, and deduplication
         openTab({ pluginMeta: plugin, view: "default", props: {} });
     };
 
@@ -48,203 +97,96 @@ export function WorkspaceSidebar() {
         navigate(path);
     };
 
+    // Determine which plugin and view are currently active
+    const activePluginId = activeTab?.pluginInstance?.plugin?.id ?? null;
+    const activeViewId = activeTab?.pluginInstance?.viewId ?? null;
+
     return (
         <Sidebar
-            className="backdrop-blur-xl border-r"
+            className="border-r"
             style={{
-                backgroundColor: currentTheme.styles.surfaceSecondary,
-                borderColor: currentTheme.styles.borderDefault
+                backgroundColor: currentTheme.styles.surfaceTertiary,
+                borderColor: currentTheme.styles.borderDefault,
+                top: `${TITLE_BAR_HEIGHT}px`,
+                height: `calc(100svh - ${TITLE_BAR_HEIGHT}px)`,
             }}
         >
-            <SidebarHeader
-                style={{
-                    background: `linear-gradient(to bottom, ${currentTheme.styles.surfaceTertiary}40, transparent)`,
-                    height: `${TITLE_BAR_HEIGHT}px`,
-                    minHeight: `${TITLE_BAR_HEIGHT}px`,
-                }}
-            ></SidebarHeader>
+            <SidebarContent className="flex flex-col items-center gap-0 p-0 pt-2 overflow-hidden">
+                {/* Main plugin icons */}
+                <ActivityBarIcon
+                    icon={Inbox}
+                    label="Inbox"
+                    isActive={activePluginId === "todos" && activeViewId === "inbox"}
+                    onClick={() => openTab({
+                        pluginMeta: plugins.find(p => p.id === 'todos') || plugins[0],
+                        view: "inbox",
+                        props: { project: "Inbox" }
+                    })}
+                />
+                {plugins.filter(p => p.id !== 'chat').map((plugin) => {
+                    const IconComponent = getIcon(plugin.icon);
 
-            <SidebarContent>
-                <SidebarGroup>
-                    <SidebarGroupLabel style={{ color: currentTheme.styles.contentSecondary }}>Workspace</SidebarGroupLabel>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton
-                                    onClick={() => openTab({
-                                        pluginMeta: plugins.find(p => p.id === 'todos') || plugins[0],
-                                        view: "inbox",
-                                        props: { project: "Inbox" }
-                                    })}
-                                    className="cursor-pointer transition-all duration-200"
-                                    style={{ color: currentTheme.styles.contentPrimary }}
-                                    onMouseEnter={(e) => {
-                                        e.currentTarget.style.backgroundColor = currentTheme.styles.surfaceAccent;
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                    }}
-                                >
-                                    <Inbox className="size-4" />
-                                    <span>Inbox</span>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                            {plugins.filter(p => p.id !== 'chat').map((plugin) => {
-                                const IconComponent = getIcon(plugin.icon);
-                                return (
-                                    <SidebarMenuItem key={plugin.id}>
-                                        <SidebarMenuButton
-                                            onClick={() => handleAddPlugin(plugin)}
-                                            className="cursor-pointer transition-all duration-200"
-                                            style={{
-                                                color: currentTheme.styles.contentPrimary
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                e.currentTarget.style.backgroundColor = currentTheme.styles.surfaceAccent;
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.currentTarget.style.backgroundColor = 'transparent';
-                                            }}
-                                        >
-                                            <IconComponent className="size-4" />
-                                            <span>{plugin.name || plugin.id}</span>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
-                                );
-                            })}
-                            <SidebarMenuItem>
-                                <SidebarMenuButton
-                                    onClick={() => handleNavigate("/agents")}
-                                    className="cursor-pointer transition-all duration-200"
-                                    style={{ color: currentTheme.styles.contentPrimary }}
-                                    onMouseEnter={(e) => {
-                                        e.currentTarget.style.backgroundColor = currentTheme.styles.surfaceAccent;
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                    }}
-                                >
-                                    <Bot className="size-4" />
-                                    <span>Agents</span>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                            {plugins.filter(p => p.id === 'chat').map((plugin) => {
-                                const IconComponent = getIcon(plugin.icon);
-                                return (
-                                    <SidebarMenuItem key={plugin.id}>
-                                        <SidebarMenuButton
-                                            onClick={() => handleAddPlugin(plugin)}
-                                            className="cursor-pointer transition-all duration-200"
-                                            style={{
-                                                color: currentTheme.styles.contentPrimary
-                                            }}
-                                            onMouseEnter={(e) => {
-                                                e.currentTarget.style.backgroundColor = currentTheme.styles.surfaceAccent;
-                                            }}
-                                            onMouseLeave={(e) => {
-                                                e.currentTarget.style.backgroundColor = 'transparent';
-                                            }}
-                                        >
-                                            <IconComponent className="size-4" />
-                                            <span>{plugin.name || plugin.id}</span>
-                                        </SidebarMenuButton>
-                                    </SidebarMenuItem>
-                                );
-                            })}
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
+                    // For the "todos" plugin icon, it should only be active if we're not in the "inbox" view
+                    const isPluginActive = plugin.id === "todos"
+                        ? activePluginId === "todos" && activeViewId !== "inbox"
+                        : activePluginId === plugin.id;
 
-                {plugins.length === 0 && (
-                    <SidebarGroup>
-                        <SidebarGroupContent>
-                            <div
-                                className="p-4 text-center text-sm rounded-lg border shadow-sm"
-                                style={{
-                                    color: currentTheme.styles.contentSecondary,
-                                    backgroundColor: currentTheme.styles.surfaceMuted,
-                                    borderColor: currentTheme.styles.borderDefault
-                                }}
-                            >
-                                No plugins available
-                            </div>
-                        </SidebarGroupContent>
-                    </SidebarGroup>
-                )}
+                    return (
+                        <ActivityBarIcon
+                            key={plugin.id}
+                            icon={IconComponent}
+                            label={plugin.name || plugin.id}
+                            isActive={isPluginActive}
+                            onClick={() => handleAddPlugin(plugin)}
+                        />
+                    );
+                })}
+                <ActivityBarIcon
+                    icon={Bot}
+                    label="Agents"
+                    isActive={currentPath === "/agents"}
+                    onClick={() => handleNavigate("/agents")}
+                />
+                {plugins.filter(p => p.id === 'chat').map((plugin) => {
+                    const IconComponent = getIcon(plugin.icon);
+                    return (
+                        <ActivityBarIcon
+                            key={plugin.id}
+                            icon={IconComponent}
+                            label={plugin.name || plugin.id}
+                            isActive={activePluginId === plugin.id}
+                            onClick={() => handleAddPlugin(plugin)}
+                        />
+                    );
+                })}
             </SidebarContent>
 
-            <SidebarFooter
-                style={{
-                    background: `linear-gradient(to top, ${currentTheme.styles.surfaceTertiary}40, transparent)`
-                }}
-            >
-                <SidebarGroup>
-                    <SidebarGroupContent>
-                        <SidebarMenu>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton
-                                    onClick={() => handleNavigate("/sync")}
-                                    className="cursor-pointer transition-all duration-200"
-                                    style={{ color: currentTheme.styles.contentPrimary }}
-                                    onMouseEnter={(e) => {
-                                        e.currentTarget.style.backgroundColor = currentTheme.styles.surfaceAccent;
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                    }}
-                                >
-                                    <GitBranch className="size-4" />
-                                    <span>Sync</span>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton
-                                    onClick={() => handleNavigate("/settings")}
-                                    className="cursor-pointer transition-all duration-200"
-                                    style={{ color: currentTheme.styles.contentPrimary }}
-                                    onMouseEnter={(e) => {
-                                        e.currentTarget.style.backgroundColor = currentTheme.styles.surfaceAccent;
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                    }}
-                                >
-                                    <Settings className="size-4" />
-                                    <span>Settings</span>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                            <SidebarMenuItem>
-                                <SidebarMenuButton
-                                    onClick={() => handleNavigate("/help")}
-                                    className="cursor-pointer transition-all duration-200"
-                                    style={{ color: currentTheme.styles.contentPrimary }}
-                                    onMouseEnter={(e) => {
-                                        e.currentTarget.style.backgroundColor = currentTheme.styles.surfaceAccent;
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                    }}
-                                >
-                                    <HelpCircle className="size-4" />
-                                    <span>Help</span>
-                                </SidebarMenuButton>
-                            </SidebarMenuItem>
-                        </SidebarMenu>
-                    </SidebarGroupContent>
-                </SidebarGroup>
-                <div className="px-2 py-1">
-                    <WorkspaceSwitcher />
-                </div>
+            <SidebarFooter className="flex flex-col items-center gap-0 p-0">
+                <ActivityBarIcon
+                    icon={GitBranch}
+                    label="Sync"
+                    isActive={currentPath === "/sync"}
+                    onClick={() => handleNavigate("/sync")}
+                />
+                <ActivityBarIcon
+                    icon={Settings}
+                    label="Settings"
+                    isActive={currentPath === "/settings"}
+                    onClick={() => handleNavigate("/settings")}
+                />
+                <ActivityBarIcon
+                    icon={HelpCircle}
+                    label="Help"
+                    isActive={currentPath === "/help"}
+                    onClick={() => handleNavigate("/help")}
+                />
                 <div
-                    className="p-2 rounded-lg mx-2 mb-2 border shadow-sm"
-                    style={{
-                        backgroundColor: currentTheme.styles.surfaceMuted,
-                        borderColor: currentTheme.styles.borderDefault
-                    }}
+                    className="w-full text-center py-1"
+                    title={`Nomendex v${appVersion}`}
                 >
-                    <div className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
-                        Nomendex v{appVersion}
-                    </div>
+                    <span className="text-[9px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                        v{appVersion}
+                    </span>
                 </div>
             </SidebarFooter>
         </Sidebar>
