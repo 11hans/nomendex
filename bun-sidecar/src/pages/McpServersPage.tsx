@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import {
     Dialog,
@@ -102,13 +101,13 @@ function McpServersContent() {
 
     return (
         <div
-            className="h-full overflow-y-auto p-6 space-y-6"
+            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
             style={{
                 backgroundColor: currentTheme.styles.surfacePrimary,
                 color: currentTheme.styles.contentPrimary,
             }}
         >
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-shrink-0 mb-6">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="icon" onClick={() => navigate("/agents")}>
                         <ArrowLeft className="h-4 w-4" />
@@ -117,7 +116,7 @@ function McpServersContent() {
                         <h1 className="text-2xl font-bold" style={{ color: currentTheme.styles.contentPrimary }}>
                             MCP Servers
                         </h1>
-                        <p style={{ color: currentTheme.styles.contentSecondary }}>
+                        <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
                             Configure Model Context Protocol servers for your agents.
                         </p>
                     </div>
@@ -128,16 +127,14 @@ function McpServersContent() {
                 </Button>
             </div>
 
-            {oauthWarning && (
-                <Alert>
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertDescription className="text-sm">{oauthWarning}</AlertDescription>
-                </Alert>
-            )}
+            <div className="flex-1 overflow-y-auto outline-none pr-2 pb-8 space-y-4">
+                {oauthWarning && (
+                    <Alert>
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription className="text-sm">{oauthWarning}</AlertDescription>
+                    </Alert>
+                )}
 
-            <Separator />
-
-            <div className="grid gap-4">
                 {servers.length === 0 ? (
                     <div
                         className="text-center py-12"

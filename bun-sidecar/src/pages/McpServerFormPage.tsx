@@ -81,10 +81,10 @@ function McpServerFormContent() {
                 setFormHeaders(
                     transport.headers
                         ? Object.entries(transport.headers).map(([key, value]) => ({
-                              id: generateId(),
-                              key,
-                              value,
-                          }))
+                            id: generateId(),
+                            key,
+                            value,
+                        }))
                         : []
                 );
             } else if ("type" in transport && transport.type === "http") {
@@ -93,10 +93,10 @@ function McpServerFormContent() {
                 setFormHeaders(
                     transport.headers
                         ? Object.entries(transport.headers).map(([key, value]) => ({
-                              id: generateId(),
-                              key,
-                              value,
-                          }))
+                            id: generateId(),
+                            key,
+                            value,
+                        }))
                         : []
                 );
             } else if ("command" in transport) {
@@ -106,10 +106,10 @@ function McpServerFormContent() {
                 setFormEnvVars(
                     transport.env
                         ? Object.entries(transport.env).map(([key, value]) => ({
-                              id: generateId(),
-                              key,
-                              value,
-                          }))
+                            id: generateId(),
+                            key,
+                            value,
+                        }))
                         : []
                 );
             }
@@ -267,47 +267,39 @@ function McpServerFormContent() {
 
     return (
         <div
-            className="h-full overflow-y-auto"
+            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
             style={{
                 backgroundColor: currentTheme.styles.surfacePrimary,
                 color: currentTheme.styles.contentPrimary,
             }}
         >
             {/* Header */}
-            <div
-                className="sticky top-0 z-10 border-b px-6 py-4"
-                style={{
-                    backgroundColor: currentTheme.styles.surfacePrimary,
-                    borderColor: currentTheme.styles.borderDefault,
-                }}
-            >
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="icon" onClick={() => navigate("/mcp-servers")}>
-                            <ArrowLeft className="h-4 w-4" />
-                        </Button>
-                        <div>
-                            <h1 className="text-xl font-semibold">
-                                {isEditing ? "Edit MCP Server" : "New MCP Server"}
-                            </h1>
-                            <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
-                                Configure a Model Context Protocol server
-                            </p>
-                        </div>
+            <div className="flex items-center justify-between flex-shrink-0 mb-6">
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="icon" onClick={() => navigate("/mcp-servers")}>
+                        <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <div>
+                        <h1 className="text-2xl font-bold">
+                            {isEditing ? "Edit MCP Server" : "New MCP Server"}
+                        </h1>
+                        <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                            Configure a Model Context Protocol server
+                        </p>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <Button variant="outline" onClick={() => navigate("/mcp-servers")}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSave} disabled={!isFormValid() || isSaving}>
-                            {isSaving ? "Saving..." : isEditing ? "Save Changes" : "Create Server"}
-                        </Button>
-                    </div>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={() => navigate("/mcp-servers")}>
+                        Cancel
+                    </Button>
+                    <Button onClick={handleSave} disabled={!isFormValid() || isSaving}>
+                        {isSaving ? "Saving..." : isEditing ? "Save Changes" : "Create Server"}
+                    </Button>
                 </div>
             </div>
 
             {/* Form Content */}
-            <div className="max-w-2xl mx-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto outline-none pr-2 pb-8 space-y-6">
                 {/* Basic Info */}
                 <Card>
                     <CardHeader>

@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -163,18 +162,18 @@ function AgentsContent() {
 
     return (
         <div
-            className="h-full overflow-y-auto p-6 space-y-6"
+            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
             style={{
                 backgroundColor: currentTheme.styles.surfacePrimary,
                 color: currentTheme.styles.contentPrimary,
             }}
         >
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-shrink-0 mb-6">
                 <div>
                     <h1 className="text-2xl font-bold" style={{ color: currentTheme.styles.contentPrimary }}>
                         Agents
                     </h1>
-                    <p style={{ color: currentTheme.styles.contentSecondary }}>
+                    <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
                         Configure AI agents with custom system prompts and MCP servers.
                     </p>
                 </div>
@@ -190,9 +189,7 @@ function AgentsContent() {
                 </div>
             </div>
 
-            <Separator />
-
-            <div className="grid gap-4">
+            <div className="flex-1 overflow-y-auto outline-none pr-2">
                 {agents.map((agent) => (
                     <Card key={agent.id}>
                         <CardHeader className="pb-3">
@@ -268,8 +265,8 @@ function AgentsContent() {
                                         {agent.mcpServers.length === 0
                                             ? "None"
                                             : agent.mcpServers
-                                                  .map((id) => allMcpServers.find((s) => s.id === id)?.name || id)
-                                                  .join(", ")}
+                                                .map((id) => allMcpServers.find((s) => s.id === id)?.name || id)
+                                                .join(", ")}
                                     </span>
                                 </div>
                                 {agent.systemPrompt && (

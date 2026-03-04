@@ -9,6 +9,7 @@ import { useGHSync } from "@/contexts/GHSyncContext";
 import { chatPluginSerial } from "@/features/chat";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
+import { useTheme } from "@/hooks/useTheme";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
     GitBranch,
@@ -94,13 +95,12 @@ function ChangedFilesList({ status }: { status: string }) {
                         const filePath = line.substring(3);
                         return (
                             <div key={i} className="flex items-center gap-2 text-xs py-0.5 px-1 min-w-0">
-                                <span className={`font-mono w-4 flex-shrink-0 ${
-                                    fileStatus.includes("M") ? "text-amber-500" :
+                                <span className={`font-mono w-4 flex-shrink-0 ${fileStatus.includes("M") ? "text-amber-500" :
                                     fileStatus.includes("A") ? "text-green-500" :
-                                    fileStatus.includes("D") ? "text-red-500" :
-                                    fileStatus.includes("?") ? "text-blue-500" :
-                                    "text-muted-foreground"
-                                }`}>
+                                        fileStatus.includes("D") ? "text-red-500" :
+                                            fileStatus.includes("?") ? "text-blue-500" :
+                                                "text-muted-foreground"
+                                    }`}>
                                     {fileStatus.trim() || "?"}
                                 </span>
                                 <span className="font-mono text-muted-foreground truncate min-w-0 flex-1">
@@ -139,6 +139,7 @@ function ChangedFilesList({ status }: { status: string }) {
 
 function SyncContent() {
     const navigate = useNavigate();
+    const { currentTheme } = useTheme();
     const { addNewTab, setActiveTabId, autoSync, setAutoSyncConfig } = useWorkspaceContext();
     const { status: syncStatus, setupStatus, needsSetup, checkForChanges, sync, recheckSetup, clearMergeConflict, gitAuthMode, setGitAuthMode } = useGHSync();
     const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
@@ -418,669 +419,668 @@ After you provide the merged content, I will manually update the file and mark t
     const isReady = gitStatus?.initialized && gitStatus?.hasRemote;
 
     return (
-        <div className="p-6 max-w-2xl">
-            {/* Header */}
-            <div className="mb-6">
-                <div className="flex items-center gap-3 mb-1">
-                    <FolderGit2 className="h-5 w-5 text-muted-foreground" />
-                    <h1 className="text-lg font-semibold tracking-tight">Sync</h1>
-                </div>
-                <p className="text-sm text-muted-foreground ml-8">
+        <div
+            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
+            style={{
+                backgroundColor: currentTheme.styles.surfacePrimary,
+                color: currentTheme.styles.contentPrimary,
+            }}
+        >
+            <div className="flex-shrink-0 mb-6">
+                <h1 className="text-2xl font-bold" style={{ color: currentTheme.styles.contentPrimary }}>
+                    Sync
+                </h1>
+                <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
                     Workspace Sync
                 </p>
             </div>
 
-            {/* Auth Mode Setting */}
-            <div className="mb-6 border rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <div className="text-sm font-medium">Authentication Mode</div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                            {gitAuthMode === "local"
-                                ? "Using local git credentials (SSH keys or credential helper)"
-                                : "Using GitHub Personal Access Token"}
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-1 bg-muted rounded-md p-1">
-                        <button
-                            onClick={() => setGitAuthMode("local")}
-                            className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                                gitAuthMode === "local"
-                                    ? "bg-background shadow-sm font-medium"
-                                    : "text-muted-foreground hover:text-foreground"
-                            }`}
-                        >
-                            Local
-                        </button>
-                        <button
-                            onClick={() => setGitAuthMode("pat")}
-                            className={`px-3 py-1.5 text-xs rounded transition-colors ${
-                                gitAuthMode === "pat"
-                                    ? "bg-background shadow-sm font-medium"
-                                    : "text-muted-foreground hover:text-foreground"
-                            }`}
-                        >
-                            PAT
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Auto-Sync Settings */}
-            <div className="border rounded-lg p-4 space-y-4">
-                <div className="text-sm font-medium">Auto-Sync Settings</div>
-
-                {/* Pause Sync Toggle */}
-                {autoSync.enabled && (
-                    <div className={`flex items-center justify-between p-3 rounded-md ${autoSync.paused ? "bg-amber-500/10 border border-amber-500/30" : "bg-muted/30"}`}>
-                        <div>
-                            <div className={`text-sm font-medium ${autoSync.paused ? "text-amber-600" : ""}`}>
-                                {autoSync.paused ? "Sync Paused" : "Sync Active"}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                {autoSync.paused ? "Auto-sync is temporarily paused" : "Pause to prevent automatic syncing"}
-                            </p>
-                        </div>
-                        <Button
-                            variant={autoSync.paused ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => setAutoSyncConfig({ paused: !autoSync.paused })}
-                        >
-                            {autoSync.paused ? "Resume" : "Pause"}
-                        </Button>
-                    </div>
-                )}
-
-                {/* Enable Auto-Sync Toggle */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <div className="text-sm">Enable Auto-Sync</div>
-                        <p className="text-xs text-muted-foreground">
-                            Automatically sync on a schedule
-                        </p>
-                    </div>
-                    <button
-                        onClick={() => setAutoSyncConfig({ enabled: !autoSync.enabled })}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                            autoSync.enabled ? "bg-primary" : "bg-muted"
-                        }`}
-                    >
-                        <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                autoSync.enabled ? "translate-x-6" : "translate-x-1"
-                            }`}
-                        />
-                    </button>
-                </div>
-
-                {/* Sync on Changes Toggle (only shown when enabled) */}
-                {autoSync.enabled && (
+            <div className="flex-1 overflow-y-auto outline-none pr-2">
+                {/* Auth Mode Setting */}
+                <div className="border rounded-lg p-4">
                     <div className="flex items-center justify-between">
                         <div>
-                            <div className="text-sm">Sync on Changes</div>
+                            <div className="text-sm font-medium">Authentication Mode</div>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                {gitAuthMode === "local"
+                                    ? "Using local git credentials (SSH keys or credential helper)"
+                                    : "Using GitHub Personal Access Token"}
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-1 bg-muted rounded-md p-1">
+                            <button
+                                onClick={() => setGitAuthMode("local")}
+                                className={`px-3 py-1.5 text-xs rounded transition-colors ${gitAuthMode === "local"
+                                    ? "bg-background shadow-sm font-medium"
+                                    : "text-muted-foreground hover:text-foreground"
+                                    }`}
+                            >
+                                Local
+                            </button>
+                            <button
+                                onClick={() => setGitAuthMode("pat")}
+                                className={`px-3 py-1.5 text-xs rounded transition-colors ${gitAuthMode === "pat"
+                                    ? "bg-background shadow-sm font-medium"
+                                    : "text-muted-foreground hover:text-foreground"
+                                    }`}
+                            >
+                                PAT
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Auto-Sync Settings */}
+                <div className="border rounded-lg p-4 space-y-4">
+                    <div className="text-sm font-medium">Auto-Sync Settings</div>
+
+                    {/* Pause Sync Toggle */}
+                    {autoSync.enabled && (
+                        <div className={`flex items-center justify-between p-3 rounded-md ${autoSync.paused ? "bg-amber-500/10 border border-amber-500/30" : "bg-muted/30"}`}>
+                            <div>
+                                <div className={`text-sm font-medium ${autoSync.paused ? "text-amber-600" : ""}`}>
+                                    {autoSync.paused ? "Sync Paused" : "Sync Active"}
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    {autoSync.paused ? "Auto-sync is temporarily paused" : "Pause to prevent automatic syncing"}
+                                </p>
+                            </div>
+                            <Button
+                                variant={autoSync.paused ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setAutoSyncConfig({ paused: !autoSync.paused })}
+                            >
+                                {autoSync.paused ? "Resume" : "Pause"}
+                            </Button>
+                        </div>
+                    )}
+
+                    {/* Enable Auto-Sync Toggle */}
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="text-sm">Enable Auto-Sync</div>
                             <p className="text-xs text-muted-foreground">
-                                Automatically sync when files change (5s debounce)
+                                Automatically sync on a schedule
                             </p>
                         </div>
                         <button
-                            onClick={() => setAutoSyncConfig({ syncOnChanges: !autoSync.syncOnChanges })}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                                autoSync.syncOnChanges ? "bg-primary" : "bg-muted"
-                            }`}
+                            onClick={() => setAutoSyncConfig({ enabled: !autoSync.enabled })}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${autoSync.enabled ? "bg-primary" : "bg-muted"
+                                }`}
                         >
                             <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                    autoSync.syncOnChanges ? "translate-x-6" : "translate-x-1"
-                                }`}
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoSync.enabled ? "translate-x-6" : "translate-x-1"
+                                    }`}
                             />
                         </button>
                     </div>
-                )}
 
-                {/* Interval Input */}
-                {autoSync.enabled && (
-                    <div>
-                        <Label className="text-xs text-muted-foreground">Sync Interval (seconds)</Label>
-                        <Input
-                            type="number"
-                            min="10"
-                            max="3600"
-                            value={autoSync.intervalSeconds}
-                            onChange={(e) => {
-                                const value = parseInt(e.target.value);
-                                if (value >= 10 && value <= 3600) {
-                                    setAutoSyncConfig({ intervalSeconds: value });
-                                }
-                            }}
-                            className="font-mono text-sm w-32 mt-1.5"
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                            Range: 10-3600 seconds
+                    {/* Sync on Changes Toggle (only shown when enabled) */}
+                    {autoSync.enabled && (
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-sm">Sync on Changes</div>
+                                <p className="text-xs text-muted-foreground">
+                                    Automatically sync when files change (5s debounce)
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setAutoSyncConfig({ syncOnChanges: !autoSync.syncOnChanges })}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${autoSync.syncOnChanges ? "bg-primary" : "bg-muted"
+                                    }`}
+                            >
+                                <span
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoSync.syncOnChanges ? "translate-x-6" : "translate-x-1"
+                                        }`}
+                                />
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Interval Input */}
+                    {autoSync.enabled && (
+                        <div>
+                            <Label className="text-xs text-muted-foreground">Sync Interval (seconds)</Label>
+                            <Input
+                                type="number"
+                                min="10"
+                                max="3600"
+                                value={autoSync.intervalSeconds}
+                                onChange={(e) => {
+                                    const value = parseInt(e.target.value);
+                                    if (value >= 10 && value <= 3600) {
+                                        setAutoSyncConfig({ intervalSeconds: value });
+                                    }
+                                }}
+                                className="font-mono text-sm w-32 mt-1.5"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Range: 10-3600 seconds
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Last Synced Timestamp */}
+                    {autoSync.enabled && syncStatus.lastSynced && (
+                        <p className="text-xs text-muted-foreground">
+                            Last synced: {syncStatus.lastSynced.toLocaleTimeString()}
                         </p>
-                    </div>
-                )}
+                    )}
+                </div>
 
-                {/* Last Synced Timestamp */}
-                {autoSync.enabled && syncStatus.lastSynced && (
-                    <p className="text-xs text-muted-foreground">
-                        Last synced: {syncStatus.lastSynced.toLocaleTimeString()}
-                    </p>
-                )}
-            </div>
-
-            {/* Setup Required Card */}
-            {needsSetup && (
-                <div className="mb-6 border rounded-lg p-5 bg-muted/30">
-                    <div className="flex items-center gap-2 mb-4">
-                        <AlertCircle className="h-4 w-4 text-amber-500" />
-                        <span className="font-medium text-sm">Setup Required</span>
-                    </div>
-
-                    <p className="text-sm text-muted-foreground mb-4">
-                        Complete the following steps to enable workspace sync:
-                    </p>
-
-                    <div className="space-y-3">
-                        {/* Git Installed Status */}
-                        <div className="flex items-center gap-3 text-sm">
-                            {setupStatus.gitInstalled ? (
-                                <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                            ) : (
-                                <XCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                            )}
-                            <span className={setupStatus.gitInstalled ? "text-foreground" : "text-muted-foreground"}>
-                                Git installed
-                            </span>
+                {/* Setup Required Card */}
+                {needsSetup && (
+                    <div className="border rounded-lg p-5 bg-muted/30">
+                        <div className="flex items-center gap-2 mb-4">
+                            <AlertCircle className="h-4 w-4 text-amber-500" />
+                            <span className="font-medium text-sm">Setup Required</span>
                         </div>
 
-                        {!setupStatus.gitInstalled && (
-                            <div className="pl-7 space-y-2">
-                                <p className="text-xs text-muted-foreground">
-                                    Git is required for workspace sync. Install it to continue:
-                                </p>
-                                <a
-                                    href="https://git-scm.com/downloads/mac"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs text-primary hover:underline flex items-center gap-1"
-                                >
-                                    Install Git for macOS
-                                    <ExternalLink className="h-3 w-3" />
-                                </a>
-                            </div>
-                        )}
+                        <p className="text-sm text-muted-foreground mb-4">
+                            Complete the following steps to enable workspace sync:
+                        </p>
 
-                        {/* Git Repository Status */}
-                        {setupStatus.gitInstalled && (
+                        <div className="space-y-3">
+                            {/* Git Installed Status */}
                             <div className="flex items-center gap-3 text-sm">
-                                {setupStatus.gitInitialized && setupStatus.hasRemote ? (
+                                {setupStatus.gitInstalled ? (
                                     <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                                 ) : (
                                     <XCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                 )}
-                                <span className={setupStatus.gitInitialized && setupStatus.hasRemote ? "text-foreground" : "text-muted-foreground"}>
-                                    Git repository with remote configured
+                                <span className={setupStatus.gitInstalled ? "text-foreground" : "text-muted-foreground"}>
+                                    Git installed
                                 </span>
                             </div>
-                        )}
 
-                        {/* PAT Status - only show if git is installed AND using PAT auth mode */}
-                        {setupStatus.gitInstalled && gitAuthMode === "pat" && (
-                            <>
+                            {!setupStatus.gitInstalled && (
+                                <div className="pl-7 space-y-2">
+                                    <p className="text-xs text-muted-foreground">
+                                        Git is required for workspace sync. Install it to continue:
+                                    </p>
+                                    <a
+                                        href="https://git-scm.com/downloads/mac"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-xs text-primary hover:underline flex items-center gap-1"
+                                    >
+                                        Install Git for macOS
+                                        <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                </div>
+                            )}
+
+                            {/* Git Repository Status */}
+                            {setupStatus.gitInstalled && (
                                 <div className="flex items-center gap-3 text-sm">
-                                    {setupStatus.hasPAT ? (
+                                    {setupStatus.gitInitialized && setupStatus.hasRemote ? (
                                         <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
                                     ) : (
                                         <XCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                     )}
-                                    <span className={setupStatus.hasPAT ? "text-foreground" : "text-muted-foreground"}>
-                                        GitHub Personal Access Token
+                                    <span className={setupStatus.gitInitialized && setupStatus.hasRemote ? "text-foreground" : "text-muted-foreground"}>
+                                        Git repository with remote configured
                                     </span>
                                 </div>
+                            )}
 
-                                {!setupStatus.hasPAT && (
-                                    <div className="pl-7 space-y-2">
-                                        <p className="text-xs text-muted-foreground">
-                                            Create a PAT with 'repo' scope to enable sync:
-                                        </p>
-                                        <div className="flex items-center gap-2">
-                                            <a
-                                                href="https://github.com/settings/tokens/new?scopes=repo&description=Nomendex%20Sync"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-xs text-primary hover:underline flex items-center gap-1"
-                                            >
-                                                Create token on GitHub
-                                                <ExternalLink className="h-3 w-3" />
-                                            </a>
-                                        </div>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => navigate("/settings")}
-                                            className="mt-2"
-                                        >
-                                            <Key className="h-3.5 w-3.5 mr-2" />
-                                            Add Token in Settings
-                                        </Button>
+                            {/* PAT Status - only show if git is installed AND using PAT auth mode */}
+                            {setupStatus.gitInstalled && gitAuthMode === "pat" && (
+                                <>
+                                    <div className="flex items-center gap-3 text-sm">
+                                        {setupStatus.hasPAT ? (
+                                            <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                        ) : (
+                                            <XCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                        )}
+                                        <span className={setupStatus.hasPAT ? "text-foreground" : "text-muted-foreground"}>
+                                            GitHub Personal Access Token
+                                        </span>
                                     </div>
-                                )}
-                            </>
-                        )}
-                    </div>
 
-                    <div className="mt-4 pt-4 border-t">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => recheckSetup()}
-                            className="text-xs"
-                        >
-                            <RefreshCw className="h-3 w-3 mr-1" />
-                            Recheck Setup
-                        </Button>
-                    </div>
-                </div>
-            )}
+                                    {!setupStatus.hasPAT && (
+                                        <div className="pl-7 space-y-2">
+                                            <p className="text-xs text-muted-foreground">
+                                                Create a PAT with 'repo' scope to enable sync:
+                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <a
+                                                    href="https://github.com/settings/tokens/new?scopes=repo&description=Nomendex%20Sync"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                                                >
+                                                    Create token on GitHub
+                                                    <ExternalLink className="h-3 w-3" />
+                                                </a>
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => navigate("/settings")}
+                                                className="mt-2"
+                                            >
+                                                <Key className="h-3.5 w-3.5 mr-2" />
+                                                Add Token in Settings
+                                            </Button>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
 
-            {/* Status Toast */}
-            {(operationMessage || operationError) && (
-                <div className={`mb-4 px-3 py-2 text-sm flex items-center gap-2 rounded-md ${
-                    operationError
+                        <div className="mt-4 pt-4 border-t">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => recheckSetup()}
+                                className="text-xs"
+                            >
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                                Recheck Setup
+                            </Button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Status Toast */}
+                {(operationMessage || operationError) && (
+                    <div className={`mb-4 px-3 py-2 text-sm flex items-center gap-2 rounded-md ${operationError
                         ? "bg-destructive/10 text-destructive border border-destructive/20"
                         : "bg-green-500/10 text-green-600 border border-green-500/20"
-                }`}>
-                    {operationError ? (
-                        <XCircle className="h-4 w-4 flex-shrink-0" />
-                    ) : (
-                        <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
-                    )}
-                    <span>{operationError || operationMessage}</span>
-                </div>
-            )}
-
-            {/* Not Initialized State */}
-            {!gitStatus?.initialized && (
-                <div className="border border-dashed rounded-lg p-8 text-center">
-                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted mb-4">
-                        <FolderGit2 className="h-6 w-6 text-muted-foreground" />
-                    </div>
-                    <h3 className="font-medium mb-2">Initialize Repository</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                        Set up git tracking for your workspace
-                    </p>
-                    <Button onClick={initializeGit} disabled={operating} size="sm">
-                        {operating ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
+                        }`}>
+                        {operationError ? (
+                            <XCircle className="h-4 w-4 flex-shrink-0" />
                         ) : (
-                            "Initialize Git"
+                            <CheckCircle2 className="h-4 w-4 flex-shrink-0" />
                         )}
-                    </Button>
-                </div>
-            )}
-
-            {/* Initialized but No Remote */}
-            {gitStatus?.initialized && !gitStatus?.hasRemote && (
-                <div className="border rounded-lg p-5">
-                    <div className="flex items-center gap-2 mb-4">
-                        <Link2 className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium text-sm">Connect Repository</span>
+                        <span>{operationError || operationMessage}</span>
                     </div>
+                )}
 
-                    <div className="space-y-4">
-                        <div className="space-y-1.5">
-                            <Label className="text-xs text-muted-foreground">Repository URL</Label>
-                            <Input
-                                placeholder="https://github.com/user/repo"
-                                value={repoUrl}
-                                onChange={(e) => setRepoUrl(e.target.value)}
-                                className="font-mono text-sm"
-                            />
+                {/* Not Initialized State */}
+                {!gitStatus?.initialized && (
+                    <div className="border border-dashed rounded-lg p-8 text-center">
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted mb-4">
+                            <FolderGit2 className="h-6 w-6 text-muted-foreground" />
                         </div>
-
-                        <div className="space-y-1.5">
-                            <Label className="text-xs text-muted-foreground">Branch</Label>
-                            <Input
-                                placeholder="main"
-                                value={branch}
-                                onChange={(e) => setBranch(e.target.value)}
-                                className="font-mono text-sm w-32"
-                            />
-                        </div>
-
-                        <Button
-                            onClick={setupRemote}
-                            disabled={!repoUrl.trim() || operating}
-                            size="sm"
-                        >
+                        <h3 className="font-medium mb-2">Initialize Repository</h3>
+                        <p className="text-sm text-muted-foreground mb-4">
+                            Set up git tracking for your workspace
+                        </p>
+                        <Button onClick={initializeGit} disabled={operating} size="sm">
                             {operating ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
-                                "Connect"
+                                "Initialize Git"
                             )}
                         </Button>
                     </div>
+                )}
 
-                    <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
-                        Uses local git credentials (SSH or credential helper)
-                    </p>
-                </div>
-            )}
+                {/* Initialized but No Remote */}
+                {gitStatus?.initialized && !gitStatus?.hasRemote && (
+                    <div className="border rounded-lg p-5">
+                        <div className="flex items-center gap-2 mb-4">
+                            <Link2 className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium text-sm">Connect Repository</span>
+                        </div>
 
-            {/* Ready State - Main Sync UI */}
-            {isReady && (
-                <div className="space-y-4">
-                    {/* Compact Status Bar */}
-                    <div className="flex items-center gap-3 flex-wrap">
-                        {gitStatus.currentBranch && (
-                            <div className="flex items-center gap-1.5 text-sm">
-                                <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
-                                <span className="font-mono">{gitStatus.currentBranch}</span>
+                        <div className="space-y-4">
+                            <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">Repository URL</Label>
+                                <Input
+                                    placeholder="https://github.com/user/repo"
+                                    value={repoUrl}
+                                    onChange={(e) => setRepoUrl(e.target.value)}
+                                    className="font-mono text-sm"
+                                />
                             </div>
-                        )}
 
-                        <span className="text-muted-foreground">·</span>
+                            <div className="space-y-1.5">
+                                <Label className="text-xs text-muted-foreground">Branch</Label>
+                                <Input
+                                    placeholder="main"
+                                    value={branch}
+                                    onChange={(e) => setBranch(e.target.value)}
+                                    className="font-mono text-sm w-32"
+                                />
+                            </div>
 
-                        {gitStatus.hasUncommittedChanges ? (
-                            <Badge variant="outline" className="gap-1 font-normal">
-                                <AlertCircle className="h-3 w-3" />
-                                {gitStatus.changedFiles} change{gitStatus.changedFiles !== 1 ? 's' : ''}
-                            </Badge>
-                        ) : (
-                            <Badge variant="secondary" className="gap-1 font-normal">
-                                <CheckCircle2 className="h-3 w-3" />
-                                Clean
-                            </Badge>
-                        )}
+                            <Button
+                                onClick={setupRemote}
+                                disabled={!repoUrl.trim() || operating}
+                                size="sm"
+                            >
+                                {operating ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    "Connect"
+                                )}
+                            </Button>
+                        </div>
 
-                        {gitStatus.remoteUrl && (
-                            <>
-                                <span className="text-muted-foreground">·</span>
-                                <span className="text-xs text-muted-foreground font-mono">
-                                    {gitStatus.remoteUrl}
-                                </span>
-                            </>
-                        )}
+                        <p className="text-xs text-muted-foreground mt-4 pt-4 border-t">
+                            Uses local git credentials (SSH or credential helper)
+                        </p>
                     </div>
+                )}
 
-                    {/* Merge Conflict Section */}
-                    {hasMergeConflict && (
-                        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 space-y-4">
-                            <div className="flex items-center gap-2">
-                                <GitMerge className="h-4 w-4 text-amber-500" />
-                                <span className="font-medium text-sm">Merge Conflicts</span>
-                                <Badge variant="outline" className={`ml-auto ${conflicts.filter(f => !f.resolved).length === 0 ? "border-green-500/30 text-green-600" : "border-amber-500/30 text-amber-600"}`}>
-                                    {conflicts.filter(f => !f.resolved).length === 0
-                                        ? "All resolved"
-                                        : `${conflicts.filter(f => !f.resolved).length} of ${conflicts.length} unresolved`}
-                                </Badge>
-                            </div>
-
-                            <p className="text-xs text-muted-foreground">
-                                Resolve each conflict by choosing which version to keep, then complete the merge.
-                            </p>
-
-                            {/* Conflict Files List */}
-                            <div className="space-y-2">
-                                {conflicts.map((file) => (
-                                    <div
-                                        key={file.path}
-                                        className={`rounded-md bg-background border overflow-hidden ${file.resolved ? "border-green-500/30" : ""}`}
-                                    >
-                                        {/* File info row - clickable to view diff */}
-                                        <button
-                                            onClick={() => navigate(`/sync/resolve?path=${encodeURIComponent(file.path)}`)}
-                                            className="flex items-center gap-2 p-3 w-full text-left hover:bg-muted/50 transition-colors"
-                                        >
-                                            {file.resolved ? (
-                                                <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
-                                            ) : (
-                                                <AlertCircle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-                                            )}
-                                            <span className="font-mono text-xs truncate flex-1 min-w-0">
-                                                {file.path}
-                                            </span>
-                                            <span className={`text-[10px] flex-shrink-0 ${file.resolved ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
-                                                {file.resolved ? "Resolved" :
-                                                 file.status === "both_modified" ? "Both modified" :
-                                                 file.status === "deleted_by_us" ? "Deleted locally" :
-                                                 file.status === "deleted_by_them" ? "Deleted remotely" :
-                                                 "Both added"}
-                                            </span>
-                                            <Eye className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                                        </button>
-                                        {/* Quick resolve buttons */}
-                                        <div className="flex gap-1 px-3 pb-2 pt-0">
-                                            {file.resolved ? (
-                                                <Button
-                                                    variant="default"
-                                                    size="sm"
-                                                    className="h-6 px-2 text-xs ml-auto"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        markAsResolved(file.path);
-                                                    }}
-                                                    disabled={resolvingFile === file.path || operating}
-                                                >
-                                                    {resolvingFile === file.path ? (
-                                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                                    ) : (
-                                                        <>
-                                                            <Check className="h-3 w-3 mr-1" />
-                                                            Mark as Resolved
-                                                        </>
-                                                    )}
-                                                </Button>
-                                            ) : (
-                                                <>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-6 px-2 text-xs mr-auto"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            solveWithAgent(file.path);
-                                                        }}
-                                                        disabled={operating}
-                                                    >
-                                                        <Bot className="h-3 w-3 mr-1" />
-                                                        Solve with Agent
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-6 px-2 text-xs"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            resolveConflict(file.path, "ours");
-                                                        }}
-                                                        disabled={resolvingFile === file.path || operating}
-                                                    >
-                                                        {resolvingFile === file.path ? (
-                                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                                        ) : (
-                                                            <>
-                                                                <ArrowLeft className="h-3 w-3 mr-1" />
-                                                                Ours
-                                                            </>
-                                                        )}
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-6 px-2 text-xs"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            resolveConflict(file.path, "theirs");
-                                                        }}
-                                                        disabled={resolvingFile === file.path || operating}
-                                                    >
-                                                        {resolvingFile === file.path ? (
-                                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                                        ) : (
-                                                            <>
-                                                                Theirs
-                                                                <ArrowRight className="h-3 w-3 ml-1" />
-                                                            </>
-                                                        )}
-                                                    </Button>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* Merge Actions */}
-                            <div className="flex gap-2 pt-2 border-t border-amber-500/20">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={abortMerge}
-                                    disabled={operating}
-                                    className="flex-1"
-                                >
-                                    {operating ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <>
-                                            <X className="h-4 w-4 mr-2" />
-                                            Abort Merge
-                                        </>
-                                    )}
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    onClick={continueMerge}
-                                    disabled={operating || conflicts.some(f => !f.resolved)}
-                                    className="flex-1"
-                                >
-                                    {operating ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <>
-                                            <Check className="h-4 w-4 mr-2" />
-                                            Complete Merge
-                                        </>
-                                    )}
-                                </Button>
-                            </div>
-
-                            {conflicts.some(f => !f.resolved) ? (
-                                <p className="text-[10px] text-muted-foreground text-center">
-                                    Resolve all conflicts before completing the merge
-                                </p>
-                            ) : conflicts.length > 0 ? (
-                                <p className="text-[10px] text-green-600 text-center">
-                                    All conflicts resolved! Click "Mark as Resolved" on each file, then complete the merge.
-                                </p>
-                            ) : null}
-                        </div>
-                    )}
-
-                    {/* Sync Status */}
-                    {!hasMergeConflict && (syncStatus.behindCount > 0 || syncStatus.aheadCount > 0) && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            {syncStatus.behindCount > 0 && (
-                                <Badge variant="secondary">
-                                    {syncStatus.behindCount} incoming
-                                </Badge>
-                            )}
-                            {syncStatus.aheadCount > 0 && (
-                                <Badge variant="outline">
-                                    {syncStatus.aheadCount} outgoing
-                                </Badge>
-                            )}
-                            {syncStatus.checking && (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                            )}
-                        </div>
-                    )}
-
-                    {/* Sync Error Display */}
-                    {syncStatus.error && (
-                        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-                            <div className="flex items-start gap-3">
-                                <XCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-                                <div className="flex-1 min-w-0">
-                                    <div className="font-medium text-sm text-destructive mb-1">Sync Failed</div>
-                                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
-                                        {syncStatus.error}
-                                    </p>
+                {/* Ready State - Main Sync UI */}
+                {isReady && (
+                    <div className="space-y-4">
+                        {/* Compact Status Bar */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                            {gitStatus.currentBranch && (
+                                <div className="flex items-center gap-1.5 text-sm">
+                                    <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+                                    <span className="font-mono">{gitStatus.currentBranch}</span>
                                 </div>
-                            </div>
-                        </div>
-                    )}
+                            )}
 
-                    {/* Sync Button */}
-                    {!hasMergeConflict && (
-                        <Button
-                            onClick={handleSync}
-                            disabled={operating || syncStatus.syncing}
-                            className="w-full h-12"
-                        >
-                            {syncStatus.syncing ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                    Syncing...
-                                </>
-                            ) : syncStatus.checking ? (
-                                <>
-                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                    Checking...
-                                </>
+                            <span className="text-muted-foreground">·</span>
+
+                            {gitStatus.hasUncommittedChanges ? (
+                                <Badge variant="outline" className="gap-1 font-normal">
+                                    <AlertCircle className="h-3 w-3" />
+                                    {gitStatus.changedFiles} change{gitStatus.changedFiles !== 1 ? 's' : ''}
+                                </Badge>
                             ) : (
+                                <Badge variant="secondary" className="gap-1 font-normal">
+                                    <CheckCircle2 className="h-3 w-3" />
+                                    Clean
+                                </Badge>
+                            )}
+
+                            {gitStatus.remoteUrl && (
                                 <>
-                                    <RefreshCw className="h-4 w-4 mr-2" />
-                                    Sync
-                                    {syncStatus.behindCount > 0 && (
-                                        <Badge variant="secondary" className="ml-2">
-                                            {syncStatus.behindCount}
-                                        </Badge>
-                                    )}
+                                    <span className="text-muted-foreground">·</span>
+                                    <span className="text-xs text-muted-foreground font-mono">
+                                        {gitStatus.remoteUrl}
+                                    </span>
                                 </>
                             )}
-                        </Button>
-                    )}
+                        </div>
 
-                    {/* Working Directory Changes */}
-                    {gitStatus.status && gitStatus.status.length > 0 && (
-                        <ChangedFilesList status={gitStatus.status} />
-                    )}
+                        {/* Merge Conflict Section */}
+                        {hasMergeConflict && (
+                            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 space-y-4">
+                                <div className="flex items-center gap-2">
+                                    <GitMerge className="h-4 w-4 text-amber-500" />
+                                    <span className="font-medium text-sm">Merge Conflicts</span>
+                                    <Badge variant="outline" className={`ml-auto ${conflicts.filter(f => !f.resolved).length === 0 ? "border-green-500/30 text-green-600" : "border-amber-500/30 text-amber-600"}`}>
+                                        {conflicts.filter(f => !f.resolved).length === 0
+                                            ? "All resolved"
+                                            : `${conflicts.filter(f => !f.resolved).length} of ${conflicts.length} unresolved`}
+                                    </Badge>
+                                </div>
 
-                    {/* Recent Commits - Collapsible */}
-                    {gitStatus.recentCommits && gitStatus.recentCommits.length > 0 && (
-                        <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
-                            <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full py-2">
-                                <History className="h-3.5 w-3.5" />
-                                <span>Recent commits</span>
-                                <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${historyOpen ? 'rotate-180' : ''}`} />
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                                <div className="space-y-1 pt-1">
-                                    {gitStatus.recentCommits.slice(0, 5).map((commit) => (
+                                <p className="text-xs text-muted-foreground">
+                                    Resolve each conflict by choosing which version to keep, then complete the merge.
+                                </p>
+
+                                {/* Conflict Files List */}
+                                <div className="space-y-2">
+                                    {conflicts.map((file) => (
                                         <div
-                                            key={commit.hash}
-                                            className="flex items-baseline gap-3 py-1.5 text-xs group"
+                                            key={file.path}
+                                            className={`rounded-md bg-background border overflow-hidden ${file.resolved ? "border-green-500/30" : ""}`}
                                         >
-                                            <code className="text-muted-foreground font-mono shrink-0">
-                                                {commit.hash}
-                                            </code>
-                                            <span className="truncate flex-1">
-                                                {commit.message}
-                                            </span>
-                                            <span className="text-muted-foreground shrink-0">
-                                                {commit.date}
-                                            </span>
+                                            {/* File info row - clickable to view diff */}
+                                            <button
+                                                onClick={() => navigate(`/sync/resolve?path=${encodeURIComponent(file.path)}`)}
+                                                className="flex items-center gap-2 p-3 w-full text-left hover:bg-muted/50 transition-colors"
+                                            >
+                                                {file.resolved ? (
+                                                    <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                                                ) : (
+                                                    <AlertCircle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                                                )}
+                                                <span className="font-mono text-xs truncate flex-1 min-w-0">
+                                                    {file.path}
+                                                </span>
+                                                <span className={`text-[10px] flex-shrink-0 ${file.resolved ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
+                                                    {file.resolved ? "Resolved" :
+                                                        file.status === "both_modified" ? "Both modified" :
+                                                            file.status === "deleted_by_us" ? "Deleted locally" :
+                                                                file.status === "deleted_by_them" ? "Deleted remotely" :
+                                                                    "Both added"}
+                                                </span>
+                                                <Eye className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                            </button>
+                                            {/* Quick resolve buttons */}
+                                            <div className="flex gap-1 px-3 pb-2 pt-0">
+                                                {file.resolved ? (
+                                                    <Button
+                                                        variant="default"
+                                                        size="sm"
+                                                        className="h-6 px-2 text-xs ml-auto"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            markAsResolved(file.path);
+                                                        }}
+                                                        disabled={resolvingFile === file.path || operating}
+                                                    >
+                                                        {resolvingFile === file.path ? (
+                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                        ) : (
+                                                            <>
+                                                                <Check className="h-3 w-3 mr-1" />
+                                                                Mark as Resolved
+                                                            </>
+                                                        )}
+                                                    </Button>
+                                                ) : (
+                                                    <>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-6 px-2 text-xs mr-auto"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                solveWithAgent(file.path);
+                                                            }}
+                                                            disabled={operating}
+                                                        >
+                                                            <Bot className="h-3 w-3 mr-1" />
+                                                            Solve with Agent
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-6 px-2 text-xs"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                resolveConflict(file.path, "ours");
+                                                            }}
+                                                            disabled={resolvingFile === file.path || operating}
+                                                        >
+                                                            {resolvingFile === file.path ? (
+                                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                            ) : (
+                                                                <>
+                                                                    <ArrowLeft className="h-3 w-3 mr-1" />
+                                                                    Ours
+                                                                </>
+                                                            )}
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="h-6 px-2 text-xs"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                resolveConflict(file.path, "theirs");
+                                                            }}
+                                                            disabled={resolvingFile === file.path || operating}
+                                                        >
+                                                            {resolvingFile === file.path ? (
+                                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                            ) : (
+                                                                <>
+                                                                    Theirs
+                                                                    <ArrowRight className="h-3 w-3 ml-1" />
+                                                                </>
+                                                            )}
+                                                        </Button>
+                                                    </>
+                                                )}
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
-                            </CollapsibleContent>
-                        </Collapsible>
-                    )}
 
-                </div>
-            )}
+                                {/* Merge Actions */}
+                                <div className="flex gap-2 pt-2 border-t border-amber-500/20">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={abortMerge}
+                                        disabled={operating}
+                                        className="flex-1"
+                                    >
+                                        {operating ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <>
+                                                <X className="h-4 w-4 mr-2" />
+                                                Abort Merge
+                                            </>
+                                        )}
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        onClick={continueMerge}
+                                        disabled={operating || conflicts.some(f => !f.resolved)}
+                                        className="flex-1"
+                                    >
+                                        {operating ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <>
+                                                <Check className="h-4 w-4 mr-2" />
+                                                Complete Merge
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+
+                                {conflicts.some(f => !f.resolved) ? (
+                                    <p className="text-[10px] text-muted-foreground text-center">
+                                        Resolve all conflicts before completing the merge
+                                    </p>
+                                ) : conflicts.length > 0 ? (
+                                    <p className="text-[10px] text-green-600 text-center">
+                                        All conflicts resolved! Click "Mark as Resolved" on each file, then complete the merge.
+                                    </p>
+                                ) : null}
+                            </div>
+                        )}
+
+                        {/* Sync Status */}
+                        {!hasMergeConflict && (syncStatus.behindCount > 0 || syncStatus.aheadCount > 0) && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                {syncStatus.behindCount > 0 && (
+                                    <Badge variant="secondary">
+                                        {syncStatus.behindCount} incoming
+                                    </Badge>
+                                )}
+                                {syncStatus.aheadCount > 0 && (
+                                    <Badge variant="outline">
+                                        {syncStatus.aheadCount} outgoing
+                                    </Badge>
+                                )}
+                                {syncStatus.checking && (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                )}
+                            </div>
+                        )}
+
+                        {/* Sync Error Display */}
+                        {syncStatus.error && (
+                            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+                                <div className="flex items-start gap-3">
+                                    <XCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-medium text-sm text-destructive mb-1">Sync Failed</div>
+                                        <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                                            {syncStatus.error}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Sync Button */}
+                        {!hasMergeConflict && (
+                            <Button
+                                onClick={handleSync}
+                                disabled={operating || syncStatus.syncing}
+                                className="w-full h-12"
+                            >
+                                {syncStatus.syncing ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                        Syncing...
+                                    </>
+                                ) : syncStatus.checking ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                        Checking...
+                                    </>
+                                ) : (
+                                    <>
+                                        <RefreshCw className="h-4 w-4 mr-2" />
+                                        Sync
+                                        {syncStatus.behindCount > 0 && (
+                                            <Badge variant="secondary" className="ml-2">
+                                                {syncStatus.behindCount}
+                                            </Badge>
+                                        )}
+                                    </>
+                                )}
+                            </Button>
+                        )}
+
+                        {/* Working Directory Changes */}
+                        {gitStatus.status && gitStatus.status.length > 0 && (
+                            <ChangedFilesList status={gitStatus.status} />
+                        )}
+
+                        {/* Recent Commits - Collapsible */}
+                        {gitStatus.recentCommits && gitStatus.recentCommits.length > 0 && (
+                            <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
+                                <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors w-full py-2">
+                                    <History className="h-3.5 w-3.5" />
+                                    <span>Recent commits</span>
+                                    <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${historyOpen ? 'rotate-180' : ''}`} />
+                                </CollapsibleTrigger>
+                                <CollapsibleContent>
+                                    <div className="space-y-1 pt-1">
+                                        {gitStatus.recentCommits.slice(0, 5).map((commit) => (
+                                            <div
+                                                key={commit.hash}
+                                                className="flex items-baseline gap-3 py-1.5 text-xs group"
+                                            >
+                                                <code className="text-muted-foreground font-mono shrink-0">
+                                                    {commit.hash}
+                                                </code>
+                                                <span className="truncate flex-1">
+                                                    {commit.message}
+                                                </span>
+                                                <span className="text-muted-foreground shrink-0">
+                                                    {commit.date}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </CollapsibleContent>
+                            </Collapsible>
+                        )}
+
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
@@ -1090,7 +1090,7 @@ export function SyncPage() {
         <SidebarProvider>
             <div className="flex h-screen w-full overflow-hidden">
                 <WorkspaceSidebar />
-                <SidebarInset className="overflow-y-auto">
+                <SidebarInset className="flex-1 overflow-hidden">
                     <SyncContent />
                 </SidebarInset>
             </div>

@@ -273,10 +273,20 @@ export function InboxListView() {
     }, [todos, selectedTags, selectedPriority, searchQuery]);
 
     return (
-        <div className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full">
-            <h1 className="text-2xl font-bold mb-4 flex-shrink-0">Inbox</h1>
+        <div
+            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
+            style={{
+                backgroundColor: currentTheme.styles.surfacePrimary,
+                color: currentTheme.styles.contentPrimary,
+            }}
+        >
+            <div className="flex items-center justify-between flex-shrink-0 mb-6">
+                <h1 className="text-2xl font-bold" style={{ color: currentTheme.styles.contentPrimary }}>
+                    Inbox
+                </h1>
+            </div>
 
-            <div className="flex items-center justify-between flex-shrink-0 mb-6 flex-wrap gap-4">
+            <div className="flex items-center justify-between flex-shrink-0 mb-4 flex-wrap gap-4">
                 <div className="flex items-center gap-3">
                     <CreateTodoDialog
                         open={createDialogOpen}
@@ -329,14 +339,31 @@ export function InboxListView() {
                         </div>
                     ))}
                     {filteredTodos.length === 0 && (
-                        <div className="text-center py-16 px-4 bg-muted/20 rounded-xl border border-dashed border-border mt-8">
+                        <div
+                            className="text-center py-16 px-4 rounded-xl border border-dashed mt-8"
+                            style={{
+                                backgroundColor: currentTheme.styles.surfaceSecondary,
+                                borderColor: currentTheme.styles.borderDefault,
+                            }}
+                        >
                             <div className="flex justify-center mb-4">
-                                <div className="p-4 bg-muted/40 rounded-full">
-                                    <Archive className="w-8 h-8 text-muted-foreground" />
+                                <div
+                                    className="p-4 rounded-full"
+                                    style={{ backgroundColor: currentTheme.styles.surfaceTertiary }}
+                                >
+                                    <Archive className="w-8 h-8" style={{ color: currentTheme.styles.contentSecondary }} />
                                 </div>
                             </div>
-                            <h3 className="text-lg font-medium text-foreground mb-2">Inbox is empty</h3>
-                            <p className="text-muted-foreground max-w-sm mx-auto mb-6">
+                            <h3
+                                className="text-lg font-medium mb-2"
+                                style={{ color: currentTheme.styles.contentPrimary }}
+                            >
+                                Inbox is empty
+                            </h3>
+                            <p
+                                className="max-w-sm mx-auto mb-6"
+                                style={{ color: currentTheme.styles.contentSecondary }}
+                            >
                                 Any tasks added here without a specific project will appear in this list. Use this space to quickly dump ideas and organize them later.
                             </p>
                             <Button onClick={() => setCreateDialogOpen(true)}>

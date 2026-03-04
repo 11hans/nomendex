@@ -10,24 +10,25 @@ function HelpContent() {
 
     return (
         <div
-            className="flex-1 overflow-y-auto p-6"
-            style={{ backgroundColor: styles.surfacePrimary }}
+            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
+            style={{ backgroundColor: styles.surfacePrimary, color: styles.contentPrimary }}
         >
-            <div className="max-w-3xl mx-auto space-y-8">
-                <div>
-                    <h1
-                        className="text-3xl font-bold mb-2"
-                        style={{ color: styles.contentPrimary }}
-                    >
-                        Help
-                    </h1>
-                    <p
-                        className="text-lg"
-                        style={{ color: styles.contentSecondary }}
-                    >
-                        Learn how to use the app's features effectively.
-                    </p>
-                </div>
+            <div className="flex-shrink-0 mb-6">
+                <h1
+                    className="text-2xl font-bold"
+                    style={{ color: styles.contentPrimary }}
+                >
+                    Help
+                </h1>
+                <p
+                    className="text-sm"
+                    style={{ color: styles.contentSecondary }}
+                >
+                    Learn how to use the app's features effectively.
+                </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto outline-none pr-2">
 
                 {/* Todos Section */}
                 <Card style={{ backgroundColor: styles.surfaceSecondary, borderColor: styles.borderDefault }}>

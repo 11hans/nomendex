@@ -107,13 +107,13 @@ function NewAgentContent() {
 
     return (
         <div
-            className="h-full overflow-y-auto p-6 space-y-6"
+            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
             style={{
                 backgroundColor: currentTheme.styles.surfacePrimary,
                 color: currentTheme.styles.contentPrimary,
             }}
         >
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-shrink-0 mb-6">
                 <Button
                     variant="ghost"
                     size="icon"
@@ -126,179 +126,182 @@ function NewAgentContent() {
                     <h1 className="text-2xl font-bold" style={{ color: currentTheme.styles.contentPrimary }}>
                         Create New Agent
                     </h1>
-                    <p style={{ color: currentTheme.styles.contentSecondary }}>
+                    <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
                         Configure the agent's settings, system prompt, and MCP servers.
                     </p>
                 </div>
             </div>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Agent Configuration</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="name">Name</Label>
-                        <Input
-                            id="name"
-                            value={formName}
-                            onChange={(e) => setFormName(e.target.value)}
-                            placeholder="e.g., Linear Assistant"
-                        />
-                    </div>
+            <div className="flex-1 overflow-y-auto outline-none pr-2 pb-8 space-y-6">
 
-                    <div className="space-y-2">
-                        <Label htmlFor="description">Description (optional)</Label>
-                        <Input
-                            id="description"
-                            value={formDescription}
-                            onChange={(e) => setFormDescription(e.target.value)}
-                            placeholder="e.g., An agent specialized for Linear project management"
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <Label htmlFor="model">Model</Label>
-                            <button
-                                type="button"
-                                className="text-xs hover:underline"
-                                style={{ color: currentTheme.styles.contentAccent }}
-                                onClick={() => {
-                                    if (!useCustomModel) {
-                                        // Switching to custom: keep current value
-                                        setUseCustomModel(true);
-                                    } else {
-                                        // Switching to dropdown: reset to first predefined model
-                                        setFormModel(PREDEFINED_MODELS[0]);
-                                        setUseCustomModel(false);
-                                    }
-                                }}
-                            >
-                                {useCustomModel ? "Use predefined" : "Enter custom"}
-                            </button>
-                        </div>
-                        {useCustomModel ? (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Agent Configuration</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="name">Name</Label>
                             <Input
-                                id="model"
-                                value={formModel}
-                                onChange={(e) => setFormModel(e.target.value)}
-                                placeholder="e.g., claude-opus-4-5-20251101"
+                                id="name"
+                                value={formName}
+                                onChange={(e) => setFormName(e.target.value)}
+                                placeholder="e.g., Linear Assistant"
                             />
-                        ) : (
-                            <Select value={formModel} onValueChange={(value) => setFormModel(value)}>
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {PREDEFINED_MODELS.map((model) => (
-                                        <SelectItem key={model} value={model}>
-                                            {MODEL_DISPLAY_NAMES[model as PredefinedModel]}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        )}
-                    </div>
+                        </div>
 
-                    <div className="space-y-2">
-                        <Label htmlFor="systemPrompt">System Prompt</Label>
-                        <Textarea
-                            id="systemPrompt"
-                            value={formSystemPrompt}
-                            onChange={(e) => setFormSystemPrompt(e.target.value)}
-                            placeholder="Leave empty to use the default Claude Code system prompt"
-                            className="min-h-[120px] font-mono text-sm"
-                        />
-                        <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
-                            An empty prompt will use Claude Code's default system prompt.
-                        </p>
-                    </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="description">Description (optional)</Label>
+                            <Input
+                                id="description"
+                                value={formDescription}
+                                onChange={(e) => setFormDescription(e.target.value)}
+                                placeholder="e.g., An agent specialized for Linear project management"
+                            />
+                        </div>
 
-                    <div className="space-y-4">
-                        <Label>MCP Servers</Label>
-                        {allMcpServers.length === 0 ? (
-                            <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
-                                No MCP servers available. Add some in the MCP Servers settings.
-                            </p>
-                        ) : (
-                            <div className="space-y-4">
-                                {/* User-defined servers */}
-                                {userServers.length > 0 && (
-                                    <div className="space-y-2">
-                                        <p className="text-xs font-medium" style={{ color: currentTheme.styles.contentSecondary }}>
-                                            User Defined
-                                        </p>
-                                        <div className="space-y-2">
-                                            {userServers.map((server) => (
-                                                <div key={server.id} className="flex items-start space-x-3">
-                                                    <Checkbox
-                                                        id={`mcp-${server.id}`}
-                                                        checked={formMcpServers.includes(server.id)}
-                                                        onCheckedChange={() => toggleMcpServer(server.id)}
-                                                    />
-                                                    <div className="grid gap-1.5 leading-none">
-                                                        <label
-                                                            htmlFor={`mcp-${server.id}`}
-                                                            className="text-sm font-medium cursor-pointer"
-                                                        >
-                                                            {server.name}
-                                                        </label>
-                                                        <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
-                                                            {server.description || "No description"}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Built-in servers */}
-                                {builtInServers.length > 0 && (
-                                    <div className="space-y-2">
-                                        <p className="text-xs font-medium" style={{ color: currentTheme.styles.contentSecondary }}>
-                                            Built-in
-                                        </p>
-                                        <div className="space-y-2">
-                                            {builtInServers.map((server) => (
-                                                <div key={server.id} className="flex items-start space-x-3">
-                                                    <Checkbox
-                                                        id={`mcp-${server.id}`}
-                                                        checked={formMcpServers.includes(server.id)}
-                                                        onCheckedChange={() => toggleMcpServer(server.id)}
-                                                    />
-                                                    <div className="grid gap-1.5 leading-none">
-                                                        <label
-                                                            htmlFor={`mcp-${server.id}`}
-                                                            className="text-sm font-medium cursor-pointer flex items-center gap-2"
-                                                        >
-                                                            {server.name}
-                                                            <Badge variant="secondary" className="text-[10px] px-1 py-0">Built-in</Badge>
-                                                        </label>
-                                                        <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
-                                                            {server.description || "No description"}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                                <Label htmlFor="model">Model</Label>
+                                <button
+                                    type="button"
+                                    className="text-xs hover:underline"
+                                    style={{ color: currentTheme.styles.contentAccent }}
+                                    onClick={() => {
+                                        if (!useCustomModel) {
+                                            // Switching to custom: keep current value
+                                            setUseCustomModel(true);
+                                        } else {
+                                            // Switching to dropdown: reset to first predefined model
+                                            setFormModel(PREDEFINED_MODELS[0]);
+                                            setUseCustomModel(false);
+                                        }
+                                    }}
+                                >
+                                    {useCustomModel ? "Use predefined" : "Enter custom"}
+                                </button>
                             </div>
-                        )}
-                    </div>
+                            {useCustomModel ? (
+                                <Input
+                                    id="model"
+                                    value={formModel}
+                                    onChange={(e) => setFormModel(e.target.value)}
+                                    placeholder="e.g., claude-opus-4-5-20251101"
+                                />
+                            ) : (
+                                <Select value={formModel} onValueChange={(value) => setFormModel(value)}>
+                                    <SelectTrigger>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {PREDEFINED_MODELS.map((model) => (
+                                            <SelectItem key={model} value={model}>
+                                                {MODEL_DISPLAY_NAMES[model as PredefinedModel]}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        </div>
 
-                    <div className="flex justify-end gap-2 pt-4">
-                        <Button variant="outline" onClick={() => navigate("/agents")}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleSave} disabled={!formName.trim() || isSaving}>
-                            {isSaving ? "Creating..." : "Create Agent"}
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
+                        <div className="space-y-2">
+                            <Label htmlFor="systemPrompt">System Prompt</Label>
+                            <Textarea
+                                id="systemPrompt"
+                                value={formSystemPrompt}
+                                onChange={(e) => setFormSystemPrompt(e.target.value)}
+                                placeholder="Leave empty to use the default Claude Code system prompt"
+                                className="min-h-[120px] font-mono text-sm"
+                            />
+                            <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
+                                An empty prompt will use Claude Code's default system prompt.
+                            </p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <Label>MCP Servers</Label>
+                            {allMcpServers.length === 0 ? (
+                                <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                    No MCP servers available. Add some in the MCP Servers settings.
+                                </p>
+                            ) : (
+                                <div className="space-y-4">
+                                    {/* User-defined servers */}
+                                    {userServers.length > 0 && (
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-medium" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                User Defined
+                                            </p>
+                                            <div className="space-y-2">
+                                                {userServers.map((server) => (
+                                                    <div key={server.id} className="flex items-start space-x-3">
+                                                        <Checkbox
+                                                            id={`mcp-${server.id}`}
+                                                            checked={formMcpServers.includes(server.id)}
+                                                            onCheckedChange={() => toggleMcpServer(server.id)}
+                                                        />
+                                                        <div className="grid gap-1.5 leading-none">
+                                                            <label
+                                                                htmlFor={`mcp-${server.id}`}
+                                                                className="text-sm font-medium cursor-pointer"
+                                                            >
+                                                                {server.name}
+                                                            </label>
+                                                            <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                                {server.description || "No description"}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Built-in servers */}
+                                    {builtInServers.length > 0 && (
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-medium" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                Built-in
+                                            </p>
+                                            <div className="space-y-2">
+                                                {builtInServers.map((server) => (
+                                                    <div key={server.id} className="flex items-start space-x-3">
+                                                        <Checkbox
+                                                            id={`mcp-${server.id}`}
+                                                            checked={formMcpServers.includes(server.id)}
+                                                            onCheckedChange={() => toggleMcpServer(server.id)}
+                                                        />
+                                                        <div className="grid gap-1.5 leading-none">
+                                                            <label
+                                                                htmlFor={`mcp-${server.id}`}
+                                                                className="text-sm font-medium cursor-pointer flex items-center gap-2"
+                                                            >
+                                                                {server.name}
+                                                                <Badge variant="secondary" className="text-[10px] px-1 py-0">Built-in</Badge>
+                                                            </label>
+                                                            <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                                {server.description || "No description"}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end gap-2 pt-4">
+                            <Button variant="outline" onClick={() => navigate("/agents")}>
+                                Cancel
+                            </Button>
+                            <Button onClick={handleSave} disabled={!formName.trim() || isSaving}>
+                                {isSaving ? "Creating..." : "Create Agent"}
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
         </div>
     );
 }
