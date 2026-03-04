@@ -793,6 +793,9 @@
   .max-h-48 {
     max-height: calc(var(--spacing) * 48);
   }
+  .max-h-60 {
+    max-height: calc(var(--spacing) * 60);
+  }
   .max-h-64 {
     max-height: calc(var(--spacing) * 64);
   }
@@ -1695,6 +1698,9 @@
   .bg-purple-100 {
     background-color: var(--color-purple-100);
   }
+  .bg-red-500 {
+    background-color: var(--color-red-500);
+  }
   .bg-red-500\/10 {
     background-color: color-mix(in srgb, oklch(63.7% 0.237 25.331) 10%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
@@ -1787,6 +1793,9 @@
   }
   .px-6 {
     padding-inline: calc(var(--spacing) * 6);
+  }
+  .px-\[13px\] {
+    padding-inline: 13px;
   }
   .py-0 {
     padding-block: calc(var(--spacing) * 0);
@@ -2079,6 +2088,9 @@
   }
   .text-slate-800 {
     color: var(--color-slate-800);
+  }
+  .text-white {
+    color: var(--color-white);
   }
   .text-yellow-600 {
     color: var(--color-yellow-600);
@@ -2773,6 +2785,13 @@
       }
     }
   }
+  .hover\:bg-red-600 {
+    &:hover {
+      @media (hover: hover) {
+        background-color: var(--color-red-600);
+      }
+    }
+  }
   .hover\:text-red-600 {
     &:hover {
       @media (hover: hover) {
@@ -2912,6 +2931,22 @@
   .focus-visible\:z-10 {
     &:focus-visible {
       z-index: 10;
+    }
+  }
+  .focus-visible\:border-black\/10 {
+    &:focus-visible {
+      border-color: color-mix(in srgb, #000 10%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        border-color: color-mix(in oklab, var(--color-black) 10%, transparent);
+      }
+    }
+  }
+  .focus-visible\:bg-black\/5 {
+    &:focus-visible {
+      background-color: color-mix(in srgb, #000 5%, transparent);
+      @supports (color: color-mix(in lab, red, red)) {
+        background-color: color-mix(in oklab, var(--color-black) 5%, transparent);
+      }
     }
   }
   .focus-visible\:ring-0 {
@@ -3713,6 +3748,38 @@
     &:is(.dark *) {
       --tw-invert: invert(100%);
       filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
+    }
+  }
+  .dark\:hover\:bg-white\/5 {
+    &:is(.dark *) {
+      &:hover {
+        @media (hover: hover) {
+          background-color: color-mix(in srgb, #fff 5%, transparent);
+          @supports (color: color-mix(in lab, red, red)) {
+            background-color: color-mix(in oklab, var(--color-white) 5%, transparent);
+          }
+        }
+      }
+    }
+  }
+  .dark\:focus-visible\:border-white\/10 {
+    &:is(.dark *) {
+      &:focus-visible {
+        border-color: color-mix(in srgb, #fff 10%, transparent);
+        @supports (color: color-mix(in lab, red, red)) {
+          border-color: color-mix(in oklab, var(--color-white) 10%, transparent);
+        }
+      }
+    }
+  }
+  .dark\:focus-visible\:bg-white\/5 {
+    &:is(.dark *) {
+      &:focus-visible {
+        background-color: color-mix(in srgb, #fff 5%, transparent);
+        @supports (color: color-mix(in lab, red, red)) {
+          background-color: color-mix(in oklab, var(--color-white) 5%, transparent);
+        }
+      }
     }
   }
   .\[\&_\.ProseMirror\]\:min-h-\[20px\] {

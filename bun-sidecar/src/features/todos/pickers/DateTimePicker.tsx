@@ -155,6 +155,36 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
         );
     };
 
+    const getDateColor = () => {
+        if (!dueDate) return styles.contentTertiary;
+        if (compact) return styles.contentPrimary;
+        const dueDay = dueDate.split('T')[0];
+        const todayDay = toLocalDateString(new Date());
+
+        if (dueDay < todayDay) return '#ef4444'; // Red (Overdue)
+        if (dueDay === todayDay) return '#3b82f6'; // Blue (Today)
+        return styles.contentPrimary; // Default
+    };
+
+    const handlePreset = (offsetDays: number) => {
+        const d = new Date();
+        d.setDate(d.getDate() + offsetDays);
+        const dateStr = toLocalDateString(d);
+        const time = dueDate?.includes('T') ? dueDate.split('T')[1] : undefined;
+        onChange({ dueDate: time ? `${dateStr}T${time}` : dateStr, startDate: undefined });
+        setOpen(false);
+    };
+
+    const handleNextWeek = () => {
+        const d = new Date();
+        const daysToNextMonday = (1 + 7 - d.getDay()) % 7 || 7;
+        d.setDate(d.getDate() + daysToNextMonday);
+        const dateStr = toLocalDateString(d);
+        const time = dueDate?.includes('T') ? dueDate.split('T')[1] : undefined;
+        onChange({ dueDate: time ? `${dateStr}T${time}` : dateStr, startDate: undefined });
+        setOpen(false);
+    };
+
     return (
         <div
             className={`flex items-center gap-0.5 ${compact ? 'p-0' : 'p-0.5'} rounded-md transition-colors`}
@@ -166,7 +196,7 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
                         type="button"
                         className={`flex items-center gap-1 ${compact ? 'px-0 py-0 text-[10px]' : 'px-2 py-1 text-sm'} rounded font-medium transition-colors hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-offset-1`}
                         style={{
-                            color: dueDate ? styles.contentPrimary : styles.contentTertiary,
+                            color: getDateColor(),
                         }}
                     >
                         <CalendarDays className={compact ? "size-3 shrink-0" : "size-4 shrink-0"} />
@@ -182,6 +212,19 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
                     }}
                 >
                     <div className="space-y-3">
+                        {/* Quick Presets row */}
+                        <div className="flex items-center gap-1 pb-1">
+                            <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => handlePreset(0)}>
+                                Today
+                            </Button>
+                            <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => handlePreset(1)}>
+                                Tomorrow
+                            </Button>
+                            <Button variant="outline" size="sm" className="h-7 text-xs flex-1 px-1" onClick={handleNextWeek}>
+                                Next week
+                            </Button>
+                        </div>
+
                         <Input
                             value={dateInput}
                             onChange={(e) => handleDateInputChange(e.target.value)}

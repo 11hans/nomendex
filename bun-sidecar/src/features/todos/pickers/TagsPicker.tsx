@@ -39,7 +39,7 @@ export function TagsPicker({ value, onChange, availableTags }: TagsPickerProps) 
                 </button>
             </PopoverTrigger>
             <PopoverContent
-                className="w-60 p-3"
+                className="w-60 p-3 z-[100]"
                 align="start"
                 style={{
                     backgroundColor: styles.surfacePrimary,

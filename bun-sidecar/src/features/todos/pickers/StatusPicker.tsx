@@ -93,7 +93,7 @@ export function StatusPicker({ value, onChange }: StatusPickerProps) {
                 </button>
             </PopoverTrigger>
             <PopoverContent
-                className="w-40 p-1"
+                className="w-40 p-1 z-[100]"
                 align="start"
                 style={{
                     backgroundColor: styles.surfacePrimary,

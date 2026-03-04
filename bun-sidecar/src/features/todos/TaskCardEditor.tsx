@@ -32,6 +32,7 @@ interface TaskCardEditorProps {
 
 export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, saving, availableTags, availableProjects }: TaskCardEditorProps) {
     const [editedTodo, setEditedTodo] = useState<Todo | null>(null);
+    const [confirmDelete, setConfirmDelete] = useState(false);
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
 
@@ -89,7 +90,6 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 className="p-0 overflow-hidden gap-0"
-                showCloseButton={false}
                 style={{
                     backgroundColor: styles.surfacePrimary,
                     width: '700px',
@@ -98,18 +98,34 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
             >
                 {/* Content Area */}
                 <div className="px-6 pt-6 pb-4 space-y-4">
-                    {/* Title */}
-                    <Input
-                        value={editedTodo.title}
-                        onChange={(e) => setEditedTodo({ ...editedTodo, title: e.target.value })}
-                        placeholder="Task title"
-                        className="text-xl font-semibold border-0 px-0 h-auto focus-visible:ring-0 placeholder:font-normal placeholder:text-muted-foreground/40"
-                        style={{
-                            color: styles.contentPrimary,
-                            backgroundColor: 'transparent',
-                        }}
-                        autoFocus
-                    />
+                    <div className="flex flex-col gap-3">
+                        <div className="flex items-center gap-1.5">
+                            <DateTimePicker
+                                dueDate={editedTodo.dueDate}
+                                startDate={editedTodo.startDate}
+                                onChange={({ dueDate, startDate }) => setEditedTodo({ ...editedTodo, dueDate, startDate })}
+                            />
+                            <PriorityPicker
+                                value={editedTodo.priority}
+                                onChange={(priority) => setEditedTodo({ ...editedTodo, priority })}
+                            />
+                        </div>
+
+                        {/* Title Row */}
+                        <Input
+                            value={editedTodo.title}
+                            onChange={(e) => setEditedTodo({ ...editedTodo, title: e.target.value })}
+                            placeholder="Task title"
+                            className="text-2xl font-bold border-0 px-[13px] py-1.5 h-auto rounded-md hover:bg-black/5 dark:hover:bg-white/5 focus-visible:bg-black/5 dark:focus-visible:bg-white/5 focus-visible:border-black/10 dark:focus-visible:border-white/10 focus-visible:ring-0 placeholder:font-normal placeholder:text-muted-foreground/40 w-full transition-all"
+                            style={{
+                                color: styles.contentPrimary,
+                                backgroundColor: 'transparent',
+                                borderColor: 'transparent',
+                                boxShadow: 'none',
+                            }}
+                            autoFocus
+                        />
+                    </div>
 
                     {/* Description */}
                     <Textarea
@@ -173,16 +189,11 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
                         borderTop: `1px solid ${styles.borderDefault}`,
                     }}
                 >
-                    {/* Metadata Pills — grouped with separator */}
+                    {/* Metadata Pills */}
                     <div className="flex items-center gap-2">
-                        {/* Group 1: Status & Priority */}
                         <StatusPicker
                             value={editedTodo.status}
                             onChange={(status) => setEditedTodo({ ...editedTodo, status })}
-                        />
-                        <PriorityPicker
-                            value={editedTodo.priority}
-                            onChange={(priority) => setEditedTodo({ ...editedTodo, priority })}
                         />
 
                         {/* Separator */}
@@ -203,11 +214,6 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
                             attachments={editedTodo.attachments || []}
                             onChange={(attachments) => setEditedTodo({ ...editedTodo, attachments })}
                         />
-                        <DateTimePicker
-                            dueDate={editedTodo.dueDate}
-                            startDate={editedTodo.startDate}
-                            onChange={({ dueDate, startDate }) => setEditedTodo({ ...editedTodo, dueDate, startDate })}
-                        />
                     </div>
 
                     {/* Action Buttons */}
@@ -215,24 +221,26 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
                         {onDelete && (
                             <Button
                                 onClick={() => {
-                                    onDelete(editedTodo);
-                                    onOpenChange(false);
+                                    if (confirmDelete) {
+                                        onDelete(editedTodo);
+                                        onOpenChange(false);
+                                        setConfirmDelete(false);
+                                    } else {
+                                        setConfirmDelete(true);
+                                        setTimeout(() => setConfirmDelete(false), 3000);
+                                    }
                                 }}
-                                variant="ghost"
+                                variant={confirmDelete ? "destructive" : "ghost"}
                                 size="sm"
-                                className="h-9 px-3 text-red-500 hover:text-red-600 hover:bg-red-500/10 mr-auto"
+                                className={`h-9 px-3 mr-auto transition-all ${confirmDelete
+                                    ? "bg-red-500 hover:bg-red-600 text-white"
+                                    : "text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                                    }`}
                             >
-                                <Trash2 className="size-4" />
+                                <Trash2 className="size-4 mr-2" />
+                                {confirmDelete ? "Sure?" : "Delete"}
                             </Button>
                         )}
-                        <Button
-                            onClick={() => onOpenChange(false)}
-                            variant="ghost"
-                            size="sm"
-                            className="h-9 px-4"
-                        >
-                            Cancel
-                        </Button>
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button
