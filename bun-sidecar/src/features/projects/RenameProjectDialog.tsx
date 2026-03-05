@@ -7,12 +7,14 @@ import { useTheme } from "@/hooks/useTheme";
 import { useProjectsAPI } from "@/hooks/useProjectsAPI";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PROJECT_COLORS } from "./project-color";
 
 interface RenameProjectDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     projectId: string;
     projectName: string;
+    projectColor?: string;
     existingProjects: string[];
     onRenamed: () => void;
 }
@@ -22,10 +24,12 @@ export function RenameProjectDialog({
     onOpenChange,
     projectId,
     projectName,
+    projectColor,
     existingProjects,
     onRenamed,
 }: RenameProjectDialogProps) {
     const [newName, setNewName] = useState(projectName);
+    const [selectedColor, setSelectedColor] = useState<string | undefined>(projectColor);
     const [loading, setLoading] = useState(false);
     const [stats, setStats] = useState<{ todoCount: number; noteCount: number } | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -37,6 +41,7 @@ export function RenameProjectDialog({
     useEffect(() => {
         if (open && projectName) {
             setNewName(projectName);
+            setSelectedColor(projectColor);
             setStats(null);
             projectsAPI.getProjectStats({ projectName }).then(setStats);
             setTimeout(() => {
@@ -44,19 +49,29 @@ export function RenameProjectDialog({
                 inputRef.current?.select();
             }, 50);
         }
-    }, [open, projectName, projectsAPI]);
+    }, [open, projectName, projectColor, projectsAPI]);
 
-    const handleRename = async () => {
+    const handleSave = async () => {
         const trimmed = newName.trim();
-        if (!trimmed || trimmed === projectName || loading) return;
+        if (!trimmed || loading) return;
+
+        const nameChanged = trimmed !== projectName;
+        const colorChanged = selectedColor !== projectColor;
+
+        if (!nameChanged && !colorChanged) return;
 
         setLoading(true);
         try {
-            await projectsAPI.renameProject({ projectId, newName: trimmed });
+            if (nameChanged) {
+                await projectsAPI.renameProject({ projectId, newName: trimmed });
+            }
+            if (colorChanged) {
+                await projectsAPI.updateProject({ projectId, updates: { color: selectedColor ?? "" } });
+            }
             onOpenChange(false);
             onRenamed();
         } catch (err) {
-            console.error("Failed to rename project:", err);
+            console.error("Failed to update project:", err);
         } finally {
             setLoading(false);
         }
@@ -65,15 +80,16 @@ export function RenameProjectDialog({
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && isValid) {
             e.preventDefault();
-            handleRename();
+            handleSave();
         }
     };
 
     const isDuplicate = existingProjects.some(
         (p) => p.toLowerCase() === newName.trim().toLowerCase() && p !== projectName
     );
-    const isUnchanged = newName.trim() === projectName;
-    const isValid = newName.trim().length > 0 && !isDuplicate && !isUnchanged;
+    const nameUnchanged = newName.trim() === projectName;
+    const colorUnchanged = selectedColor === projectColor;
+    const isValid = newName.trim().length > 0 && !isDuplicate && !(nameUnchanged && colorUnchanged);
 
     const hasAssociatedItems = stats && (stats.todoCount > 0 || stats.noteCount > 0);
 
@@ -102,23 +118,23 @@ export function RenameProjectDialog({
                                 className="text-lg font-semibold"
                                 style={{ color: styles.contentPrimary }}
                             >
-                                Rename Project
+                                Edit Project
                             </h2>
                             <p
                                 className="text-sm mt-1"
                                 style={{ color: styles.contentSecondary }}
                             >
-                                Rename <strong>{projectName}</strong> to a new name
+                                Edit <strong>{projectName}</strong>
                             </p>
                         </div>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                         <Input
                             ref={inputRef}
                             value={newName}
                             onChange={(e) => setNewName(e.target.value)}
-                            placeholder="New project name"
+                            placeholder="Project name"
                             className="text-base"
                             style={{
                                 color: styles.contentPrimary,
@@ -132,6 +148,34 @@ export function RenameProjectDialog({
                                 A project with this name already exists
                             </p>
                         )}
+                        <div>
+                            <p className="text-xs mb-2" style={{ color: styles.contentSecondary }}>Color</p>
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedColor(undefined)}
+                                    className="w-6 h-6 rounded-full border-2 transition-all focus:outline-none"
+                                    style={{
+                                        backgroundColor: styles.surfaceSecondary,
+                                        borderColor: !selectedColor ? styles.contentPrimary : styles.borderDefault,
+                                    }}
+                                    title="No color"
+                                />
+                                {PROJECT_COLORS.map((color) => (
+                                    <button
+                                        key={color}
+                                        type="button"
+                                        onClick={() => setSelectedColor(color)}
+                                        className="w-6 h-6 rounded-full border-2 transition-all focus:outline-none"
+                                        style={{
+                                            backgroundColor: color,
+                                            borderColor: selectedColor === color ? styles.contentPrimary : "transparent",
+                                        }}
+                                        title={color}
+                                    />
+                                ))}
+                            </div>
+                        </div>
                     </div>
 
                     {/* Stats info */}
@@ -190,12 +234,12 @@ export function RenameProjectDialog({
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <Button
-                                onClick={handleRename}
+                                onClick={handleSave}
                                 disabled={!isValid || loading}
                                 size="sm"
                                 className="h-9 px-4"
                             >
-                                {loading ? "Renaming..." : "Rename"}
+                                {loading ? "Saving..." : "Save"}
                             </Button>
                         </TooltipTrigger>
                         <TooltipContent

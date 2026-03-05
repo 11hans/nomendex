@@ -280,6 +280,11 @@ export async function updateProject(input: {
         updatedAt: new Date().toISOString(),
     };
 
+    // Empty string means "clear the color"
+    if (updated.color === "") {
+        delete updated.color;
+    }
+
     data.projects[index] = updated;
     await writeProjectsFile(data);
 

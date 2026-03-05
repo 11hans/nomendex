@@ -28,6 +28,7 @@ export const ProjectConfigSchema = z.object({
     id: z.string(),                    // "proj-abc123"
     name: z.string(),                  // "Nomendex"
     description: z.string().optional(),
+    color: z.string().optional(),
     board: BoardConfigSchema.optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
