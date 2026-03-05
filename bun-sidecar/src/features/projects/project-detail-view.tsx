@@ -5,9 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FolderKanban, Circle, Clock, CheckCircle2, FileText, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
-import { useProjectsAPI } from "@/hooks/useProjectsAPI";
 import { useTheme } from "@/hooks/useTheme";
-import { ColorDot } from "./ColorDot";
 import { todosPluginSerial } from "@/features/todos";
 import { notesPluginSerial } from "@/features/notes";
 import { TaskCardEditor } from "@/features/todos/TaskCardEditor";
@@ -31,8 +29,6 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
     const [editSaving, setEditSaving] = useState(false);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
-    const [projectColor, setProjectColor] = useState<string | undefined>(undefined);
-    const [projectColors, setProjectColors] = useState<Record<string, string>>({});
     const { currentTheme } = useTheme();
     const placement = getViewSelfPlacement(tabId);
 
@@ -40,7 +36,6 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
 
     const todosAPI = useTodosAPI();
     const notesAPI = useNotesAPI();
-    const projectsAPI = useProjectsAPI();
 
     // Set tab name
     useEffect(() => {
@@ -57,12 +52,11 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                 setLoading(true);
                 setError(null);
 
-                const [todosResult, notesResult, tagsResult, projectsResult, allProjectConfigs] = await Promise.all([
+                const [todosResult, notesResult, tagsResult, projectsResult] = await Promise.all([
                     todosAPI.getTodos({ project: projectName }),
                     notesAPI.getNotesByProject({ project: projectName }),
                     todosAPI.getTags(),
                     todosAPI.getProjects(),
-                    projectsAPI.listProjects(),
                 ]);
 
                 setTodos(todosResult);
@@ -70,15 +64,6 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                 setNotes(notesResult);
                 setAvailableTags(tagsResult);
                 setAvailableProjects(projectsResult);
-
-                const thisProject = allProjectConfigs.find((p) => p.name === projectName);
-                setProjectColor(thisProject?.color);
-
-                const colorMap: Record<string, string> = {};
-                for (const p of allProjectConfigs) {
-                    if (p.color) colorMap[p.name] = p.color;
-                }
-                setProjectColors(colorMap);
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : "Failed to fetch project data";
                 setError(errorMessage);
@@ -87,7 +72,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
             }
         };
         fetchData();
-    }, [projectName, todosAPI, notesAPI, projectsAPI, setLoading, setError]);
+    }, [projectName, todosAPI, notesAPI, setLoading, setError]);
 
     // Open todo in dialog
     const handleOpenTodo = useCallback(
@@ -308,14 +293,10 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                 }}
             >
                 <div className="flex items-center gap-3 mb-4">
-                    {projectColor ? (
-                        <ColorDot color={projectColor} size={24} />
-                    ) : (
-                        <FolderKanban
-                            size={28}
-                            style={{ color: currentTheme.styles.contentAccent }}
-                        />
-                    )}
+                    <FolderKanban
+                        size={28}
+                        style={{ color: currentTheme.styles.contentAccent }}
+                    />
                     <h1
                         className="text-2xl font-bold"
                         style={{ color: currentTheme.styles.contentPrimary }}
@@ -537,7 +518,6 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                 saving={editSaving}
                 availableTags={availableTags}
                 availableProjects={availableProjects}
-                projectColors={projectColors}
             />
         </div >
     );

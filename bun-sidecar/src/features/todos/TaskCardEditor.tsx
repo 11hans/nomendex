@@ -28,10 +28,9 @@ interface TaskCardEditorProps {
     saving: boolean;
     availableTags: string[];
     availableProjects: string[];
-    projectColors?: Record<string, string>;
 }
 
-export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, saving, availableTags, availableProjects, projectColors = {} }: TaskCardEditorProps) {
+export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, saving, availableTags, availableProjects }: TaskCardEditorProps) {
     const [editedTodo, setEditedTodo] = useState<Todo | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const { currentTheme } = useTheme();
@@ -205,7 +204,6 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
                             value={editedTodo.project}
                             onChange={(project) => setEditedTodo({ ...editedTodo, project })}
                             availableProjects={availableProjects}
-                            projectColors={projectColors}
                         />
                         <TagsPicker
                             value={editedTodo.tags || []}

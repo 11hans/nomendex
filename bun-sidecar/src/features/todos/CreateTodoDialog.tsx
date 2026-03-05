@@ -39,7 +39,6 @@ interface CreateTodoDialogProps {
     projectLocked?: boolean;
     availableTags: string[];
     availableProjects: string[];
-    projectColors?: Record<string, string>;
 }
 
 export function CreateTodoDialog({
@@ -51,8 +50,7 @@ export function CreateTodoDialog({
     loading,
     projectLocked = false,
     availableTags,
-    availableProjects,
-    projectColors = {},
+    availableProjects
 }: CreateTodoDialogProps) {
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
@@ -201,7 +199,6 @@ export function CreateTodoDialog({
                             value={newTodo.project || undefined}
                             onChange={(project) => onNewTodoChange({ ...newTodo, project })}
                             availableProjects={availableProjects}
-                            projectColors={projectColors}
                             disabled={projectLocked}
                         />
                         <TagsPicker

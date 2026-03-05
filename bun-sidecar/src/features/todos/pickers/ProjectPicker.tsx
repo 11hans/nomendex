@@ -2,17 +2,15 @@ import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTheme } from "@/hooks/useTheme";
 import { Folder } from "lucide-react";
-import { ColorDot } from "@/features/projects/ColorDot";
 
 interface ProjectPickerProps {
     value: string | undefined;
     onChange: (project: string) => void;
     availableProjects: string[];
-    projectColors?: Record<string, string>;
     disabled?: boolean;
 }
 
-export function ProjectPicker({ value, onChange, availableProjects, projectColors = {}, disabled = false }: ProjectPickerProps) {
+export function ProjectPicker({ value, onChange, availableProjects, disabled = false }: ProjectPickerProps) {
     const [open, setOpen] = useState(false);
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
@@ -40,11 +38,7 @@ export function ProjectPicker({ value, onChange, availableProjects, projectColor
                     }}
                     disabled={disabled}
                 >
-                    {value && projectColors[value] ? (
-                        <ColorDot color={projectColors[value]} size={14} />
-                    ) : (
-                        <Folder className="size-4 shrink-0" />
-                    )}
+                    <Folder className="size-4 shrink-0" />
                     <span className="truncate max-w-[100px]">{value || "Project"}</span>
                 </button>
             </PopoverTrigger>
@@ -70,11 +64,7 @@ export function ProjectPicker({ value, onChange, availableProjects, projectColor
                                     color: styles.contentPrimary,
                                 }}
                             >
-                                {projectColors[project] ? (
-                                    <ColorDot color={projectColors[project]} size={12} />
-                                ) : (
-                                    <Folder className="size-4 shrink-0" style={{ color: isActive ? styles.contentPrimary : styles.contentTertiary }} />
-                                )}
+                                <Folder className="size-4 shrink-0" style={{ color: isActive ? styles.contentPrimary : styles.contentTertiary }} />
                                 {project}
                             </button>
                         );

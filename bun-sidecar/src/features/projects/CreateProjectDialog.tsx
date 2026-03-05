@@ -6,12 +6,11 @@ import { Plus } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PROJECT_COLORS } from "./project-color";
 
 interface CreateProjectDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onCreateProject: (name: string, color?: string) => Promise<void>;
+    onCreateProject: (name: string) => Promise<void>;
     loading: boolean;
     existingProjects: string[];
 }
@@ -24,7 +23,6 @@ export function CreateProjectDialog({
     existingProjects
 }: CreateProjectDialogProps) {
     const [projectName, setProjectName] = useState("");
-    const [selectedColor, setSelectedColor] = useState<string | undefined>(undefined);
     const inputRef = useRef<HTMLInputElement>(null);
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
@@ -33,7 +31,6 @@ export function CreateProjectDialog({
     useEffect(() => {
         if (open) {
             setProjectName("");
-            setSelectedColor(undefined);
             // Focus input after a short delay to allow dialog to render
             setTimeout(() => inputRef.current?.focus(), 50);
         }
@@ -42,7 +39,7 @@ export function CreateProjectDialog({
     const handleCreate = async () => {
         const trimmed = projectName.trim();
         if (trimmed && !loading) {
-            await onCreateProject(trimmed, selectedColor);
+            await onCreateProject(trimmed);
             onOpenChange(false);
         }
     };
@@ -87,7 +84,7 @@ export function CreateProjectDialog({
                         Create Project
                     </h2>
 
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                         <Input
                             ref={inputRef}
                             value={projectName}
@@ -106,34 +103,6 @@ export function CreateProjectDialog({
                                 A project with this name already exists
                             </p>
                         )}
-                        <div>
-                            <p className="text-xs mb-2" style={{ color: styles.contentSecondary }}>Color</p>
-                            <div className="flex flex-wrap gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedColor(undefined)}
-                                    className="w-6 h-6 rounded-full border-2 transition-all focus:outline-none"
-                                    style={{
-                                        backgroundColor: styles.surfaceSecondary,
-                                        borderColor: !selectedColor ? styles.contentPrimary : styles.borderDefault,
-                                    }}
-                                    title="No color"
-                                />
-                                {PROJECT_COLORS.map((color) => (
-                                    <button
-                                        key={color}
-                                        type="button"
-                                        onClick={() => setSelectedColor(color)}
-                                        className="w-6 h-6 rounded-full border-2 transition-all focus:outline-none"
-                                        style={{
-                                            backgroundColor: color,
-                                            borderColor: selectedColor === color ? styles.contentPrimary : "transparent",
-                                        }}
-                                        title={color}
-                                    />
-                                ))}
-                            </div>
-                        </div>
                     </div>
                 </div>
 

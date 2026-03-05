@@ -7,7 +7,6 @@ export { ProjectConfigSchema, type ProjectConfig } from "./project-types";
 
 export const ProjectInfoSchema = z.object({
     name: z.string(),
-    color: z.string().optional(),
     todoCount: z.number(),
     inProgressCount: z.number(),
     doneCount: z.number(),

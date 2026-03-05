@@ -4,7 +4,6 @@ import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Search, FolderKanban, Clock, Circle, CheckCircle2, FileText, Pencil, Trash2 } from "lucide-react";
-import { ColorDot } from "./ColorDot";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
 import { useProjectsAPI } from "@/hooks/useProjectsAPI";
@@ -28,7 +27,7 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
-    const [selectedProject, setSelectedProject] = useState<{ id: string; name: string; color?: string } | null>(null);
+    const [selectedProject, setSelectedProject] = useState<{ id: string; name: string } | null>(null);
     const { currentTheme } = useTheme();
 
     const searchInputRef = useRef<HTMLInputElement>(null);
@@ -78,7 +77,6 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
                     return {
                         id: config.id,
                         name: config.name,
-                        color: config.color,
                         todoCount: projectTodos.filter((t) => t.status === "todo").length,
                         inProgressCount: projectTodos.filter((t) => t.status === "in_progress").length,
                         doneCount: projectTodos.filter((t) => t.status === "done").length,
@@ -106,11 +104,11 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
     }, [projectsAPI, todosAPI, notesAPI, setLoading, setError]);
 
     // Handle project creation
-    const handleCreateProject = async (projectName: string, color?: string) => {
+    const handleCreateProject = async (projectName: string) => {
         try {
             setLoading(true);
             // Create project via projects API
-            await projectsAPI.createProject({ name: projectName, color });
+            await projectsAPI.createProject({ name: projectName });
 
             // Refresh projects
             const [projectConfigs, allTodos, allNotes] = await Promise.all([
@@ -127,7 +125,6 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
                 return {
                     id: config.id,
                     name: config.name,
-                    color: config.color,
                     todoCount: projectTodos.filter((t) => t.status === "todo").length,
                     inProgressCount: projectTodos.filter((t) => t.status === "in_progress").length,
                     doneCount: projectTodos.filter((t) => t.status === "done").length,
@@ -168,7 +165,6 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
                 return {
                     id: config.id,
                     name: config.name,
-                    color: config.color,
                     todoCount: projectTodos.filter((t) => t.status === "todo").length,
                     inProgressCount: projectTodos.filter((t) => t.status === "in_progress").length,
                     doneCount: projectTodos.filter((t) => t.status === "done").length,
@@ -190,7 +186,7 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
     }, [projectsAPI, todosAPI, notesAPI]);
 
     // Handle opening rename dialog
-    const handleOpenRename = useCallback((project: { id: string; name: string; color?: string }, e: React.MouseEvent) => {
+    const handleOpenRename = useCallback((project: { id: string; name: string }, e: React.MouseEvent) => {
         e.stopPropagation();
         setSelectedProject(project);
         setRenameDialogOpen(true);
@@ -377,21 +373,17 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
                                     className="flex items-center gap-2 flex-1 text-left focus:outline-none"
                                     style={{ color: currentTheme.styles.contentPrimary }}
                                 >
-                                    {project.color ? (
-                                        <ColorDot color={project.color} size={12} />
-                                    ) : (
-                                        <FolderKanban
-                                            size={14}
-                                            style={{ color: currentTheme.styles.contentAccent }}
-                                        />
-                                    )}
+                                    <FolderKanban
+                                        size={14}
+                                        style={{ color: currentTheme.styles.contentAccent }}
+                                    />
                                     <span className="font-medium">{project.name}</span>
                                 </button>
                                 <div className="flex items-center gap-2">
                                     {/* Action buttons - visible on hover */}
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         <button
-                                            onClick={(e) => handleOpenRename({ id: project.id, name: project.name, color: project.color }, e)}
+                                            onClick={(e) => handleOpenRename({ id: project.id, name: project.name }, e)}
                                             className="p-1.5 rounded hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1"
                                             title="Rename project"
                                             style={{ color: currentTheme.styles.contentSecondary }}
@@ -468,7 +460,6 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
                         onOpenChange={setRenameDialogOpen}
                         projectId={selectedProject.id}
                         projectName={selectedProject.name}
-                        projectColor={selectedProject.color}
                         existingProjects={projects.map((p) => p.name)}
                         onRenamed={refreshProjects}
                     />
