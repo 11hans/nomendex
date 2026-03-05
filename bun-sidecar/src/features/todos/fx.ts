@@ -133,9 +133,28 @@ async function createTodo(input: {
             return Math.max(max, todo.order || 0);
         }, 0);
 
+        // Generate a slug from the title (lowercase, no special chars, hyphens instead of spaces)
+        let slug = input.title
+            .toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove accents/diacritics
+            .replace(/[^a-z0-9\s-]/g, "") // remove non-alphanumeric chars
+            .trim()
+            .replace(/\s+/g, "-") // replace spaces with hyphens
+            .replace(/-+/g, "-"); // remove consecutive hyphens
+
+        // Limit slug length
+        if (slug.length > 50) {
+            slug = slug.substring(0, 50).replace(/-$/, "");
+        }
+
+        // Fallback if title was entirely emojis/special chars
+        if (!slug) {
+            slug = Math.random().toString(36).substr(2, 6);
+        }
+
         const now = new Date().toISOString();
         const newTodo: Todo = {
-            id: `todo-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: `todo-${slug}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
             title: input.title,
             description: input.description,
             status: status,
