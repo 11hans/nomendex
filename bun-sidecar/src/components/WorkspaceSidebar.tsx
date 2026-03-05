@@ -13,6 +13,7 @@ import { PluginIcon } from "@/types/Plugin";
 import { getIcon } from "./PluginViewIcons";
 import { useTheme } from "@/hooks/useTheme";
 import { TITLE_BAR_HEIGHT } from "./Layout";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 
 /**
  * VS Code-style Activity Bar icon button with tooltip and left accent border.
@@ -160,7 +161,8 @@ export function WorkspaceSidebar() {
                 })}
             </SidebarContent>
 
-            <SidebarFooter className="flex flex-col items-center gap-0 p-0">
+            <SidebarFooter className="flex flex-col items-center gap-0 p-0 pb-1">
+                <WorkspaceSwitcher />
                 <ActivityBarIcon
                     icon={GitBranch}
                     label="Sync"

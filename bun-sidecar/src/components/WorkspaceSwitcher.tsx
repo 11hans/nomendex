@@ -6,7 +6,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { FolderOpen, Plus, ChevronDown, Check, Settings } from "lucide-react";
+import { FolderOpen, Plus, Check, Settings } from "lucide-react";
 import { useWorkspaceSwitcher } from "@/hooks/useWorkspaceSwitcher";
 import { useTheme } from "@/hooks/useTheme";
 import { FolderPickerDialog } from "./FolderPickerDialog";
@@ -42,6 +42,12 @@ export function WorkspaceSwitcher() {
             delete (window as Window & { __setDataRoot?: (path: string) => void }).__setDataRoot;
         };
     }, [handleSetDataRoot]);
+
+    useEffect(() => {
+        const handler = () => setManagerOpen(true);
+        window.addEventListener("workspace:openManager", handler);
+        return () => window.removeEventListener("workspace:openManager", handler);
+    }, []);
 
     const handleAddWorkspace = () => {
         if (isNativeApp) {
@@ -82,23 +88,20 @@ export function WorkspaceSwitcher() {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1"
+                className="relative flex items-center justify-center w-full h-12 cursor-pointer transition-colors duration-150 focus:outline-none"
                 style={{
-                    color: currentTheme.styles.contentPrimary,
+                    color: currentTheme.styles.contentSecondary,
                     backgroundColor: "transparent",
                 }}
                 onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = currentTheme.styles.surfaceAccent;
+                    e.currentTarget.style.color = currentTheme.styles.contentPrimary;
                 }}
                 onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = "transparent";
+                    e.currentTarget.style.color = currentTheme.styles.contentSecondary;
                 }}
+                title={activeWorkspace?.name || "No Workspace"}
             >
-                <FolderOpen className="size-4 shrink-0" />
-                <span className="truncate flex-1 text-left text-sm">
-                    {activeWorkspace?.name || "No Workspace"}
-                </span>
-                <ChevronDown className="size-3 opacity-50 shrink-0" />
+                <FolderOpen className="size-5" />
             </DropdownMenuTrigger>
             <DropdownMenuContent
                 align="start"

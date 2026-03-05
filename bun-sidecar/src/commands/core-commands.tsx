@@ -280,6 +280,16 @@ function TagManagementDialog({
 export function getCoreCommands(context: CoreCommandContext): Command[] {
     return [
         {
+            id: "core.openWorkspaceManager",
+            name: "Manage Workspaces",
+            description: "Open the workspace manager",
+            icon: "FolderOpen",
+            callback: () => {
+                context.closeCommandMenu();
+                window.dispatchEvent(new CustomEvent("workspace:openManager"));
+            },
+        },
+        {
             id: "core.openSettings",
             name: "Open Settings",
             description: "Open the settings page",
