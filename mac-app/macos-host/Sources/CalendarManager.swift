@@ -6,7 +6,8 @@ class CalendarManager {
     static let shared = CalendarManager()
     
     private let eventStore = EKEventStore()
-    private let calendarTitle = "Nomendex Tasks"
+    private let defaultCalendarTitle = "Nomendex Tasks"
+    private let calendarPrefix = "Nomendex"
     
     private init() {}
     
@@ -47,10 +48,11 @@ class CalendarManager {
     }
     
     private func snapshotCurrentEvents() {
-        guard let calendar = getOrCreateCalendar() else { return }
+        let nomendexCalendars = getNomendexCalendars()
+        guard !nomendexCalendars.isEmpty else { return }
         let start = Date().addingTimeInterval(-365 * 24 * 3600)
         let end = Date().addingTimeInterval(365 * 24 * 3600)
-        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: [calendar])
+        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
         let events = eventStore.events(matching: predicate)
         
         var newState: [String: EventState] = [:]
@@ -69,11 +71,13 @@ class CalendarManager {
     }
     
     private func detectChanges() {
-        guard let calendar = getOrCreateCalendar(), let webView = webViewRef else { return }
-        
+        guard let webView = webViewRef else { return }
+        let nomendexCalendars = getNomendexCalendars()
+        guard !nomendexCalendars.isEmpty else { return }
+
         let start = Date().addingTimeInterval(-365 * 24 * 3600)
         let end = Date().addingTimeInterval(365 * 24 * 3600)
-        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: [calendar])
+        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
         let currentEvents = eventStore.events(matching: predicate)
         
         var currentMap: [String: (EKEvent, EventState)] = [:]
@@ -217,19 +221,31 @@ class CalendarManager {
     }
     
     // MARK: - Calendar
-    
-    private func getOrCreateCalendar() -> EKCalendar? {
+
+    /// Returns all calendars whose title starts with "Nomendex"
+    private func getNomendexCalendars() -> [EKCalendar] {
+        return eventStore.calendars(for: .event).filter { $0.title.hasPrefix(calendarPrefix) }
+    }
+
+    /// Get or create a calendar for a specific project, or the default "Nomendex Tasks" calendar
+    private func getOrCreateCalendar(projectName: String? = nil) -> EKCalendar? {
+        let title: String
+        if let name = projectName, !name.isEmpty {
+            title = "\(calendarPrefix) - \(name)"
+        } else {
+            title = defaultCalendarTitle
+        }
+
         // Look for existing calendar
         let calendars = eventStore.calendars(for: .event)
-        if let existing = calendars.first(where: { $0.title == calendarTitle }) {
+        if let existing = calendars.first(where: { $0.title == title }) {
             return existing
         }
-        
+
         // Create new calendar
         let calendar = EKCalendar(for: .event, eventStore: eventStore)
-        calendar.title = calendarTitle
-        calendar.cgColor = NSColor.systemBlue.cgColor
-        
+        calendar.title = title
+
         // Use the default calendar source or iCloud
         if let defaultSource = eventStore.defaultCalendarForNewEvents?.source {
             calendar.source = defaultSource
@@ -239,10 +255,10 @@ class CalendarManager {
             log("No calendar source available")
             return nil
         }
-        
+
         do {
             try eventStore.saveCalendar(calendar, commit: true)
-            log("Created calendar: \(calendarTitle)")
+            log("Created calendar: \(title)")
             return calendar
         } catch {
             log("Failed to create calendar: \(error)")
@@ -253,19 +269,21 @@ class CalendarManager {
     // MARK: - Upsert Event
     
     private func upsertEvent(taskData: [String: Any], webView: WKWebView?, callback: String?) {
-        guard let calendar = getOrCreateCalendar() else {
+        let projectName = taskData["projectName"] as? String
+
+        guard let calendar = getOrCreateCalendar(projectName: projectName) else {
             sendResult(webView: webView, callback: callback, success: false, error: "Cannot create calendar")
             return
         }
-        
+
         guard let taskId = taskData["taskId"] as? String,
               let title = taskData["title"] as? String else {
             sendResult(webView: webView, callback: callback, success: false, error: "Missing taskId or title")
             return
         }
-        
-        // Find existing event or create new one
-        let event = findEvent(taskId: taskId, in: calendar) ?? EKEvent(eventStore: eventStore)
+
+        // Find existing event across all Nomendex calendars, or create new one
+        let event = findEvent(taskId: taskId) ?? EKEvent(eventStore: eventStore)
         event.calendar = calendar
         
         // Clear existing alarms to avoid duplicates
@@ -339,17 +357,12 @@ class CalendarManager {
     // MARK: - Delete Event
     
     private func deleteEvent(taskData: [String: Any], webView: WKWebView?, callback: String?) {
-        guard let calendar = getOrCreateCalendar() else {
-            sendResult(webView: webView, callback: callback, success: true, error: nil)
-            return
-        }
-        
         guard let taskId = taskData["taskId"] as? String else {
             sendResult(webView: webView, callback: callback, success: false, error: "Missing taskId")
             return
         }
-        
-        if let event = findEvent(taskId: taskId, in: calendar) {
+
+        if let event = findEvent(taskId: taskId) {
             // Prevent echo
             ignoreNextChangeForTaskID = taskId
             do {
@@ -365,12 +378,14 @@ class CalendarManager {
     
     // MARK: - Helpers
     
-    private func findEvent(taskId: String, in calendar: EKCalendar) -> EKEvent? {
+    private func findEvent(taskId: String) -> EKEvent? {
+        let nomendexCalendars = getNomendexCalendars()
+        guard !nomendexCalendars.isEmpty else { return nil }
         let start = Date().addingTimeInterval(-365 * 24 * 3600)
         let end = Date().addingTimeInterval(365 * 24 * 3600)
-        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: [calendar])
+        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
         let events = eventStore.events(matching: predicate)
-        
+
         let targetURL = URL(string: "nomendex://task/\(taskId)")
         return events.first { $0.url == targetURL }
     }

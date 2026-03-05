@@ -1,8 +1,5 @@
 import type { Todo } from "@/features/todos/todo-types";
 
-// Bridge to native macOS Calendar via EventKit
-// Uses WKScriptMessageHandler to communicate with Swift CalendarManager
-
 interface CalendarSyncResult {
     success: boolean;
     error: string | null;
@@ -40,6 +37,7 @@ export async function syncTaskToCalendar(task: Todo): Promise<void> {
             duration: task.duration || 60,
             priority: task.priority || "none",
             status: task.status,
+            projectName: task.project || null,
             callback: callbackName,
         });
 
