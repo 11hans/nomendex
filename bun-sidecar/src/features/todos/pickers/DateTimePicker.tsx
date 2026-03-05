@@ -1,11 +1,51 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { useTheme } from "@/hooks/useTheme";
 import { CalendarDays, Clock, X } from "lucide-react";
-import { parseDateFromInput, toLocalDateString, parseLocalDateString } from "@/features/notes/date-utils";
+import { toLocalDateString, parseLocalDateString } from "@/features/notes/date-utils";
+import type { DateRange, DayButton } from "react-day-picker";
+import { cn } from "@/lib/utils";
+
+function PickerDayButton({ className, day: _day, modifiers, style, ...props }: React.ComponentProps<typeof DayButton>) {
+    const ref = useRef<HTMLButtonElement>(null);
+    const { currentTheme } = useTheme();
+    const { styles } = currentTheme;
+    useEffect(() => { if (modifiers.focused) ref.current?.focus(); }, [modifiers.focused]);
+
+    const isEndpoint = modifiers.range_start || modifiers.range_end;
+    const isSingleSelected = modifiers.selected && !modifiers.range_start && !modifiers.range_end && !modifiers.range_middle;
+
+    const bgColor = isEndpoint || isSingleSelected ? styles.semanticPrimary : undefined;
+    const textColor = isEndpoint || isSingleSelected
+        ? styles.semanticPrimaryForeground
+        : modifiers.today && !modifiers.selected
+            ? styles.contentAccent
+            : modifiers.outside
+                ? styles.contentTertiary
+                : styles.contentPrimary;
+
+    return (
+        <button
+            ref={ref}
+            className={cn(
+                "flex aspect-square size-auto w-full min-w-[var(--cell-size,2rem)] items-center justify-center text-sm transition-colors focus:outline-none",
+                modifiers.today && !modifiers.selected && "font-bold",
+                isSingleSelected && "rounded-md",
+                modifiers.range_start && "rounded-l-md rounded-r-none",
+                modifiers.range_end   && "rounded-r-md rounded-l-none",
+                modifiers.range_middle && "rounded-none",
+                modifiers.disabled && "opacity-40 cursor-not-allowed pointer-events-none",
+                modifiers.outside && "opacity-30",
+                className
+            )}
+            style={{ backgroundColor: bgColor, color: textColor, ...style }}
+            {...props}
+        />
+    );
+}
 
 interface DateTimePickerProps {
     dueDate: string | undefined;
@@ -16,112 +56,112 @@ interface DateTimePickerProps {
 
 export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTimePickerProps) {
     const [open, setOpen] = useState(false);
-    const [dateInput, setDateInput] = useState("");
+    const [localFrom, setLocalFrom] = useState<Date | undefined>();
+    const [localTo, setLocalTo] = useState<Date | undefined>();
+    const [localTime, setLocalTime] = useState<string>("");
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
 
-    const handleDateInputChange = (value: string) => {
-        setDateInput(value);
-        const parsed = parseDateFromInput(value);
-        if (parsed) {
-            const time = dueDate?.includes('T') ? dueDate.split('T')[1] : undefined;
-            const dateStr = toLocalDateString(parsed);
-            const newDueDate = time ? `${dateStr}T${time}` : dateStr;
-
-            let newStartDate: string | undefined = undefined;
-            if (startDate) {
-                const startTime = startDate.includes('T') ? startDate.split('T')[1] : undefined;
-                newStartDate = startTime ? `${dateStr}T${startTime}` : dateStr;
-            }
-
-            onChange({ dueDate: newDueDate, startDate: newStartDate });
-        }
-    };
-
-    const handleCalendarSelect = (date: Date | undefined) => {
-        if (date) {
-            const dateStr = toLocalDateString(date);
-            const dueTime = dueDate?.includes('T') ? dueDate.split('T')[1] : undefined;
-            const newDueDate = dueTime ? `${dateStr}T${dueTime}` : dateStr;
-
-            let newStartDate: string | undefined = undefined;
-            if (startDate) {
-                const startTime = startDate.includes('T') ? startDate.split('T')[1] : undefined;
-                newStartDate = startTime ? `${dateStr}T${startTime}` : dateStr;
-            }
-
-            onChange({ dueDate: newDueDate, startDate: newStartDate });
-            setDateInput("");
-        }
-    };
-
-    const handleDueTimeChange = (time: string) => {
-        if (!dueDate) return;
-        const dateStr = dueDate.split('T')[0];
-        if (time) {
-            onChange({ dueDate: `${dateStr}T${time}`, startDate });
+    const initLocalState = () => {
+        if (startDate) {
+            setLocalFrom(parseLocalDateString(startDate.split('T')[0]));
+        } else if (dueDate) {
+            setLocalFrom(parseLocalDateString(dueDate.split('T')[0]));
         } else {
-            onChange({ dueDate: dateStr, startDate });
+            setLocalFrom(undefined);
         }
-    };
 
-    const handleStartTimeChange = (time: string) => {
-        if (!startDate) return;
-        const dateStr = startDate.split('T')[0];
-        if (time) {
-            onChange({ dueDate, startDate: `${dateStr}T${time}` });
+        if (dueDate && startDate && dueDate.split('T')[0] !== startDate.split('T')[0]) {
+            setLocalTo(parseLocalDateString(dueDate.split('T')[0]));
+        } else {
+            setLocalTo(undefined);
         }
+
+        setLocalTime(dueDate?.includes('T') ? dueDate.split('T')[1] : "");
     };
 
-    const handleEndTimeChange = (time: string) => {
-        if (!dueDate) return;
-        const dateStr = dueDate.split('T')[0];
-        if (time) {
-            onChange({ dueDate: `${dateStr}T${time}`, startDate });
+    const handleOpenChange = (nextOpen: boolean) => {
+        if (nextOpen) initLocalState();
+        setOpen(nextOpen);
+    };
+
+    const isSingleDay = !localTo || (
+        localFrom !== undefined && toLocalDateString(localFrom) === toLocalDateString(localTo)
+    );
+
+    const handleRangeSelect = (range: DateRange | undefined) => {
+        const from = range?.from;
+        const to = range?.to;
+
+        // If a range is already selected, any new click starts fresh from the clicked day.
+        // This overrides react-day-picker's built-in range logic (which can behave
+        // unexpectedly when clicking inside an existing range or on endpoints).
+        if (localFrom && localTo && toLocalDateString(localFrom) !== toLocalDateString(localTo)) {
+            // Use whichever end of the reported range is the "new" click
+            const clicked = (from && to) ? (toLocalDateString(from) !== toLocalDateString(localFrom) ? from : to) : (from ?? to);
+            setLocalFrom(clicked);
+            setLocalTo(undefined);
+            return;
         }
-    };
 
-    const handleAddEndTime = () => {
-        if (!dueDate) return;
-        const dateStr = dueDate.split('T')[0];
-        let startTime = "09:00";
-        if (dueDate.includes('T')) {
-            startTime = dueDate.split('T')[1];
+        // No existing range — normal first/second click behaviour.
+        // If the library reports to < from (e.g. user clicked an earlier day as second click),
+        // treat it as a fresh start on that day.
+        if (from && to && to < from) {
+            setLocalFrom(to);
+            setLocalTo(undefined);
+            return;
         }
-        const [hours, minutes] = startTime.split(':').map(Number);
-        const endHours = (hours! + 1) % 24;
-        const endTime = `${endHours.toString().padStart(2, '0')}:${minutes!.toString().padStart(2, '0')}`;
 
-        onChange({
-            startDate: `${dateStr}T${startTime}`,
-            dueDate: `${dateStr}T${endTime}`,
-        });
+        setLocalFrom(from);
+        setLocalTo(to);
+        // Note: we intentionally do NOT clear localTime here so the user
+        // doesn't lose a previously entered time if they later collapse back to a single day.
     };
 
-    const handleRemoveRange = () => {
-        onChange({ dueDate, startDate: undefined });
+    const handleSave = () => {
+        if (!localFrom) {
+            setOpen(false);
+            return;
+        }
+        const fromStr = toLocalDateString(localFrom);
+        if (!isSingleDay && localTo) {
+            const toStr = toLocalDateString(localTo);
+            onChange({ startDate: fromStr, dueDate: toStr });
+        } else {
+            const newDueDate = localTime ? `${fromStr}T${localTime}` : fromStr;
+            onChange({ dueDate: newDueDate, startDate: undefined });
+        }
+        setOpen(false);
     };
 
-    const handleClearAll = () => {
+    const handleCancel = () => {
+        setOpen(false);
+    };
+
+    const handleClearLocal = () => {
+        setLocalFrom(undefined);
+        setLocalTo(undefined);
+        setLocalTime("");
+    };
+
+    const handleClear = () => {
         onChange({ dueDate: undefined, startDate: undefined });
+        setOpen(false);
     };
 
-    // Render date display label — icon-only when empty
     const renderDateLabel = () => {
         if (!dueDate) return null;
 
         if (startDate) {
             const startDay = startDate.split('T')[0];
             const dueDay = dueDate.split('T')[0];
-
             const startFormatted = parseLocalDateString(startDay).toLocaleDateString("en-US", { month: "short", day: "numeric" });
             const dueFormatted = parseLocalDateString(dueDay).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
             const startTime = startDate.includes('T') ? startDate.split('T')[1] : null;
             const dueTime = dueDate.includes('T') ? dueDate.split('T')[1] : null;
 
             if (startDay !== dueDay) {
-                // Different days: Mar 3 - Mar 5
                 return (
                     <span className="whitespace-nowrap">
                         {startFormatted}{startTime ? `, ${startTime}` : ''}
@@ -129,22 +169,18 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
                         {dueFormatted}{dueTime ? `, ${dueTime}` : ''}
                     </span>
                 );
-            } else {
-                // Same day
-                if (!startTime && !dueTime) {
-                    // Just the date (no times)
-                    return <span className="whitespace-nowrap">{startFormatted}</span>;
-                }
-                // Time range on same day: Mar 3, 13:00 - 15:00
-                return (
-                    <span className="whitespace-nowrap">
-                        {startFormatted}
-                        {startTime ? `, ${startTime}` : ''}
-                        {' - '}
-                        {dueTime ? dueTime : '?'}
-                    </span>
-                );
             }
+            if (!startTime && !dueTime) {
+                return <span className="whitespace-nowrap">{startFormatted}</span>;
+            }
+            return (
+                <span className="whitespace-nowrap">
+                    {startFormatted}
+                    {startTime ? `, ${startTime}` : ''}
+                    {' - '}
+                    {dueTime ?? '?'}
+                </span>
+            );
         }
 
         return (
@@ -160,44 +196,26 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
         if (compact) return styles.contentPrimary;
         const dueDay = dueDate.split('T')[0];
         const todayDay = toLocalDateString(new Date());
-
-        if (dueDay < todayDay) return '#ef4444'; // Red (Overdue)
-        if (dueDay === todayDay) return '#3b82f6'; // Blue (Today)
-        return styles.contentPrimary; // Default
+        if (dueDay < todayDay) return '#ef4444';
+        if (dueDay === todayDay) return '#3b82f6';
+        return styles.contentPrimary;
     };
 
-    const handlePreset = (offsetDays: number) => {
-        const d = new Date();
-        d.setDate(d.getDate() + offsetDays);
-        const dateStr = toLocalDateString(d);
-        const time = dueDate?.includes('T') ? dueDate.split('T')[1] : undefined;
-        onChange({ dueDate: time ? `${dateStr}T${time}` : dateStr, startDate: undefined });
-        setOpen(false);
-    };
-
-    const handleNextWeek = () => {
-        const d = new Date();
-        const daysToNextMonday = (1 + 7 - d.getDay()) % 7 || 7;
-        d.setDate(d.getDate() + daysToNextMonday);
-        const dateStr = toLocalDateString(d);
-        const time = dueDate?.includes('T') ? dueDate.split('T')[1] : undefined;
-        onChange({ dueDate: time ? `${dateStr}T${time}` : dateStr, startDate: undefined });
-        setOpen(false);
-    };
+    const selectedRange: DateRange | undefined = localFrom
+        ? { from: localFrom, to: localTo }
+        : undefined;
 
     return (
         <div
             className={`flex items-center gap-0.5 ${compact ? 'p-0' : 'p-0.5'} rounded-md transition-colors`}
             style={compact ? undefined : { backgroundColor: styles.surfaceTertiary }}
         >
-            <Popover open={open} onOpenChange={setOpen}>
+            <Popover open={open} onOpenChange={handleOpenChange}>
                 <PopoverTrigger asChild>
                     <button
                         type="button"
                         className={`flex items-center gap-1 ${compact ? 'px-0 py-0 text-[10px]' : 'px-2 py-1 text-sm'} rounded font-medium transition-colors hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-offset-1`}
-                        style={{
-                            color: getDateColor(),
-                        }}
+                        style={{ color: getDateColor() }}
                     >
                         <CalendarDays className={compact ? "size-3 shrink-0" : "size-4 shrink-0"} />
                         {renderDateLabel()}
@@ -212,94 +230,71 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
                     }}
                 >
                     <div className="space-y-3">
-                        {/* Quick Presets row */}
-                        <div className="flex items-center gap-1 pb-1">
-                            <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => handlePreset(0)}>
-                                Today
-                            </Button>
-                            <Button variant="outline" size="sm" className="h-7 text-xs flex-1" onClick={() => handlePreset(1)}>
-                                Tomorrow
-                            </Button>
-                            <Button variant="outline" size="sm" className="h-7 text-xs flex-1 px-1" onClick={handleNextWeek}>
-                                Next week
-                            </Button>
+                        {/* Range Calendar */}
+                        <div style={{ "--picker-range-bg": styles.surfaceAccent } as React.CSSProperties}>
+                            <Calendar
+                                mode="range"
+                                selected={selectedRange}
+                                onSelect={handleRangeSelect}
+                                defaultMonth={localFrom ?? new Date()}
+                                classNames={{
+                                    range_start: "bg-[var(--picker-range-bg)] rounded-l-md",
+                                    range_middle: "bg-[var(--picker-range-bg)] rounded-none",
+                                    range_end: "bg-[var(--picker-range-bg)] rounded-r-md",
+                                    today: "",
+                                }}
+                                components={{ DayButton: PickerDayButton }}
+                            />
                         </div>
 
-                        <Input
-                            value={dateInput}
-                            onChange={(e) => handleDateInputChange(e.target.value)}
-                            placeholder="tomorrow, next wed, 1/15..."
-                            className="h-9 text-sm"
-                            autoFocus
-                            onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    setOpen(false);
-                                }
-                            }}
-                        />
-                        <Calendar
-                            mode="single"
-                            selected={dueDate ? parseLocalDateString(dueDate.split('T')[0]) : undefined}
-                            onSelect={handleCalendarSelect}
-                            defaultMonth={dueDate ? parseLocalDateString(dueDate.split('T')[0]) : new Date()}
-                        />
+                        {/* Selection summary */}
+                        <div className="text-xs text-center py-1" style={{ color: styles.contentSecondary }}>
+                            {!localFrom
+                                ? "Select a date"
+                                : isSingleDay
+                                    ? localFrom.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+                                    : `${localFrom.toLocaleDateString("en-US", { month: "short", day: "numeric" })} → ${localTo!.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                            }
+                        </div>
 
+                        {/* Time / All-day section */}
                         <div className="pt-2 border-t" style={{ borderColor: styles.surfaceTertiary }}>
-                            {!startDate ? (
-                                // Single Date Mode
+                            {isSingleDay ? (
                                 <div className="flex items-center gap-2">
                                     <Clock className="size-3.5 shrink-0" style={{ color: styles.contentTertiary }} />
                                     <Input
                                         type="time"
-                                        value={dueDate?.includes('T') ? dueDate.split('T')[1] : ''}
-                                        onChange={(e) => handleDueTimeChange(e.target.value)}
+                                        value={localTime}
+                                        onChange={(e) => setLocalTime(e.target.value)}
                                         className="h-8 text-sm flex-1"
-                                        disabled={!dueDate}
+                                        disabled={!localFrom}
                                         placeholder="Add time"
                                     />
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-8 text-xs px-2"
-                                        onClick={handleAddEndTime}
-                                        disabled={!dueDate}
-                                    >
-                                        Add End Time
-                                    </Button>
                                 </div>
                             ) : (
-                                // Range Mode
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-medium w-8" style={{ color: styles.contentSecondary }}>Start</span>
-                                        <Input
-                                            type="time"
-                                            value={startDate?.includes('T') ? startDate.split('T')[1] : ''}
-                                            onChange={(e) => handleStartTimeChange(e.target.value)}
-                                            className="h-8 text-sm flex-1"
-                                        />
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-xs font-medium w-8" style={{ color: styles.contentSecondary }}>End</span>
-                                        <Input
-                                            type="time"
-                                            value={dueDate?.includes('T') ? dueDate.split('T')[1] : ''}
-                                            onChange={(e) => handleEndTimeChange(e.target.value)}
-                                            className="h-8 text-sm flex-1"
-                                        />
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="h-8 text-xs p-1 hover:bg-red-100 hover:text-red-600"
-                                            onClick={handleRemoveRange}
-                                            title="Remove start time"
-                                        >
-                                            <X className="size-3" />
-                                        </Button>
-                                    </div>
+                                <div className="flex items-center justify-center py-1">
+                                    <span className="text-xs" style={{ color: styles.contentTertiary }}>All day</span>
                                 </div>
                             )}
+                        </div>
+
+                        {/* Footer: Clear / Cancel / Save */}
+                        <div className="flex items-center gap-2 pt-1 border-t" style={{ borderColor: styles.surfaceTertiary }}>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 px-2"
+                                onClick={handleClearLocal}
+                            >
+                                Clear
+                            </Button>
+                            <div className="flex-1" />
+                            <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={handleCancel}>
+                                Cancel
+                            </Button>
+                            <Button size="sm" className="h-7 text-xs px-3" onClick={handleSave} disabled={!localFrom}>
+                                Save
+                            </Button>
                         </div>
                     </div>
                 </PopoverContent>
@@ -310,7 +305,7 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
                     type="button"
                     onClick={(e) => {
                         e.stopPropagation();
-                        handleClearAll();
+                        handleClear();
                     }}
                     className="p-1 rounded-sm hover:bg-black/10 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1"
                     style={{ color: styles.contentTertiary }}
