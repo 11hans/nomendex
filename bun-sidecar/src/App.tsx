@@ -5,6 +5,7 @@ import { ThemeProvider } from "./hooks/useTheme";
 import { useNativeKeyboardBridge } from "./hooks/useNativeKeyboardBridge";
 import { useUpdateNotification } from "./hooks/useUpdateNotification";
 import { useSkillUpdates } from "./hooks/useSkillUpdates";
+import { Layout } from "./components/Layout";
 import { WorkspacePage } from "./pages/WorkspacePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { HelpPage } from "./pages/HelpPage";
@@ -104,20 +105,20 @@ export function App() {
                                     <GHSyncProvider>
                                         <CommandDialogProvider>
                                             <Routes>
-                                                {/* Main workspace - handles tabs for todos, notes */}
-                                                <Route path="/" element={<WorkspacePage />} />
-
-                                                {/* Settings and utility pages */}
-                                                <Route path="/settings" element={<SettingsPage />} />
-                                                <Route path="/help" element={<HelpPage />} />
-                                                <Route path="/agents" element={<AgentsPage />} />
-                                                <Route path="/new-agent" element={<NewAgentPage />} />
-                                                <Route path="/mcp-servers" element={<McpServersPage />} />
-                                                <Route path="/mcp-servers/new" element={<McpServerFormPage />} />
-                                                <Route path="/mcp-servers/:serverId/edit" element={<McpServerFormPage />} />
-                                                <Route path="/sync" element={<SyncPage />} />
-                                                <Route path="/sync/resolve" element={<ConflictResolvePage />} />
-                                                <Route path="/test-editor" element={<TestEditorPage />} />
+                                                {/* Main layout with sidebar */}
+                                                <Route element={<Layout />}>
+                                                    <Route index element={<WorkspacePage />} />
+                                                    <Route path="/settings" element={<SettingsPage />} />
+                                                    <Route path="/help" element={<HelpPage />} />
+                                                    <Route path="/agents" element={<AgentsPage />} />
+                                                    <Route path="/new-agent" element={<NewAgentPage />} />
+                                                    <Route path="/mcp-servers" element={<McpServersPage />} />
+                                                    <Route path="/mcp-servers/new" element={<McpServerFormPage />} />
+                                                    <Route path="/mcp-servers/:serverId/edit" element={<McpServerFormPage />} />
+                                                    <Route path="/sync" element={<SyncPage />} />
+                                                    <Route path="/sync/resolve" element={<ConflictResolvePage />} />
+                                                    <Route path="/test-editor" element={<TestEditorPage />} />
+                                                </Route>
 
                                                 {/* Catch-all redirect to root */}
                                                 <Route path="*" element={<Navigate to="/" replace />} />

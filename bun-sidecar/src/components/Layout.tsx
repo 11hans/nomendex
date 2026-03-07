@@ -1,5 +1,5 @@
+import { Outlet } from "react-router-dom";
 import { WorkspaceSidebar } from "./WorkspaceSidebar";
-import { Workspace } from "./Workspace";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "./ui/context-menu";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "./ui/resizable";
 
@@ -23,7 +23,7 @@ export function Layout() {
                         </ResizablePanel>
                         <ResizableHandle withHandle />
                         <ResizablePanel className="flex flex-col min-w-0 min-h-0">
-                            <Workspace />
+                            <Outlet />
                         </ResizablePanel>
                     </ResizablePanelGroup>
                 </div>

@@ -4,8 +4,6 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { chatPluginSerial } from "@/features/chat";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import {
     ArrowLeft,
     ArrowRight,
@@ -439,14 +437,5 @@ After you provide the merged content, I will manually update the file and mark t
 }
 
 export function ConflictResolvePage() {
-    return (
-        <SidebarProvider>
-            <div className="flex h-screen w-full overflow-hidden">
-                <WorkspaceSidebar />
-                <SidebarInset className="flex flex-col overflow-hidden">
-                    <ConflictResolveContent />
-                </SidebarInset>
-            </div>
-        </SidebarProvider>
-    );
+    return <ConflictResolveContent />;
 }

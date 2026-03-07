@@ -4,8 +4,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../co
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useKeyboardShortcuts } from "@/contexts/KeyboardShortcutsContext";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { KeyboardIndicator } from "@/components/ui/keyboard-indicator";
 import { useTheme } from "@/hooks/useTheme";
 import { triggerNativeUpdate } from "@/hooks/useUpdateNotification";
@@ -1340,14 +1338,5 @@ function SettingsContent() {
 }
 
 export function SettingsPage() {
-    return (
-        <SidebarProvider>
-            <div className="flex h-screen w-full overflow-hidden">
-                <WorkspaceSidebar />
-                <SidebarInset className="flex-1 overflow-hidden">
-                    <SettingsContent />
-                </SidebarInset>
-            </div>
-        </SidebarProvider>
-    );
+    return <SettingsContent />;
 }

@@ -21,8 +21,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { useTheme } from "@/hooks/useTheme";
 import { useAgentsAPI } from "@/hooks/useAgentsAPI";
 import { useMcpServersAPI } from "@/hooks/useMcpServersAPI";
@@ -490,14 +488,5 @@ function AgentsContent() {
 }
 
 export function AgentsPage() {
-    return (
-        <SidebarProvider>
-            <div className="flex h-screen w-full overflow-hidden">
-                <WorkspaceSidebar />
-                <SidebarInset className="flex-1 overflow-hidden">
-                    <AgentsContent />
-                </SidebarInset>
-            </div>
-        </SidebarProvider>
-    );
+    return <AgentsContent />;
 }

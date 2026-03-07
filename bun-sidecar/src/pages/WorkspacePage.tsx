@@ -1,5 +1,5 @@
-import { Layout } from "../components/Layout";
+import { Workspace } from "../components/Workspace";
 
 export function WorkspacePage() {
-    return <Layout />;
+    return <Workspace />;
 }

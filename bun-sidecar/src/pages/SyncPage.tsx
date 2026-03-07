@@ -7,8 +7,6 @@ import { Badge } from "../components/ui/badge";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useGHSync } from "@/contexts/GHSyncContext";
 import { chatPluginSerial } from "@/features/chat";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { useTheme } from "@/hooks/useTheme";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -1086,14 +1084,5 @@ After you provide the merged content, I will manually update the file and mark t
 }
 
 export function SyncPage() {
-    return (
-        <SidebarProvider>
-            <div className="flex h-screen w-full overflow-hidden">
-                <WorkspaceSidebar />
-                <SidebarInset className="flex-1 overflow-hidden">
-                    <SyncContent />
-                </SidebarInset>
-            </div>
-        </SidebarProvider>
-    );
+    return <SyncContent />;
 }

@@ -16,8 +16,6 @@ import {
     Alert,
     AlertDescription,
 } from "@/components/ui/alert";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { useTheme } from "@/hooks/useTheme";
 import { useMcpServersAPI } from "@/hooks/useMcpServersAPI";
 import type { TransportConfig, SseTransport, HttpTransport } from "@/features/mcp-servers/mcp-server-types";
@@ -534,14 +532,5 @@ function McpServerFormContent() {
 }
 
 export function McpServerFormPage() {
-    return (
-        <SidebarProvider>
-            <div className="flex h-screen w-full overflow-hidden">
-                <WorkspaceSidebar />
-                <SidebarInset className="flex-1 overflow-hidden">
-                    <McpServerFormContent />
-                </SidebarInset>
-            </div>
-        </SidebarProvider>
-    );
+    return <McpServerFormContent />;
 }

@@ -1,6 +1,4 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
-import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
-import { WorkspaceSidebar } from "@/components/WorkspaceSidebar";
 import { useTheme } from "@/hooks/useTheme";
 import { CalendarDays, Tag, Clock, FileText, ListTodo } from "lucide-react";
 
@@ -254,14 +252,5 @@ function HelpContent() {
 }
 
 export function HelpPage() {
-    return (
-        <SidebarProvider>
-            <div className="flex h-screen w-full overflow-hidden">
-                <WorkspaceSidebar />
-                <SidebarInset className="flex-1 overflow-hidden">
-                    <HelpContent />
-                </SidebarInset>
-            </div>
-        </SidebarProvider>
-    );
+    return <HelpContent />;
 }
