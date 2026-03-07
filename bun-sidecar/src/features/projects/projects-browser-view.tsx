@@ -3,7 +3,8 @@ import { usePlugin } from "@/hooks/usePlugin";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Search, FolderKanban, Clock, Circle, CheckCircle2, FileText, Pencil, Trash2 } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Search, FolderKanban } from "lucide-react";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
 import { useProjectsAPI } from "@/hooks/useProjectsAPI";
@@ -13,7 +14,7 @@ import type { ProjectInfo } from "./index";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { RenameProjectDialog } from "./RenameProjectDialog";
-import { cn } from "@/lib/utils";
+import { ProjectList, type ProjectListItem } from "./ProjectList";
 
 export function ProjectsBrowserView({ tabId }: { tabId: string }) {
     if (!tabId) {
@@ -38,6 +39,37 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
     const notesAPI = useNotesAPI();
     const projectsAPI = useProjectsAPI();
 
+    const buildProjectInfos = useCallback(async () => {
+        const [projectConfigs, allTodos, allNotes] = await Promise.all([
+            projectsAPI.listProjects(),
+            todosAPI.getTodos(),
+            notesAPI.getNotes(),
+        ]);
+
+        const projectInfos = projectConfigs.map((config) => {
+            const projectTodos = allTodos.filter((t) => t.project === config.name);
+            const projectNotes = allNotes.filter((n) => n.frontMatter?.project === config.name);
+
+            return {
+                id: config.id,
+                name: config.name,
+                todoCount: projectTodos.filter((t) => t.status === "todo").length,
+                inProgressCount: projectTodos.filter((t) => t.status === "in_progress").length,
+                doneCount: projectTodos.filter((t) => t.status === "done").length,
+                notesCount: projectNotes.length,
+            };
+        });
+
+        projectInfos.sort((a, b) => {
+            const activeA = a.inProgressCount + a.todoCount;
+            const activeB = b.inProgressCount + b.todoCount;
+            if (activeB !== activeA) return activeB - activeA;
+            return a.name.localeCompare(b.name);
+        });
+
+        return projectInfos;
+    }, [projectsAPI, todosAPI, notesAPI]);
+
     // Set tab name
     useEffect(() => {
         if (activeTab?.id === tabId && !hasSetTabNameRef.current) {
@@ -61,38 +93,7 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
             try {
                 setLoading(true);
                 setError(null);
-
-                // Get list of projects from projects service and all data for stats
-                const [projectConfigs, allTodos, allNotes] = await Promise.all([
-                    projectsAPI.listProjects(),
-                    todosAPI.getTodos(),
-                    notesAPI.getNotes(),
-                ]);
-
-                // Calculate stats per project
-                const projectInfos = projectConfigs.map((config) => {
-                    const projectTodos = allTodos.filter((t) => t.project === config.name);
-                    const projectNotes = allNotes.filter((n) => n.frontMatter?.project === config.name);
-
-                    return {
-                        id: config.id,
-                        name: config.name,
-                        todoCount: projectTodos.filter((t) => t.status === "todo").length,
-                        inProgressCount: projectTodos.filter((t) => t.status === "in_progress").length,
-                        doneCount: projectTodos.filter((t) => t.status === "done").length,
-                        notesCount: projectNotes.length,
-                    };
-                });
-
-                // Sort by in-progress + todo count (most active first), then alphabetically
-                projectInfos.sort((a, b) => {
-                    const activeA = a.inProgressCount + a.todoCount;
-                    const activeB = b.inProgressCount + b.todoCount;
-                    if (activeB !== activeA) return activeB - activeA;
-                    return a.name.localeCompare(b.name);
-                });
-
-                setProjects(projectInfos);
+                setProjects(await buildProjectInfos());
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : "Failed to fetch projects";
                 setError(errorMessage);
@@ -101,46 +102,14 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
             }
         };
         fetchProjects();
-    }, [projectsAPI, todosAPI, notesAPI, setLoading, setError]);
+    }, [buildProjectInfos, setLoading, setError]);
 
     // Handle project creation
     const handleCreateProject = async (projectName: string) => {
         try {
             setLoading(true);
-            // Create project via projects API
             await projectsAPI.createProject({ name: projectName });
-
-            // Refresh projects
-            const [projectConfigs, allTodos, allNotes] = await Promise.all([
-                projectsAPI.listProjects(),
-                todosAPI.getTodos(),
-                notesAPI.getNotes(),
-            ]);
-
-            // Calculate stats per project
-            const projectInfos = projectConfigs.map((config) => {
-                const projectTodos = allTodos.filter((t) => t.project === config.name);
-                const projectNotes = allNotes.filter((n) => n.frontMatter?.project === config.name);
-
-                return {
-                    id: config.id,
-                    name: config.name,
-                    todoCount: projectTodos.filter((t) => t.status === "todo").length,
-                    inProgressCount: projectTodos.filter((t) => t.status === "in_progress").length,
-                    doneCount: projectTodos.filter((t) => t.status === "done").length,
-                    notesCount: projectNotes.length,
-                };
-            });
-
-            // Sort by in-progress + todo count (most active first), then alphabetically
-            projectInfos.sort((a, b) => {
-                const activeA = a.inProgressCount + a.todoCount;
-                const activeB = b.inProgressCount + b.todoCount;
-                if (activeB !== activeA) return activeB - activeA;
-                return a.name.localeCompare(b.name);
-            });
-
-            setProjects(projectInfos);
+            setProjects(await buildProjectInfos());
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : "Failed to create project";
             setError(errorMessage);
@@ -152,38 +121,11 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
     // Refresh projects list (used after rename/delete)
     const refreshProjects = useCallback(async () => {
         try {
-            const [projectConfigs, allTodos, allNotes] = await Promise.all([
-                projectsAPI.listProjects(),
-                todosAPI.getTodos(),
-                notesAPI.getNotes(),
-            ]);
-
-            const projectInfos = projectConfigs.map((config) => {
-                const projectTodos = allTodos.filter((t) => t.project === config.name);
-                const projectNotes = allNotes.filter((n) => n.frontMatter?.project === config.name);
-
-                return {
-                    id: config.id,
-                    name: config.name,
-                    todoCount: projectTodos.filter((t) => t.status === "todo").length,
-                    inProgressCount: projectTodos.filter((t) => t.status === "in_progress").length,
-                    doneCount: projectTodos.filter((t) => t.status === "done").length,
-                    notesCount: projectNotes.length,
-                };
-            });
-
-            projectInfos.sort((a, b) => {
-                const activeA = a.inProgressCount + a.todoCount;
-                const activeB = b.inProgressCount + b.todoCount;
-                if (activeB !== activeA) return activeB - activeA;
-                return a.name.localeCompare(b.name);
-            });
-
-            setProjects(projectInfos);
+            setProjects(await buildProjectInfos());
         } catch (err) {
             console.error("Failed to refresh projects:", err);
         }
-    }, [projectsAPI, todosAPI, notesAPI]);
+    }, [buildProjectInfos]);
 
     // Handle opening rename dialog
     const handleOpenRename = useCallback((project: { id: string; name: string }, e: React.MouseEvent) => {
@@ -203,6 +145,16 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
     const filteredProjects = searchQuery
         ? projects.filter((p) => p.name.toLowerCase().includes(searchQuery.toLowerCase()))
         : projects;
+
+    const projectListItems: ProjectListItem[] = filteredProjects.map((project) => ({
+        id: project.id,
+        name: project.name,
+        projectKey: project.name,
+        todoCount: project.todoCount,
+        inProgressCount: project.inProgressCount,
+        doneCount: project.doneCount,
+        notesCount: project.notesCount,
+    }));
 
     // Open project detail view
     const handleOpenProject = useCallback(
@@ -278,30 +230,30 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
 
     return (
         <div
-            className="h-full flex flex-col"
+            className="flex-1 min-w-0 min-h-0 flex flex-col"
             style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
         >
             {/* Header with search */}
             <div
-                className="sticky top-0 z-10 px-4 py-3 border-b"
+                className="shrink-0 px-4 py-2.5 border-b"
                 style={{
                     backgroundColor: currentTheme.styles.surfacePrimary,
                     borderColor: currentTheme.styles.borderDefault,
                 }}
             >
-                <div className="flex items-center gap-3 mb-3">
+                <div className="flex items-center gap-2 mb-2">
                     <FolderKanban
-                        size={20}
+                        size={16}
                         style={{ color: currentTheme.styles.contentAccent }}
                     />
-                    <h1
-                        className="text-xl font-semibold"
+                    <h2
+                        className="text-sm font-medium truncate"
                         style={{ color: currentTheme.styles.contentPrimary }}
                     >
                         Projects
-                    </h1>
+                    </h2>
                     <span
-                        className="text-sm"
+                        className="text-[10px]"
                         style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         ({projects.length})
@@ -341,109 +293,20 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
             </div>
 
             {/* Projects list */}
-            <div
-                ref={listRef}
-                className="flex-1 overflow-y-auto p-2"
-            >
-                {filteredProjects.length === 0 ? (
-                    <div
-                        className="text-center py-8"
-                        style={{ color: currentTheme.styles.contentTertiary }}
-                    >
-                        {searchQuery ? "No projects found" : "No projects yet"}
-                    </div>
-                ) : (
-                    <div className="space-y-1">
-                        {filteredProjects.map((project, index) => (
-                            <div
-                                key={project.name}
-                                data-index={index}
-                                className={cn(
-                                    "group w-full flex items-center justify-between px-3 py-2.5 rounded-md transition-colors",
-                                    "hover:bg-accent/50"
-                                )}
-                                style={{
-                                    backgroundColor: index === selectedIndex
-                                        ? currentTheme.styles.surfaceAccent
-                                        : "transparent",
-                                }}
-                            >
-                                <button
-                                    onClick={() => handleOpenProject(project.name)}
-                                    className="flex items-center gap-2 flex-1 text-left focus:outline-none"
-                                    style={{ color: currentTheme.styles.contentPrimary }}
-                                >
-                                    <FolderKanban
-                                        size={14}
-                                        style={{ color: currentTheme.styles.contentAccent }}
-                                    />
-                                    <span className="font-medium">{project.name}</span>
-                                </button>
-                                <div className="flex items-center gap-2">
-                                    {/* Action buttons - visible on hover */}
-                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            onClick={(e) => handleOpenRename({ id: project.id, name: project.name }, e)}
-                                            className="p-1.5 rounded hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1"
-                                            title="Rename project"
-                                            style={{ color: currentTheme.styles.contentSecondary }}
-                                        >
-                                            <Pencil size={14} />
-                                        </button>
-                                        <button
-                                            onClick={(e) => handleOpenDelete({ id: project.id, name: project.name }, e)}
-                                            className="p-1.5 rounded hover:bg-accent transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1"
-                                            title="Delete project"
-                                            style={{ color: currentTheme.styles.semanticDestructive }}
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
-                                    </div>
-                                    {/* Stats */}
-                                    <div className="flex items-center gap-3 text-xs ml-2">
-                                        {project.notesCount > 0 && (
-                                            <span
-                                                className="flex items-center gap-1"
-                                                style={{ color: currentTheme.styles.contentTertiary }}
-                                            >
-                                                <FileText size={12} />
-                                                {project.notesCount}
-                                            </span>
-                                        )}
-                                        {project.inProgressCount > 0 && (
-                                            <span
-                                                className="flex items-center gap-1"
-                                                style={{ color: currentTheme.styles.contentAccent }}
-                                            >
-                                                <Clock size={12} />
-                                                {project.inProgressCount}
-                                            </span>
-                                        )}
-                                        {project.todoCount > 0 && (
-                                            <span
-                                                className="flex items-center gap-1"
-                                                style={{ color: currentTheme.styles.contentSecondary }}
-                                            >
-                                                <Circle size={12} />
-                                                {project.todoCount}
-                                            </span>
-                                        )}
-                                        {project.doneCount > 0 && (
-                                            <span
-                                                className="flex items-center gap-1"
-                                                style={{ color: currentTheme.styles.semanticSuccess }}
-                                            >
-                                                <CheckCircle2 size={12} />
-                                                {project.doneCount}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
+            <ScrollArea className="flex-1 min-h-0">
+                <ProjectList
+                    mode="full"
+                    items={projectListItems}
+                    selectedIndex={selectedIndex}
+                    onSelectedIndexChange={setSelectedIndex}
+                    onOpenProject={(project) => handleOpenProject(project.projectKey)}
+                    emptyMessage={searchQuery ? "No projects found" : "No projects yet"}
+                    showNotesCount
+                    listRef={listRef}
+                    onRenameProject={(project, e) => handleOpenRename({ id: project.id, name: project.name }, e)}
+                    onDeleteProject={(project, e) => handleOpenDelete({ id: project.id, name: project.name }, e)}
+                />
+            </ScrollArea>
 
             {/* Dialogs */}
             {selectedProject && (
