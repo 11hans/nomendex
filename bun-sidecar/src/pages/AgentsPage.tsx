@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
     Select,
     SelectContent,
@@ -154,116 +155,114 @@ function AgentsContent() {
     }
 
     return (
-        <div className="h-full flex flex-col overflow-hidden bg-bg text-text">
-            <div className="px-6 py-4 flex-shrink-0">
-                <div className="max-w-4xl mx-auto flex items-center justify-between">
-                    <div>
-                        <h1 className="text-lg font-medium">
-                            Agents
-                        </h1>
-                        <p className="text-xs text-text-secondary">
-                            Configure AI agents with custom system prompts and MCP servers.
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <Button variant="outline" onClick={() => navigate("/mcp-servers")}>
-                            <Server className="mr-2 h-4 w-4" />
-                            MCP Servers
-                        </Button>
-                        <Button onClick={openCreatePage}>
-                            <Plus className="mr-2 h-4 w-4" />
-                            New Agent
-                        </Button>
-                    </div>
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col max-w-4xl mx-auto w-full bg-bg text-text">
+            <div className="shrink-0 px-4 py-2.5 border-b border-border flex items-center justify-between gap-2">
+                <div>
+                    <h1 className="text-sm font-medium">
+                        Agents
+                    </h1>
+                    <p className="text-[10px] text-text-secondary">
+                        Configure AI agents with custom system prompts and MCP servers.
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={() => navigate("/mcp-servers")}>
+                        <Server className="mr-2 h-4 w-4" />
+                        MCP Servers
+                    </Button>
+                    <Button onClick={openCreatePage}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        New Agent
+                    </Button>
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto outline-none">
-                <div className="max-w-4xl mx-auto px-6 pr-8">
-                {agents.map((agent) => (
-                    <Card key={agent.id}>
-                        <CardHeader className="pb-3">
-                            <div className="flex items-start justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-bg-secondary">
-                                        <Bot className="h-5 w-5 text-text-secondary" />
+            <ScrollArea className="flex-1 min-h-0">
+                <div className="px-4 py-4 outline-none pr-2 space-y-4">
+                    {agents.map((agent) => (
+                        <Card key={agent.id}>
+                            <CardHeader className="pb-3">
+                                <div className="flex items-start justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-bg-secondary">
+                                            <Bot className="h-5 w-5 text-text-secondary" />
+                                        </div>
+                                        <div>
+                                            <CardTitle className="flex items-center gap-2">
+                                                {agent.name}
+                                                {agent.isDefault && (
+                                                    <span className="text-xs px-2 py-0.5 rounded-full bg-surface-elevated text-accent">
+                                                        Default
+                                                    </span>
+                                                )}
+                                            </CardTitle>
+                                            <CardDescription>{agent.description || "No description"}</CardDescription>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => handleDuplicate(agent)}
+                                            title="Duplicate"
+                                        >
+                                            <Copy className="h-4 w-4" />
+                                        </Button>
+                                        {!agent.isDefault && (
+                                            <>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => openEditDialog(agent)}
+                                                    title="Edit"
+                                                >
+                                                    <Pencil className="h-4 w-4" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => setDeleteConfirmAgent(agent)}
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex flex-wrap gap-4 text-xs">
+                                    <div>
+                                        <span className="text-text-secondary">Model: </span>
+                                        <span>{getModelDisplayName(agent.model)}</span>
                                     </div>
                                     <div>
-                                        <CardTitle className="flex items-center gap-2">
-                                            {agent.name}
-                                            {agent.isDefault && (
-                                                <span className="text-xs px-2 py-0.5 rounded-full bg-surface-elevated text-accent">
-                                                    Default
-                                                </span>
-                                            )}
-                                        </CardTitle>
-                                        <CardDescription>{agent.description || "No description"}</CardDescription>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleDuplicate(agent)}
-                                        title="Duplicate"
-                                    >
-                                        <Copy className="h-4 w-4" />
-                                    </Button>
-                                    {!agent.isDefault && (
-                                        <>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => openEditDialog(agent)}
-                                                title="Edit"
-                                            >
-                                                <Pencil className="h-4 w-4" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => setDeleteConfirmAgent(agent)}
-                                                title="Delete"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="flex flex-wrap gap-4 text-xs">
-                                <div>
-                                    <span className="text-text-secondary">Model: </span>
-                                    <span>{getModelDisplayName(agent.model)}</span>
-                                </div>
-                                <div>
-                                    <span className="text-text-secondary">MCP Servers: </span>
-                                    <span>
-                                        {agent.mcpServers.length === 0
-                                            ? "None"
-                                            : agent.mcpServers
-                                                .map((id) => allMcpServers.find((s) => s.id === id)?.name || id)
-                                                .join(", ")}
-                                    </span>
-                                </div>
-                                {agent.systemPrompt && (
-                                    <div className="w-full">
-                                        <span className="text-text-secondary">System Prompt: </span>
-                                        <span className="font-mono text-text-muted">
-                                            {agent.systemPrompt.length > 100
-                                                ? agent.systemPrompt.slice(0, 100) + "..."
-                                                : agent.systemPrompt || "(uses default)"}
+                                        <span className="text-text-secondary">MCP Servers: </span>
+                                        <span>
+                                            {agent.mcpServers.length === 0
+                                                ? "None"
+                                                : agent.mcpServers
+                                                    .map((id) => allMcpServers.find((s) => s.id === id)?.name || id)
+                                                    .join(", ")}
                                         </span>
                                     </div>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-                ))}
+                                    {agent.systemPrompt && (
+                                        <div className="w-full">
+                                            <span className="text-text-secondary">System Prompt: </span>
+                                            <span className="font-mono text-text-muted">
+                                                {agent.systemPrompt.length > 100
+                                                    ? agent.systemPrompt.slice(0, 100) + "..."
+                                                    : agent.systemPrompt || "(uses default)"}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
                 </div>
-            </div>
+            </ScrollArea>
 
             {/* Edit Dialog */}
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

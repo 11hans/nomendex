@@ -2,14 +2,15 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Hash, FileText, CheckSquare } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Hash, FileText, CheckSquare, ArrowLeft } from "lucide-react";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useTheme } from "@/hooks/useTheme";
 import { notesPluginSerial } from "@/features/notes";
 import { todosPluginSerial } from "@/features/todos";
 import { cn } from "@/lib/utils";
-import type { TagDetailViewProps } from "./index";
+import { tagsPluginSerial, type TagDetailViewProps } from "./index";
 
 interface FileReference {
     fileRef: string;
@@ -50,7 +51,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
     if (!tabId) {
         throw new Error("tabId is required");
     }
-    const { activeTab, setTabName, addNewTab, setActiveTabId, getViewSelfPlacement, setSidebarTabId } = useWorkspaceContext();
+    const { activeTab, setTabName, addNewTab, setActiveTabId, getViewSelfPlacement, setSidebarTabId, replaceTabWithNewView } = useWorkspaceContext();
     const { loading, error, setLoading, setError } = usePlugin();
     const [files, setFiles] = useState<FileReference[]>([]);
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -145,6 +146,10 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
         [addNewTab, placement, setActiveTabId, setSidebarTabId]
     );
 
+    const handleBackToTagsBrowser = useCallback(() => {
+        replaceTabWithNewView(tabId, tagsPluginSerial, { view: "browser" });
+    }, [replaceTabWithNewView, tabId]);
+
     // Keyboard navigation
     const handleKeyDown = useCallback(
         (e: React.KeyboardEvent) => {
@@ -205,32 +210,41 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
 
     return (
         <div
-            className="h-full flex flex-col"
+            className="tag-detail flex-1 min-w-0 min-h-0 flex flex-col"
             style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
             onKeyDown={handleKeyDown}
             tabIndex={0}
         >
             {/* Header */}
             <div
-                className="sticky top-0 z-10 px-4 py-3 border-b"
+                className="shrink-0 px-4 py-2.5 border-b"
                 style={{
                     backgroundColor: currentTheme.styles.surfacePrimary,
                     borderColor: currentTheme.styles.borderDefault,
                 }}
             >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={handleBackToTagsBrowser}
+                        aria-label="Back to Tags"
+                        className="h-6 w-6"
+                    >
+                        <ArrowLeft size={14} />
+                    </Button>
                     <Hash
-                        size={24}
+                        size={16}
                         style={{ color: currentTheme.styles.contentAccent }}
                     />
                     <h1
-                        className="text-2xl font-semibold"
+                        className="tag-detail-title text-sm font-medium"
                         style={{ color: currentTheme.styles.contentPrimary }}
                     >
                         {tagName}
                     </h1>
                     <span
-                        className="text-sm px-2 py-0.5 rounded-full"
+                        className="tag-detail-meta text-[10px] px-2 py-0.5 rounded-full"
                         style={{
                             backgroundColor: currentTheme.styles.surfaceTertiary,
                             color: currentTheme.styles.contentSecondary
@@ -259,7 +273,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                         {noteFiles.length > 0 && (
                             <div>
                                 <div
-                                    className="flex items-center gap-2 mb-2 text-sm font-medium"
+                                    className="flex items-center gap-2 mb-2 text-[11px] font-normal"
                                     style={{ color: currentTheme.styles.contentSecondary }}
                                 >
                                     <FileText size={14} />
@@ -288,7 +302,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                                                     size={16}
                                                     style={{ color: currentTheme.styles.contentTertiary }}
                                                 />
-                                                <span>{file.displayName}</span>
+                                                <span className="text-[11px] font-normal">{file.displayName}</span>
                                             </button>
                                         );
                                     })}
@@ -300,7 +314,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                         {todoFiles.length > 0 && (
                             <div>
                                 <div
-                                    className="flex items-center gap-2 mb-2 text-sm font-medium"
+                                    className="flex items-center gap-2 mb-2 text-[11px] font-normal"
                                     style={{ color: currentTheme.styles.contentSecondary }}
                                 >
                                     <CheckSquare size={14} />
@@ -329,7 +343,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                                                     size={16}
                                                     style={{ color: currentTheme.styles.contentTertiary }}
                                                 />
-                                                <span>{file.title || file.displayName}</span>
+                                                <span className="text-[11px] font-normal">{file.title || file.displayName}</span>
                                             </button>
                                         );
                                     })}

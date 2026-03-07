@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { FolderKanban, Circle, Clock, CheckCircle2, FileText, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
@@ -281,232 +282,179 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
 
     return (
         <div
-            className="h-full flex flex-col"
+            className="flex-1 min-w-0 min-h-0 flex flex-col"
             style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
         >
-            {/* Header */}
             <div
-                className="sticky top-0 z-10 px-6 py-4 border-b"
+                className="shrink-0 px-4 py-2.5 border-b"
                 style={{
                     backgroundColor: currentTheme.styles.surfacePrimary,
                     borderColor: currentTheme.styles.borderDefault,
                 }}
             >
-                <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center gap-2">
                     <FolderKanban
-                        size={28}
+                        size={16}
                         style={{ color: currentTheme.styles.contentAccent }}
                     />
-                    <h1
-                        className="text-2xl font-bold"
+                    <h2
+                        className="text-sm font-medium truncate flex-1"
                         style={{ color: currentTheme.styles.contentPrimary }}
                     >
                         {projectName}
-                    </h1>
+                    </h2>
                     <button
                         onClick={handleOpenKanban}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors hover:opacity-80"
+                        className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors hover:opacity-80"
                         style={{
                             backgroundColor: currentTheme.styles.surfaceSecondary,
                             color: currentTheme.styles.contentAccent,
                             border: `1px solid ${currentTheme.styles.borderDefault}`,
                         }}
                     >
-                        <ExternalLink size={14} />
-                        Kanban Board
+                        <ExternalLink size={12} />
+                        Kanban
                     </button>
                 </div>
-
-                {/* Stats */}
-                <div className="flex gap-6">
-                    <div
-                        className="px-4 py-3 rounded-lg"
-                        style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}
-                    >
-                        <div
-                            className="text-2xl font-bold"
-                            style={{ color: currentTheme.styles.contentPrimary }}
-                        >
-                            {totalItems}
-                        </div>
-                        <div
-                            className="text-xs uppercase tracking-wider"
-                            style={{ color: currentTheme.styles.contentTertiary }}
-                        >
-                            Total Items
-                        </div>
-                    </div>
-                    <div
-                        className="px-4 py-3 rounded-lg"
-                        style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}
-                    >
-                        <div
-                            className="text-2xl font-bold"
-                            style={{ color: currentTheme.styles.contentAccent }}
-                        >
-                            {inProgressTodos.length}
-                        </div>
-                        <div
-                            className="text-xs uppercase tracking-wider"
-                            style={{ color: currentTheme.styles.contentTertiary }}
-                        >
-                            In Progress
-                        </div>
-                    </div>
-                    <div
-                        className="px-4 py-3 rounded-lg"
-                        style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}
-                    >
-                        <div
-                            className="text-2xl font-bold"
-                            style={{ color: currentTheme.styles.semanticSuccess }}
-                        >
-                            {completionRate}%
-                        </div>
-                        <div
-                            className="text-xs uppercase tracking-wider"
-                            style={{ color: currentTheme.styles.contentTertiary }}
-                        >
-                            Complete
-                        </div>
-                    </div>
-                    <div
-                        className="px-4 py-3 rounded-lg"
-                        style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}
-                    >
-                        <div
-                            className="text-2xl font-bold"
-                            style={{ color: currentTheme.styles.contentPrimary }}
-                        >
-                            {notes.length}
-                        </div>
-                        <div
-                            className="text-xs uppercase tracking-wider"
-                            style={{ color: currentTheme.styles.contentTertiary }}
-                        >
-                            Notes
-                        </div>
-                    </div>
+                <div
+                    className="flex items-center gap-3 mt-1 text-[10px] flex-wrap"
+                    style={{ color: currentTheme.styles.contentTertiary }}
+                >
+                    <span className="flex items-center gap-1">
+                        <FileText size={12} />
+                        {notes.length} notes
+                    </span>
+                    <span className="flex items-center gap-1">
+                        <Clock size={12} />
+                        {inProgressTodos.length} in progress
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded" style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}>
+                        {totalItems} total
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded" style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}>
+                        {completionRate}% done
+                    </span>
                 </div>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-8">
-                {totalItems === 0 ? (
-                    <div
-                        className="text-center py-12"
-                        style={{ color: currentTheme.styles.contentTertiary }}
-                    >
-                        No notes or todos in this project yet
-                    </div>
-                ) : (
-                    <>
-                        {/* Notes Section */}
-                        {notes.length > 0 && (
-                            <div>
-                                <SectionHeader
-                                    icon={FileText}
-                                    title="Notes"
-                                    count={notes.length}
-                                    color={currentTheme.styles.contentAccent}
-                                />
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
-                                    {displayedNotes.map((note) => (
-                                        <NoteCard key={note.fileName} note={note} />
-                                    ))}
+            <ScrollArea className="flex-1 min-h-0">
+                <div className="px-6 py-4 max-w-6xl space-y-8">
+                    {totalItems === 0 ? (
+                        <div
+                            className="flex items-center justify-center h-full min-h-[220px] text-xs"
+                            style={{ color: currentTheme.styles.contentTertiary }}
+                        >
+                            No notes or todos in this project yet
+                        </div>
+                    ) : (
+                        <>
+                            {/* Notes Section */}
+                            {notes.length > 0 && (
+                                <div>
+                                    <SectionHeader
+                                        icon={FileText}
+                                        title="Notes"
+                                        count={notes.length}
+                                        color={currentTheme.styles.contentAccent}
+                                    />
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
+                                        {displayedNotes.map((note) => (
+                                            <NoteCard key={note.fileName} note={note} />
+                                        ))}
+                                    </div>
+                                    {hasMoreNotes && (
+                                        <button
+                                            onClick={() => setShowAllNotes(!showAllNotes)}
+                                            className="mt-3 flex items-center gap-1 text-sm transition-colors hover:opacity-80"
+                                            style={{ color: currentTheme.styles.contentAccent }}
+                                        >
+                                            {showAllNotes ? (
+                                                <>
+                                                    <ChevronUp size={16} />
+                                                    Show less
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <ChevronDown size={16} />
+                                                    Show all {notes.length} notes
+                                                </>
+                                            )}
+                                        </button>
+                                    )}
                                 </div>
-                                {hasMoreNotes && (
-                                    <button
-                                        onClick={() => setShowAllNotes(!showAllNotes)}
-                                        className="mt-3 flex items-center gap-1 text-sm transition-colors hover:opacity-80"
-                                        style={{ color: currentTheme.styles.contentAccent }}
-                                    >
-                                        {showAllNotes ? (
-                                            <>
-                                                <ChevronUp size={16} />
-                                                Show less
-                                            </>
-                                        ) : (
-                                            <>
-                                                <ChevronDown size={16} />
-                                                Show all {notes.length} notes
-                                            </>
-                                        )}
-                                    </button>
-                                )}
-                            </div>
-                        )}
+                            )}
 
-                        {/* In Progress Section */}
-                        {inProgressTodos.length > 0 && (
-                            <div>
-                                <SectionHeader
-                                    icon={Clock}
-                                    title="In Progress"
-                                    count={inProgressTodos.length}
-                                    color={currentTheme.styles.contentAccent}
-                                />
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
-                                    {inProgressTodos.map((todo) => (
-                                        <TodoCard key={todo.id} todo={todo} />
-                                    ))}
+                            {/* In Progress Section */}
+                            {inProgressTodos.length > 0 && (
+                                <div>
+                                    <SectionHeader
+                                        icon={Clock}
+                                        title="In Progress"
+                                        count={inProgressTodos.length}
+                                        color={currentTheme.styles.contentAccent}
+                                    />
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
+                                        {inProgressTodos.map((todo) => (
+                                            <TodoCard key={todo.id} todo={todo} />
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
 
-                        {/* Todo Section */}
-                        {todoTodos.length > 0 && (
-                            <div>
-                                <SectionHeader
-                                    icon={Circle}
-                                    title="Todo"
-                                    count={todoTodos.length}
-                                    color={currentTheme.styles.contentSecondary}
-                                />
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
-                                    {todoTodos.map((todo) => (
-                                        <TodoCard key={todo.id} todo={todo} />
-                                    ))}
+                            {/* Todo Section */}
+                            {todoTodos.length > 0 && (
+                                <div>
+                                    <SectionHeader
+                                        icon={Circle}
+                                        title="Todo"
+                                        count={todoTodos.length}
+                                        color={currentTheme.styles.contentSecondary}
+                                    />
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
+                                        {todoTodos.map((todo) => (
+                                            <TodoCard key={todo.id} todo={todo} />
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
 
-                        {/* Done Section */}
-                        {doneTodos.length > 0 && (
-                            <div>
-                                <SectionHeader
-                                    icon={CheckCircle2}
-                                    title="Done"
-                                    count={doneTodos.length}
-                                    color={currentTheme.styles.semanticSuccess}
-                                />
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
-                                    {doneTodos.map((todo) => (
-                                        <TodoCard key={todo.id} todo={todo} />
-                                    ))}
+                            {/* Done Section */}
+                            {doneTodos.length > 0 && (
+                                <div>
+                                    <SectionHeader
+                                        icon={CheckCircle2}
+                                        title="Done"
+                                        count={doneTodos.length}
+                                        color={currentTheme.styles.semanticSuccess}
+                                    />
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
+                                        {doneTodos.map((todo) => (
+                                            <TodoCard key={todo.id} todo={todo} />
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
 
-                        {/* Other Section */}
-                        {otherTodos.length > 0 && (
-                            <div>
-                                <SectionHeader
-                                    icon={Circle}
-                                    title="Other"
-                                    count={otherTodos.length}
-                                    color={currentTheme.styles.contentTertiary}
-                                />
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
-                                    {otherTodos.map((todo) => (
-                                        <TodoCard key={todo.id} todo={todo} />
-                                    ))}
+                            {/* Other Section */}
+                            {otherTodos.length > 0 && (
+                                <div>
+                                    <SectionHeader
+                                        icon={Circle}
+                                        title="Other"
+                                        count={otherTodos.length}
+                                        color={currentTheme.styles.contentTertiary}
+                                    />
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
+                                        {otherTodos.map((todo) => (
+                                            <TodoCard key={todo.id} todo={todo} />
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                    </>
-                )}
-            </div>
+                            )}
+                        </>
+                    )}
+                </div>
+            </ScrollArea>
 
             {/* Edit Todo Dialog */}
             <TaskCardEditor

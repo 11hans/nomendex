@@ -221,31 +221,31 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
 
     return (
         <div
-            className="h-full flex flex-col"
+            className="tags-browser flex-1 min-w-0 min-h-0 flex flex-col"
             style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
         >
             {/* Header with search */}
             <div
-                className="sticky top-0 z-10 px-4 py-3 border-b"
+                className="shrink-0 px-4 py-2.5 border-b"
                 style={{
                     backgroundColor: currentTheme.styles.surfacePrimary,
                     borderColor: currentTheme.styles.borderDefault,
                 }}
             >
-                <div className="flex items-center justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2">
                         <Hash
-                            size={20}
+                            size={16}
                             style={{ color: currentTheme.styles.contentAccent }}
                         />
-                        <h1
-                            className="text-xl font-semibold"
+                        <h2
+                            className="tags-header-title text-sm font-medium"
                             style={{ color: currentTheme.styles.contentPrimary }}
                         >
                             Tags
-                        </h1>
+                        </h2>
                         <span
-                            className="text-sm"
+                            className="tags-header-meta text-[10px]"
                             style={{ color: currentTheme.styles.contentTertiary }}
                         >
                             ({tags.length})
@@ -255,7 +255,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                         variant="ghost"
                         size="sm"
                         onClick={() => setShowCreateDialog(true)}
-                        className="flex items-center gap-2"
+                        className="tags-create-btn flex items-center gap-2"
                     >
                         <Plus size={16} />
                         Create Tag
@@ -275,7 +275,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        className="pl-9"
+                        className="tags-search-input pl-9"
                         style={{
                             backgroundColor: currentTheme.styles.surfaceSecondary,
                             borderColor: currentTheme.styles.borderDefault,
@@ -323,11 +323,11 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                                             size={14}
                                             style={{ color: currentTheme.styles.contentAccent }}
                                         />
-                                        <span className="font-medium">{tagItem.tag}</span>
+                                        <span className="text-[11px] font-normal">{tagItem.tag}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span
-                                            className="text-sm px-2 py-0.5 rounded-full"
+                                            className="text-[10px] font-normal px-2 py-0.5 rounded-full"
                                             style={{
                                                 backgroundColor: currentTheme.styles.surfaceTertiary,
                                                 color: currentTheme.styles.contentSecondary
