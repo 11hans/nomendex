@@ -39,6 +39,10 @@ interface CreateTodoDialogProps {
     projectLocked?: boolean;
     availableTags: string[];
     availableProjects: string[];
+    triggerLabel?: string;
+    triggerClassName?: string;
+    hideTriggerIcon?: boolean;
+    triggerVariant?: React.ComponentProps<typeof Button>["variant"];
 }
 
 export function CreateTodoDialog({
@@ -50,7 +54,11 @@ export function CreateTodoDialog({
     loading,
     projectLocked = false,
     availableTags,
-    availableProjects
+    availableProjects,
+    triggerLabel = "Add Todo",
+    triggerClassName,
+    hideTriggerIcon = false,
+    triggerVariant = "default",
 }: CreateTodoDialogProps) {
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
@@ -86,9 +94,9 @@ export function CreateTodoDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogTrigger asChild>
-                <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Todo
+                <Button className={triggerClassName} variant={triggerVariant}>
+                    {!hideTriggerIcon && <Plus className="w-4 h-4 mr-2" />}
+                    {triggerLabel}
                 </Button>
             </DialogTrigger>
             <DialogContent
