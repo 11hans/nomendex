@@ -35,6 +35,14 @@ declare global {
 /**
  * Notifies the native macOS app of theme changes for title bar styling
  */
+function applyDarkClass(themeName: string) {
+    if (themeName === "Dark") {
+        document.documentElement.classList.add("dark");
+    } else {
+        document.documentElement.classList.remove("dark");
+    }
+}
+
 function notifyNativeTheme(backgroundColor: string, themeName: string) {
     if (window.webkit?.messageHandlers?.setNativeTheme) {
         window.webkit.messageHandlers.setNativeTheme.postMessage({
@@ -179,6 +187,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     // Default to first theme (Light) until we load from API
     const [currentTheme, setCurrentTheme] = useState<Theme>(() => {
         const defaultTheme = themes[0]!;
+        applyDarkClass(defaultTheme.name);
         document.body.style.backgroundColor = defaultTheme.styles.surfacePrimary;
         // Apply default scrollbar theme colors
         document.documentElement.style.setProperty("--scrollbar-thumb", defaultTheme.styles.borderDefault);
@@ -198,6 +207,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
                         const savedTheme = themes.find(t => t.name === result.data.themeName);
                         if (savedTheme) {
                             setCurrentTheme(savedTheme);
+                            applyDarkClass(savedTheme.name);
                             document.body.style.backgroundColor = savedTheme.styles.surfacePrimary;
                             // Apply scrollbar theme colors
                             document.documentElement.style.setProperty("--scrollbar-thumb", savedTheme.styles.borderDefault);
@@ -225,6 +235,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 
     const setTheme = (theme: Theme) => {
         setCurrentTheme(theme);
+        applyDarkClass(theme.name);
         // Apply the background color to the document body
         document.body.style.backgroundColor = theme.styles.surfacePrimary;
         // Apply scrollbar theme colors
