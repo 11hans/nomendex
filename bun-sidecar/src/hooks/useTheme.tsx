@@ -106,33 +106,33 @@ const themes: Theme[] = [
     {
         name: "Light",
         styles: {
-            // Surface colors
-            surfacePrimary: "#ffffff",
-            surfaceSecondary: "#f9fafb",
-            surfaceTertiary: "#f3f4f6",
-            surfaceAccent: "#f3f4f6",
-            surfaceMuted: "#f9fafb",
+            // Surface colors from :root OKLch variables
+            surfacePrimary: "oklch(0.96 0.003 270)",     // --background
+            surfaceSecondary: "oklch(0.92 0.005 270 / 0.6)",  // --secondary
+            surfaceTertiary: "oklch(0.88 0.005 270 / 0.6)",   // --border
+            surfaceAccent: "oklch(0.92 0.005 270 / 0.6)",     // --accent
+            surfaceMuted: "oklch(0.99 0.002 270 / 0.7)",      // --card
 
             // Content colors
-            contentPrimary: "#0a0a0a",
-            contentSecondary: "#525252",
-            contentTertiary: "#a3a3a3",
-            contentAccent: "#3b82f6",
+            contentPrimary: "oklch(0.25 0 0)",          // --foreground
+            contentSecondary: "oklch(0.45 0 0)",        // --muted-foreground
+            contentTertiary: "oklch(0.50 0 0)",         // lighter text
+            contentAccent: "oklch(0.50 0.18 250)",      // --primary
 
             // Border colors
-            borderDefault: "#e5e7eb",
-            borderAccent: "#3b82f6",
+            borderDefault: "oklch(0.88 0.005 270 / 0.6)",    // --border
+            borderAccent: "oklch(0.50 0.18 250)",            // --ring (primary)
 
             // Semantic colors
-            semanticPrimary: "#0a0a0a",
-            semanticPrimaryForeground: "#ffffff",
-            semanticDestructive: "#dc2626",
-            semanticDestructiveForeground: "#ffffff",
-            semanticSuccess: "#16a34a",
-            semanticSuccessForeground: "#ffffff",
+            semanticPrimary: "oklch(0.50 0.18 250)",         // --primary
+            semanticPrimaryForeground: "oklch(1 0 0)",       // white
+            semanticDestructive: "oklch(0.55 0.24 27)",      // --destructive
+            semanticDestructiveForeground: "oklch(1 0 0)",   // white
+            semanticSuccess: "oklch(0.45 0.22 145)",         // --success
+            semanticSuccessForeground: "oklch(1 0 0)",       // white
 
             // Design tokens
-            borderRadius: "0px",
+            borderRadius: "0.5rem",
             shadowSm: "none",
             shadowMd: "none",
             shadowLg: "none",
@@ -141,243 +141,33 @@ const themes: Theme[] = [
     {
         name: "Dark",
         styles: {
-            // Surface colors - softer, less intense blacks
-            surfacePrimary: "#1a1a1a",
-            surfaceSecondary: "#252525",
-            surfaceTertiary: "#2f2f2f",
-            surfaceAccent: "#3a3a3a",
-            surfaceMuted: "#232323",
-
-            // Content colors - improved readability with higher contrast
-            contentPrimary: "#f5f5f5",
-            contentSecondary: "#c9c9c9",
-            contentTertiary: "#9a9a9a",
-            contentAccent: "#60a5fa",
-
-            // Border colors - subtle with accent
-            borderDefault: "#3a3a3a",
-            borderAccent: "#60a5fa",
-
-            // Semantic colors - vibrant accents
-            semanticPrimary: "#60a5fa",
-            semanticPrimaryForeground: "#ffffff",
-            semanticDestructive: "#f87171",
-            semanticDestructiveForeground: "#ffffff",
-            semanticSuccess: "#34d399",
-            semanticSuccessForeground: "#ffffff",
-
-            // Design tokens
-            borderRadius: "0px",
-            shadowSm: "none",
-            shadowMd: "none",
-            shadowLg: "none",
-        },
-    },
-    {
-        name: "Nord",
-        styles: {
-            // Surface colors - inspired by Nord theme
-            surfacePrimary: "#2e3440",
-            surfaceSecondary: "#3b4252",
-            surfaceTertiary: "#434c5e",
-            surfaceAccent: "#4c566a",
-            surfaceMuted: "#3b4252",
-
-            // Content colors - softer off-white instead of pure white
-            contentPrimary: "#e5e9f0",
-            contentSecondary: "#d8dee9",
-            contentTertiary: "#81a1c1",
-            contentAccent: "#88c0d0",
-
-            // Border colors
-            borderDefault: "#4c566a",
-            borderAccent: "#88c0d0",
-
-            // Semantic colors - Nord palette
-            semanticPrimary: "#88c0d0",
-            semanticPrimaryForeground: "#2e3440",
-            semanticDestructive: "#bf616a",
-            semanticDestructiveForeground: "#e5e9f0",
-            semanticSuccess: "#a3be8c",
-            semanticSuccessForeground: "#2e3440",
-
-            // Design tokens
-            borderRadius: "0px",
-            shadowSm: "none",
-            shadowMd: "none",
-            shadowLg: "none",
-        },
-    },
-    {
-        name: "Dracula",
-        styles: {
-            // Surface colors - Dracula theme
-            surfacePrimary: "#282a36",
-            surfaceSecondary: "#343746",
-            surfaceTertiary: "#44475a",
-            surfaceAccent: "#6272a4",
-            surfaceMuted: "#343746",
+            // Surface colors from .dark OKLch variables
+            surfacePrimary: "oklch(0.14 0.005 270)",         // --background
+            surfaceSecondary: "oklch(0.22 0.008 270 / 0.6)", // --secondary
+            surfaceTertiary: "oklch(0.28 0.008 270 / 0.5)",  // --border
+            surfaceAccent: "oklch(0.22 0.008 270 / 0.6)",    // --accent
+            surfaceMuted: "oklch(0.18 0.005 270 / 0.7)",     // --card
 
             // Content colors
-            contentPrimary: "#f8f8f2",
-            contentSecondary: "#bd93f9",
-            contentTertiary: "#6272a4",
-            contentAccent: "#8be9fd",
+            contentPrimary: "oklch(0.90 0 0)",          // --foreground
+            contentSecondary: "oklch(0.60 0 0)",        // --muted-foreground
+            contentTertiary: "oklch(0.65 0 0)",         // lighter text
+            contentAccent: "oklch(0.72 0.18 250)",      // --primary
 
             // Border colors
-            borderDefault: "#44475a",
-            borderAccent: "#bd93f9",
-
-            // Semantic colors - Dracula vibrant
-            semanticPrimary: "#bd93f9",
-            semanticPrimaryForeground: "#282a36",
-            semanticDestructive: "#ff5555",
-            semanticDestructiveForeground: "#f8f8f2",
-            semanticSuccess: "#50fa7b",
-            semanticSuccessForeground: "#282a36",
-
-            // Design tokens
-            borderRadius: "0px",
-            shadowSm: "none",
-            shadowMd: "none",
-            shadowLg: "none",
-        },
-    },
-    {
-        name: "Solarized Light",
-        styles: {
-            // Surface colors - Solarized Light
-            surfacePrimary: "#fdf6e3",
-            surfaceSecondary: "#eee8d5",
-            surfaceTertiary: "#e3dcc8",
-            surfaceAccent: "#d9d0bb",
-            surfaceMuted: "#eee8d5",
-
-            // Content colors
-            contentPrimary: "#657b83",
-            contentSecondary: "#839496",
-            contentTertiary: "#93a1a1",
-            contentAccent: "#268bd2",
-
-            // Border colors
-            borderDefault: "#d9d0bb",
-            borderAccent: "#268bd2",
-
-            // Semantic colors - Solarized palette
-            semanticPrimary: "#268bd2",
-            semanticPrimaryForeground: "#fdf6e3",
-            semanticDestructive: "#dc322f",
-            semanticDestructiveForeground: "#fdf6e3",
-            semanticSuccess: "#859900",
-            semanticSuccessForeground: "#fdf6e3",
-
-            // Design tokens
-            borderRadius: "0px",
-            shadowSm: "none",
-            shadowMd: "none",
-            shadowLg: "none",
-        },
-    },
-    {
-        name: "Solarized Dark",
-        styles: {
-            // Surface colors - Solarized Dark
-            surfacePrimary: "#002b36",
-            surfaceSecondary: "#073642",
-            surfaceTertiary: "#0e4958",
-            surfaceAccent: "#155d6d",
-            surfaceMuted: "#073642",
-
-            // Content colors
-            contentPrimary: "#839496",
-            contentSecondary: "#657b83",
-            contentTertiary: "#586e75",
-            contentAccent: "#268bd2",
-
-            // Border colors
-            borderDefault: "#155d6d",
-            borderAccent: "#268bd2",
+            borderDefault: "oklch(0.28 0.008 270 / 0.5)",    // --border
+            borderAccent: "oklch(0.72 0.18 250)",            // --ring (primary)
 
             // Semantic colors
-            semanticPrimary: "#268bd2",
-            semanticPrimaryForeground: "#fdf6e3",
-            semanticDestructive: "#dc322f",
-            semanticDestructiveForeground: "#fdf6e3",
-            semanticSuccess: "#859900",
-            semanticSuccessForeground: "#fdf6e3",
+            semanticPrimary: "oklch(0.72 0.18 250)",         // --primary
+            semanticPrimaryForeground: "oklch(1 0 0)",       // white
+            semanticDestructive: "oklch(0.65 0.24 27)",      // --destructive
+            semanticDestructiveForeground: "oklch(1 0 0)",   // white
+            semanticSuccess: "oklch(0.70 0.24 145)",         // --success
+            semanticSuccessForeground: "oklch(1 0 0)",       // white
 
             // Design tokens
-            borderRadius: "0px",
-            shadowSm: "none",
-            shadowMd: "none",
-            shadowLg: "none",
-        },
-    },
-    {
-        name: "Monokai",
-        styles: {
-            // Surface colors - Monokai
-            surfacePrimary: "#272822",
-            surfaceSecondary: "#34352f",
-            surfaceTertiary: "#3e3d32",
-            surfaceAccent: "#49483e",
-            surfaceMuted: "#34352f",
-
-            // Content colors
-            contentPrimary: "#f8f8f2",
-            contentSecondary: "#cfcfc2",
-            contentTertiary: "#75715e",
-            contentAccent: "#66d9ef",
-
-            // Border colors
-            borderDefault: "#49483e",
-            borderAccent: "#66d9ef",
-
-            // Semantic colors - Monokai vibrant
-            semanticPrimary: "#66d9ef",
-            semanticPrimaryForeground: "#272822",
-            semanticDestructive: "#f92672",
-            semanticDestructiveForeground: "#f8f8f2",
-            semanticSuccess: "#a6e22e",
-            semanticSuccessForeground: "#272822",
-
-            // Design tokens
-            borderRadius: "0px",
-            shadowSm: "none",
-            shadowMd: "none",
-            shadowLg: "none",
-        },
-    },
-    {
-        name: "Ocean",
-        styles: {
-            // Surface colors - Ocean inspired
-            surfacePrimary: "#1a2332",
-            surfaceSecondary: "#243447",
-            surfaceTertiary: "#2e445c",
-            surfaceAccent: "#385571",
-            surfaceMuted: "#243447",
-
-            // Content colors
-            contentPrimary: "#e0e9f0",
-            contentSecondary: "#b3c5d6",
-            contentTertiary: "#7a92ab",
-            contentAccent: "#4fd1c5",
-
-            // Border colors
-            borderDefault: "#385571",
-            borderAccent: "#4fd1c5",
-
-            // Semantic colors
-            semanticPrimary: "#4fd1c5",
-            semanticPrimaryForeground: "#1a2332",
-            semanticDestructive: "#fc8181",
-            semanticDestructiveForeground: "#ffffff",
-            semanticSuccess: "#68d391",
-            semanticSuccessForeground: "#1a2332",
-
-            // Design tokens
-            borderRadius: "0px",
+            borderRadius: "0.5rem",
             shadowSm: "none",
             shadowMd: "none",
             shadowLg: "none",
