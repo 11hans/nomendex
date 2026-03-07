@@ -6,7 +6,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { FolderOpen, Plus, Check, Settings } from "lucide-react";
+import { FolderOpen, Plus, Check, Settings, ChevronDown } from "lucide-react";
 import { useWorkspaceSwitcher } from "@/hooks/useWorkspaceSwitcher";
 import { useTheme } from "@/hooks/useTheme";
 import { FolderPickerDialog } from "./FolderPickerDialog";
@@ -17,6 +17,7 @@ export function WorkspaceSwitcher() {
     const { workspaces, activeWorkspace, loading, switchWorkspace, addWorkspace } =
         useWorkspaceSwitcher();
     const { currentTheme } = useTheme();
+    const { styles } = currentTheme;
     const [folderPickerOpen, setFolderPickerOpen] = useState(false);
     const [managerOpen, setManagerOpen] = useState(false);
     const [warningDialogOpen, setWarningDialogOpen] = useState(false);
@@ -75,12 +76,9 @@ export function WorkspaceSwitcher() {
 
     if (loading) {
         return (
-            <div
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-md opacity-50"
-                style={{ color: currentTheme.styles.contentSecondary }}
-            >
-                <FolderOpen className="size-4" />
-                <span className="text-sm">Loading...</span>
+            <div className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md opacity-50 text-muted-foreground text-xs">
+                <FolderOpen className="size-3.5 shrink-0" />
+                <span className="truncate">Loading...</span>
             </div>
         );
     }
@@ -88,35 +86,24 @@ export function WorkspaceSwitcher() {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger
-                className="relative flex items-center justify-center w-full h-12 cursor-pointer transition-colors duration-150 focus:outline-none"
-                style={{
-                    color: currentTheme.styles.contentSecondary,
-                    backgroundColor: "transparent",
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.color = currentTheme.styles.contentPrimary;
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.color = currentTheme.styles.contentSecondary;
-                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded-md text-xs transition-colors text-muted-foreground hover:bg-secondary/50 hover:text-foreground focus:outline-none"
                 title={activeWorkspace?.name || "No Workspace"}
             >
-                <FolderOpen className="size-5" />
+                <FolderOpen className="size-3.5 shrink-0" />
+                <span className="truncate flex-1 text-left">{activeWorkspace?.name || "No Workspace"}</span>
+                <ChevronDown className="size-3 shrink-0 opacity-50" />
             </DropdownMenuTrigger>
             <DropdownMenuContent
                 align="start"
                 className="w-56"
-                style={{
-                    backgroundColor: currentTheme.styles.surfacePrimary,
-                    borderColor: currentTheme.styles.borderDefault,
-                }}
+                style={{ backgroundColor: styles.surfacePrimary, borderColor: styles.borderDefault }}
             >
                 {workspaces.map((ws) => (
                     <DropdownMenuItem
                         key={ws.id}
                         onClick={() => switchWorkspace(ws.id)}
                         className="cursor-pointer"
-                        style={{ color: currentTheme.styles.contentPrimary }}
+                        style={{ color: styles.contentPrimary }}
                     >
                         <FolderOpen className="size-4 mr-2 shrink-0" />
                         <span className="truncate flex-1">{ws.name}</span>
@@ -129,7 +116,7 @@ export function WorkspaceSwitcher() {
                 <DropdownMenuItem
                     onClick={handleAddWorkspace}
                     className="cursor-pointer"
-                    style={{ color: currentTheme.styles.contentPrimary }}
+                    style={{ color: styles.contentPrimary }}
                 >
                     <Plus className="size-4 mr-2 shrink-0" />
                     <span>Add Workspace...</span>
@@ -137,7 +124,7 @@ export function WorkspaceSwitcher() {
                 <DropdownMenuItem
                     onClick={() => setManagerOpen(true)}
                     className="cursor-pointer"
-                    style={{ color: currentTheme.styles.contentPrimary }}
+                    style={{ color: styles.contentPrimary }}
                 >
                     <Settings className="size-4 mr-2 shrink-0" />
                     <span>Manage Workspaces...</span>

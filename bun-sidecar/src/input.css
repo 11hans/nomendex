@@ -1,9 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap');
 @import url('tldraw/tldraw.css');
 @import "tailwindcss";
 
 @theme {
+	--font-sans: 'JetBrains Mono', monospace;
+	--font-mono: 'JetBrains Mono', monospace;
 	--color-bg: var(--bg);
 	--color-bg-secondary: var(--bg-secondary);
 	--color-bg-card: var(--bg-card);
@@ -26,12 +26,18 @@
 	--color-surface-mid: var(--surface-mid);
 	--color-surface-raised: var(--surface-raised);
 	--color-surface-elevated: var(--surface-elevated);
+	--color-card: oklch(0.99 0.002 270 / 0.9);
+	--color-secondary: oklch(0.95 0.004 270 / 0.6);
+	--color-foreground: oklch(0.20 0.01 270);
+	--color-muted-foreground: oklch(0.42 0.01 270);
+	--color-primary-foreground: oklch(1 0 0);
 }
 /* TLDraw Agent Styles */
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
+	--sidebar: oklch(0.99 0.002 270 / 0.75);
 	--bg: oklch(0.98 0.002 270);
 	--bg-secondary: oklch(0.95 0.004 270);
 	--bg-card: oklch(0.99 0.002 270 / 0.9);
@@ -54,6 +60,11 @@
 }
 
 .dark {
+	--sidebar: oklch(0.16 0.005 270 / 0.75);
+	--color-card: oklch(0.16 0.005 270 / 0.75);
+	--color-secondary: oklch(0.22 0.008 270 / 0.6);
+	--color-foreground: oklch(0.92 0 0);
+	--color-muted-foreground: oklch(0.60 0 0);
 	--bg: oklch(0.13 0.005 270 / 0.92);
 	--bg-secondary: oklch(0.18 0.005 270);
 	--bg-card: oklch(0.16 0.005 270 / 0.75);
@@ -624,6 +635,17 @@
 }
 
 
+
+.glass {
+	backdrop-filter: blur(20px) saturate(1.8);
+	-webkit-backdrop-filter: blur(20px) saturate(1.8);
+}
+
+[data-sidebar="sidebar"] {
+	backdrop-filter: blur(20px) saturate(1.8);
+	-webkit-backdrop-filter: blur(20px) saturate(1.8);
+	color: var(--text);
+}
 
 * {
 	box-sizing: border-box;
