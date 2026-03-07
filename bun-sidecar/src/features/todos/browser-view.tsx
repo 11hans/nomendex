@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
-import { useTheme } from "@/hooks/useTheme";
 import { subscribe } from "@/lib/events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,7 +50,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const filterProject = project;
     const { loading, setLoading } = usePlugin();
     const { activeTab, setTabName, openTab, getProjectPreferences, setProjectPreferences } = useWorkspaceContext();
-    const { currentTheme } = useTheme();
 
     const todosAPI = useTodosAPI();
     const [todos, setTodos] = useState<Todo[]>([]);
@@ -1451,26 +1449,18 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             >
                 {/* Drop indicator line */}
                 {showIndicator && (
-                    <div
-                        className="absolute -top-1.5 left-0 right-0 h-0.5 rounded-full z-10"
-                        style={{ backgroundColor: currentTheme.styles.contentAccent }}
-                    />
+                    <div className="absolute -top-1.5 left-0 right-0 h-0.5 rounded-full z-10 bg-accent" />
                 )}
                 <div
                     ref={setNodeRef}
-                    style={{
-                        ...style,
-                        outline: isSelected ? `2px solid ${currentTheme.styles.contentAccent}` : undefined,
-                        outlineOffset: isSelected ? '1px' : undefined,
-                        borderRadius: '8px',
-                    }}
+                    style={style}
                     {...attributes}
                     {...listeners}
                     onClick={() => {
                         setSelectedTodoId(todo.id);
                     }}
                     onDoubleClick={() => handleOpenTodo(todo.id)}
-                    className="cursor-move"
+                    className={`cursor-move rounded-lg ${isSelected ? 'outline outline-2 outline-offset-1 outline-accent' : ''}`}
                 >
                     <TodoCard
                         todo={todo}
@@ -1493,14 +1483,12 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         columnId,
         todos: columnTodos,
         icon,
-        accentColor,
         onAddTodo,
     }: {
         title: string;
         columnId: string;
         todos: Todo[];
         icon: React.ReactNode;
-        accentColor: string;
         onAddTodo: () => void;
     }) {
         const { setNodeRef, isOver } = useDroppable({
@@ -1531,11 +1519,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     </Badge>
                     <button
                         type="button"
-                        className="ml-auto p-1 rounded hover:bg-muted transition-opacity"
-                        style={{
-                            opacity: headerHovered ? 1 : 0,
-                            color: currentTheme.styles.contentSecondary,
-                        }}
+                        className={`ml-auto p-1 rounded hover:bg-muted text-text-secondary transition-opacity ${headerHovered ? 'opacity-100' : 'opacity-0'}`}
                         onClick={(e) => {
                             e.stopPropagation();
                             onAddTodo();
@@ -1547,12 +1531,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                 <SortableContext items={safeColumnTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
                     <div
                         ref={setNodeRef}
-                        className="space-y-2 bg-muted/30 rounded-lg py-3 px-1.5 transition-all duration-200"
-                        style={{
-                            border: isOver
-                                ? `1.5px solid ${accentColor}60`
-                                : '1.5px solid transparent',
-                        }}
+                        className={`space-y-2 bg-muted/30 rounded-lg py-3 px-1.5 transition-all duration-200 border border-[1.5px] ${isOver ? 'border-accent/60' : 'border-transparent'}`}
                     >
                         {safeColumnTodos.map((todo) => (
                             <SortableTodoCard
@@ -1594,13 +1573,12 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                         availableProjects={availableProjects}
                     />
                     <div className="relative w-64">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: currentTheme.styles.contentTertiary }} />
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
                         <Input
                             ref={searchInputRef}
                             placeholder="Search todos..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            style={{ color: currentTheme.styles.contentPrimary }}
                             onKeyDown={(e) => {
                                 if (flattenedTodos.length === 0) return;
 
@@ -1668,24 +1646,14 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                 <MoreHorizontal className="w-4 h-4" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                            align="end"
-                            style={{
-                                backgroundColor: currentTheme.styles.surfacePrimary,
-                                borderColor: currentTheme.styles.borderDefault,
-                            }}
-                        >
-                            <DropdownMenuItem
-                                onClick={openArchivedView}
-                                style={{ color: currentTheme.styles.contentPrimary }}
-                            >
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={openArchivedView}>
                                 <Archive className="w-4 h-4 mr-2" />
                                 Open Archived
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 onClick={archiveAllDone}
                                 disabled={todos.filter(t => t.status === "done").length === 0}
-                                style={{ color: currentTheme.styles.contentPrimary }}
                             >
                                 <Archive className="w-4 h-4 mr-2" />
                                 Archive All Done ({todos.filter(t => t.status === "done").length})
@@ -1693,19 +1661,13 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
 
                             {/* Board Settings Link - Show for project views */}
                             {filterProject && filterProject !== "" && (
-                                <DropdownMenuItem
-                                    onClick={() => setBoardSettingsOpen(true)}
-                                    style={{ color: currentTheme.styles.contentPrimary }}
-                                >
+                                <DropdownMenuItem onClick={() => setBoardSettingsOpen(true)}>
                                     <Settings className="w-4 h-4 mr-2" />
                                     {boardConfig ? "Board Settings" : "Setup Custom Board"}
                                 </DropdownMenuItem>
                             )}
 
-                            <DropdownMenuItem
-                                onClick={toggleShowLaterColumn}
-                                style={{ color: currentTheme.styles.contentPrimary }}
-                            >
+                            <DropdownMenuItem onClick={toggleShowLaterColumn}>
                                 {showLaterColumn ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
                                 {showLaterColumn ? "Hide Later Column" : "Show Later Column"}
                             </DropdownMenuItem>
@@ -1736,8 +1698,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                 title={col.title}
                                 columnId={col.id}
                                 todos={todosByColumn[col.id] || []}
-                                icon={<Icon className="w-4 h-4" style={{ color: currentTheme.styles.contentSecondary }} />}
-                                accentColor={currentTheme.styles.contentAccent}
+                                icon={<Icon className="w-4 h-4 text-text-secondary" />}
                                 onAddTodo={() => {
                                     if (boardConfig) {
                                         openCreateDialogWithStatus("todo", col.id);

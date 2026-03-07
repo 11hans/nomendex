@@ -21,7 +21,6 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
-import { useTheme } from "@/hooks/useTheme";
 import { useAgentsAPI } from "@/hooks/useAgentsAPI";
 import { useMcpServersAPI } from "@/hooks/useMcpServersAPI";
 import type { AgentConfig } from "@/features/agents/index";
@@ -36,7 +35,6 @@ interface CombinedMcpServer extends UserMcpServer {
 }
 
 function AgentsContent() {
-    const { currentTheme } = useTheme();
     const navigate = useNavigate();
     const api = useAgentsAPI();
     const mcpServersAPI = useMcpServersAPI();
@@ -149,67 +147,52 @@ function AgentsContent() {
 
     if (isLoading) {
         return (
-            <div
-                className="flex h-full items-center justify-center"
-                style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
-            >
-                <p style={{ color: currentTheme.styles.contentSecondary }}>Loading agents...</p>
+            <div className="flex h-full items-center justify-center bg-bg">
+                <p className="text-text-secondary">Loading agents...</p>
             </div>
         );
     }
 
     return (
-        <div
-            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
-            style={{
-                backgroundColor: currentTheme.styles.surfacePrimary,
-                color: currentTheme.styles.contentPrimary,
-            }}
-        >
-            <div className="flex items-center justify-between flex-shrink-0 mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold" style={{ color: currentTheme.styles.contentPrimary }}>
-                        Agents
-                    </h1>
-                    <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
-                        Configure AI agents with custom system prompts and MCP servers.
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" onClick={() => navigate("/mcp-servers")}>
-                        <Server className="mr-2 h-4 w-4" />
-                        MCP Servers
-                    </Button>
-                    <Button onClick={openCreatePage}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        New Agent
-                    </Button>
+        <div className="h-full flex flex-col overflow-hidden bg-bg text-text">
+            <div className="px-6 py-4 flex-shrink-0">
+                <div className="max-w-4xl mx-auto flex items-center justify-between">
+                    <div>
+                        <h1 className="text-lg font-medium">
+                            Agents
+                        </h1>
+                        <p className="text-xs text-text-secondary">
+                            Configure AI agents with custom system prompts and MCP servers.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" onClick={() => navigate("/mcp-servers")}>
+                            <Server className="mr-2 h-4 w-4" />
+                            MCP Servers
+                        </Button>
+                        <Button onClick={openCreatePage}>
+                            <Plus className="mr-2 h-4 w-4" />
+                            New Agent
+                        </Button>
+                    </div>
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto outline-none pr-2">
+            <div className="flex-1 overflow-y-auto outline-none">
+                <div className="max-w-4xl mx-auto px-6 pr-8">
                 {agents.map((agent) => (
                     <Card key={agent.id}>
                         <CardHeader className="pb-3">
                             <div className="flex items-start justify-between">
                                 <div className="flex items-center gap-3">
-                                    <div
-                                        className="flex h-10 w-10 items-center justify-center rounded-lg"
-                                        style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}
-                                    >
-                                        <Bot className="h-5 w-5" style={{ color: currentTheme.styles.contentSecondary }} />
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-bg-secondary">
+                                        <Bot className="h-5 w-5 text-text-secondary" />
                                     </div>
                                     <div>
                                         <CardTitle className="flex items-center gap-2">
                                             {agent.name}
                                             {agent.isDefault && (
-                                                <span
-                                                    className="text-xs px-2 py-0.5 rounded-full"
-                                                    style={{
-                                                        backgroundColor: currentTheme.styles.surfaceAccent,
-                                                        color: currentTheme.styles.contentAccent,
-                                                    }}
-                                                >
+                                                <span className="text-xs px-2 py-0.5 rounded-full bg-surface-elevated text-accent">
                                                     Default
                                                 </span>
                                             )}
@@ -250,16 +233,14 @@ function AgentsContent() {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="flex flex-wrap gap-4 text-sm">
+                            <div className="flex flex-wrap gap-4 text-xs">
                                 <div>
-                                    <span style={{ color: currentTheme.styles.contentSecondary }}>Model: </span>
-                                    <span style={{ color: currentTheme.styles.contentPrimary }}>
-                                        {getModelDisplayName(agent.model)}
-                                    </span>
+                                    <span className="text-text-secondary">Model: </span>
+                                    <span>{getModelDisplayName(agent.model)}</span>
                                 </div>
                                 <div>
-                                    <span style={{ color: currentTheme.styles.contentSecondary }}>MCP Servers: </span>
-                                    <span style={{ color: currentTheme.styles.contentPrimary }}>
+                                    <span className="text-text-secondary">MCP Servers: </span>
+                                    <span>
                                         {agent.mcpServers.length === 0
                                             ? "None"
                                             : agent.mcpServers
@@ -269,11 +250,8 @@ function AgentsContent() {
                                 </div>
                                 {agent.systemPrompt && (
                                     <div className="w-full">
-                                        <span style={{ color: currentTheme.styles.contentSecondary }}>System Prompt: </span>
-                                        <span
-                                            className="text-xs font-mono"
-                                            style={{ color: currentTheme.styles.contentTertiary }}
-                                        >
+                                        <span className="text-text-secondary">System Prompt: </span>
+                                        <span className="font-mono text-text-muted">
                                             {agent.systemPrompt.length > 100
                                                 ? agent.systemPrompt.slice(0, 100) + "..."
                                                 : agent.systemPrompt || "(uses default)"}
@@ -284,6 +262,7 @@ function AgentsContent() {
                         </CardContent>
                     </Card>
                 ))}
+                </div>
             </div>
 
             {/* Edit Dialog */}
@@ -322,8 +301,7 @@ function AgentsContent() {
                                 <Label htmlFor="model">Model</Label>
                                 <button
                                     type="button"
-                                    className="text-xs hover:underline"
-                                    style={{ color: currentTheme.styles.contentAccent }}
+                                    className="text-xs hover:underline text-accent"
                                     onClick={() => {
                                         if (!useCustomModel) {
                                             // Switching to custom: keep current value
@@ -370,7 +348,7 @@ function AgentsContent() {
                                 placeholder="Leave empty to use the default Claude Code system prompt"
                                 className="min-h-[120px] font-mono text-sm"
                             />
-                            <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
+                            <p className="text-xs text-text-secondary">
                                 An empty prompt will use Claude Code's default system prompt.
                             </p>
                         </div>
@@ -378,7 +356,7 @@ function AgentsContent() {
                         <div className="space-y-4">
                             <Label>MCP Servers</Label>
                             {allMcpServers.length === 0 ? (
-                                <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                <p className="text-xs text-text-secondary">
                                     No MCP servers available.
                                 </p>
                             ) : (
@@ -386,7 +364,7 @@ function AgentsContent() {
                                     {/* User-defined servers */}
                                     {userServers.length > 0 && (
                                         <div className="space-y-2">
-                                            <p className="text-xs font-medium" style={{ color: currentTheme.styles.contentSecondary }}>
+                                            <p className="text-xs font-medium text-text-secondary">
                                                 User Defined
                                             </p>
                                             <div className="space-y-2">
@@ -404,7 +382,7 @@ function AgentsContent() {
                                                             >
                                                                 {server.name}
                                                             </label>
-                                                            <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                            <p className="text-xs text-text-secondary">
                                                                 {server.description || "No description"}
                                                             </p>
                                                         </div>
@@ -417,7 +395,7 @@ function AgentsContent() {
                                     {/* Built-in servers */}
                                     {builtInServers.length > 0 && (
                                         <div className="space-y-2">
-                                            <p className="text-xs font-medium" style={{ color: currentTheme.styles.contentSecondary }}>
+                                            <p className="text-xs font-medium text-text-secondary">
                                                 Built-in
                                             </p>
                                             <div className="space-y-2">
@@ -436,7 +414,7 @@ function AgentsContent() {
                                                                 {server.name}
                                                                 <Badge variant="secondary" className="text-[10px] px-1 py-0">Built-in</Badge>
                                                             </label>
-                                                            <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                            <p className="text-xs text-text-secondary">
                                                                 {server.description || "No description"}
                                                             </p>
                                                         </div>

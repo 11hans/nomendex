@@ -8,7 +8,6 @@ import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { getIcon } from "./PluginViewIcons";
 import { useState, useEffect } from "react";
 import { WorkspaceTab } from "@/types/Workspace";
-import { useTheme } from "@/hooks/useTheme";
 import { SplitLayout } from "./SplitLayout";
 import { useFileLocks } from "@/hooks/useFileLocks";
 
@@ -17,7 +16,6 @@ export function Workspace() {
         useWorkspaceContext();
     const [draggedTabIndex, setDraggedTabIndex] = useState<number | null>(null);
     const [dropIndicator, setDropIndicator] = useState<{ index: number; side: 'left' | 'right' } | null>(null);
-    const { currentTheme } = useTheme();
     const { getLock } = useFileLocks();
 
     const getNoteLock = (tab: WorkspaceTab) => {
@@ -141,10 +139,7 @@ export function Workspace() {
                     className="flex flex-col h-full min-h-0 overflow-hidden"
                 >
                     <div
-                        className="flex items-center w-full flex-shrink-0 sticky top-0 z-50"
-                        style={{
-                            backgroundColor: currentTheme.styles.surfaceSecondary,
-                        }}
+                        className="flex items-center w-full flex-shrink-0 sticky top-0 z-50 bg-bg-secondary"
                         id="workspace-tabs-header"
                     >
                         <TabsList
@@ -161,23 +156,11 @@ export function Workspace() {
                                     >
                                         {/* Left drop indicator */}
                                         {dropIndicator?.index === index && dropIndicator?.side === 'left' && draggedTabIndex !== index && (
-                                            <div
-                                                className="absolute left-0 top-0 bottom-0 w-0.5 z-10"
-                                                style={{ backgroundColor: currentTheme.styles.borderAccent }}
-                                            />
+                                            <div className="absolute left-0 top-0 bottom-0 w-0.5 z-10 bg-accent" />
                                         )}
                                         <TabsTrigger
                                             value={tab.id}
-                                            className={`rounded-none h-9 px-3 gap-1.5 flex items-center transition-colors duration-100 min-w-0 max-w-[160px] cursor-grab text-xs border-r ${draggedTabIndex === index ? "opacity-50" : ""
-                                                }`}
-                                            style={{
-                                                backgroundColor: activeTab?.id === tab.id ? currentTheme.styles.surfacePrimary : currentTheme.styles.surfaceSecondary,
-                                                color: activeTab?.id === tab.id ? currentTheme.styles.contentPrimary : currentTheme.styles.contentSecondary,
-                                                borderTop: activeTab?.id === tab.id ? `2px solid ${currentTheme.styles.borderAccent}` : '2px solid transparent',
-                                                borderBottom: 'none',
-                                                borderRightColor: currentTheme.styles.borderDefault,
-                                                fontWeight: activeTab?.id === tab.id ? 500 : 400,
-                                            }}
+                                            className={`rounded-none h-9 px-3 gap-1.5 flex items-center transition-colors duration-100 min-w-0 max-w-[160px] cursor-grab text-xs border-r border-r-border border-b-0 ${draggedTabIndex === index ? "opacity-50" : ""} ${activeTab?.id === tab.id ? "bg-bg text-text font-medium border-t-2 border-t-accent" : "bg-bg-secondary text-text-secondary font-normal border-t-2 border-t-transparent"}`}
                                             draggable
                                             onDragStart={(e) => handleTabDragStart(e, tab, index)}
                                             onDragEnd={handleTabDragEnd}
@@ -193,10 +176,7 @@ export function Workspace() {
                                                     className="flex items-center flex-shrink-0"
                                                     title={`Locked by ${noteLock.agentName}`}
                                                 >
-                                                    <Lock
-                                                        className="h-3 w-3"
-                                                        style={{ color: currentTheme.styles.contentSecondary }}
-                                                    />
+                                                    <Lock className="h-3 w-3 text-text-secondary" />
                                                 </span>
                                             )}
                                             {/* Close button – visible on hover or when active */}
@@ -208,43 +188,31 @@ export function Workspace() {
                                                     closeTab(tab.id);
                                                 }}
                                             >
-                                                <X className="size-3" style={{ color: currentTheme.styles.contentSecondary }} />
+                                                <X className="size-3 text-text-secondary" />
                                             </span>
                                         </TabsTrigger>
                                         {/* Right drop indicator */}
                                         {dropIndicator?.index === index && dropIndicator?.side === 'right' && draggedTabIndex !== index && (
-                                            <div
-                                                className="absolute right-0 top-0 bottom-0 w-0.5 z-10"
-                                                style={{ backgroundColor: currentTheme.styles.borderAccent }}
-                                            />
+                                            <div className="absolute right-0 top-0 bottom-0 w-0.5 z-10 bg-accent" />
                                         )}
                                     </div>
                                 );
                             })}
                         </TabsList>
                         {hasOverflow && (
-                            <div
-                                className="flex items-center pr-2 flex-shrink-0"
-                                style={{
-                                    backgroundColor: currentTheme.styles.surfaceSecondary,
-                                }}
-                            >
+                            <div className="flex items-center pr-2 flex-shrink-0 bg-bg-secondary">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button
                                             variant="ghost"
                                             size="sm"
-                                            className="group relative h-7 px-2 rounded-md transition-all duration-200"
-                                            style={{
-                                                color: currentTheme.styles.contentSecondary,
-                                                backgroundColor: currentTheme.styles.surfaceTertiary,
-                                            }}
+                                            className="group relative h-7 px-2 rounded-md transition-all duration-200 text-text-secondary bg-surface-elevated"
                                         >
                                             <Plus className="h-3 w-3 mr-0.5" />
                                             <span className="text-xs transition-opacity">{overflowTabs.length}</span>
                                         </Button>
                                     </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="start" className="w-56" style={{ backgroundColor: currentTheme.styles.surfacePrimary }}>
+                                    <DropdownMenuContent align="start" className="w-56">
                                         {overflowTabs.map((tab, overflowIndex) => {
                                             const realIndex = 20 + overflowIndex; // Overflow tabs start at index 20
                                             const noteLock = getNoteLock(tab);
@@ -268,10 +236,7 @@ export function Workspace() {
                                                                 className="flex items-center flex-shrink-0"
                                                                 title={`Locked by ${noteLock.agentName}`}
                                                             >
-                                                                <Lock
-                                                                    className="h-3 w-3"
-                                                                    style={{ color: currentTheme.styles.contentSecondary }}
-                                                                />
+                                                                <Lock className="h-3 w-3 text-text-secondary" />
                                                             </span>
                                                         )}
                                                     </div>

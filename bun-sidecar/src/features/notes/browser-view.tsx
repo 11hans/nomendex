@@ -11,7 +11,6 @@ import { Search, FileText, FilePlus, FolderPlus, Maximize2 } from "lucide-react"
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
 import { Note, NoteFolder, notesPluginSerial } from "./index";
-import { useTheme } from "@/hooks/useTheme";
 import { NotesView } from "./note-view";
 import { NotesFileTree } from "./NotesFileTree";
 import { CreateFolderDialog, RenameFolderDialog, MoveToFolderDialog } from "./NotesFolderDialogs";
@@ -36,7 +35,6 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     const [newNoteName, setNewNoteName] = useState("");
     const [createNoteInFolderPath, setCreateNoteInFolderPath] = useState<string | null>(null);
     const placement = getViewSelfPlacement(tabId);
-    const { currentTheme } = useTheme();
     const { openDialog } = useCommandDialog();
 
     // Folder dialog state
@@ -403,18 +401,17 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
             {/* Main Content - Split Layout */}
             <div className="flex-1 flex overflow-hidden">
                 {/* Left Panel - File Tree */}
-                <div className="w-64 border-r flex flex-col h-full" style={{ borderColor: currentTheme.styles.borderDefault, backgroundColor: currentTheme.styles.surfaceSecondary }}>
+                <div className="w-64 border-r border-border flex flex-col h-full bg-bg-secondary">
                     {/* Search and Create */}
-                    <div className="px-3 py-3 border-b space-y-2" style={{ borderColor: currentTheme.styles.borderDefault }}>
+                    <div className="px-3 py-3 border-b border-border space-y-2">
                         <div className="flex items-center gap-2">
                             <div className="relative flex-1 min-w-0">
-                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: currentTheme.styles.contentSecondary }} />
+                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-text-secondary" />
                                 <Input
                                     ref={searchInputRef}
                                     placeholder="Search notes..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    style={{ color: currentTheme.styles.contentPrimary }}
                                     onKeyDown={(e) => {
                                         if (e.key === "Escape") {
                                             if (searchQuery) {
@@ -499,8 +496,8 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                     ) : !loading && notes.length > 0 ? (
                         <div className="flex-1 flex items-center justify-center">
                             <div className="text-center space-y-2">
-                                <FileText className="h-12 w-12 mx-auto" style={{ color: currentTheme.styles.contentTertiary }} />
-                                <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>Select a note to edit</p>
+                                <FileText className="h-12 w-12 mx-auto text-text-muted" />
+                                <p className="text-xs text-text-secondary">Select a note to edit</p>
                             </div>
                         </div>
                     ) : null}
