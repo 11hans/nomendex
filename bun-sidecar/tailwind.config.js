@@ -10,6 +10,10 @@ export default {
       colors: {
         background: '#ffffff',
       },
+      fontFamily: {
+        sans: ['var(--font-sans)'],
+        mono: ['var(--font-mono)'],
+      },
     },
   },
   plugins: [],

@@ -1,4 +1,5 @@
 /*! tailwindcss v4.1.18 | MIT License | https://tailwindcss.com */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap');
 @import url('tldraw/tldraw.css');
 @layer properties;
@@ -4257,6 +4258,8 @@
   --sidebar-border: hsl(220 13% 91%);
   --sidebar-ring: hsl(217.2 91.2% 59.8%);
   --sidebar: hsl(0 0% 98%);
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'JetBrains Mono', monospace;
 }
 .dark {
   --background: hsl(240 10% 3.9%);
@@ -4424,7 +4427,7 @@
 }
 @layer base {
   :root {
-    font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    font-family: var(--font-sans);
     --scrollbar-thumb: #c9c9c9;
     --scrollbar-track: transparent;
     --scrollbar-thumb-hover: #a3a3a3;
@@ -4560,7 +4563,7 @@
   color: hsl(var(--foreground));
   padding: 0.125em 0.375em;
   border-radius: 0.25em;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.875em;
 }
 .editor-content .ProseMirror pre {
@@ -4702,7 +4705,7 @@
   border: 1px solid hsl(var(--border));
   background: hsl(var(--accent));
   color: hsl(var(--foreground));
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.9em;
 }
 .editor-content .pm-resource-uri::before {
@@ -4738,7 +4741,7 @@
   overscroll-behavior: none;
 }
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
 }
 .chat-panel.tl-theme__light {
   --tl-color-text-2: hsl(0, 0%, 55%);
@@ -4756,7 +4759,7 @@ body {
   background-color: var(--tl-color-panel);
   border-left: 1px solid var(--tl-color-low);
   color: var(--tl-color-text-1);
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
   font-weight: 400;
   font-size: 12px;
   line-height: 1.5;
