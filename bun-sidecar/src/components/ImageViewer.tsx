@@ -5,9 +5,10 @@ import {
 } from "./ui/dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Button } from "./ui/button";
-import { Download, X, ZoomIn, ZoomOut } from "lucide-react";
-import { useState } from "react";
+import { Download, X, ZoomIn, ZoomOut, RotateCcw, Copy, Image as ImageIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTheme } from "@/hooks/useTheme";
+import { toast } from "sonner";
 
 interface ImageViewerProps {
     open: boolean;
@@ -43,79 +44,137 @@ export function ImageViewer({ open, onOpenChange, src, alt, filename }: ImageVie
         setZoom(1);
     };
 
+    const handleCopyUrl = async () => {
+        try {
+            const absoluteUrl = src.startsWith("http")
+                ? src
+                : new URL(src, window.location.origin).toString();
+            await navigator.clipboard.writeText(absoluteUrl);
+            toast.success("Image URL copied");
+        } catch (error) {
+            console.error("Failed to copy image URL:", error);
+            toast.error("Copy failed");
+        }
+    };
+
+    useEffect(() => {
+        if (!open) return;
+        // Keep zoom predictable when opening or switching images.
+        setZoom(1);
+    }, [open, src]);
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === "+" || e.key === "=") {
+            e.preventDefault();
+            handleZoomIn();
+        } else if (e.key === "-" || e.key === "_") {
+            e.preventDefault();
+            handleZoomOut();
+        } else if (e.key === "0") {
+            e.preventDefault();
+            resetZoom();
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            onOpenChange(false);
+        }
+    };
+
+    const displayName = filename || alt || "Image";
+    const zoomOutDisabled = zoom <= 0.5;
+    const zoomInDisabled = zoom >= 3;
+
     return (
         <Dialog open={open} onOpenChange={(newOpen) => {
             if (!newOpen) resetZoom();
             onOpenChange(newOpen);
         }}>
             <DialogContent
-                className="max-w-[90vw] max-h-[90vh] p-0 overflow-hidden"
+                size="jumbo"
+                showCloseButton={false}
+                className="w-[min(96vw,1280px)] h-[min(92vh,920px)] max-w-[96vw] max-h-[92vh] p-0 overflow-hidden"
                 style={{
                     backgroundColor: styles.surfacePrimary,
                     borderColor: styles.borderDefault,
                 }}
             >
                 <VisuallyHidden>
-                    <DialogTitle>{alt || filename || "Image preview"}</DialogTitle>
+                    <DialogTitle>{displayName}</DialogTitle>
                 </VisuallyHidden>
 
-                {/* Toolbar */}
-                <div
-                    className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 py-2"
-                    style={{
-                        backgroundColor: `${styles.surfacePrimary}ee`,
-                        borderBottom: `1px solid ${styles.borderDefault}`,
-                    }}
-                >
+                <div className="h-full flex flex-col" onKeyDown={handleKeyDown} tabIndex={0}>
+                    {/* Toolbar */}
                     <div
-                        className="text-sm font-medium truncate max-w-[300px]"
-                        style={{ color: styles.contentPrimary }}
-                    >
-                        {filename || alt || "Image"}
-                    </div>
-                    <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" onClick={handleZoomOut} title="Zoom out">
-                            <ZoomOut className="size-4" />
-                        </Button>
-                        <span
-                            className="text-xs min-w-[48px] text-center"
-                            style={{ color: styles.contentSecondary }}
-                        >
-                            {Math.round(zoom * 100)}%
-                        </span>
-                        <Button variant="ghost" size="icon" onClick={handleZoomIn} title="Zoom in">
-                            <ZoomIn className="size-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={handleDownload} title="Download">
-                            <Download className="size-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} title="Close">
-                            <X className="size-4" />
-                        </Button>
-                    </div>
-                </div>
-
-                {/* Image container */}
-                <div
-                    className="flex items-center justify-center overflow-auto pt-12 pb-4 px-4"
-                    style={{
-                        minHeight: "400px",
-                        maxHeight: "calc(90vh - 56px)",
-                    }}
-                >
-                    <img
-                        src={src}
-                        alt={alt || "Preview"}
+                        className="shrink-0 flex items-center justify-between gap-3 px-3 py-2"
                         style={{
-                            transform: `scale(${zoom})`,
-                            transformOrigin: "center center",
-                            transition: "transform 0.2s ease",
-                            maxWidth: "100%",
-                            maxHeight: "100%",
-                            objectFit: "contain",
+                            backgroundColor: styles.surfacePrimary,
+                            borderBottom: `1px solid ${styles.borderDefault}`,
                         }}
-                        onDoubleClick={resetZoom}
-                    />
+                    >
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                                <ImageIcon className="size-3" style={{ color: styles.contentTertiary }} />
+                                <span className="text-[10px] uppercase tracking-[0.1em]" style={{ color: styles.contentTertiary }}>
+                                    Image Preview
+                                </span>
+                            </div>
+                            <div
+                                className="text-sm font-medium truncate"
+                                style={{ color: styles.contentPrimary }}
+                            >
+                                {displayName}
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon" onClick={handleZoomOut} title="Zoom out" disabled={zoomOutDisabled} className="h-7 w-7">
+                                <ZoomOut className="size-4" />
+                            </Button>
+                            <span
+                                className="text-[11px] min-w-[52px] text-center tabular-nums"
+                                style={{ color: styles.contentSecondary }}
+                                title="Current zoom"
+                            >
+                                {Math.round(zoom * 100)}%
+                            </span>
+                            <Button variant="ghost" size="icon" onClick={handleZoomIn} title="Zoom in" disabled={zoomInDisabled} className="h-7 w-7">
+                                <ZoomIn className="size-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={resetZoom} title="Reset zoom" className="h-7 w-7">
+                                <RotateCcw className="size-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={handleCopyUrl} title="Copy URL" className="h-7 w-7">
+                                <Copy className="size-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={handleDownload} title="Download" className="h-7 w-7">
+                                <Download className="size-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} title="Close" className="h-7 w-7">
+                                <X className="size-4" />
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Image container */}
+                    <div
+                        className="flex-1 min-h-0 flex items-center justify-center overflow-auto p-4"
+                        style={{
+                            backgroundColor: styles.surfaceSecondary,
+                        }}
+                    >
+                        <img
+                            src={src}
+                            alt={alt || "Preview"}
+                            className="select-none"
+                            style={{
+                                transform: `scale(${zoom})`,
+                                transformOrigin: "center center",
+                                transition: "transform 0.2s ease",
+                                maxWidth: "100%",
+                                maxHeight: "100%",
+                                objectFit: "contain",
+                            }}
+                            onDoubleClick={resetZoom}
+                        />
+                    </div>
                 </div>
             </DialogContent>
         </Dialog>

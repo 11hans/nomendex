@@ -29,12 +29,12 @@ export const functionStubs = {
 const views = {
     default: {
         id: "default",
-        name: "File Browser",
+        name: "Media Library",
         component: UploadsBrowserView,
     },
     browser: {
         id: "browser",
-        name: "File Browser",
+        name: "Media Library",
         component: UploadsBrowserView,
     },
 } as const;
