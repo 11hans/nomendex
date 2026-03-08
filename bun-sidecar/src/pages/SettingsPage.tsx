@@ -29,7 +29,6 @@ type SecretInfo = {
 
 function StorageSettings() {
     const { notesLocation, setNotesLocation, showHiddenFiles, setShowHiddenFiles } = useWorkspaceContext();
-    const { currentTheme } = useTheme();
     const [pendingChange, setPendingChange] = useState<NotesLocation | null>(null);
     const [pendingHiddenFiles, setPendingHiddenFiles] = useState<boolean | null>(null);
     const [savingHiddenFiles, setSavingHiddenFiles] = useState(false);
@@ -87,16 +86,12 @@ function StorageSettings() {
             </CardHeader>
             <CardContent className="space-y-6">
                 <div
-                    className="p-4 rounded-lg border"
-                    style={{
-                        backgroundColor: currentTheme.styles.surfaceSecondary,
-                        borderColor: currentTheme.styles.borderDefault,
-                    }}
+                    className="p-4 rounded-lg border bg-secondary border-border"
                 >
-                    <h4 className="font-medium mb-2" style={{ color: currentTheme.styles.contentPrimary }}>
+                    <h4 className="font-medium mb-2">
                         Notes Location
                     </h4>
-                    <p className="text-sm mb-4" style={{ color: currentTheme.styles.contentSecondary }}>
+                    <p className="text-sm mb-4 text-muted-foreground">
                         Choose where notes are stored in your workspace. Use "Workspace Root" for Obsidian compatibility.
                     </p>
 
@@ -111,8 +106,8 @@ function StorageSettings() {
                                 <Label htmlFor="subfolder" className="font-medium cursor-pointer">
                                     Notes Subfolder
                                 </Label>
-                                <p className="text-sm" style={{ color: currentTheme.styles.contentTertiary }}>
-                                    Store notes in <code className="px-1 py-0.5 rounded" style={{ backgroundColor: currentTheme.styles.surfaceTertiary }}>/notes</code> subfolder
+                                <p className="text-sm text-muted-foreground">
+                                    Store notes in <code className="px-1 py-0.5 rounded bg-surface-elevated">/notes</code> subfolder
                                 </p>
                             </div>
                         </div>
@@ -122,7 +117,7 @@ function StorageSettings() {
                                 <Label htmlFor="root" className="font-medium cursor-pointer">
                                     Workspace Root
                                 </Label>
-                                <p className="text-sm" style={{ color: currentTheme.styles.contentTertiary }}>
+                                <p className="text-sm text-muted-foreground">
                                     Store notes at workspace root (default, Obsidian-compatible)
                                 </p>
                             </div>
@@ -130,8 +125,8 @@ function StorageSettings() {
                     </RadioGroup>
 
                     {pendingChange && (
-                        <div className="mt-4 pt-4 border-t" style={{ borderColor: currentTheme.styles.borderDefault }}>
-                            <p className="text-sm mb-3" style={{ color: currentTheme.styles.contentSecondary }}>
+                        <div className="mt-4 pt-4 border-t border-border">
+                            <p className="text-sm mb-3 text-muted-foreground">
                                 Changing notes location requires a page reload. Your existing notes will not be moved automatically.
                             </p>
                             <div className="flex gap-2">
@@ -149,16 +144,12 @@ function StorageSettings() {
 
                 {/* Show Hidden Files Setting */}
                 <div
-                    className="p-4 rounded-lg border"
-                    style={{
-                        backgroundColor: currentTheme.styles.surfaceSecondary,
-                        borderColor: currentTheme.styles.borderDefault,
-                    }}
+                    className="p-4 rounded-lg border bg-secondary border-border"
                 >
-                    <h4 className="font-medium mb-2" style={{ color: currentTheme.styles.contentPrimary }}>
+                    <h4 className="font-medium mb-2">
                         Show Hidden Files
                     </h4>
-                    <p className="text-sm mb-4" style={{ color: currentTheme.styles.contentSecondary }}>
+                    <p className="text-sm mb-4 text-muted-foreground">
                         Show or hide files and folders that start with a dot (.) in the notes browser.
                     </p>
 
@@ -173,7 +164,7 @@ function StorageSettings() {
                                 <Label htmlFor="hide-hidden" className="font-medium cursor-pointer">
                                     Hide Hidden Files
                                 </Label>
-                                <p className="text-sm" style={{ color: currentTheme.styles.contentTertiary }}>
+                                <p className="text-sm text-muted-foreground">
                                     Files and folders starting with . are hidden (default)
                                 </p>
                             </div>
@@ -184,7 +175,7 @@ function StorageSettings() {
                                 <Label htmlFor="show-hidden" className="font-medium cursor-pointer">
                                     Show Hidden Files
                                 </Label>
-                                <p className="text-sm" style={{ color: currentTheme.styles.contentTertiary }}>
+                                <p className="text-sm text-muted-foreground">
                                     All files and folders are visible, including hidden ones
                                 </p>
                             </div>
@@ -192,7 +183,7 @@ function StorageSettings() {
                     </RadioGroup>
 
                     {hasUnsavedHiddenFiles && (
-                        <div className="flex items-center gap-2 mt-4 pt-4 border-t" style={{ borderColor: currentTheme.styles.borderDefault }}>
+                        <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border">
                             <Button
                                 onClick={handleSaveHiddenFiles}
                                 disabled={savingHiddenFiles}
@@ -210,9 +201,9 @@ function StorageSettings() {
                         </div>
                     )}
                     {savedHiddenFiles && (
-                        <div className="flex items-center gap-2 mt-4 pt-4 border-t" style={{ borderColor: currentTheme.styles.borderDefault }}>
-                            <Check className="h-4 w-4" style={{ color: currentTheme.styles.semanticSuccess }} />
-                            <span className="text-sm" style={{ color: currentTheme.styles.semanticSuccess }}>
+                        <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border">
+                            <Check className="h-4 w-4 text-success" />
+                            <span className="text-sm text-success">
                                 Saved successfully
                             </span>
                         </div>
@@ -534,12 +525,11 @@ function SettingsContent() {
 
     return (
         <div
-            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
-            style={{ backgroundColor: currentTheme.styles.surfacePrimary, color: currentTheme.styles.contentPrimary }}
+            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full bg-bg text-foreground"
         >
             <div className="flex-shrink-0 mb-6">
-                <h1 className="text-2xl font-bold" style={{ color: currentTheme.styles.contentPrimary }}>Settings</h1>
-                <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>Manage your application settings and configuration.</p>
+                <h1 className="text-2xl font-bold">Settings</h1>
+                <p className="text-sm text-muted-foreground">Manage your application settings and configuration.</p>
             </div>
 
             <div className="flex-1 overflow-y-auto outline-none pr-2">
@@ -580,7 +570,7 @@ function SettingsContent() {
                                     }, {} as Record<string, typeof shortcuts>)
                                 ).map(([category, categoryShortcuts]) => (
                                     <div key={category} className="space-y-2">
-                                        <h3 className="font-medium text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                        <h3 className="font-medium text-sm text-muted-foreground">
                                             {categoryLabels[category as keyof typeof categoryLabels] || category}
                                         </h3>
                                         <Table>
@@ -603,7 +593,7 @@ function SettingsContent() {
                                                             <TableCell>
                                                                 <div className="space-y-1">
                                                                     <div className="font-medium">{shortcut.name}</div>
-                                                                    <div className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                                    <div className="text-xs text-muted-foreground">
                                                                         {shortcut.description}
                                                                     </div>
                                                                 </div>
@@ -612,7 +602,7 @@ function SettingsContent() {
                                                                 <div className="flex items-center gap-2">
                                                                     {isEditing ? (
                                                                         <div className="flex items-center gap-2">
-                                                                            <span className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                                            <span className="text-sm text-muted-foreground">
                                                                                 Press keys...
                                                                             </span>
                                                                             {recordingKeys.length > 0 && (
@@ -634,7 +624,7 @@ function SettingsContent() {
                                                             <TableCell>
                                                                 <div className="flex items-center gap-2">
                                                                     {isDocOnly ? (
-                                                                        <span className="text-xs" style={{ color: currentTheme.styles.contentTertiary }}>
+                                                                        <span className="text-xs text-muted-foreground">
                                                                             Editor shortcut
                                                                         </span>
                                                                     ) : isEditing ? (
@@ -693,7 +683,7 @@ function SettingsContent() {
                                         <Label className="text-base">
                                             Send message with
                                         </Label>
-                                        <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                        <p className="text-sm text-muted-foreground">
                                             Choose which key combination sends your message
                                         </p>
                                     </div>
@@ -736,13 +726,13 @@ function SettingsContent() {
                                 )}
                                 {savedPreference && (
                                     <div className="flex items-center gap-2 pt-2">
-                                        <Check className="h-4 w-4" style={{ color: currentTheme.styles.semanticSuccess }} />
-                                        <span className="text-sm" style={{ color: currentTheme.styles.semanticSuccess }}>
+                                        <Check className="h-4 w-4 text-success" />
+                                        <span className="text-sm text-success">
                                             Saved successfully
                                         </span>
                                     </div>
                                 )}
-                                <div className="pt-4 text-xs" style={{ color: currentTheme.styles.contentTertiary }}>
+                                <div className="pt-4 text-xs text-muted-foreground">
                                     Debug: Current saved value = {String(chatInputEnterToSend)}
                                 </div>
                             </CardContent>
@@ -761,7 +751,7 @@ function SettingsContent() {
                                     <div className="grid grid-cols-2 gap-4">
                                         {/* Surface Colors */}
                                         <div className="space-y-2">
-                                            <h4 className="text-sm font-medium" style={{ color: currentTheme.styles.contentSecondary }}>Surface Colors</h4>
+                                            <h4 className="text-sm font-medium text-muted-foreground">Surface Colors</h4>
                                             <div className="space-y-1">
                                                 {Object.entries({
                                                     'Primary': currentTheme.styles.surfacePrimary,
@@ -778,8 +768,8 @@ function SettingsContent() {
                                                                 borderColor: currentTheme.styles.borderDefault
                                                             }}
                                                         />
-                                                        <span className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>{name}</span>
-                                                        <code className="text-xs ml-auto" style={{ color: currentTheme.styles.contentTertiary }}>{color}</code>
+                                                        <span className="text-sm text-muted-foreground">{name}</span>
+                                                        <code className="text-xs ml-auto text-muted-foreground">{color}</code>
                                                     </div>
                                                 ))}
                                             </div>
@@ -787,7 +777,7 @@ function SettingsContent() {
 
                                         {/* Content Colors */}
                                         <div className="space-y-2">
-                                            <h4 className="text-sm font-medium" style={{ color: currentTheme.styles.contentSecondary }}>Content Colors</h4>
+                                            <h4 className="text-sm font-medium text-muted-foreground">Content Colors</h4>
                                             <div className="space-y-1">
                                                 {Object.entries({
                                                     'Primary': currentTheme.styles.contentPrimary,
@@ -803,8 +793,8 @@ function SettingsContent() {
                                                                 borderColor: currentTheme.styles.borderDefault
                                                             }}
                                                         />
-                                                        <span className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>{name}</span>
-                                                        <code className="text-xs ml-auto" style={{ color: currentTheme.styles.contentTertiary }}>{color}</code>
+                                                        <span className="text-sm text-muted-foreground">{name}</span>
+                                                        <code className="text-xs ml-auto text-muted-foreground">{color}</code>
                                                     </div>
                                                 ))}
                                             </div>
@@ -812,7 +802,7 @@ function SettingsContent() {
 
                                         {/* Semantic Colors */}
                                         <div className="space-y-2">
-                                            <h4 className="text-sm font-medium" style={{ color: currentTheme.styles.contentSecondary }}>Semantic Colors</h4>
+                                            <h4 className="text-sm font-medium text-muted-foreground">Semantic Colors</h4>
                                             <div className="space-y-1">
                                                 {Object.entries({
                                                     'Primary': currentTheme.styles.semanticPrimary,
@@ -827,8 +817,8 @@ function SettingsContent() {
                                                                 borderColor: currentTheme.styles.borderDefault
                                                             }}
                                                         />
-                                                        <span className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>{name}</span>
-                                                        <code className="text-xs ml-auto" style={{ color: currentTheme.styles.contentTertiary }}>{color}</code>
+                                                        <span className="text-sm text-muted-foreground">{name}</span>
+                                                        <code className="text-xs ml-auto text-muted-foreground">{color}</code>
                                                     </div>
                                                 ))}
                                             </div>
@@ -836,7 +826,7 @@ function SettingsContent() {
 
                                         {/* Border Colors */}
                                         <div className="space-y-2">
-                                            <h4 className="text-sm font-medium" style={{ color: currentTheme.styles.contentSecondary }}>Border Colors</h4>
+                                            <h4 className="text-sm font-medium text-muted-foreground">Border Colors</h4>
                                             <div className="space-y-1">
                                                 {Object.entries({
                                                     'Default': currentTheme.styles.borderDefault,
@@ -850,8 +840,8 @@ function SettingsContent() {
                                                                 borderColor: color
                                                             }}
                                                         />
-                                                        <span className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>{name}</span>
-                                                        <code className="text-xs ml-auto" style={{ color: currentTheme.styles.contentTertiary }}>{color}</code>
+                                                        <span className="text-sm text-muted-foreground">{name}</span>
+                                                        <code className="text-xs ml-auto text-muted-foreground">{color}</code>
                                                     </div>
                                                 ))}
                                             </div>
@@ -889,10 +879,10 @@ function SettingsContent() {
                                     <CardDescription>Create and save your own custom themes</CardDescription>
                                 </CardHeader>
                                 <CardContent>
-                                    <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                    <p className="text-sm text-muted-foreground">
                                         The custom theme editor is coming soon. You'll be able to:
                                     </p>
-                                    <ul className="list-disc list-inside mt-2 space-y-1 text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                    <ul className="list-disc list-inside mt-2 space-y-1 text-sm text-muted-foreground">
                                         <li>Customize all color tokens with a color picker</li>
                                         <li>Save custom themes as presets</li>
                                         <li>Export and import theme configurations</li>
@@ -918,24 +908,20 @@ function SettingsContent() {
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     {secretsLoading ? (
-                                        <p style={{ color: currentTheme.styles.contentSecondary }}>Loading...</p>
+                                        <p className="text-muted-foreground">Loading...</p>
                                     ) : (
                                         <div className="space-y-4">
                                             {secrets.filter((s) => s.isPredefined).map((secret) => (
                                                 <div
                                                     key={secret.key}
-                                                    className="p-4 rounded-lg border"
-                                                    style={{
-                                                        backgroundColor: currentTheme.styles.surfaceSecondary,
-                                                        borderColor: currentTheme.styles.borderDefault,
-                                                    }}
+                                                    className="p-4 rounded-lg border bg-secondary border-border"
                                                 >
                                                     <div className="flex items-start justify-between mb-2">
                                                         <div>
-                                                            <h4 className="font-medium" style={{ color: currentTheme.styles.contentPrimary }}>
+                                                            <h4 className="font-medium">
                                                                 {secret.label}
                                                             </h4>
-                                                            <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                            <p className="text-sm text-muted-foreground">
                                                                 {secret.description}
                                                             </p>
                                                         </div>
@@ -990,7 +976,7 @@ function SettingsContent() {
                                                                     <X className="h-4 w-4" />
                                                                 </Button>
                                                             </div>
-                                                            <p className="text-xs" style={{ color: currentTheme.styles.contentTertiary }}>
+                                                            <p className="text-xs text-muted-foreground">
                                                                 {secret.helpText}
                                                             </p>
                                                         </div>
@@ -999,11 +985,7 @@ function SettingsContent() {
                                                             {secret.hasValue ? (
                                                                 <>
                                                                     <code
-                                                                        className="text-sm px-2 py-1 rounded flex-1"
-                                                                        style={{
-                                                                            backgroundColor: currentTheme.styles.surfaceTertiary,
-                                                                            color: currentTheme.styles.contentSecondary,
-                                                                        }}
+                                                                        className="text-sm px-2 py-1 rounded flex-1 bg-surface-elevated text-muted-foreground"
                                                                     >
                                                                         {secret.maskedValue}
                                                                     </code>
@@ -1072,18 +1054,14 @@ function SettingsContent() {
                                     {/* Add new custom secret form */}
                                     {isAddingCustom && (
                                         <div
-                                            className="p-4 rounded-lg border"
-                                            style={{
-                                                backgroundColor: currentTheme.styles.surfaceSecondary,
-                                                borderColor: currentTheme.styles.borderAccent,
-                                            }}
+                                            className="p-4 rounded-lg border bg-secondary border-accent"
                                         >
-                                            <h4 className="font-medium mb-3" style={{ color: currentTheme.styles.contentPrimary }}>
+                                            <h4 className="font-medium mb-3">
                                                 New API Key
                                             </h4>
                                             <div className="space-y-3">
                                                 <div className="space-y-1">
-                                                    <label className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                    <label className="text-sm text-muted-foreground">
                                                         Key Name
                                                     </label>
                                                     <Input
@@ -1095,12 +1073,12 @@ function SettingsContent() {
                                                         placeholder="e.g., LINEAR_API_KEY, OPENAI_API_KEY"
                                                         className="font-mono"
                                                     />
-                                                    <p className="text-xs" style={{ color: currentTheme.styles.contentTertiary }}>
+                                                    <p className="text-xs text-muted-foreground">
                                                         Will be converted to uppercase. Use this name in MCP server configs.
                                                     </p>
                                                 </div>
                                                 <div className="space-y-1">
-                                                    <label className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                    <label className="text-sm text-muted-foreground">
                                                         Value
                                                     </label>
                                                     <div className="relative">
@@ -1130,7 +1108,7 @@ function SettingsContent() {
                                                     </div>
                                                 </div>
                                                 {newSecretError && (
-                                                    <p className="text-sm" style={{ color: currentTheme.styles.semanticDestructive }}>
+                                                    <p className="text-sm text-destructive">
                                                         {newSecretError}
                                                     </p>
                                                 )}
@@ -1162,7 +1140,7 @@ function SettingsContent() {
 
                                     {/* Existing custom secrets */}
                                     {secrets.filter((s) => !s.isPredefined).length === 0 && !isAddingCustom ? (
-                                        <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                        <p className="text-sm text-muted-foreground">
                                             No custom API keys configured. Add one to use with MCP servers.
                                         </p>
                                     ) : (
@@ -1170,18 +1148,14 @@ function SettingsContent() {
                                             {secrets.filter((s) => !s.isPredefined).map((secret) => (
                                                 <div
                                                     key={secret.key}
-                                                    className="p-4 rounded-lg border"
-                                                    style={{
-                                                        backgroundColor: currentTheme.styles.surfaceSecondary,
-                                                        borderColor: currentTheme.styles.borderDefault,
-                                                    }}
+                                                    className="p-4 rounded-lg border bg-secondary border-border"
                                                 >
                                                     <div className="flex items-start justify-between mb-2">
                                                         <div>
-                                                            <h4 className="font-medium font-mono" style={{ color: currentTheme.styles.contentPrimary }}>
+                                                            <h4 className="font-medium font-mono">
                                                                 {secret.key}
                                                             </h4>
-                                                            <p className="text-xs" style={{ color: currentTheme.styles.contentTertiary }}>
+                                                            <p className="text-xs text-muted-foreground">
                                                                 Use as {`\${${secret.key}}`} in MCP server configs
                                                             </p>
                                                         </div>
@@ -1235,11 +1209,7 @@ function SettingsContent() {
                                                     ) : (
                                                         <div className="flex items-center gap-2">
                                                             <code
-                                                                className="text-sm px-2 py-1 rounded flex-1"
-                                                                style={{
-                                                                    backgroundColor: currentTheme.styles.surfaceTertiary,
-                                                                    color: currentTheme.styles.contentSecondary,
-                                                                }}
+                                                                className="text-sm px-2 py-1 rounded flex-1 bg-surface-elevated text-muted-foreground"
                                                             >
                                                                 {secret.maskedValue}
                                                             </code>
@@ -1289,23 +1259,19 @@ function SettingsContent() {
                             <CardContent className="space-y-6">
                                 {/* Version Info */}
                                 <div
-                                    className="p-4 rounded-lg border"
-                                    style={{
-                                        backgroundColor: currentTheme.styles.surfaceSecondary,
-                                        borderColor: currentTheme.styles.borderDefault,
-                                    }}
+                                    className="p-4 rounded-lg border bg-secondary border-border"
                                 >
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <h4 className="font-medium" style={{ color: currentTheme.styles.contentPrimary }}>
+                                            <h4 className="font-medium">
                                                 Current Version
                                             </h4>
                                             {versionInfo ? (
-                                                <p className="text-sm mt-1" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                <p className="text-sm mt-1 text-muted-foreground">
                                                     v{versionInfo.version} (build {versionInfo.buildNumber})
                                                 </p>
                                             ) : (
-                                                <p className="text-sm mt-1" style={{ color: currentTheme.styles.contentTertiary }}>
+                                                <p className="text-sm mt-1 text-muted-foreground">
                                                     Loading...
                                                 </p>
                                             )}
@@ -1322,7 +1288,7 @@ function SettingsContent() {
                                 </div>
 
                                 {/* Update Settings Info */}
-                                <div className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                <div className="text-sm text-muted-foreground">
                                     <p>
                                         Nomendex automatically checks for updates every 15 minutes.
                                         When an update is available, you'll see a notification.

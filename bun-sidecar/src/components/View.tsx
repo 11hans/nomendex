@@ -22,7 +22,7 @@ const View = React.memo(({ pluginInstance, tabId }: ViewProps) => {
     if (!viewDef) {
         return (
             <div className="h-full">
-                <div className="text-red-500">View "{viewId}" not found</div>
+                <div className="text-destructive">View "{viewId}" not found</div>
             </div>
         );
     }

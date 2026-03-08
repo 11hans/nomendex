@@ -488,9 +488,9 @@ export function InboxListView() {
                                                                 <span
                                                                     className={`size-2 rounded-full shrink-0 ${
                                                                         statusType === "active"
-                                                                            ? "bg-blue-500"
+                                                                            ? "bg-primary"
                                                                             : statusType === "completed"
-                                                                                ? "bg-green-500"
+                                                                                ? "bg-success"
                                                                                 : "bg-text-muted/40"
                                                                     }`}
                                                                 />
@@ -509,7 +509,7 @@ export function InboxListView() {
                                                                     e.stopPropagation();
                                                                     void toggleArchiveWithToast(todo);
                                                                 }}
-                                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-text-muted hover:text-text hover:bg-surface-elevated"
+                                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-surface-elevated"
                                                                 title={todo.archived ? "restore" : "archive"}
                                                             >
                                                                 {todo.archived ? <ArchiveRestore className="size-3" /> : <Archive className="size-3" />}

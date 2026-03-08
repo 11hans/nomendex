@@ -16,7 +16,6 @@ import {
     Alert,
     AlertDescription,
 } from "@/components/ui/alert";
-import { useTheme } from "@/hooks/useTheme";
 import { useMcpServersAPI } from "@/hooks/useMcpServersAPI";
 import type { TransportConfig, SseTransport, HttpTransport } from "@/features/mcp-servers/mcp-server-types";
 import { ArrowLeft, Plus, X, Info } from "lucide-react";
@@ -34,7 +33,6 @@ function generateId(): string {
 }
 
 function McpServerFormContent() {
-    const { currentTheme } = useTheme();
     const navigate = useNavigate();
     const { serverId } = useParams<{ serverId: string }>();
     const api = useMcpServersAPI();
@@ -254,23 +252,14 @@ function McpServerFormContent() {
 
     if (isLoading) {
         return (
-            <div
-                className="flex h-full items-center justify-center"
-                style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
-            >
-                <p style={{ color: currentTheme.styles.contentSecondary }}>Loading...</p>
+            <div className="flex h-full items-center justify-center bg-bg">
+                <p className="text-muted-foreground">Loading...</p>
             </div>
         );
     }
 
     return (
-        <div
-            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
-            style={{
-                backgroundColor: currentTheme.styles.surfacePrimary,
-                color: currentTheme.styles.contentPrimary,
-            }}
-        >
+        <div className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full bg-bg text-foreground">
             {/* Header */}
             <div className="flex items-center justify-between flex-shrink-0 mb-6">
                 <div className="flex items-center gap-4">
@@ -281,7 +270,7 @@ function McpServerFormContent() {
                         <h1 className="text-2xl font-bold">
                             {isEditing ? "Edit MCP Server" : "New MCP Server"}
                         </h1>
-                        <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                        <p className="text-sm text-muted-foreground">
                             Configure a Model Context Protocol server
                         </p>
                     </div>
@@ -374,7 +363,7 @@ function McpServerFormContent() {
                                         </Button>
                                     </div>
                                     {formArgs.length === 0 ? (
-                                        <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                        <p className="text-sm text-muted-foreground">
                                             No arguments configured
                                         </p>
                                     ) : (
@@ -410,7 +399,7 @@ function McpServerFormContent() {
                                         </Button>
                                     </div>
                                     {formEnvVars.length === 0 ? (
-                                        <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                        <p className="text-sm text-muted-foreground">
                                             No environment variables configured
                                         </p>
                                     ) : (
@@ -423,7 +412,7 @@ function McpServerFormContent() {
                                                         placeholder="KEY"
                                                         className="font-mono w-1/3"
                                                     />
-                                                    <span style={{ color: currentTheme.styles.contentSecondary }}>=</span>
+                                                    <span className="text-muted-foreground">=</span>
                                                     <Input
                                                         value={env.value}
                                                         onChange={(e) => updateEnvVar(env.id, "value", e.target.value)}
@@ -466,7 +455,7 @@ function McpServerFormContent() {
                                         </Button>
                                     </div>
                                     {formHeaders.length === 0 ? (
-                                        <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                        <p className="text-sm text-muted-foreground">
                                             No headers configured
                                         </p>
                                     ) : (
@@ -479,7 +468,7 @@ function McpServerFormContent() {
                                                         placeholder="Header-Name"
                                                         className="font-mono w-1/3"
                                                     />
-                                                    <span style={{ color: currentTheme.styles.contentSecondary }}>:</span>
+                                                    <span className="text-muted-foreground">:</span>
                                                     <Input
                                                         value={header.value}
                                                         onChange={(e) => updateHeader(header.id, "value", e.target.value)}

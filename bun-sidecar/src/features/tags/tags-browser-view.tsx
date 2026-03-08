@@ -239,7 +239,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                             style={{ color: currentTheme.styles.contentAccent }}
                         />
                         <h2
-                            className="tags-header-title text-sm font-medium"
+                            className="tags-header-title text-[11px] font-medium uppercase tracking-[0.14em]"
                             style={{ color: currentTheme.styles.contentPrimary }}
                         >
                             Tags
@@ -255,7 +255,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                         variant="ghost"
                         size="sm"
                         onClick={() => setShowCreateDialog(true)}
-                        className="tags-create-btn flex items-center gap-2"
+                        className="tags-create-btn h-7 px-2 text-[11px] font-medium rounded-md flex items-center gap-2"
                     >
                         <Plus size={16} />
                         Create Tag
@@ -275,7 +275,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        className="tags-search-input pl-9"
+                        className="tags-search-input h-8 pl-8 text-xs bg-transparent"
                         style={{
                             backgroundColor: currentTheme.styles.surfaceSecondary,
                             borderColor: currentTheme.styles.borderDefault,
@@ -292,7 +292,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
             >
                 {filteredTags.length === 0 ? (
                     <div
-                        className="text-center py-8"
+                        className="text-center py-8 text-[11px]"
                         style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         {searchQuery ? "No tags found" : "No tags yet"}
@@ -304,6 +304,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                                 key={tagItem.tag}
                                 data-index={index}
                                 className="group relative"
+                                onMouseEnter={() => setSelectedTagIndex(index)}
                             >
                                 <button
                                     onClick={() => handleOpenTag(tagItem.tag)}
@@ -323,9 +324,9 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                                             size={14}
                                             style={{ color: currentTheme.styles.contentAccent }}
                                         />
-                                        <span className="text-[11px] font-normal">{tagItem.tag}</span>
+                                        <span className="text-xs font-normal">{tagItem.tag}</span>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 pr-8">
                                         <span
                                             className="text-[10px] font-normal px-2 py-0.5 rounded-full"
                                             style={{

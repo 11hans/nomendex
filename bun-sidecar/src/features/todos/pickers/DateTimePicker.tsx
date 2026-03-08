@@ -283,7 +283,7 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 text-xs text-red-500 hover:text-red-600 hover:bg-red-50 px-2"
+                                className="h-7 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 px-2"
                                 onClick={handleClearLocal}
                             >
                                 Clear

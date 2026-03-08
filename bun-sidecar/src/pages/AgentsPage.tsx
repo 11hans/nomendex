@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTheme } from "@/hooks/useTheme";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,8 +39,6 @@ function AgentsContent() {
     const navigate = useNavigate();
     const api = useAgentsAPI();
     const mcpServersAPI = useMcpServersAPI();
-    const { currentTheme } = useTheme();
-
     const [agents, setAgents] = useState<AgentConfig[]>([]);
     const [allMcpServers, setAllMcpServers] = useState<CombinedMcpServer[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -150,20 +147,20 @@ function AgentsContent() {
 
     if (isLoading) {
         return (
-            <div className="flex h-full items-center justify-center" style={{ backgroundColor: currentTheme.styles.surfacePrimary }}>
-                <p style={{ color: currentTheme.styles.contentTertiary }}>Loading agents...</p>
+            <div className="flex h-full items-center justify-center bg-bg">
+                <p className="text-muted-foreground">Loading agents...</p>
             </div>
         );
     }
 
     return (
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col max-w-4xl mx-auto w-full" style={{ backgroundColor: currentTheme.styles.surfacePrimary, color: currentTheme.styles.contentPrimary }}>
-            <div className="shrink-0 px-4 py-2.5 border-b flex items-center justify-between gap-2" style={{ borderColor: currentTheme.styles.borderDefault }}>
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col max-w-4xl mx-auto w-full bg-bg text-foreground">
+            <div className="shrink-0 px-4 py-2.5 border-b border-border flex items-center justify-between gap-2">
                 <div>
-                    <h1 className="text-sm font-medium" style={{ color: currentTheme.styles.contentPrimary }}>
+                    <h1 className="text-sm font-medium">
                         Agents
                     </h1>
-                    <p className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <p className="text-[10px] text-muted-foreground">
                         Configure AI agents with custom system prompts and MCP servers.
                     </p>
                 </div>
@@ -187,7 +184,7 @@ function AgentsContent() {
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-center gap-3">
                                         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-bg-secondary">
-                                            <Bot className="h-5 w-5 text-text-secondary" />
+                                            <Bot className="h-5 w-5 text-muted-foreground" />
                                         </div>
                                         <div>
                                             <CardTitle className="flex items-center gap-2">
@@ -236,11 +233,11 @@ function AgentsContent() {
                             <CardContent>
                                 <div className="flex flex-wrap gap-4 text-xs">
                                     <div>
-                                        <span className="text-text-secondary">Model: </span>
+                                        <span className="text-muted-foreground">Model: </span>
                                         <span>{getModelDisplayName(agent.model)}</span>
                                     </div>
                                     <div>
-                                        <span className="text-text-secondary">MCP Servers: </span>
+                                        <span className="text-muted-foreground">MCP Servers: </span>
                                         <span>
                                             {agent.mcpServers.length === 0
                                                 ? "None"
@@ -251,8 +248,8 @@ function AgentsContent() {
                                     </div>
                                     {agent.systemPrompt && (
                                         <div className="w-full">
-                                            <span className="text-text-secondary">System Prompt: </span>
-                                            <span className="font-mono text-text-muted">
+                                            <span className="text-muted-foreground">System Prompt: </span>
+                                            <span className="font-mono text-muted-foreground">
                                                 {agent.systemPrompt.length > 100
                                                     ? agent.systemPrompt.slice(0, 100) + "..."
                                                     : agent.systemPrompt || "(uses default)"}
@@ -349,7 +346,7 @@ function AgentsContent() {
                                 placeholder="Leave empty to use the default Claude Code system prompt"
                                 className="min-h-[120px] font-mono text-sm"
                             />
-                            <p className="text-xs text-text-secondary">
+                            <p className="text-xs text-muted-foreground">
                                 An empty prompt will use Claude Code's default system prompt.
                             </p>
                         </div>
@@ -357,7 +354,7 @@ function AgentsContent() {
                         <div className="space-y-4">
                             <Label>MCP Servers</Label>
                             {allMcpServers.length === 0 ? (
-                                <p className="text-xs text-text-secondary">
+                                <p className="text-xs text-muted-foreground">
                                     No MCP servers available.
                                 </p>
                             ) : (
@@ -365,7 +362,7 @@ function AgentsContent() {
                                     {/* User-defined servers */}
                                     {userServers.length > 0 && (
                                         <div className="space-y-2">
-                                            <p className="text-xs font-medium text-text-secondary">
+                                            <p className="text-xs font-medium text-muted-foreground">
                                                 User Defined
                                             </p>
                                             <div className="space-y-2">
@@ -383,7 +380,7 @@ function AgentsContent() {
                                                             >
                                                                 {server.name}
                                                             </label>
-                                                            <p className="text-xs text-text-secondary">
+                                                            <p className="text-xs text-muted-foreground">
                                                                 {server.description || "No description"}
                                                             </p>
                                                         </div>
@@ -396,7 +393,7 @@ function AgentsContent() {
                                     {/* Built-in servers */}
                                     {builtInServers.length > 0 && (
                                         <div className="space-y-2">
-                                            <p className="text-xs font-medium text-text-secondary">
+                                            <p className="text-xs font-medium text-muted-foreground">
                                                 Built-in
                                             </p>
                                             <div className="space-y-2">
@@ -415,7 +412,7 @@ function AgentsContent() {
                                                                 {server.name}
                                                                 <Badge variant="secondary" className="text-[10px] px-1 py-0">Built-in</Badge>
                                                             </label>
-                                                            <p className="text-xs text-text-secondary">
+                                                            <p className="text-xs text-muted-foreground">
                                                                 {server.description || "No description"}
                                                             </p>
                                                         </div>

@@ -470,16 +470,16 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
                             title="Later"
                             status="later"
                             todos={todosByStatus.later}
-                            icon={<Calendar className="w-4 h-4 text-purple-600" />}
+                            icon={<Calendar className="w-4 h-4 text-purple" />}
                         />
-                        <KanbanColumn title="To Do" status="todo" todos={todosByStatus.todo} icon={<AlertCircle className="w-4 h-4 text-slate-600" />} />
+                        <KanbanColumn title="To Do" status="todo" todos={todosByStatus.todo} icon={<AlertCircle className="w-4 h-4 text-muted-foreground" />} />
                         <KanbanColumn
                             title="In Progress"
                             status="in_progress"
                             todos={todosByStatus.in_progress}
-                            icon={<Clock className="w-4 h-4 text-blue-600" />}
+                            icon={<Clock className="w-4 h-4 text-primary" />}
                         />
-                        <KanbanColumn title="Done" status="done" todos={todosByStatus.done} icon={<CheckCircle2 className="w-4 h-4 text-green-600" />} />
+                        <KanbanColumn title="Done" status="done" todos={todosByStatus.done} icon={<CheckCircle2 className="w-4 h-4 text-success" />} />
                     </div>
                     <DragOverlay>
                         {draggedTodo ? (

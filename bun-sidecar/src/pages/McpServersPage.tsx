@@ -15,7 +15,6 @@ import {
     Alert,
     AlertDescription,
 } from "@/components/ui/alert";
-import { useTheme } from "@/hooks/useTheme";
 import { useMcpServersAPI } from "@/hooks/useMcpServersAPI";
 import type { UserMcpServer, TransportConfig } from "@/features/mcp-servers/mcp-server-types";
 import { Plus, Pencil, Trash2, ArrowLeft, Server, AlertTriangle, Globe, Terminal } from "lucide-react";
@@ -27,7 +26,6 @@ interface CombinedMcpServer extends UserMcpServer {
 }
 
 function McpServersContent() {
-    const { currentTheme } = useTheme();
     const navigate = useNavigate();
     const api = useMcpServersAPI();
 
@@ -88,33 +86,24 @@ function McpServersContent() {
 
     if (isLoading) {
         return (
-            <div
-                className="flex h-full items-center justify-center"
-                style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
-            >
-                <p style={{ color: currentTheme.styles.contentSecondary }}>Loading MCP servers...</p>
+            <div className="flex h-full items-center justify-center bg-bg">
+                <p className="text-muted-foreground">Loading MCP servers...</p>
             </div>
         );
     }
 
     return (
-        <div
-            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
-            style={{
-                backgroundColor: currentTheme.styles.surfacePrimary,
-                color: currentTheme.styles.contentPrimary,
-            }}
-        >
+        <div className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full bg-bg text-foreground">
             <div className="flex items-center justify-between flex-shrink-0 mb-6">
                 <div className="flex items-center gap-4">
                     <Button variant="ghost" size="icon" onClick={() => navigate("/agents")}>
                         <ArrowLeft className="h-4 w-4" />
                     </Button>
                     <div>
-                        <h1 className="text-2xl font-bold" style={{ color: currentTheme.styles.contentPrimary }}>
+                        <h1 className="text-2xl font-bold">
                             MCP Servers
                         </h1>
-                        <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                        <p className="text-sm text-muted-foreground">
                             Configure Model Context Protocol servers for your agents.
                         </p>
                     </div>
@@ -134,10 +123,7 @@ function McpServersContent() {
                 )}
 
                 {servers.length === 0 ? (
-                    <div
-                        className="text-center py-12"
-                        style={{ color: currentTheme.styles.contentSecondary }}
-                    >
+                    <div className="text-center py-12 text-muted-foreground">
                         <Server className="h-12 w-12 mx-auto mb-4 opacity-50" />
                         <p>No MCP servers configured yet.</p>
                         <p className="text-sm mt-1">Click "New Server" to add one.</p>
@@ -148,10 +134,7 @@ function McpServersContent() {
                             <CardHeader className="pb-3">
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-center gap-3">
-                                        <div
-                                            className="flex h-10 w-10 items-center justify-center rounded-lg"
-                                            style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}
-                                        >
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
                                             {getTransportIcon(server.transport)}
                                         </div>
                                         <div>
@@ -190,11 +173,11 @@ function McpServersContent() {
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <div className="text-sm font-mono truncate" style={{ color: currentTheme.styles.contentSecondary }}>
+                                <div className="text-sm font-mono truncate text-muted-foreground">
                                     {getTransportLabel(server.transport)}
                                 </div>
                                 {server.notes && (
-                                    <p className="text-xs mt-2" style={{ color: currentTheme.styles.contentTertiary }}>
+                                    <p className="text-xs mt-2 text-muted-foreground">
                                         {server.notes}
                                     </p>
                                 )}

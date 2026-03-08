@@ -116,7 +116,7 @@ const themes: Theme[] = [
         styles: {
             // Surface colors from :root OKLch variables
             surfacePrimary: "oklch(0.96 0.003 270)",     // --background
-            surfaceSecondary: "oklch(0.92 0.005 270 / 0.6)",  // --secondary
+            surfaceSecondary: "oklch(0.95 0.004 270 / 0.6)",  // --secondary
             surfaceTertiary: "oklch(0.88 0.005 270 / 0.6)",   // --border
             surfaceAccent: "oklch(0.92 0.005 270 / 0.6)",     // --accent
             surfaceMuted: "oklch(0.99 0.002 270 / 0.7)",      // --card

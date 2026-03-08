@@ -68,7 +68,7 @@ export function TodoCard({
                                 title={todo.status === "done" ? "Mark as incomplete" : "Mark as done"}
                             >
                                 {todo.status === "done" ? (
-                                    <CheckCircle2 className="size-4 text-green-600" />
+                                    <CheckCircle2 className="size-4 text-success" />
                                 ) : (
                                     <Circle className="size-4" />
                                 )}
@@ -81,7 +81,7 @@ export function TodoCard({
                     </div>
                     {todo.archived && <span className="text-[10px] text-muted-foreground bg-muted px-1 rounded shrink-0">Archived</span>}
                 </div>
-                {!hideProject && todo.project && <p className="text-[10px] text-blue-600">{todo.project}</p>}
+                {!hideProject && todo.project && <p className="text-[10px] text-accent">{todo.project}</p>}
                 {todo.tags && todo.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
                         {todo.tags.map((tag) => (
@@ -167,7 +167,7 @@ export function TodoCard({
                     </button>
                     <button
                         type="button"
-                        className="inline-flex items-center justify-center size-6 rounded hover:bg-red-100 text-muted-foreground hover:text-red-600"
+                        className="inline-flex items-center justify-center size-6 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                         onClick={(e) => {
                             e.stopPropagation();
                             onDelete?.(todo);

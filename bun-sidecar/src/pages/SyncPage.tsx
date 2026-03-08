@@ -7,7 +7,6 @@ import { Badge } from "../components/ui/badge";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useGHSync } from "@/contexts/GHSyncContext";
 import { chatPluginSerial } from "@/features/chat";
-import { useTheme } from "@/hooks/useTheme";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
     GitBranch,
@@ -93,10 +92,10 @@ function ChangedFilesList({ status }: { status: string }) {
                         const filePath = line.substring(3);
                         return (
                             <div key={i} className="flex items-center gap-2 text-xs py-0.5 px-1 min-w-0">
-                                <span className={`font-mono w-4 flex-shrink-0 ${fileStatus.includes("M") ? "text-amber-500" :
-                                    fileStatus.includes("A") ? "text-green-500" :
-                                        fileStatus.includes("D") ? "text-red-500" :
-                                            fileStatus.includes("?") ? "text-blue-500" :
+                                <span className={`font-mono w-4 flex-shrink-0 ${fileStatus.includes("M") ? "text-warning" :
+                                    fileStatus.includes("A") ? "text-success" :
+                                        fileStatus.includes("D") ? "text-destructive" :
+                                            fileStatus.includes("?") ? "text-primary" :
                                                 "text-muted-foreground"
                                     }`}>
                                     {fileStatus.trim() || "?"}
@@ -137,7 +136,6 @@ function ChangedFilesList({ status }: { status: string }) {
 
 function SyncContent() {
     const navigate = useNavigate();
-    const { currentTheme } = useTheme();
     const { addNewTab, setActiveTabId, autoSync, setAutoSyncConfig } = useWorkspaceContext();
     const { status: syncStatus, setupStatus, needsSetup, checkForChanges, sync, recheckSetup, clearMergeConflict, gitAuthMode, setGitAuthMode } = useGHSync();
     const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
@@ -418,17 +416,13 @@ After you provide the merged content, I will manually update the file and mark t
 
     return (
         <div
-            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
-            style={{
-                backgroundColor: currentTheme.styles.surfacePrimary,
-                color: currentTheme.styles.contentPrimary,
-            }}
+            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full bg-bg text-foreground"
         >
             <div className="flex-shrink-0 mb-6">
-                <h1 className="text-2xl font-bold" style={{ color: currentTheme.styles.contentPrimary }}>
+                <h1 className="text-2xl font-bold text-foreground">
                     Sync
                 </h1>
-                <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                <p className="text-sm text-muted-foreground">
                     Workspace Sync
                 </p>
             </div>
@@ -474,9 +468,9 @@ After you provide the merged content, I will manually update the file and mark t
 
                     {/* Pause Sync Toggle */}
                     {autoSync.enabled && (
-                        <div className={`flex items-center justify-between p-3 rounded-md ${autoSync.paused ? "bg-amber-500/10 border border-amber-500/30" : "bg-muted/30"}`}>
+                        <div className={`flex items-center justify-between p-3 rounded-md ${autoSync.paused ? "bg-warning/10 border border-warning/30" : "bg-muted/30"}`}>
                             <div>
-                                <div className={`text-sm font-medium ${autoSync.paused ? "text-amber-600" : ""}`}>
+                                <div className={`text-sm font-medium ${autoSync.paused ? "text-warning" : ""}`}>
                                     {autoSync.paused ? "Sync Paused" : "Sync Active"}
                                 </div>
                                 <p className="text-xs text-muted-foreground">
@@ -570,7 +564,7 @@ After you provide the merged content, I will manually update the file and mark t
                 {needsSetup && (
                     <div className="border rounded-lg p-5 bg-muted/30">
                         <div className="flex items-center gap-2 mb-4">
-                            <AlertCircle className="h-4 w-4 text-amber-500" />
+                            <AlertCircle className="h-4 w-4 text-warning" />
                             <span className="font-medium text-sm">Setup Required</span>
                         </div>
 
@@ -582,7 +576,7 @@ After you provide the merged content, I will manually update the file and mark t
                             {/* Git Installed Status */}
                             <div className="flex items-center gap-3 text-sm">
                                 {setupStatus.gitInstalled ? (
-                                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                    <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                                 ) : (
                                     <XCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                 )}
@@ -612,7 +606,7 @@ After you provide the merged content, I will manually update the file and mark t
                             {setupStatus.gitInstalled && (
                                 <div className="flex items-center gap-3 text-sm">
                                     {setupStatus.gitInitialized && setupStatus.hasRemote ? (
-                                        <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                        <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                                     ) : (
                                         <XCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                     )}
@@ -627,7 +621,7 @@ After you provide the merged content, I will manually update the file and mark t
                                 <>
                                     <div className="flex items-center gap-3 text-sm">
                                         {setupStatus.hasPAT ? (
-                                            <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                            <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                                         ) : (
                                             <XCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                         )}
@@ -685,7 +679,7 @@ After you provide the merged content, I will manually update the file and mark t
                 {(operationMessage || operationError) && (
                     <div className={`mb-4 px-3 py-2 text-sm flex items-center gap-2 rounded-md ${operationError
                         ? "bg-destructive/10 text-destructive border border-destructive/20"
-                        : "bg-green-500/10 text-green-600 border border-green-500/20"
+                        : "bg-success/10 text-success border border-success/20"
                         }`}>
                         {operationError ? (
                             <XCircle className="h-4 w-4 flex-shrink-0" />
@@ -802,11 +796,11 @@ After you provide the merged content, I will manually update the file and mark t
 
                         {/* Merge Conflict Section */}
                         {hasMergeConflict && (
-                            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-4 space-y-4">
+                            <div className="rounded-md border border-warning/30 bg-warning/5 p-4 space-y-4">
                                 <div className="flex items-center gap-2">
-                                    <GitMerge className="h-4 w-4 text-amber-500" />
+                                    <GitMerge className="h-4 w-4 text-warning" />
                                     <span className="font-medium text-sm">Merge Conflicts</span>
-                                    <Badge variant="outline" className={`ml-auto ${conflicts.filter(f => !f.resolved).length === 0 ? "border-green-500/30 text-green-600" : "border-amber-500/30 text-amber-600"}`}>
+                                    <Badge variant="outline" className={`ml-auto ${conflicts.filter(f => !f.resolved).length === 0 ? "border-success/30 text-success" : "border-warning/30 text-warning"}`}>
                                         {conflicts.filter(f => !f.resolved).length === 0
                                             ? "All resolved"
                                             : `${conflicts.filter(f => !f.resolved).length} of ${conflicts.length} unresolved`}
@@ -822,7 +816,7 @@ After you provide the merged content, I will manually update the file and mark t
                                     {conflicts.map((file) => (
                                         <div
                                             key={file.path}
-                                            className={`rounded-md bg-background border overflow-hidden ${file.resolved ? "border-green-500/30" : ""}`}
+                                            className={`rounded-md bg-background border overflow-hidden ${file.resolved ? "border-success/30" : ""}`}
                                         >
                                             {/* File info row - clickable to view diff */}
                                             <button
@@ -830,14 +824,14 @@ After you provide the merged content, I will manually update the file and mark t
                                                 className="flex items-center gap-2 p-3 w-full text-left hover:bg-muted/50 transition-colors"
                                             >
                                                 {file.resolved ? (
-                                                    <Check className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                                                    <Check className="h-3.5 w-3.5 text-success flex-shrink-0" />
                                                 ) : (
-                                                    <AlertCircle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                                                    <AlertCircle className="h-3.5 w-3.5 text-warning flex-shrink-0" />
                                                 )}
                                                 <span className="font-mono text-xs truncate flex-1 min-w-0">
                                                     {file.path}
                                                 </span>
-                                                <span className={`text-[10px] flex-shrink-0 ${file.resolved ? "text-green-600 font-medium" : "text-muted-foreground"}`}>
+                                                <span className={`text-[10px] flex-shrink-0 ${file.resolved ? "text-success font-medium" : "text-muted-foreground"}`}>
                                                     {file.resolved ? "Resolved" :
                                                         file.status === "both_modified" ? "Both modified" :
                                                             file.status === "deleted_by_us" ? "Deleted locally" :
@@ -929,7 +923,7 @@ After you provide the merged content, I will manually update the file and mark t
                                 </div>
 
                                 {/* Merge Actions */}
-                                <div className="flex gap-2 pt-2 border-t border-amber-500/20">
+                                <div className="flex gap-2 pt-2 border-t border-warning/20">
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -968,7 +962,7 @@ After you provide the merged content, I will manually update the file and mark t
                                         Resolve all conflicts before completing the merge
                                     </p>
                                 ) : conflicts.length > 0 ? (
-                                    <p className="text-[10px] text-green-600 text-center">
+                                    <p className="text-[10px] text-success text-center">
                                         All conflicts resolved! Click "Mark as Resolved" on each file, then complete the merge.
                                     </p>
                                 ) : null}

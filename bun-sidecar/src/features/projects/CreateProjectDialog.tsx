@@ -58,12 +58,12 @@ export function CreateProjectDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogTrigger asChild>
                 <Button
-                    variant="default"
+                    variant="ghost"
                     size="sm"
-                    className="h-8 hover:opacity-90 transition-opacity"
+                    className="projects-create-btn h-7 px-2 text-[11px] font-medium rounded-md flex items-center gap-2"
                 >
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Project
+                    <Plus size={16} />
+                    Create Project
                 </Button>
             </DialogTrigger>
             <DialogContent

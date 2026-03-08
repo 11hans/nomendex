@@ -13,7 +13,6 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { useTheme } from "@/hooks/useTheme";
 import { useAgentsAPI } from "@/hooks/useAgentsAPI";
 import { useMcpServersAPI } from "@/hooks/useMcpServersAPI";
 import { PREDEFINED_MODELS, MODEL_DISPLAY_NAMES } from "@/features/agents/index";
@@ -27,7 +26,6 @@ interface CombinedMcpServer extends UserMcpServer {
 }
 
 function NewAgentContent() {
-    const { currentTheme } = useTheme();
     const api = useAgentsAPI();
     const mcpServersAPI = useMcpServersAPI();
     const navigate = useNavigate();
@@ -94,23 +92,14 @@ function NewAgentContent() {
 
     if (isLoading) {
         return (
-            <div
-                className="flex h-full items-center justify-center"
-                style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
-            >
-                <p style={{ color: currentTheme.styles.contentSecondary }}>Loading...</p>
+            <div className="flex h-full items-center justify-center bg-bg">
+                <p className="text-muted-foreground">Loading...</p>
             </div>
         );
     }
 
     return (
-        <div
-            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full"
-            style={{
-                backgroundColor: currentTheme.styles.surfacePrimary,
-                color: currentTheme.styles.contentPrimary,
-            }}
-        >
+        <div className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full bg-bg text-foreground">
             <div className="flex items-center gap-4 flex-shrink-0 mb-6">
                 <Button
                     variant="ghost"
@@ -121,10 +110,10 @@ function NewAgentContent() {
                     <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <div>
-                    <h1 className="text-2xl font-bold" style={{ color: currentTheme.styles.contentPrimary }}>
+                    <h1 className="text-2xl font-bold">
                         Create New Agent
                     </h1>
-                    <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                    <p className="text-sm text-muted-foreground">
                         Configure the agent's settings, system prompt, and MCP servers.
                     </p>
                 </div>
@@ -162,8 +151,7 @@ function NewAgentContent() {
                                 <Label htmlFor="model">Model</Label>
                                 <button
                                     type="button"
-                                    className="text-xs hover:underline"
-                                    style={{ color: currentTheme.styles.contentAccent }}
+                                    className="text-xs hover:underline text-accent"
                                     onClick={() => {
                                         if (!useCustomModel) {
                                             // Switching to custom: keep current value
@@ -210,7 +198,7 @@ function NewAgentContent() {
                                 placeholder="Leave empty to use the default Claude Code system prompt"
                                 className="min-h-[120px] font-mono text-sm"
                             />
-                            <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
+                            <p className="text-xs text-muted-foreground">
                                 An empty prompt will use Claude Code's default system prompt.
                             </p>
                         </div>
@@ -218,7 +206,7 @@ function NewAgentContent() {
                         <div className="space-y-4">
                             <Label>MCP Servers</Label>
                             {allMcpServers.length === 0 ? (
-                                <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                <p className="text-sm text-muted-foreground">
                                     No MCP servers available. Add some in the MCP Servers settings.
                                 </p>
                             ) : (
@@ -226,7 +214,7 @@ function NewAgentContent() {
                                     {/* User-defined servers */}
                                     {userServers.length > 0 && (
                                         <div className="space-y-2">
-                                            <p className="text-xs font-medium" style={{ color: currentTheme.styles.contentSecondary }}>
+                                            <p className="text-xs font-medium text-muted-foreground">
                                                 User Defined
                                             </p>
                                             <div className="space-y-2">
@@ -244,7 +232,7 @@ function NewAgentContent() {
                                                             >
                                                                 {server.name}
                                                             </label>
-                                                            <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                            <p className="text-xs text-muted-foreground">
                                                                 {server.description || "No description"}
                                                             </p>
                                                         </div>
@@ -257,7 +245,7 @@ function NewAgentContent() {
                                     {/* Built-in servers */}
                                     {builtInServers.length > 0 && (
                                         <div className="space-y-2">
-                                            <p className="text-xs font-medium" style={{ color: currentTheme.styles.contentSecondary }}>
+                                            <p className="text-xs font-medium text-muted-foreground">
                                                 Built-in
                                             </p>
                                             <div className="space-y-2">
@@ -276,7 +264,7 @@ function NewAgentContent() {
                                                                 {server.name}
                                                                 <Badge variant="secondary" className="text-[10px] px-1 py-0">Built-in</Badge>
                                                             </label>
-                                                            <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                            <p className="text-xs text-muted-foreground">
                                                                 {server.description || "No description"}
                                                             </p>
                                                         </div>

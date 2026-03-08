@@ -104,10 +104,10 @@ function CodePanel(props: {
     const { title, subtitle, content, highlightedLines, uniqueLines, variant, diffCount } = props;
     const lines = content.split("\n");
 
-    const bgColor = variant === "ours" ? "bg-blue-500/5" : "bg-green-500/5";
-    const highlightColor = variant === "ours" ? "bg-red-500/15" : "bg-green-500/15";
-    const highlightBorder = variant === "ours" ? "border-l-2 border-l-red-500" : "border-l-2 border-l-green-500";
-    const borderColor = variant === "ours" ? "border-blue-500/20" : "border-green-500/20";
+    const bgColor = variant === "ours" ? "bg-primary/5" : "bg-success/5";
+    const highlightColor = variant === "ours" ? "bg-destructive/15" : "bg-success/15";
+    const highlightBorder = variant === "ours" ? "border-l-2 border-l-destructive" : "border-l-2 border-l-success";
+    const borderColor = variant === "ours" ? "border-primary/20" : "border-success/20";
 
     return (
         <div className={`flex-1 flex flex-col border rounded-lg overflow-hidden ${borderColor}`}>
@@ -143,11 +143,11 @@ function CodePanel(props: {
                                         key={i}
                                         className={isHighlighted ? `${highlightColor} ${highlightBorder}` : ""}
                                     >
-                                        <td className={`px-2 py-0.5 text-right select-none border-r w-10 sticky left-0 ${isHighlighted ? (variant === "ours" ? "bg-red-500/10 text-red-600" : "bg-green-500/10 text-green-600") : "bg-muted/50 text-muted-foreground"}`}>
+                                        <td className={`px-2 py-0.5 text-right select-none border-r w-10 sticky left-0 ${isHighlighted ? (variant === "ours" ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success") : "bg-muted/50 text-muted-foreground"}`}>
                                             {isUnique && (variant === "ours" ? "-" : "+")}
                                             {i + 1}
                                         </td>
-                                        <td className={`px-2 py-0.5 whitespace-pre overflow-x-auto ${isHighlighted ? (variant === "ours" ? "text-red-700" : "text-green-700") : ""}`}>
+                                        <td className={`px-2 py-0.5 whitespace-pre overflow-x-auto ${isHighlighted ? (variant === "ours" ? "text-destructive" : "text-success") : ""}`}>
                                             {line || " "}
                                         </td>
                                     </tr>
@@ -283,8 +283,8 @@ After you provide the merged content, I will manually update the file and mark t
     if (resolved) {
         return (
             <div className="flex flex-col items-center justify-center h-64 gap-4">
-                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-green-500/10">
-                    <Check className="h-6 w-6 text-green-500" />
+                <div className="flex items-center justify-center w-12 h-12 rounded-full bg-success/10">
+                    <Check className="h-6 w-6 text-success" />
                 </div>
                 <p className="text-sm text-muted-foreground">Conflict resolved! Redirecting...</p>
             </div>
@@ -371,14 +371,14 @@ After you provide the merged content, I will manually update the file and mark t
 
             {/* Diff Summary */}
             {content && (oursOnly.size > 0 || theirsOnly.size > 0) && (
-                <div className="mx-4 mt-4 px-3 py-2 text-sm bg-amber-500/10 border border-amber-500/20 rounded-md">
+                <div className="mx-4 mt-4 px-3 py-2 text-sm bg-warning/10 border border-warning/20 rounded-md">
                     <span className="font-medium">Differences found: </span>
                     {oursOnly.size > 0 && (
-                        <span className="text-red-600">{oursOnly.size} line{oursOnly.size !== 1 ? "s" : ""} only in local</span>
+                        <span className="text-destructive">{oursOnly.size} line{oursOnly.size !== 1 ? "s" : ""} only in local</span>
                     )}
                     {oursOnly.size > 0 && theirsOnly.size > 0 && <span>, </span>}
                     {theirsOnly.size > 0 && (
-                        <span className="text-green-600">{theirsOnly.size} line{theirsOnly.size !== 1 ? "s" : ""} only in remote</span>
+                        <span className="text-success">{theirsOnly.size} line{theirsOnly.size !== 1 ? "s" : ""} only in remote</span>
                     )}
                 </div>
             )}
@@ -388,7 +388,7 @@ After you provide the merged content, I will manually update the file and mark t
                 <div className="mx-4 mt-4 px-3 py-2 text-sm bg-muted border rounded-md space-y-2">
                     <span className="text-muted-foreground">No differences detected between extracted versions.</span>
                     {content.mergedContent.includes("<<<<<<<") && (
-                        <div className="text-amber-600 text-xs">
+                        <div className="text-warning text-xs">
                             The file contains conflict markers. View the raw file below to see the conflict.
                         </div>
                     )}
@@ -399,7 +399,7 @@ After you provide the merged content, I will manually update the file and mark t
             {content && content.mergedContent.includes("<<<<<<<") && (
                 <div className="mx-4 mt-2">
                     <details className="border rounded-lg overflow-hidden">
-                        <summary className="px-3 py-2 bg-amber-500/10 border-b cursor-pointer text-sm font-medium hover:bg-amber-500/20">
+                        <summary className="px-3 py-2 bg-warning/10 border-b cursor-pointer text-sm font-medium hover:bg-warning/20">
                             View file with conflict markers
                         </summary>
                         <div className="font-mono text-xs overflow-auto max-h-64 p-2 bg-muted/30">

@@ -233,8 +233,8 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
                                 variant={confirmDelete ? "destructive" : "ghost"}
                                 size="sm"
                                 className={`h-9 px-3 mr-auto transition-all ${confirmDelete
-                                    ? "bg-red-500 hover:bg-red-600 text-white"
-                                    : "text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                                    ? "bg-destructive hover:bg-destructive/90 text-primary-foreground"
+                                    : "text-destructive hover:text-destructive hover:bg-destructive/10"
                                     }`}
                             >
                                 <Trash2 className="size-4 mr-2" />

@@ -12,10 +12,10 @@ import { Save, ArrowLeft, Clock } from "lucide-react";
 import { Todo } from "./todo-types";
 
 const statusOptions = [
-    { value: "todo", label: "To Do", color: "bg-slate-100 text-slate-800" },
-    { value: "in_progress", label: "In Progress", color: "bg-blue-100 text-blue-800" },
-    { value: "done", label: "Done", color: "bg-green-100 text-green-800" },
-    { value: "later", label: "Later", color: "bg-purple-100 text-purple-800" },
+    { value: "todo", label: "To Do", color: "bg-muted text-foreground" },
+    { value: "in_progress", label: "In Progress", color: "bg-primary/10 text-primary" },
+    { value: "done", label: "Done", color: "bg-success/10 text-success" },
+    { value: "later", label: "Later", color: "bg-purple/10 text-purple" },
 ];
 
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";

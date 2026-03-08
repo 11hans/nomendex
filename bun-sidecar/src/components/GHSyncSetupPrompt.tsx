@@ -57,7 +57,7 @@ export function GHSyncSetupPrompt() {
                     {/* Git Installed Status */}
                     <div className="flex items-center gap-3 text-sm">
                         {setupStatus.gitInstalled ? (
-                            <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                            <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                         ) : (
                             <XCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         )}
@@ -85,7 +85,7 @@ export function GHSyncSetupPrompt() {
                     {setupStatus.gitInstalled && (
                         <div className="flex items-center gap-3 text-sm">
                             {setupStatus.gitInitialized && setupStatus.hasRemote ? (
-                                <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                             ) : (
                                 <XCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                             )}
@@ -100,7 +100,7 @@ export function GHSyncSetupPrompt() {
                         <>
                             <div className="flex items-center gap-3 text-sm">
                                 {setupStatus.hasPAT ? (
-                                    <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                    <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                                 ) : (
                                     <XCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                                 )}
