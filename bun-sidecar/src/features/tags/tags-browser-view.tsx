@@ -137,6 +137,12 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
         setSelectedTagIndex(0);
     }, [searchQuery]);
 
+    // Keep selection in bounds when filtered list changes
+    useEffect(() => {
+        if (selectedTagIndex < filteredTags.length) return;
+        setSelectedTagIndex(Math.max(filteredTags.length - 1, 0));
+    }, [filteredTags, selectedTagIndex]);
+
     // Scroll selected item into view
     useEffect(() => {
         if (listRef.current) {
@@ -174,9 +180,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
     }, [newTagName, notesAPI]);
 
     // Handle deleting an explicit tag
-    const handleDeleteTag = useCallback(async (tagName: string, event: React.MouseEvent) => {
-        event.stopPropagation();
-
+    const handleDeleteTag = useCallback(async (tagName: string) => {
         try {
             const { isExplicit } = await notesAPI.isExplicitTag({ tagName });
             if (!isExplicit) {
@@ -319,37 +323,37 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                                         color: currentTheme.styles.contentPrimary,
                                     }}
                                 >
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
                                         <Hash
                                             size={14}
                                             style={{ color: currentTheme.styles.contentAccent }}
                                         />
-                                        <span className="text-xs font-normal">{tagItem.tag}</span>
+                                        <span className="text-xs font-normal truncate">{tagItem.tag}</span>
                                     </div>
                                     <div className="flex items-center gap-2 pr-8">
                                         <span
                                             className="text-[10px] font-normal px-2 py-0.5 rounded-full"
                                             style={{
                                                 backgroundColor: currentTheme.styles.surfaceTertiary,
-                                                color: currentTheme.styles.contentSecondary
+                                                color: currentTheme.styles.contentSecondary,
                                             }}
                                         >
                                             {tagItem.count}
                                         </span>
                                     </div>
-                                    {tagItem.count === 0 && (
-                                        <button
-                                            onClick={(e) => handleDeleteTag(tagItem.tag, e)}
-                                            className="absolute right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
-                                            title="Delete explicit tag"
-                                        >
-                                            <Trash2
-                                                size={14}
-                                                style={{ color: currentTheme.styles.semanticDestructive }}
-                                            />
-                                        </button>
-                                    )}
                                 </button>
+                                {tagItem.count === 0 && (
+                                    <button
+                                        onClick={() => handleDeleteTag(tagItem.tag)}
+                                        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
+                                        title="Delete explicit tag"
+                                    >
+                                        <Trash2
+                                            size={14}
+                                            style={{ color: currentTheme.styles.semanticDestructive }}
+                                        />
+                                    </button>
+                                )}
                             </div>
                         ))}
                     </div>

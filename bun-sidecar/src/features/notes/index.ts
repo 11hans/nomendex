@@ -155,6 +155,7 @@ export const functionStubs = {
 export const notesViewPropsSchema = z.object({
     noteFileName: z.string(),
     scrollToLine: z.number().optional(),
+    compact: z.boolean().optional(),
 });
 export type NotesViewProps = z.infer<typeof notesViewPropsSchema>;
 

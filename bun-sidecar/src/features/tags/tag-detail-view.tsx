@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -58,7 +58,8 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
     const { currentTheme } = useTheme();
     const placement = getViewSelfPlacement(tabId);
 
-    const hasSetTabNameRef = useRef<boolean>(false);
+    const tabContainerRef = useRef<HTMLDivElement>(null);
+    const lastTabNameRef = useRef<string | null>(null);
     const listRef = useRef<HTMLDivElement>(null);
 
     const notesAPI = useNotesAPI();
@@ -66,11 +67,21 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
 
     // Set tab name
     useEffect(() => {
-        if (activeTab?.id === tabId && !hasSetTabNameRef.current) {
-            setTabName(tabId, `#${tagName}`);
-            hasSetTabNameRef.current = true;
-        }
+        if (activeTab?.id !== tabId) return;
+        const nextName = `#${tagName}`;
+        if (lastTabNameRef.current === nextName) return;
+        setTabName(tabId, nextName);
+        lastTabNameRef.current = nextName;
     }, [activeTab?.id, tabId, tagName, setTabName]);
+
+    // Auto-focus container when tab becomes active so keyboard navigation works immediately
+    useEffect(() => {
+        if (activeTab?.id === tabId && !loading) {
+            requestAnimationFrame(() => {
+                tabContainerRef.current?.focus();
+            });
+        }
+    }, [activeTab?.id, tabId, loading]);
 
     // Load files with this tag
     useEffect(() => {
@@ -110,6 +121,10 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
         fetchFiles();
     }, [tagName, notesAPI, todosAPI, setLoading, setError]);
 
+    const noteFiles = useMemo(() => files.filter((f) => f.source === "notes"), [files]);
+    const todoFiles = useMemo(() => files.filter((f) => f.source === "todos"), [files]);
+    const orderedFiles = useMemo(() => [...noteFiles, ...todoFiles], [noteFiles, todoFiles]);
+
     // Open file
     const handleOpenFile = useCallback(
         async (file: FileReference) => {
@@ -117,7 +132,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                 const newTab = await addNewTab({
                     pluginMeta: notesPluginSerial,
                     view: "editor",
-                    props: { noteFileName: file.path },
+                    props: { noteFileName: file.path, compact: true },
                 });
                 if (newTab) {
                     if (placement === "sidebar") {
@@ -131,7 +146,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                 const todoId = file.path.replace(/\.md$/, "");
                 const newTab = await addNewTab({
                     pluginMeta: todosPluginSerial,
-                    view: "detail",
+                    view: "editor",
                     props: { todoId },
                 });
                 if (newTab) {
@@ -153,12 +168,12 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
     // Keyboard navigation
     const handleKeyDown = useCallback(
         (e: React.KeyboardEvent) => {
-            if (files.length === 0) return;
+            if (orderedFiles.length === 0) return;
 
             switch (e.key) {
                 case "ArrowDown":
                     e.preventDefault();
-                    setSelectedIndex((prev) => Math.min(prev + 1, files.length - 1));
+                    setSelectedIndex((prev) => Math.min(prev + 1, orderedFiles.length - 1));
                     break;
                 case "ArrowUp":
                     e.preventDefault();
@@ -167,7 +182,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                 case "Enter":
                     e.preventDefault();
                     {
-                        const selectedFile = files[selectedIndex];
+                        const selectedFile = orderedFiles[selectedIndex];
                         if (selectedFile) {
                             handleOpenFile(selectedFile);
                         }
@@ -175,8 +190,19 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                     break;
             }
         },
-        [files, selectedIndex, handleOpenFile]
+        [orderedFiles, selectedIndex, handleOpenFile]
     );
+
+    // Reset selection when tag changes
+    useEffect(() => {
+        setSelectedIndex(0);
+    }, [tagName]);
+
+    // Keep selection in bounds when list length changes
+    useEffect(() => {
+        if (selectedIndex < orderedFiles.length) return;
+        setSelectedIndex(Math.max(orderedFiles.length - 1, 0));
+    }, [orderedFiles.length, selectedIndex]);
 
     // Scroll selected item into view
     useEffect(() => {
@@ -184,11 +210,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
             const selectedItem = listRef.current.querySelector(`[data-index="${selectedIndex}"]`);
             selectedItem?.scrollIntoView({ block: "nearest", behavior: "smooth" });
         }
-    }, [selectedIndex]);
-
-    // Group files by source
-    const noteFiles = files.filter((f) => f.source === "notes");
-    const todoFiles = files.filter((f) => f.source === "todos");
+    }, [selectedIndex, orderedFiles.length]);
 
     if (loading) {
         return (
@@ -210,6 +232,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
 
     return (
         <div
+            ref={tabContainerRef}
             className="tag-detail flex-1 min-w-0 min-h-0 flex flex-col"
             style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
             onKeyDown={handleKeyDown}
