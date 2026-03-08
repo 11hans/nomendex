@@ -2,7 +2,6 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { Plus } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -58,12 +57,11 @@ export function CreateProjectDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogTrigger asChild>
                 <Button
-                    variant="ghost"
+                    variant="default"
                     size="sm"
-                    className="projects-create-btn h-7 px-2 text-[11px] font-medium rounded-md flex items-center gap-2"
+                    className="projects-create-btn h-7 px-2 text-[11px] font-medium rounded-md"
                 >
-                    <Plus size={16} />
-                    Create Project
+                    + new
                 </Button>
             </DialogTrigger>
             <DialogContent

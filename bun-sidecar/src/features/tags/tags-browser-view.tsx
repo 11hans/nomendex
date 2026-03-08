@@ -3,15 +3,15 @@ import { usePlugin } from "@/hooks/usePlugin";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Search, Hash, Plus, Trash2 } from "lucide-react";
+import { Hash, Trash2 } from "lucide-react";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
 import { useTheme } from "@/hooks/useTheme";
+import { useIndexedListNavigation } from "@/hooks/useIndexedListNavigation";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
+import { BrowserListCard, BrowserViewShell } from "@/features/shared/browser-view-shell";
 import { tagsPluginSerial } from "./index";
 import type { TagSuggestion } from "@/features/notes/tags-types";
-import { cn } from "@/lib/utils";
 
 export function TagsBrowserView({ tabId }: { tabId: string }) {
     if (!tabId) {
@@ -21,7 +21,6 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
     const { loading, error, setLoading, setError } = usePlugin();
     const [tags, setTags] = useState<TagSuggestion[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
-    const [selectedTagIndex, setSelectedTagIndex] = useState(0);
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     const [newTagName, setNewTagName] = useState("");
     const [createError, setCreateError] = useState<string | null>(null);
@@ -32,7 +31,6 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
     const searchInputRef = useRef<HTMLInputElement>(null);
     const newTagInputRef = useRef<HTMLInputElement>(null);
     const hasSetTabNameRef = useRef<boolean>(false);
-    const listRef = useRef<HTMLDivElement>(null);
 
     const notesAPI = useNotesAPI();
 
@@ -104,52 +102,16 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
         [addNewTab, placement, setActiveTabId, setSidebarTabId]
     );
 
-    // Keyboard navigation
-    const handleKeyDown = useCallback(
-        (e: React.KeyboardEvent) => {
-            if (filteredTags.length === 0) return;
-
-            switch (e.key) {
-                case "ArrowDown":
-                    e.preventDefault();
-                    setSelectedTagIndex((prev) => Math.min(prev + 1, filteredTags.length - 1));
-                    break;
-                case "ArrowUp":
-                    e.preventDefault();
-                    setSelectedTagIndex((prev) => Math.max(prev - 1, 0));
-                    break;
-                case "Enter":
-                    e.preventDefault();
-                    {
-                        const selectedTag = filteredTags[selectedTagIndex];
-                        if (selectedTag) {
-                            handleOpenTag(selectedTag.tag);
-                        }
-                    }
-                    break;
+    const { selectedIndex, setSelectedIndex, listRef, handleKeyDown } = useIndexedListNavigation({
+        itemCount: filteredTags.length,
+        resetKey: searchQuery,
+        onEnter: (index) => {
+            const selectedTag = filteredTags[index];
+            if (selectedTag) {
+                void handleOpenTag(selectedTag.tag);
             }
         },
-        [filteredTags, selectedTagIndex, handleOpenTag]
-    );
-
-    // Reset selection when search changes
-    useEffect(() => {
-        setSelectedTagIndex(0);
-    }, [searchQuery]);
-
-    // Keep selection in bounds when filtered list changes
-    useEffect(() => {
-        if (selectedTagIndex < filteredTags.length) return;
-        setSelectedTagIndex(Math.max(filteredTags.length - 1, 0));
-    }, [filteredTags, selectedTagIndex]);
-
-    // Scroll selected item into view
-    useEffect(() => {
-        if (listRef.current) {
-            const selectedItem = listRef.current.querySelector(`[data-index="${selectedTagIndex}"]`);
-            selectedItem?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        }
-    }, [selectedTagIndex]);
+    });
 
     // Handle creating a new explicit tag
     const handleCreateTag = useCallback(async () => {
@@ -205,160 +167,100 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
         }
     });
 
-    if (loading) {
-        return (
-            <div className="h-full flex items-center justify-center">
-                <div className="text-muted-foreground">Loading tags...</div>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="p-4">
-                <Alert variant="destructive">
-                    <AlertDescription>Error: {error}</AlertDescription>
-                </Alert>
-            </div>
-        );
-    }
-
     return (
-        <div
-            className="tags-browser flex-1 min-w-0 min-h-0 flex flex-col"
-            style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
-        >
-            {/* Header with search */}
-            <div
-                className="shrink-0 px-4 py-2.5 border-b"
-                style={{
-                    backgroundColor: currentTheme.styles.surfacePrimary,
-                    borderColor: currentTheme.styles.borderDefault,
-                }}
-            >
-                <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2">
-                        <Hash
-                            size={16}
-                            style={{ color: currentTheme.styles.contentAccent }}
-                        />
-                        <h2
-                            className="tags-header-title text-[11px] font-medium uppercase tracking-[0.14em]"
-                            style={{ color: currentTheme.styles.contentPrimary }}
-                        >
-                            Tags
-                        </h2>
-                        <span
-                            className="tags-header-meta text-[10px]"
-                            style={{ color: currentTheme.styles.contentTertiary }}
-                        >
-                            ({tags.length})
-                        </span>
-                    </div>
+        <>
+            <BrowserViewShell
+                styles={currentTheme.styles}
+                loading={loading}
+                loadingLabel="loading tags..."
+                error={error}
+                errorLabel="failed to load tags"
+                title="Tags"
+                itemCount={tags.length}
+                headerIcon={(
+                    <Hash
+                        className="size-3"
+                        style={{ color: currentTheme.styles.contentTertiary }}
+                    />
+                )}
+                action={(
                     <Button
-                        variant="ghost"
+                        variant="default"
                         size="sm"
                         onClick={() => setShowCreateDialog(true)}
-                        className="tags-create-btn h-7 px-2 text-[11px] font-medium rounded-md flex items-center gap-2"
+                        className="h-7 rounded-md px-2 text-[11px] font-medium"
                     >
-                        <Plus size={16} />
-                        Create Tag
+                        + new
                     </Button>
-                </div>
-
-                <div className="relative">
-                    <Search
-                        className="absolute left-3 top-1/2 -translate-y-1/2"
-                        size={16}
-                        style={{ color: currentTheme.styles.contentTertiary }}
-                    />
-                    <Input
-                        ref={searchInputRef}
-                        type="text"
-                        placeholder="Search tags..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        className="tags-search-input h-8 pl-8 text-xs bg-transparent"
-                        style={{
-                            backgroundColor: currentTheme.styles.surfaceSecondary,
-                            borderColor: currentTheme.styles.borderDefault,
-                            color: currentTheme.styles.contentPrimary,
-                        }}
-                    />
-                </div>
-            </div>
-
-            {/* Tags list */}
-            <div
-                ref={listRef}
-                className="flex-1 overflow-y-auto p-2"
-            >
-                {filteredTags.length === 0 ? (
-                    <div
-                        className="text-center py-8 text-[11px]"
-                        style={{ color: currentTheme.styles.contentTertiary }}
-                    >
-                        {searchQuery ? "No tags found" : "No tags yet"}
-                    </div>
-                ) : (
-                    <div className="space-y-1">
-                        {filteredTags.map((tagItem, index) => (
-                            <div
-                                key={tagItem.tag}
-                                data-index={index}
-                                className="group relative"
-                                onMouseEnter={() => setSelectedTagIndex(index)}
-                            >
-                                <button
-                                    onClick={() => handleOpenTag(tagItem.tag)}
-                                    className={cn(
-                                        "w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-left",
-                                        "hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-offset-1"
-                                    )}
-                                    style={{
-                                        backgroundColor: index === selectedTagIndex
-                                            ? currentTheme.styles.surfaceAccent
-                                            : "transparent",
-                                        color: currentTheme.styles.contentPrimary,
-                                    }}
-                                >
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        <Hash
-                                            size={14}
-                                            style={{ color: currentTheme.styles.contentAccent }}
-                                        />
-                                        <span className="text-xs font-normal truncate">{tagItem.tag}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 pr-8">
-                                        <span
-                                            className="text-[10px] font-normal px-2 py-0.5 rounded-full"
-                                            style={{
-                                                backgroundColor: currentTheme.styles.surfaceTertiary,
-                                                color: currentTheme.styles.contentSecondary,
-                                            }}
-                                        >
-                                            {tagItem.count}
-                                        </span>
-                                    </div>
-                                </button>
-                                {tagItem.count === 0 && (
-                                    <button
-                                        onClick={() => handleDeleteTag(tagItem.tag)}
-                                        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10"
-                                        title="Delete explicit tag"
-                                    >
-                                        <Trash2
-                                            size={14}
-                                            style={{ color: currentTheme.styles.semanticDestructive }}
-                                        />
-                                    </button>
-                                )}
-                            </div>
-                        ))}
-                    </div>
                 )}
-            </div>
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+                onSearchKeyDown={handleKeyDown}
+                searchInputRef={searchInputRef}
+                searchPlaceholder="search tags..."
+                empty={filteredTags.length === 0}
+                emptyLabel={searchQuery ? "no tags match current filters" : "no tags yet"}
+                listRef={listRef}
+                rootClassName="tags-browser"
+            >
+                <BrowserListCard styles={currentTheme.styles}>
+                    {filteredTags.map((tagItem, index) => (
+                        <div
+                            key={tagItem.tag}
+                            data-index={index}
+                            className="group relative"
+                            onMouseEnter={() => setSelectedIndex(index)}
+                        >
+                            <button
+                                onClick={() => {
+                                    void handleOpenTag(tagItem.tag);
+                                }}
+                                className={`w-full border-t px-2.5 py-1.5 flex items-center gap-1.5 text-left transition-colors ${index === 0 ? "border-t-0" : ""}`}
+                                style={{
+                                    borderColor: currentTheme.styles.borderDefault,
+                                    backgroundColor: index === selectedIndex
+                                        ? currentTheme.styles.surfaceAccent
+                                        : undefined,
+                                    color: currentTheme.styles.contentPrimary,
+                                }}
+                            >
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                    <Hash
+                                        className="size-3 shrink-0"
+                                        style={{ color: currentTheme.styles.contentTertiary }}
+                                    />
+                                    <span className="text-xs truncate">{tagItem.tag}</span>
+                                </div>
+                                <div className="ml-auto mr-8 flex items-center gap-1 shrink-0">
+                                    <span
+                                        className="rounded-full px-1.5 py-0.5 text-[10px]"
+                                        style={{
+                                            backgroundColor: currentTheme.styles.surfaceTertiary,
+                                            color: currentTheme.styles.contentSecondary,
+                                        }}
+                                    >
+                                        {tagItem.count}
+                                    </span>
+                                </div>
+                            </button>
+                            {tagItem.count === 0 && (
+                                <button
+                                    onClick={() => {
+                                        void handleDeleteTag(tagItem.tag);
+                                    }}
+                                    className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 transition-opacity hover:bg-surface-elevated group-hover:opacity-100"
+                                    title="Delete explicit tag"
+                                >
+                                    <Trash2
+                                        className="size-3"
+                                        style={{ color: currentTheme.styles.semanticDestructive }}
+                                    />
+                                </button>
+                            )}
+                        </div>
+                    ))}
+                </BrowserListCard>
+            </BrowserViewShell>
 
             {/* Create Tag Dialog */}
             <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
@@ -412,7 +314,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+        </>
     );
 }
 

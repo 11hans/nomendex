@@ -1,14 +1,13 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
-import { Input } from "@/components/ui/input";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Search, FolderKanban, Clock, CheckCircle2, FileText, Pencil, Trash2 } from "lucide-react";
+import { FolderKanban, Clock, CheckCircle2, FileText, Pencil, Trash2 } from "lucide-react";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
 import { useProjectsAPI } from "@/hooks/useProjectsAPI";
 import { useTheme } from "@/hooks/useTheme";
-import { cn } from "@/lib/utils";
+import { useIndexedListNavigation } from "@/hooks/useIndexedListNavigation";
+import { BrowserListCard, BrowserViewShell } from "@/features/shared/browser-view-shell";
 import { projectsPluginSerial } from "./index";
 import type { ProjectInfo } from "./index";
 import { CreateProjectDialog } from "./CreateProjectDialog";
@@ -24,7 +23,6 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
     const [projects, setProjects] = useState<(ProjectInfo & { id: string })[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
-    const [selectedIndex, setSelectedIndex] = useState(0);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
     const [selectedProject, setSelectedProject] = useState<{ id: string; name: string } | null>(null);
@@ -32,7 +30,6 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
 
     const searchInputRef = useRef<HTMLInputElement>(null);
     const hasSetTabNameRef = useRef<boolean>(false);
-    const listRef = useRef<HTMLDivElement>(null);
 
     const todosAPI = useTodosAPI();
     const notesAPI = useNotesAPI();
@@ -52,7 +49,8 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
             return {
                 id: config.id,
                 name: config.name,
-                todoCount: projectTodos.filter((t) => t.status === "todo").length,
+                // Keep "later" together with todo for high-level project stats
+                todoCount: projectTodos.filter((t) => t.status === "todo" || t.status === "later").length,
                 inProgressCount: projectTodos.filter((t) => t.status === "in_progress").length,
                 doneCount: projectTodos.filter((t) => t.status === "done").length,
                 notesCount: projectNotes.length,
@@ -158,272 +156,177 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
         [openTab]
     );
 
-    // Keyboard navigation
-    const handleKeyDown = useCallback(
-        (e: React.KeyboardEvent) => {
-            if (filteredProjects.length === 0) return;
-
-            switch (e.key) {
-                case "ArrowDown":
-                    e.preventDefault();
-                    setSelectedIndex((prev) => Math.min(prev + 1, filteredProjects.length - 1));
-                    break;
-                case "ArrowUp":
-                    e.preventDefault();
-                    setSelectedIndex((prev) => Math.max(prev - 1, 0));
-                    break;
-                case "Enter":
-                    e.preventDefault();
-                    {
-                        const selectedProject = filteredProjects[selectedIndex];
-                        if (selectedProject) {
-                            handleOpenProject(selectedProject.name);
-                        }
-                    }
-                    break;
+    const { selectedIndex, setSelectedIndex, listRef, handleKeyDown } = useIndexedListNavigation({
+        itemCount: filteredProjects.length,
+        resetKey: searchQuery,
+        onEnter: (index) => {
+            const selectedProject = filteredProjects[index];
+            if (selectedProject) {
+                handleOpenProject(selectedProject.name);
             }
         },
-        [filteredProjects, selectedIndex, handleOpenProject]
-    );
-
-    // Reset selection when search changes
-    useEffect(() => {
-        setSelectedIndex(0);
-    }, [searchQuery]);
-
-    // Scroll selected item into view
-    useEffect(() => {
-        if (listRef.current) {
-            const selectedItem = listRef.current.querySelector(`[data-index="${selectedIndex}"]`);
-            selectedItem?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        }
-    }, [selectedIndex]);
-
-    if (loading) {
-        return (
-            <div className="h-full flex items-center justify-center">
-                <div className="text-muted-foreground">Loading projects...</div>
-            </div>
-        );
-    }
-
-    if (error) {
-        return (
-            <div className="p-4">
-                <Alert variant="destructive">
-                    <AlertDescription>Error: {error}</AlertDescription>
-                </Alert>
-            </div>
-        );
-    }
+    });
 
     return (
-        <div
-            className="projects-browser flex-1 min-w-0 min-h-0 flex flex-col"
-            style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
-        >
-            {/* Header with search */}
-            <div
-                className="shrink-0 px-4 py-2.5 border-b"
-                style={{
-                    backgroundColor: currentTheme.styles.surfacePrimary,
-                    borderColor: currentTheme.styles.borderDefault,
-                }}
-            >
-                <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2">
-                        <FolderKanban
-                            size={16}
-                            style={{ color: currentTheme.styles.contentAccent }}
-                        />
-                        <h2
-                            className="projects-header-title text-[11px] font-medium uppercase tracking-[0.14em]"
-                            style={{ color: currentTheme.styles.contentPrimary }}
-                        >
-                            Projects
-                        </h2>
-                        <span
-                            className="projects-header-meta text-[10px]"
-                            style={{ color: currentTheme.styles.contentTertiary }}
-                        >
-                            ({projects.length})
-                        </span>
-                    </div>
-                    <div>
-                        <CreateProjectDialog
-                            open={createDialogOpen}
-                            onOpenChange={setCreateDialogOpen}
-                            onCreateProject={handleCreateProject}
-                            loading={loading}
-                            existingProjects={projects.map(p => p.name)}
-                        />
-                    </div>
-                </div>
-
-                <div className="relative">
-                    <Search
-                        className="absolute left-3 top-1/2 -translate-y-1/2"
-                        size={16}
+        <>
+            <BrowserViewShell
+                styles={currentTheme.styles}
+                loading={loading}
+                loadingLabel="loading projects..."
+                error={error}
+                errorLabel="failed to load projects"
+                title="Projects"
+                itemCount={projects.length}
+                headerIcon={(
+                    <FolderKanban
+                        className="size-3"
                         style={{ color: currentTheme.styles.contentTertiary }}
                     />
-                    <Input
-                        ref={searchInputRef}
-                        type="text"
-                        placeholder="Search projects..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        onKeyDown={handleKeyDown}
-                        className="projects-search-input h-8 pl-8 text-xs bg-transparent"
-                        style={{
-                            backgroundColor: currentTheme.styles.surfaceSecondary,
-                            borderColor: currentTheme.styles.borderDefault,
-                            color: currentTheme.styles.contentPrimary,
-                        }}
+                )}
+                action={(
+                    <CreateProjectDialog
+                        open={createDialogOpen}
+                        onOpenChange={setCreateDialogOpen}
+                        onCreateProject={handleCreateProject}
+                        loading={loading}
+                        existingProjects={projects.map((project) => project.name)}
                     />
-                </div>
-            </div>
-
-            {/* Projects list */}
-            <div
-                ref={listRef}
-                className="flex-1 overflow-y-auto p-2"
+                )}
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+                onSearchKeyDown={handleKeyDown}
+                searchInputRef={searchInputRef}
+                searchPlaceholder="search projects..."
+                empty={filteredProjects.length === 0}
+                emptyLabel={searchQuery ? "no projects match current filters" : "no projects yet"}
+                listRef={listRef}
+                rootClassName="projects-browser"
             >
-                {filteredProjects.length === 0 ? (
-                    <div
-                        className="text-center py-8 text-[11px]"
-                        style={{ color: currentTheme.styles.contentTertiary }}
-                    >
-                        {searchQuery ? "No projects found" : "No projects yet"}
-                    </div>
-                ) : (
-                    <div className="space-y-1">
-                        {filteredProjects.map((project, index) => {
-                            const totalCount = project.inProgressCount + project.todoCount + project.doneCount;
-                            const isSelected = index === selectedIndex;
+                <BrowserListCard styles={currentTheme.styles}>
+                    {filteredProjects.map((project, index) => {
+                        const totalCount = project.inProgressCount + project.todoCount + project.doneCount;
+                        const isSelected = index === selectedIndex;
 
-                            return (
-                                <div
-                                    key={project.id}
-                                    data-index={index}
-                                    className="group relative"
-                                    onMouseEnter={() => setSelectedIndex(index)}
+                        return (
+                            <div
+                                key={project.id}
+                                data-index={index}
+                                className="group relative"
+                                onMouseEnter={() => setSelectedIndex(index)}
+                            >
+                                <button
+                                    onClick={() => handleOpenProject(project.name)}
+                                    className={`w-full border-t px-2.5 py-1.5 flex items-center gap-1.5 text-left transition-colors ${index === 0 ? "border-t-0" : ""}`}
+                                    style={{
+                                        borderColor: currentTheme.styles.borderDefault,
+                                        backgroundColor: isSelected
+                                            ? currentTheme.styles.surfaceAccent
+                                            : undefined,
+                                        color: currentTheme.styles.contentPrimary,
+                                    }}
                                 >
-                                    <button
-                                        onClick={() => handleOpenProject(project.name)}
-                                        className={cn(
-                                            "w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-left",
-                                            "hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-offset-1"
-                                        )}
-                                        style={{
-                                            backgroundColor: isSelected
-                                                ? currentTheme.styles.surfaceAccent
-                                                : "transparent",
-                                            color: currentTheme.styles.contentPrimary,
-                                        }}
-                                    >
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <FolderKanban
-                                                size={14}
-                                                style={{ color: currentTheme.styles.contentAccent }}
-                                            />
-                                            <span className="text-xs font-normal truncate">
-                                                {project.name}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5 pr-12">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                        <FolderKanban
+                                            className="size-3 shrink-0"
+                                            style={{ color: currentTheme.styles.contentTertiary }}
+                                        />
+                                        <span className="text-xs truncate">
+                                            {project.name}
+                                        </span>
+                                    </div>
+
+                                    <div className="ml-auto mr-12 flex items-center gap-1 shrink-0">
+                                        <span
+                                            className="rounded-full px-1.5 py-0.5 text-[10px]"
+                                            style={{
+                                                backgroundColor: currentTheme.styles.surfaceTertiary,
+                                                color: currentTheme.styles.contentSecondary,
+                                            }}
+                                            title="Total tasks"
+                                        >
+                                            {totalCount}
+                                        </span>
+                                        {project.inProgressCount > 0 && (
                                             <span
-                                                className="text-[10px] font-normal px-2 py-0.5 rounded-full"
+                                                className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]"
+                                                style={{
+                                                    backgroundColor: currentTheme.styles.surfaceTertiary,
+                                                    color: currentTheme.styles.contentAccent,
+                                                }}
+                                                title="In progress"
+                                            >
+                                                <Clock className="size-2.5" />
+                                                {project.inProgressCount}
+                                            </span>
+                                        )}
+                                        {project.todoCount > 0 && (
+                                            <span
+                                                className="rounded-full px-1.5 py-0.5 text-[10px]"
                                                 style={{
                                                     backgroundColor: currentTheme.styles.surfaceTertiary,
                                                     color: currentTheme.styles.contentSecondary,
                                                 }}
-                                                title="Total tasks"
+                                                title="Todo"
                                             >
-                                                {totalCount}
+                                                {project.todoCount}
                                             </span>
-                                            {project.inProgressCount > 0 && (
-                                                <span
-                                                    className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full"
-                                                    style={{
-                                                        backgroundColor: currentTheme.styles.surfaceTertiary,
-                                                        color: currentTheme.styles.contentAccent,
-                                                    }}
-                                                    title="In progress"
-                                                >
-                                                    <Clock size={10} />
-                                                    {project.inProgressCount}
-                                                </span>
-                                            )}
-                                            {project.todoCount > 0 && (
-                                                <span
-                                                    className="text-[10px] font-normal px-2 py-0.5 rounded-full"
-                                                    style={{
-                                                        backgroundColor: currentTheme.styles.surfaceTertiary,
-                                                        color: currentTheme.styles.contentSecondary,
-                                                    }}
-                                                    title="Todo"
-                                                >
-                                                    {project.todoCount}
-                                                </span>
-                                            )}
-                                            {project.doneCount > 0 && (
-                                                <span
-                                                    className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full"
-                                                    style={{
-                                                        backgroundColor: currentTheme.styles.surfaceTertiary,
-                                                        color: currentTheme.styles.semanticSuccess,
-                                                    }}
-                                                    title="Done"
-                                                >
-                                                    <CheckCircle2 size={10} />
-                                                    {project.doneCount}
-                                                </span>
-                                            )}
-                                            {project.notesCount > 0 && (
-                                                <span
-                                                    className="inline-flex items-center gap-1 text-[10px] font-normal px-2 py-0.5 rounded-full"
-                                                    style={{
-                                                        backgroundColor: currentTheme.styles.surfaceTertiary,
-                                                        color: currentTheme.styles.contentTertiary,
-                                                    }}
-                                                    title="Notes"
-                                                >
-                                                    <FileText size={10} />
-                                                    {project.notesCount}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </button>
-                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            onClick={(e) => handleOpenRename({ id: project.id, name: project.name }, e)}
-                                            className="p-1 rounded hover:bg-accent/50 transition-colors"
-                                            title="Rename project"
-                                        >
-                                            <Pencil
-                                                size={14}
-                                                style={{ color: currentTheme.styles.contentSecondary }}
-                                            />
-                                        </button>
-                                        <button
-                                            onClick={(e) => handleOpenDelete({ id: project.id, name: project.name }, e)}
-                                            className="p-1 rounded hover:bg-destructive/10 transition-colors"
-                                            title="Delete project"
-                                        >
-                                            <Trash2
-                                                size={14}
-                                                style={{ color: currentTheme.styles.semanticDestructive }}
-                                            />
-                                        </button>
+                                        )}
+                                        {project.doneCount > 0 && (
+                                            <span
+                                                className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]"
+                                                style={{
+                                                    backgroundColor: currentTheme.styles.surfaceTertiary,
+                                                    color: currentTheme.styles.semanticSuccess,
+                                                }}
+                                                title="Done"
+                                            >
+                                                <CheckCircle2 className="size-2.5" />
+                                                {project.doneCount}
+                                            </span>
+                                        )}
+                                        {project.notesCount > 0 && (
+                                            <span
+                                                className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]"
+                                                style={{
+                                                    backgroundColor: currentTheme.styles.surfaceTertiary,
+                                                    color: currentTheme.styles.contentTertiary,
+                                                }}
+                                                title="Notes"
+                                            >
+                                                <FileText className="size-2.5" />
+                                                {project.notesCount}
+                                            </span>
+                                        )}
                                     </div>
+                                </button>
+                                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                        onClick={(event) => handleOpenRename({ id: project.id, name: project.name }, event)}
+                                        className="rounded p-1 transition-colors hover:bg-surface-elevated"
+                                        title="Rename project"
+                                    >
+                                        <Pencil
+                                            className="size-3"
+                                            style={{ color: currentTheme.styles.contentSecondary }}
+                                        />
+                                    </button>
+                                    <button
+                                        onClick={(event) => handleOpenDelete({ id: project.id, name: project.name }, event)}
+                                        className="rounded p-1 transition-colors hover:bg-surface-elevated"
+                                        title="Delete project"
+                                    >
+                                        <Trash2
+                                            className="size-3"
+                                            style={{ color: currentTheme.styles.semanticDestructive }}
+                                        />
+                                    </button>
                                 </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
+                            </div>
+                        );
+                    })}
+                </BrowserListCard>
+            </BrowserViewShell>
 
-            {/* Dialogs */}
             {selectedProject && (
                 <>
                     <DeleteProjectDialog
@@ -438,12 +341,12 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
                         onOpenChange={setRenameDialogOpen}
                         projectId={selectedProject.id}
                         projectName={selectedProject.name}
-                        existingProjects={projects.map((p) => p.name)}
+                        existingProjects={projects.map((project) => project.name)}
                         onRenamed={refreshProjects}
                     />
                 </>
             )}
-        </div>
+        </>
     );
 }
 

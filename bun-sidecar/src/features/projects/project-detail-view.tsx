@@ -1,9 +1,21 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { FolderKanban, Circle, Clock, CheckCircle2, FileText, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+    ArrowLeft,
+    CheckCircle2,
+    CheckSquare,
+    ChevronDown,
+    ChevronUp,
+    Circle,
+    Clock,
+    ExternalLink,
+    FileText,
+    FolderKanban,
+    type LucideIcon,
+} from "lucide-react";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
 import { useTheme } from "@/hooks/useTheme";
@@ -12,16 +24,72 @@ import { notesPluginSerial } from "@/features/notes";
 import { TaskCardEditor } from "@/features/todos/TaskCardEditor";
 import type { Todo } from "@/features/todos/todo-types";
 import type { Note } from "@/features/notes";
-import type { ProjectDetailViewProps } from "./index";
+import { projectsPluginSerial, type ProjectDetailViewProps } from "./index";
 
 const INITIAL_NOTES_LIMIT = 10;
+
+function getStatusLabel(status: Todo["status"]): string {
+    switch (status) {
+        case "in_progress":
+            return "In Progress";
+        case "done":
+            return "Done";
+        case "later":
+            return "Later";
+        case "todo":
+        default:
+            return "Todo";
+    }
+}
+
+function sortTodosByUpdatedDesc(input: Todo[]): Todo[] {
+    return [...input].sort((a, b) => {
+        const aTime = new Date(a.updatedAt).getTime();
+        const bTime = new Date(b.updatedAt).getTime();
+        if (Number.isNaN(aTime) || Number.isNaN(bTime)) return 0;
+        return bTime - aTime;
+    });
+}
+
+interface SectionHeaderProps {
+    title: string;
+    count: number;
+    icon: LucideIcon;
+    color: string;
+}
+
+function SectionHeader({ title, count, icon: Icon, color }: SectionHeaderProps) {
+    return (
+        <div className="flex items-center gap-2 mb-2">
+            <Icon size={14} style={{ color }} />
+            <h3 className="text-[11px] font-medium uppercase tracking-[0.12em]" style={{ color }}>
+                {title}
+            </h3>
+            <span className="text-[10px]">({count})</span>
+        </div>
+    );
+}
 
 export function ProjectDetailView({ tabId, projectName }: { tabId: string } & ProjectDetailViewProps) {
     if (!tabId) {
         throw new Error("tabId is required");
     }
-    const { activeTab, setTabName, addNewTab, setActiveTabId, getViewSelfPlacement, setSidebarTabId } = useWorkspaceContext();
+
+    const {
+        activeTab,
+        setTabName,
+        addNewTab,
+        setActiveTabId,
+        getViewSelfPlacement,
+        setSidebarTabId,
+        replaceTabWithNewView,
+    } = useWorkspaceContext();
     const { loading, error, setLoading, setError } = usePlugin();
+    const { currentTheme } = useTheme();
+    const placement = getViewSelfPlacement(tabId);
+    const todosAPI = useTodosAPI();
+    const notesAPI = useNotesAPI();
+
     const [todos, setTodos] = useState<Todo[]>([]);
     const [notes, setNotes] = useState<Note[]>([]);
     const [showAllNotes, setShowAllNotes] = useState(false);
@@ -30,64 +98,94 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
     const [editSaving, setEditSaving] = useState(false);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
-    const { currentTheme } = useTheme();
-    const placement = getViewSelfPlacement(tabId);
+    const lastTabNameRef = useRef<string | null>(null);
 
-    const hasSetTabNameRef = useRef<boolean>(false);
-
-    const todosAPI = useTodosAPI();
-    const notesAPI = useNotesAPI();
-
-    // Set tab name
     useEffect(() => {
-        if (activeTab?.id === tabId && !hasSetTabNameRef.current) {
-            setTabName(tabId, projectName);
-            hasSetTabNameRef.current = true;
-        }
+        if (activeTab?.id !== tabId) return;
+        if (lastTabNameRef.current === projectName) return;
+        setTabName(tabId, projectName);
+        lastTabNameRef.current = projectName;
     }, [activeTab?.id, tabId, projectName, setTabName]);
 
-    // Load todos, notes, tags, and projects for this project
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setLoading(true);
-                setError(null);
+        setShowAllNotes(false);
+    }, [projectName]);
 
-                const [todosResult, notesResult, tagsResult, projectsResult] = await Promise.all([
-                    todosAPI.getTodos({ project: projectName }),
-                    notesAPI.getNotesByProject({ project: projectName }),
-                    todosAPI.getTags(),
-                    todosAPI.getProjects(),
-                ]);
+    const loadProjectData = useCallback(async () => {
+        try {
+            setLoading(true);
+            setError(null);
 
-                setTodos(todosResult);
-                notesResult.sort((a, b) => a.fileName.localeCompare(b.fileName));
-                setNotes(notesResult);
-                setAvailableTags(tagsResult);
-                setAvailableProjects(projectsResult);
-            } catch (err) {
-                const errorMessage = err instanceof Error ? err.message : "Failed to fetch project data";
-                setError(errorMessage);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
+            const [todosResult, notesResult, tagsResult, projectsResult] = await Promise.all([
+                todosAPI.getTodos({ project: projectName }),
+                notesAPI.getNotesByProject({ project: projectName }),
+                todosAPI.getTags(),
+                todosAPI.getProjects(),
+            ]);
+
+            notesResult.sort((a, b) => a.fileName.localeCompare(b.fileName));
+            setTodos(todosResult);
+            setNotes(notesResult);
+            setAvailableTags(tagsResult);
+            setAvailableProjects(projectsResult);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : "Failed to fetch project data";
+            setError(errorMessage);
+        } finally {
+            setLoading(false);
+        }
     }, [projectName, todosAPI, notesAPI, setLoading, setError]);
 
-    // Open todo in dialog
+    useEffect(() => {
+        loadProjectData();
+    }, [loadProjectData]);
+
+    const openInPlacement = useCallback(
+        (newTabId: string) => {
+            if (placement === "sidebar") {
+                setSidebarTabId(newTabId);
+            } else {
+                setActiveTabId(newTabId);
+            }
+        },
+        [placement, setActiveTabId, setSidebarTabId]
+    );
+
+    const handleOpenNote = useCallback(
+        async (noteFileName: string) => {
+            const newTab = await addNewTab({
+                pluginMeta: notesPluginSerial,
+                view: "editor",
+                props: { noteFileName, compact: true },
+            });
+            if (newTab) openInPlacement(newTab.id);
+        },
+        [addNewTab, openInPlacement]
+    );
+
+    const handleOpenKanban = useCallback(async () => {
+        const newTab = await addNewTab({
+            pluginMeta: todosPluginSerial,
+            view: "browser",
+            props: { project: projectName },
+        });
+        if (newTab) openInPlacement(newTab.id);
+    }, [addNewTab, projectName, openInPlacement]);
+
+    const handleBackToProjects = useCallback(() => {
+        replaceTabWithNewView(tabId, projectsPluginSerial, { view: "browser" });
+    }, [replaceTabWithNewView, tabId]);
+
     const handleOpenTodo = useCallback(
         (todoId: string) => {
             const todo = todos.find((t) => t.id === todoId);
-            if (todo) {
-                setTodoToEdit(todo);
-                setEditDialogOpen(true);
-            }
+            if (!todo) return;
+            setTodoToEdit(todo);
+            setEditDialogOpen(true);
         },
         [todos]
     );
 
-    // Save todo from dialog
     const handleSaveTodo = useCallback(
         async (updatedTodo: Todo) => {
             setEditSaving(true);
@@ -101,97 +199,133 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                         project: updatedTodo.project,
                         tags: updatedTodo.tags,
                         dueDate: updatedTodo.dueDate,
+                        priority: updatedTodo.priority,
+                        startDate: updatedTodo.startDate,
+                        duration: updatedTodo.duration,
                         attachments: updatedTodo.attachments,
+                        customColumnId: updatedTodo.customColumnId,
                     },
                 });
                 setEditDialogOpen(false);
                 setTodoToEdit(null);
-                // Refresh todos
-                const todosResult = await todosAPI.getTodos({ project: projectName });
-                setTodos(todosResult);
+                setTodos(await todosAPI.getTodos({ project: projectName }));
             } catch (err) {
-                console.error("Failed to save todo:", err);
+                const errorMessage = err instanceof Error ? err.message : "Failed to save todo";
+                setError(errorMessage);
             } finally {
                 setEditSaving(false);
             }
         },
-        [todosAPI, projectName]
+        [todosAPI, projectName, setError]
     );
 
-    // Delete todo
     const handleDeleteTodo = useCallback(
         async (todo: Todo) => {
             try {
                 await todosAPI.deleteTodo({ todoId: todo.id });
-                setTodos(prev => prev.filter(t => t.id !== todo.id));
+                setTodos((prev) => prev.filter((t) => t.id !== todo.id));
             } catch (err) {
-                console.error("Failed to delete todo:", err);
+                const errorMessage = err instanceof Error ? err.message : "Failed to delete todo";
+                setError(errorMessage);
             }
         },
-        [todosAPI]
+        [todosAPI, setError]
     );
 
-    // Open note
-    const handleOpenNote = useCallback(
-        async (noteFileName: string) => {
-            const newTab = await addNewTab({
-                pluginMeta: notesPluginSerial,
-                view: "editor",
-                props: { noteFileName },
-            });
-            if (newTab) {
-                if (placement === "sidebar") {
-                    setSidebarTabId(newTab.id);
-                } else {
-                    setActiveTabId(newTab.id);
-                }
-            }
-        },
-        [addNewTab, placement, setActiveTabId, setSidebarTabId]
+    const sortedTodos = useMemo(() => sortTodosByUpdatedDesc(todos), [todos]);
+    const inProgressTodos = useMemo(
+        () => sortedTodos.filter((t) => t.status === "in_progress"),
+        [sortedTodos]
+    );
+    const todoTodos = useMemo(
+        () => sortedTodos.filter((t) => t.status === "todo" || t.status === "later"),
+        [sortedTodos]
+    );
+    const doneTodos = useMemo(
+        () => sortedTodos.filter((t) => t.status === "done"),
+        [sortedTodos]
+    );
+    const otherTodos = useMemo(
+        () => sortedTodos.filter((t) => !["in_progress", "todo", "later", "done"].includes(t.status)),
+        [sortedTodos]
     );
 
-    // Open kanban board for this project
-    const handleOpenKanban = useCallback(
-        async () => {
-            const newTab = await addNewTab({
-                pluginMeta: todosPluginSerial,
-                view: "browser",
-                props: { project: projectName },
-            });
-            if (newTab) {
-                if (placement === "sidebar") {
-                    setSidebarTabId(newTab.id);
-                } else {
-                    setActiveTabId(newTab.id);
-                }
-            }
-        },
-        [addNewTab, placement, setActiveTabId, setSidebarTabId, projectName]
-    );
-
-    // Group todos by status
-    const inProgressTodos = todos.filter((t) => t.status === "in_progress");
-    const todoTodos = todos.filter((t) => t.status === "todo");
-    const doneTodos = todos.filter((t) => t.status === "done");
-    const otherTodos = todos.filter((t) => !["in_progress", "todo", "done"].includes(t.status));
-
-    // Stats
     const totalItems = todos.length + notes.length;
     const completionRate = todos.length > 0 ? Math.round((doneTodos.length / todos.length) * 100) : 0;
-
-    // Notes to display
     const displayedNotes = showAllNotes ? notes : notes.slice(0, INITIAL_NOTES_LIMIT);
     const hasMoreNotes = notes.length > INITIAL_NOTES_LIMIT;
 
-    if (loading) {
+    const renderTodoSection = (
+        title: string,
+        items: Todo[],
+        icon: LucideIcon,
+        color: string
+    ) => {
+        if (items.length === 0) return null;
+
+        const Icon = icon;
+        return (
+            <section>
+                <SectionHeader title={title} count={items.length} icon={Icon} color={color} />
+                <div
+                    className="rounded-md border overflow-hidden"
+                    style={{ borderColor: currentTheme.styles.borderDefault }}
+                >
+                    {items.map((todo, index) => (
+                        <button
+                            key={todo.id}
+                            onClick={() => handleOpenTodo(todo.id)}
+                            className="w-full text-left px-3 py-2.5 transition-colors hover:bg-accent/50"
+                            style={{
+                                backgroundColor: currentTheme.styles.surfacePrimary,
+                                borderBottom: index < items.length - 1 ? `1px solid ${currentTheme.styles.borderDefault}` : undefined,
+                            }}
+                        >
+                            <div className="flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <div
+                                        className="text-xs font-medium truncate"
+                                        style={{ color: currentTheme.styles.contentPrimary }}
+                                    >
+                                        {todo.title}
+                                    </div>
+                                    {todo.description && (
+                                        <div
+                                            className="text-[11px] truncate mt-0.5"
+                                            style={{ color: currentTheme.styles.contentTertiary }}
+                                        >
+                                            {todo.description}
+                                        </div>
+                                    )}
+                                </div>
+                                <span
+                                    className="text-[10px] px-2 py-0.5 rounded-full shrink-0"
+                                    style={{
+                                        backgroundColor: currentTheme.styles.surfaceTertiary,
+                                        color: todo.status === "done"
+                                            ? currentTheme.styles.semanticSuccess
+                                            : currentTheme.styles.contentSecondary,
+                                    }}
+                                >
+                                    {getStatusLabel(todo.status)}
+                                </span>
+                            </div>
+                        </button>
+                    ))}
+                </div>
+            </section>
+        );
+    };
+
+    if (loading && todos.length === 0 && notes.length === 0) {
         return (
             <div className="h-full flex items-center justify-center">
-                <div className="text-muted-foreground">Loading...</div>
+                <div className="text-muted-foreground">Loading project...</div>
             </div>
         );
     }
 
-    if (error) {
+    if (error && todos.length === 0 && notes.length === 0) {
         return (
             <div className="p-4">
                 <Alert variant="destructive">
@@ -201,88 +335,9 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
         );
     }
 
-    // Note card component
-    const NoteCard = ({ note }: { note: Note }) => {
-        const displayName = note.fileName.replace(/\.md$/, "");
-        const preview = note.content.slice(0, 120).trim();
-
-        return (
-            <button
-                onClick={() => handleOpenNote(note.fileName)}
-                className="text-left p-4 rounded-lg transition-all hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-offset-1 flex flex-col justify-start items-start"
-                style={{
-                    backgroundColor: currentTheme.styles.surfaceSecondary,
-                    border: `1px solid ${currentTheme.styles.borderDefault}`,
-                }}
-            >
-                <div
-                    className="font-medium truncate"
-                    style={{ color: currentTheme.styles.contentPrimary }}
-                >
-                    {displayName}
-                </div>
-                {preview && (
-                    <div
-                        className="text-sm mt-2 line-clamp-2"
-                        style={{ color: currentTheme.styles.contentTertiary }}
-                    >
-                        {preview}...
-                    </div>
-                )}
-            </button>
-        );
-    };
-
-    // Todo card component
-    const TodoCard = ({ todo }: { todo: Todo }) => {
-        return (
-            <button
-                onClick={() => handleOpenTodo(todo.id)}
-                className="text-left p-4 rounded-lg transition-all hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-offset-1 flex flex-col justify-start items-start"
-                style={{
-                    backgroundColor: currentTheme.styles.surfaceSecondary,
-                    border: `1px solid ${currentTheme.styles.borderDefault}`,
-                    opacity: todo.status === "done" ? 0.7 : 1,
-                }}
-            >
-                <div
-                    className="font-medium"
-                    style={{ color: currentTheme.styles.contentPrimary }}
-                >
-                    {todo.title}
-                </div>
-                {todo.description && (
-                    <div
-                        className="text-sm mt-2 line-clamp-2"
-                        style={{ color: currentTheme.styles.contentTertiary }}
-                    >
-                        {todo.description}
-                    </div>
-                )}
-            </button>
-        );
-    };
-
-    // Section header component
-    const SectionHeader = ({ icon: Icon, title, count, color }: { icon: typeof Circle; title: string; count: number; color: string }) => (
-        <div className="flex items-center gap-2 mb-3">
-            <Icon size={16} style={{ color }} />
-            <span className="font-medium" style={{ color }}>{title}</span>
-            <span
-                className="text-xs px-1.5 py-0.5 rounded-full"
-                style={{
-                    backgroundColor: currentTheme.styles.surfaceTertiary,
-                    color: currentTheme.styles.contentSecondary
-                }}
-            >
-                {count}
-            </span>
-        </div>
-    );
-
     return (
         <div
-            className="flex-1 min-w-0 min-h-0 flex flex-col"
+            className="project-detail flex-1 min-w-0 min-h-0 flex flex-col"
             style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
         >
             <div
@@ -292,171 +347,203 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                     borderColor: currentTheme.styles.borderDefault,
                 }}
             >
-                <div className="flex items-center gap-2">
-                    <FolderKanban
-                        size={16}
-                        style={{ color: currentTheme.styles.contentAccent }}
-                    />
-                    <h2
-                        className="text-sm font-medium truncate flex-1"
-                        style={{ color: currentTheme.styles.contentPrimary }}
-                    >
-                        {projectName}
-                    </h2>
-                    <button
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={handleBackToProjects}
+                            aria-label="Back to Projects"
+                            className="h-6 w-6"
+                        >
+                            <ArrowLeft size={14} />
+                        </Button>
+                        <FolderKanban size={16} style={{ color: currentTheme.styles.contentAccent }} />
+                        <h2
+                            className="text-[11px] font-medium uppercase tracking-[0.14em] shrink-0"
+                            style={{ color: currentTheme.styles.contentPrimary }}
+                        >
+                            Project
+                        </h2>
+                        <span
+                            className="text-xs font-medium truncate"
+                            style={{ color: currentTheme.styles.contentPrimary }}
+                        >
+                            {projectName}
+                        </span>
+                    </div>
+
+                    <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={handleOpenKanban}
-                        className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors hover:opacity-80"
+                        className="h-7 px-2.5 text-[11px] font-medium rounded-md shrink-0"
+                    >
+                        <ExternalLink size={13} className="mr-1.5" />
+                        Open Kanban
+                    </Button>
+                </div>
+
+                <div className="mt-1.5 flex items-center gap-2 flex-wrap text-[10px]">
+                    <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded"
+                        style={{
+                            backgroundColor: currentTheme.styles.surfaceSecondary,
+                            color: currentTheme.styles.contentTertiary,
+                        }}
+                    >
+                        <FileText size={11} />
+                        {notes.length} notes
+                    </span>
+                    <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded"
                         style={{
                             backgroundColor: currentTheme.styles.surfaceSecondary,
                             color: currentTheme.styles.contentAccent,
-                            border: `1px solid ${currentTheme.styles.borderDefault}`,
                         }}
                     >
-                        <ExternalLink size={12} />
-                        Kanban
-                    </button>
-                </div>
-                <div
-                    className="flex items-center gap-3 mt-1 text-[10px] flex-wrap"
-                    style={{ color: currentTheme.styles.contentTertiary }}
-                >
-                    <span className="flex items-center gap-1">
-                        <FileText size={12} />
-                        {notes.length} notes
-                    </span>
-                    <span className="flex items-center gap-1">
-                        <Clock size={12} />
+                        <Clock size={11} />
                         {inProgressTodos.length} in progress
                     </span>
-                    <span className="px-1.5 py-0.5 rounded" style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}>
-                        {totalItems} total
+                    <span
+                        className="px-1.5 py-0.5 rounded"
+                        style={{
+                            backgroundColor: currentTheme.styles.surfaceSecondary,
+                            color: currentTheme.styles.contentSecondary,
+                        }}
+                    >
+                        {totalItems} total items
                     </span>
-                    <span className="px-1.5 py-0.5 rounded" style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}>
+                    <span
+                        className="px-1.5 py-0.5 rounded"
+                        style={{
+                            backgroundColor: currentTheme.styles.surfaceSecondary,
+                            color: currentTheme.styles.semanticSuccess,
+                        }}
+                    >
                         {completionRate}% done
                     </span>
                 </div>
             </div>
 
-            <ScrollArea className="flex-1 min-h-0">
-                <div className="px-6 py-4 max-w-6xl space-y-8">
-                    {totalItems === 0 ? (
-                        <div
-                            className="flex items-center justify-center h-full min-h-[220px] text-xs"
-                            style={{ color: currentTheme.styles.contentTertiary }}
-                        >
-                            No notes or todos in this project yet
-                        </div>
-                    ) : (
-                        <>
-                            {/* Notes Section */}
-                            {notes.length > 0 && (
-                                <div>
-                                    <SectionHeader
-                                        icon={FileText}
-                                        title="Notes"
-                                        count={notes.length}
-                                        color={currentTheme.styles.contentAccent}
-                                    />
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
-                                        {displayedNotes.map((note) => (
-                                            <NoteCard key={note.fileName} note={note} />
-                                        ))}
-                                    </div>
-                                    {hasMoreNotes && (
-                                        <button
-                                            onClick={() => setShowAllNotes(!showAllNotes)}
-                                            className="mt-3 flex items-center gap-1 text-sm transition-colors hover:opacity-80"
-                                            style={{ color: currentTheme.styles.contentAccent }}
-                                        >
-                                            {showAllNotes ? (
-                                                <>
-                                                    <ChevronUp size={16} />
-                                                    Show less
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <ChevronDown size={16} />
-                                                    Show all {notes.length} notes
-                                                </>
-                                            )}
-                                        </button>
-                                    )}
-                                </div>
-                            )}
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
+                {error && (
+                    <Alert variant="destructive">
+                        <AlertDescription>Error: {error}</AlertDescription>
+                    </Alert>
+                )}
 
-                            {/* In Progress Section */}
-                            {inProgressTodos.length > 0 && (
-                                <div>
-                                    <SectionHeader
-                                        icon={Clock}
-                                        title="In Progress"
-                                        count={inProgressTodos.length}
-                                        color={currentTheme.styles.contentAccent}
-                                    />
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
-                                        {inProgressTodos.map((todo) => (
-                                            <TodoCard key={todo.id} todo={todo} />
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                {totalItems === 0 ? (
+                    <div
+                        className="flex items-center justify-center min-h-[240px] text-xs"
+                        style={{ color: currentTheme.styles.contentTertiary }}
+                    >
+                        No notes or todos in this project yet.
+                    </div>
+                ) : (
+                    <>
+                        {notes.length > 0 && (
+                            <section>
+                                <SectionHeader
+                                    title="Notes"
+                                    count={notes.length}
+                                    icon={FileText}
+                                    color={currentTheme.styles.contentAccent}
+                                />
+                                <div
+                                    className="rounded-md border overflow-hidden"
+                                    style={{ borderColor: currentTheme.styles.borderDefault }}
+                                >
+                                    {displayedNotes.map((note, index) => {
+                                        const displayName = note.fileName.replace(/\.md$/, "");
+                                        const preview = note.content.slice(0, 110).trim();
 
-                            {/* Todo Section */}
-                            {todoTodos.length > 0 && (
-                                <div>
-                                    <SectionHeader
-                                        icon={Circle}
-                                        title="Todo"
-                                        count={todoTodos.length}
-                                        color={currentTheme.styles.contentSecondary}
-                                    />
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
-                                        {todoTodos.map((todo) => (
-                                            <TodoCard key={todo.id} todo={todo} />
-                                        ))}
-                                    </div>
+                                        return (
+                                            <button
+                                                key={note.fileName}
+                                                onClick={() => handleOpenNote(note.fileName)}
+                                                className="w-full text-left px-3 py-2.5 transition-colors hover:bg-accent/50"
+                                                style={{
+                                                    backgroundColor: currentTheme.styles.surfacePrimary,
+                                                    borderBottom: index < displayedNotes.length - 1
+                                                        ? `1px solid ${currentTheme.styles.borderDefault}`
+                                                        : undefined,
+                                                }}
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <FileText size={12} style={{ color: currentTheme.styles.contentTertiary }} />
+                                                    <span
+                                                        className="text-xs font-medium truncate"
+                                                        style={{ color: currentTheme.styles.contentPrimary }}
+                                                    >
+                                                        {displayName}
+                                                    </span>
+                                                </div>
+                                                {preview && (
+                                                    <div
+                                                        className="text-[11px] truncate mt-1 pl-5"
+                                                        style={{ color: currentTheme.styles.contentTertiary }}
+                                                    >
+                                                        {preview}
+                                                    </div>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
-                            )}
 
-                            {/* Done Section */}
-                            {doneTodos.length > 0 && (
-                                <div>
-                                    <SectionHeader
-                                        icon={CheckCircle2}
-                                        title="Done"
-                                        count={doneTodos.length}
-                                        color={currentTheme.styles.semanticSuccess}
-                                    />
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
-                                        {doneTodos.map((todo) => (
-                                            <TodoCard key={todo.id} todo={todo} />
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                                {hasMoreNotes && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setShowAllNotes((prev) => !prev)}
+                                        className="mt-2 h-7 px-2 text-[11px]"
+                                        style={{ color: currentTheme.styles.contentAccent }}
+                                    >
+                                        {showAllNotes ? (
+                                            <>
+                                                <ChevronUp size={13} className="mr-1.5" />
+                                                Show less
+                                            </>
+                                        ) : (
+                                            <>
+                                                <ChevronDown size={13} className="mr-1.5" />
+                                                Show all {notes.length} notes
+                                            </>
+                                        )}
+                                    </Button>
+                                )}
+                            </section>
+                        )}
 
-                            {/* Other Section */}
-                            {otherTodos.length > 0 && (
-                                <div>
-                                    <SectionHeader
-                                        icon={Circle}
-                                        title="Other"
-                                        count={otherTodos.length}
-                                        color={currentTheme.styles.contentTertiary}
-                                    />
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ maxWidth: "1200px" }}>
-                                        {otherTodos.map((todo) => (
-                                            <TodoCard key={todo.id} todo={todo} />
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </>
-                    )}
-                </div>
-            </ScrollArea>
+                        {renderTodoSection(
+                            "In Progress",
+                            inProgressTodos,
+                            Clock,
+                            currentTheme.styles.contentAccent
+                        )}
+                        {renderTodoSection(
+                            "Todo",
+                            todoTodos,
+                            Circle,
+                            currentTheme.styles.contentSecondary
+                        )}
+                        {renderTodoSection(
+                            "Done",
+                            doneTodos,
+                            CheckCircle2,
+                            currentTheme.styles.semanticSuccess
+                        )}
+                        {renderTodoSection(
+                            "Other",
+                            otherTodos,
+                            CheckSquare,
+                            currentTheme.styles.contentTertiary
+                        )}
+                    </>
+                )}
+            </div>
 
-            {/* Edit Todo Dialog */}
             <TaskCardEditor
                 todo={todoToEdit}
                 open={editDialogOpen}
@@ -467,7 +554,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                 availableTags={availableTags}
                 availableProjects={availableProjects}
             />
-        </div >
+        </div>
     );
 }
 

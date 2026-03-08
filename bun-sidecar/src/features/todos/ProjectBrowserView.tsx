@@ -36,6 +36,14 @@ interface ProjectStats {
 
 const NO_PROJECT_ID = "__no_project__";
 const NO_PROJECT_LABEL = "Inbox";
+const INBOX_PROJECT_ALIAS = "inbox";
+
+function normalizeProjectKey(project?: string): string {
+    const trimmed = project?.trim() ?? "";
+    if (!trimmed) return "";
+    if (trimmed.toLowerCase() === INBOX_PROJECT_ALIAS) return "";
+    return trimmed;
+}
 
 function fuzzySearch(query: string, text?: string): boolean {
     if (!query) return true;
@@ -147,23 +155,32 @@ export function ProjectBrowserView() {
         const today = new Date();
         const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
 
-        const normalizedConfigEntries = projectConfigs.map((config) => ({
-            ...config,
-            name: config.name.trim(),
-        })).filter((config) => config.name.length > 0);
+        const normalizedConfigEntries = projectConfigs
+            .map((config) => ({
+                ...config,
+                name: config.name.trim(),
+            }))
+            .filter((config) => config.name.length > 0);
+
+        const inboxConfig = normalizedConfigEntries.find(
+            (config) => config.name.toLowerCase() === INBOX_PROJECT_ALIAS
+        );
+
+        const regularProjectConfigs = normalizedConfigEntries.filter(
+            (config) => config.name.toLowerCase() !== INBOX_PROJECT_ALIAS
+        );
 
         const projectConfigByName = new Map<string, ProjectConfig>(
-            normalizedConfigEntries.map((config) => [config.name, config])
+            regularProjectConfigs.map((config) => [config.name, config])
         );
 
         const todosByProject = allTodos.reduce<Map<string, Todo[]>>((acc, todo) => {
-            const key = todo.project?.trim() ?? "";
-            const normalized = key.length > 0 ? key : "";
-            const existing = acc.get(normalized);
+            const key = normalizeProjectKey(todo.project);
+            const existing = acc.get(key);
             if (existing) {
                 existing.push(todo);
             } else {
-                acc.set(normalized, [todo]);
+                acc.set(key, [todo]);
             }
             return acc;
         }, new Map());
@@ -217,12 +234,12 @@ export function ProjectBrowserView() {
         const noProjectStats = buildStats(
             NO_PROJECT_LABEL,
             "",
-            undefined,
+            inboxConfig,
             true
         );
 
         const projectNames = new Set<string>([
-            ...normalizedConfigEntries.map((config) => config.name),
+            ...regularProjectConfigs.map((config) => config.name),
             ...Array.from(todosByProject.keys()).filter((projectName) => projectName !== ""),
         ]);
 
