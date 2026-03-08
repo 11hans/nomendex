@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTheme } from "@/hooks/useTheme";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -39,6 +40,7 @@ function AgentsContent() {
     const navigate = useNavigate();
     const api = useAgentsAPI();
     const mcpServersAPI = useMcpServersAPI();
+    const { currentTheme } = useTheme();
 
     const [agents, setAgents] = useState<AgentConfig[]>([]);
     const [allMcpServers, setAllMcpServers] = useState<CombinedMcpServer[]>([]);
@@ -148,20 +150,20 @@ function AgentsContent() {
 
     if (isLoading) {
         return (
-            <div className="flex h-full items-center justify-center bg-bg">
-                <p className="text-text-secondary">Loading agents...</p>
+            <div className="flex h-full items-center justify-center" style={{ backgroundColor: currentTheme.styles.surfacePrimary }}>
+                <p style={{ color: currentTheme.styles.contentTertiary }}>Loading agents...</p>
             </div>
         );
     }
 
     return (
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col max-w-4xl mx-auto w-full bg-bg text-text">
-            <div className="shrink-0 px-4 py-2.5 border-b border-border flex items-center justify-between gap-2">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col max-w-4xl mx-auto w-full" style={{ backgroundColor: currentTheme.styles.surfacePrimary, color: currentTheme.styles.contentPrimary }}>
+            <div className="shrink-0 px-4 py-2.5 border-b flex items-center justify-between gap-2" style={{ borderColor: currentTheme.styles.borderDefault }}>
                 <div>
-                    <h1 className="text-sm font-medium">
+                    <h1 className="text-sm font-medium" style={{ color: currentTheme.styles.contentPrimary }}>
                         Agents
                     </h1>
-                    <p className="text-[10px] text-text-secondary">
+                    <p className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
                         Configure AI agents with custom system prompts and MCP servers.
                     </p>
                 </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
+import { useTheme } from "@/hooks/useTheme";
 import { subscribe } from "@/lib/events";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -52,6 +53,7 @@ function formatRelativeDateLabel(dateString?: string): string {
 export function InboxListView() {
     const { loading, setLoading } = usePlugin();
     const { activeTab, setTabName } = useWorkspaceContext();
+    const { currentTheme } = useTheme();
 
     const todosAPI = useTodosAPI();
     const [todos, setTodos] = useState<Todo[]>([]);
@@ -366,19 +368,19 @@ export function InboxListView() {
 
     if (loading) {
         return (
-            <div className="h-full flex items-center justify-center text-xs text-text-muted">
+            <div className="h-full flex items-center justify-center text-xs" style={{ backgroundColor: currentTheme.styles.surfacePrimary, color: currentTheme.styles.contentTertiary }}>
                 loading inbox...
             </div>
         );
     }
 
     return (
-        <div className="h-full min-h-0 bg-bg text-text overflow-y-auto">
+        <div className="h-full min-h-0 overflow-y-auto" style={{ backgroundColor: currentTheme.styles.surfacePrimary, color: currentTheme.styles.contentPrimary }}>
             <div className="mx-auto w-full max-w-[620px] px-3 pt-3 pb-6">
                 <div className="shrink-0 flex items-center gap-1.5">
-                    <FileSearch className="size-3 text-text-muted" />
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]">Inbox</span>
-                    <span className="text-[10px] text-text-muted">{counts.all} items</span>
+                    <FileSearch className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
+                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>Inbox</span>
+                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>{counts.all} items</span>
 
                     <div className="ml-auto">
                         <CreateTodoDialog
@@ -401,12 +403,13 @@ export function InboxListView() {
 
                 <div className="shrink-0 mt-2.5 flex items-center gap-1.5">
                     <div className="relative flex-1 min-w-0">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-text-muted" />
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3" style={{ color: currentTheme.styles.contentTertiary }} />
                         <Input
                             placeholder="search inbox..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="h-8 pl-8 text-xs border-border/70 bg-transparent"
+                            className="h-8 pl-8 text-xs bg-transparent"
+                            style={{ borderColor: currentTheme.styles.borderDefault, color: currentTheme.styles.contentPrimary }}
                         />
                     </div>
 
@@ -415,11 +418,13 @@ export function InboxListView() {
                             <button
                                 key={value}
                                 onClick={() => setFilter(value)}
-                                className={`h-7 rounded-md px-2 text-[10px] transition-colors ${
-                                    filter === value
-                                        ? "bg-surface-elevated text-text shadow-sm"
-                                        : "text-text-muted hover:text-text"
-                                }`}
+                                className={`h-7 rounded-md px-2 text-[10px] transition-colors`}
+                                style={filter === value ? {
+                                    backgroundColor: currentTheme.styles.surfaceAccent,
+                                    color: currentTheme.styles.contentPrimary,
+                                } : {
+                                    color: currentTheme.styles.contentTertiary,
+                                }}
                             >
                                 {value}
                                 <span className="ml-1 opacity-70">{counts[value]}</span>
@@ -430,7 +435,7 @@ export function InboxListView() {
 
                 <div className="mt-2.5">
                     {groupedTodos.length === 0 ? (
-                        <div className="py-8 text-center text-[11px] text-text-muted">
+                        <div className="py-8 text-center text-[11px]" style={{ color: currentTheme.styles.contentTertiary }}>
                             <div className="mb-1">no tasks found</div>
                             <p className="text-[10px] opacity-70">create a task or change filters</p>
                         </div>
@@ -442,7 +447,8 @@ export function InboxListView() {
                                 return (
                                     <div
                                         key={groupName}
-                                        className="overflow-hidden rounded-lg border border-border/80 bg-surface"
+                                        className="overflow-hidden rounded-lg border"
+                                        style={{ borderColor: currentTheme.styles.borderDefault, backgroundColor: currentTheme.styles.surfaceSecondary }}
                                     >
                                         <button
                                             onClick={() => {
@@ -451,7 +457,8 @@ export function InboxListView() {
                                                     [groupName]: !expanded,
                                                 }));
                                             }}
-                                            className="w-full px-2.5 py-1.5 flex items-center gap-1.5 text-left text-[10px] text-text-muted hover:text-text transition-colors"
+                                            className="w-full px-2.5 py-1.5 flex items-center gap-1.5 text-left text-[10px] transition-colors"
+                                            style={{ color: currentTheme.styles.contentTertiary }}
                                         >
                                             <ChevronRight className={`size-3 transition-transform opacity-70 ${expanded ? "rotate-90" : ""}`} />
                                             <span className="font-medium uppercase tracking-[0.08em]">{groupName}</span>
@@ -468,9 +475,11 @@ export function InboxListView() {
                                                     return (
                                                         <div
                                                             key={todo.id}
-                                                            className={`group border-t border-border/60 px-2.5 py-0.5 flex items-center gap-1.5 ${
-                                                                selectedTodoId === todo.id ? "bg-surface-elevated/70" : ""
-                                                            }`}
+                                                            className={`group border-t px-2.5 py-0.5 flex items-center gap-1.5`}
+                                                            style={{
+                                                                borderColor: currentTheme.styles.borderDefault,
+                                                                backgroundColor: selectedTodoId === todo.id ? currentTheme.styles.surfaceAccent : undefined,
+                                                            }}
                                                         >
                                                             <button
                                                                 onClick={() => openTodoForEdit(todo)}
@@ -486,9 +495,9 @@ export function InboxListView() {
                                                                     }`}
                                                                 />
 
-                                                                <span className="truncate text-xs text-text">{todo.title}</span>
+                                                                <span className="truncate text-xs" style={{ color: currentTheme.styles.contentPrimary }}>{todo.title}</span>
 
-                                                                <span className="ml-auto flex items-center gap-2 text-[10px] text-text-muted shrink-0">
+                                                                <span className="ml-auto flex items-center gap-2 text-[10px] shrink-0" style={{ color: currentTheme.styles.contentTertiary }}>
                                                                     {leadTag && <span>#{leadTag}</span>}
                                                                     {dateLabel && <span>{dateLabel}</span>}
                                                                     <ChevronRight className="size-3 opacity-60" />
