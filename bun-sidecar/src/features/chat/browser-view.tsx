@@ -4,7 +4,7 @@ import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Search, MessageCircle, Plus, Trash2, Maximize2 } from "lucide-react";
+import { Search, MessageCircle, Plus, Trash2, Maximize2, Bot, UserRound, ChevronRight } from "lucide-react";
 import { useCommandDialog } from "@/components/CommandDialogProvider";
 import { useTheme } from "@/hooks/useTheme";
 import { DeleteChatSessionDialog } from "./delete-chat-session-dialog";
@@ -295,30 +295,78 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
         }
     };
 
+    const styles = currentTheme.styles;
+    const visibleSessions = searchQuery.trim() ? filteredSessions.length : sessions.length;
+
     return (
-        <div className="h-full flex flex-col">
-            {/* Main Content - Split Layout */}
-            <div className="flex-1 flex overflow-hidden">
+        <div
+            className="h-full flex flex-col"
+            style={{ backgroundColor: styles.surfacePrimary }}
+        >
+            <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Left Panel - Session List */}
-                <div className="w-72 border-r flex flex-col h-full" style={{ borderColor: currentTheme.styles.borderDefault }}>
-                    <div className="px-3 py-3 border-b space-y-2" style={{ borderColor: currentTheme.styles.borderDefault }}>
-                        <div className="flex items-center gap-2">
-                            <div className="relative flex-1 min-w-0">
-                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4" style={{ color: currentTheme.styles.contentSecondary }} />
-                                <Input
-                                    ref={searchInputRef}
-                                    placeholder="Search chats..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    onKeyDown={handleKeyDown}
-                                    style={{ color: currentTheme.styles.contentPrimary }}
-                                    className="pl-7"
-                                    autoFocus
-                                />
+                <div
+                    className="w-72 shrink-0 border-r flex flex-col h-full min-h-0"
+                    style={{
+                        backgroundColor: styles.surfacePrimary,
+                        borderColor: styles.borderDefault,
+                    }}
+                >
+                    <div
+                        className="shrink-0 px-4 py-2.5 border-b space-y-2"
+                        style={{
+                            backgroundColor: styles.surfacePrimary,
+                            borderColor: styles.borderDefault,
+                        }}
+                    >
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <MessageCircle size={15} style={{ color: styles.contentAccent }} />
+                                <h2
+                                    className="text-[11px] font-medium uppercase tracking-[0.14em] truncate"
+                                    style={{ color: styles.contentPrimary }}
+                                >
+                                    Chats
+                                </h2>
+                                <span
+                                    className="text-[10px] shrink-0"
+                                    style={{ color: styles.contentTertiary }}
+                                >
+                                    ({visibleSessions})
+                                </span>
                             </div>
-                            <Button size="icon" onClick={handleNewChat} title="New chat">
-                                <Plus className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center gap-0.5 shrink-0">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={handleNewChat}
+                                    title="New chat"
+                                >
+                                    <Plus className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        </div>
+
+                        <div className="relative">
+                            <Search
+                                className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4"
+                                style={{ color: styles.contentTertiary }}
+                            />
+                            <Input
+                                ref={searchInputRef}
+                                placeholder="Search chats..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                className="h-8 pl-8 text-xs bg-transparent"
+                                style={{
+                                    backgroundColor: styles.surfaceSecondary,
+                                    borderColor: styles.borderDefault,
+                                    color: styles.contentPrimary,
+                                }}
+                                autoFocus
+                            />
                         </div>
                     </div>
 
@@ -328,24 +376,24 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                         onKeyDown={handleKeyDown}
                     >
                         <ScrollArea className="h-full">
-                            <div className="px-2 py-2 space-y-1">
+                            <div className="px-2 py-2 space-y-1.5">
                                 {isLoadingSessions ? (
-                                    <div className="p-6 text-center" style={{ color: currentTheme.styles.contentSecondary }}>
-                                        <p className="text-sm">Loading...</p>
+                                    <div className="p-6 text-center" style={{ color: styles.contentSecondary }}>
+                                        <p className="text-xs">Loading...</p>
                                     </div>
                                 ) : isSearching ? (
-                                    <div className="p-6 text-center" style={{ color: currentTheme.styles.contentSecondary }}>
-                                        <p className="text-sm">Searching...</p>
+                                    <div className="p-6 text-center" style={{ color: styles.contentSecondary }}>
+                                        <p className="text-xs">Searching...</p>
                                     </div>
                                 ) : filteredSessions.length === 0 ? (
-                                    <div className="p-6 text-center" style={{ color: currentTheme.styles.contentSecondary }}>
+                                    <div className="p-6 text-center" style={{ color: styles.contentSecondary }}>
                                         {searchQuery ? (
-                                            <p className="text-sm">No chats match "{searchQuery}"</p>
+                                            <p className="text-xs">No chats match "{searchQuery}"</p>
                                         ) : (
                                             <div className="space-y-2">
-                                                <MessageCircle className="h-12 w-12 mx-auto" style={{ color: currentTheme.styles.contentTertiary }} />
-                                                <p className="text-sm">No chats yet</p>
-                                                <Button size="sm" onClick={handleNewChat}>
+                                                <MessageCircle className="h-12 w-12 mx-auto" style={{ color: styles.contentTertiary }} />
+                                                <p className="text-xs">No chats yet</p>
+                                                <Button size="sm" className="h-7 px-2 text-[11px]" onClick={handleNewChat}>
                                                     <Plus className="h-4 w-4 mr-1" /> Start a chat
                                                 </Button>
                                             </div>
@@ -358,73 +406,63 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                             <div
                                                 key={session.id}
                                                 ref={isSelected ? selectedRowRef : undefined}
-                                                className="group relative px-3 py-2.5 cursor-pointer rounded-md transition-colors"
+                                                className="group relative overflow-hidden rounded-lg border transition-colors"
                                                 style={{
-                                                    border: isSelected
-                                                        ? `2px solid ${currentTheme.styles.contentAccent}`
-                                                        : "2px solid transparent",
-                                                    color: currentTheme.styles.contentPrimary,
+                                                    borderColor: isSelected ? styles.surfaceAccent : styles.borderDefault,
+                                                    backgroundColor: styles.surfaceSecondary,
                                                 }}
-                                                onClick={() => handleOpenChat(session.id)}
                                                 onMouseEnter={() => {
                                                     setSelectedIndex(index);
                                                     setSelectedSession(session);
                                                 }}
                                             >
-                                                {/* Time */}
-                                                <div className="flex items-center gap-1.5 mb-1">
-                                                    <MessageCircle
-                                                        className="h-3 w-3"
-                                                        style={{ color: currentTheme.styles.contentTertiary }}
-                                                    />
-                                                    <span
-                                                        className="text-xs"
-                                                        style={{ color: currentTheme.styles.contentTertiary }}
-                                                    >
-                                                        {formatRelativeTime(session.updatedAt)}
-                                                    </span>
-                                                    <span
-                                                        className="text-xs"
-                                                        style={{ color: currentTheme.styles.contentTertiary }}
-                                                    >
-                                                        - {session.messageCount} msgs
-                                                    </span>
-                                                </div>
-
-                                                {/* Title */}
-                                                <div
-                                                    className="font-medium text-sm leading-snug line-clamp-2"
-                                                    style={{ color: currentTheme.styles.contentPrimary }}
+                                                <button
+                                                    className="w-full px-2.5 py-2 text-left"
+                                                    onClick={() => handleOpenChat(session.id)}
+                                                    style={{
+                                                        backgroundColor: isSelected ? styles.surfaceAccent : "transparent",
+                                                    }}
                                                 >
-                                                    {session.title}
-                                                </div>
-
-                                                {/* Match snippet */}
-                                                {session.matchSnippet && (
-                                                    <div
-                                                        className="text-xs mt-1 line-clamp-1"
-                                                        style={{ color: currentTheme.styles.contentSecondary }}
-                                                    >
-                                                        {session.matchSnippet.before}
+                                                    <div className="flex items-center gap-1.5">
                                                         <span
-                                                            className="font-semibold rounded px-0.5"
-                                                            style={{
-                                                                backgroundColor: currentTheme.styles.contentAccent + "30",
-                                                                color: currentTheme.styles.contentPrimary,
-                                                            }}
+                                                            className="truncate text-xs font-medium"
+                                                            style={{ color: styles.contentPrimary }}
                                                         >
-                                                            {session.matchSnippet.match}
+                                                            {session.title}
                                                         </span>
-                                                        {session.matchSnippet.after}
+                                                        <ChevronRight className="ml-auto size-3 opacity-60 shrink-0" style={{ color: styles.contentTertiary }} />
                                                     </div>
-                                                )}
+                                                    <div
+                                                        className="mt-0.5 text-[10px] truncate"
+                                                        style={{ color: styles.contentTertiary }}
+                                                    >
+                                                        {formatRelativeTime(session.updatedAt)} • {session.messageCount} messages
+                                                    </div>
+                                                    {session.matchSnippet && (
+                                                        <div
+                                                            className="mt-1 text-[10px] line-clamp-1"
+                                                            style={{ color: styles.contentSecondary }}
+                                                        >
+                                                            {session.matchSnippet.before}
+                                                            <span
+                                                                className="font-semibold rounded px-0.5"
+                                                                style={{
+                                                                    backgroundColor: styles.contentAccent + "30",
+                                                                    color: styles.contentPrimary,
+                                                                }}
+                                                            >
+                                                                {session.matchSnippet.match}
+                                                            </span>
+                                                            {session.matchSnippet.after}
+                                                        </div>
+                                                    )}
+                                                </button>
 
-                                                {/* Delete button */}
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    style={{ color: currentTheme.styles.contentTertiary }}
+                                                    className="absolute top-1.5 right-1.5 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    style={{ color: styles.contentTertiary }}
                                                     onClick={(e) => handleDeleteSession(session.id, e)}
                                                 >
                                                     <Trash2 className="h-3.5 w-3.5" />
@@ -439,70 +477,128 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                 </div>
 
                 {/* Right Panel - Chat Preview */}
-                <div className="flex-1 flex flex-col overflow-hidden relative">
+                <div
+                    className="flex-1 flex flex-col overflow-hidden relative min-w-0"
+                    style={{ backgroundColor: styles.surfacePrimary }}
+                >
                     {selectedSession ? (
                         <>
-                            {/* Open in new tab button */}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="absolute top-2 right-2 z-20 h-8 w-8"
-                                onClick={() => handleOpenChat(selectedSession.id)}
-                                title="Open chat in new tab"
+                            <div
+                                className="shrink-0 px-4 py-2.5 border-b"
+                                style={{
+                                    backgroundColor: styles.surfacePrimary,
+                                    borderColor: styles.borderDefault,
+                                }}
                             >
-                                <Maximize2 className="h-4 w-4" />
-                            </Button>
+                                <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <MessageCircle size={15} style={{ color: styles.contentAccent }} />
+                                        <h2
+                                            className="text-[11px] font-medium uppercase tracking-[0.14em] truncate"
+                                            style={{ color: styles.contentPrimary }}
+                                        >
+                                            Preview
+                                        </h2>
+                                        <span
+                                            className="text-[10px] shrink-0"
+                                            style={{ color: styles.contentTertiary }}
+                                        >
+                                            ({selectedSession.messageCount})
+                                        </span>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        onClick={() => handleOpenChat(selectedSession.id)}
+                                        title="Open chat in new tab"
+                                    >
+                                        <Maximize2 className="h-4 w-4" />
+                                    </Button>
+                                </div>
+                            </div>
 
                             {isLoadingMessages ? (
                                 <div className="flex-1 flex items-center justify-center">
-                                    <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                    <p className="text-xs" style={{ color: styles.contentSecondary }}>
                                         Loading messages...
                                     </p>
                                 </div>
                             ) : (
                                 <ScrollArea className="flex-1">
-                                    <div className="p-4 space-y-4 max-w-3xl mx-auto">
+                                    <div className="mx-auto max-w-3xl space-y-3 p-4">
                                         {selectedMessages.map((message) => (
                                             <Message key={message.id} from={message.role}>
-                                                <MessageContent isUser={message.role === "user"}>
-                                                    {message.blocks.map((block) => {
-                                                        if (block.type === "text") {
-                                                            // When searching, render plain text with highlights
-                                                            // Otherwise use MessageResponse for markdown
-                                                            if (searchQuery.trim()) {
+                                                <div
+                                                    className={message.role === "user"
+                                                        ? "ml-auto w-fit max-w-[90%] rounded-lg border px-2.5 py-2"
+                                                        : "w-full rounded-lg border px-2.5 py-2"
+                                                    }
+                                                    style={{
+                                                        borderColor: styles.borderDefault,
+                                                        backgroundColor: message.role === "user" ? styles.surfaceAccent : styles.surfaceSecondary,
+                                                    }}
+                                                >
+                                                    <div
+                                                        className={message.role === "user"
+                                                            ? "mb-1 flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-[0.08em]"
+                                                            : "mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em]"
+                                                        }
+                                                        style={{ color: styles.contentSecondary }}
+                                                    >
+                                                        {message.role === "user" ? (
+                                                            <>
+                                                                <span>You</span>
+                                                                <UserRound className="h-3.5 w-3.5" />
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Bot className="h-3.5 w-3.5" />
+                                                                <span>Agent</span>
+                                                            </>
+                                                        )}
+                                                    </div>
+
+                                                    <MessageContent>
+                                                        {message.blocks.map((block) => {
+                                                            if (block.type === "text") {
+                                                                if (searchQuery.trim()) {
+                                                                    return (
+                                                                        <div key={block.id} className="whitespace-pre-wrap">
+                                                                            {highlightMatches(
+                                                                                block.content,
+                                                                                searchQuery,
+                                                                                styles.contentAccent
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                }
                                                                 return (
-                                                                    <div key={block.id} className="whitespace-pre-wrap">
-                                                                        {highlightMatches(
-                                                                            block.content,
-                                                                            searchQuery,
-                                                                            currentTheme.styles.contentAccent
-                                                                        )}
+                                                                    <MessageResponse key={block.id}>
+                                                                        {block.content}
+                                                                    </MessageResponse>
+                                                                );
+                                                            }
+
+                                                            if (block.type === "tool") {
+                                                                return (
+                                                                    <div
+                                                                        key={block.id}
+                                                                        className="rounded px-2 py-1 text-xs"
+                                                                        style={{
+                                                                            backgroundColor: styles.surfacePrimary,
+                                                                            color: styles.contentSecondary,
+                                                                        }}
+                                                                    >
+                                                                        Tool: {block.toolCall.name}
                                                                     </div>
                                                                 );
                                                             }
-                                                            return (
-                                                                <MessageResponse key={block.id}>
-                                                                    {block.content}
-                                                                </MessageResponse>
-                                                            );
-                                                        }
-                                                        if (block.type === "tool") {
-                                                            return (
-                                                                <div
-                                                                    key={block.id}
-                                                                    className="text-xs px-2 py-1 rounded"
-                                                                    style={{
-                                                                        backgroundColor: currentTheme.styles.surfaceSecondary,
-                                                                        color: currentTheme.styles.contentSecondary,
-                                                                    }}
-                                                                >
-                                                                    Tool: {block.toolCall.name}
-                                                                </div>
-                                                            );
-                                                        }
-                                                        return null;
-                                                    })}
-                                                </MessageContent>
+
+                                                            return null;
+                                                        })}
+                                                    </MessageContent>
+                                                </div>
                                             </Message>
                                         ))}
                                     </div>
@@ -510,23 +606,26 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                             )}
                         </>
                     ) : !isLoadingSessions && sessions.length > 0 ? (
-                        <div className="flex-1 flex items-center justify-center">
+                        <div className="flex-1 flex items-center justify-center p-6">
                             <div className="text-center space-y-2">
-                                <MessageCircle className="h-12 w-12 mx-auto" style={{ color: currentTheme.styles.contentTertiary }} />
-                                <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                <MessageCircle
+                                    className="h-12 w-12 mx-auto"
+                                    style={{ color: styles.contentTertiary }}
+                                />
+                                <p className="text-xs" style={{ color: styles.contentSecondary }}>
                                     Select a chat to preview
                                 </p>
                             </div>
                         </div>
                     ) : !isLoadingSessions ? (
-                        <div className="flex-1 flex items-center justify-center">
+                        <div className="flex-1 flex items-center justify-center p-6">
                             <div className="text-center space-y-3">
-                                <MessageCircle className="h-12 w-12 mx-auto" style={{ color: currentTheme.styles.contentTertiary }} />
-                                <p className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
+                                <MessageCircle className="h-12 w-12 mx-auto" style={{ color: styles.contentTertiary }} />
+                                <p className="text-xs" style={{ color: styles.contentSecondary }}>
                                     No chats yet
                                 </p>
-                                <Button onClick={handleNewChat}>
-                                    <Plus className="h-4 w-4 mr-1" /> Start a new chat
+                                <Button className="h-7 px-2 text-[11px]" onClick={handleNewChat}>
+                                    <Plus className="h-4 w-4 mr-1" /> Start a chat
                                 </Button>
                             </div>
                         </div>

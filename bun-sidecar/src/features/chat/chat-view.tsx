@@ -18,7 +18,7 @@ import {
 } from "@/components/prosemirror/ProseMirrorPromptInput";
 import type { Attachment } from "@/types/attachments";
 import { Button } from "@/components/ui/button";
-import { StopCircle, ListPlus } from "lucide-react";
+import { StopCircle, ListPlus, Bot, UserRound, ShieldAlert, PauseCircle, MessageSquare } from "lucide-react";
 import { Loader } from "@/components/ai-elements/loader";
 import {
     Tool,
@@ -770,156 +770,229 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
         }
     }, [isLoading, messageQueue, queuePaused]);
 
+    const styles = currentTheme.styles;
+    const sessionStatus = sessionId ? (sessionSaved ? "Saved session" : "Unsaved session") : "New session";
+
     return (
-        <div className="flex h-full flex-col" style={{ backgroundColor: currentTheme.styles.surfacePrimary }}>
+        <div className="h-full flex flex-col" style={{ backgroundColor: styles.surfacePrimary }}>
+            <div
+                className="shrink-0 px-4 py-2.5 border-b"
+                style={{
+                    backgroundColor: styles.surfacePrimary,
+                    borderColor: styles.borderDefault,
+                }}
+            >
+                <div className="flex items-center gap-2 min-w-0">
+                    <MessageSquare className="size-3.5" style={{ color: styles.contentAccent }} />
+                    <span className="text-[11px] font-medium uppercase tracking-[0.14em] truncate" style={{ color: styles.contentPrimary }}>
+                        Chat
+                    </span>
+                    <span className="text-[10px] shrink-0" style={{ color: styles.contentTertiary }}>
+                        {sessionStatus} • {isLoading ? "running" : "ready"}
+                    </span>
+                    {messageQueue.length > 0 && (
+                        <span className="text-[10px] shrink-0" style={{ color: styles.contentTertiary }}>
+                            queue {messageQueue.length}
+                        </span>
+                    )}
+                </div>
+            </div>
+
             <OverlayScrollbar scrollRef={scrollRef} className="flex-1">
                 {isLoadingHistory ? (
                     <div className="flex h-full flex-col items-center justify-center">
                         <Loader />
-                        <p className="mt-4" style={{ color: currentTheme.styles.contentSecondary }}>Loading session...</p>
+                        <p className="mt-4 text-xs" style={{ color: styles.contentSecondary }}>Loading session...</p>
                     </div>
                 ) : (
-                <Conversation>
-                    <ConversationContent>
-                    {messages.map((message) => (
-                        <Message key={message.id} from={message.role}>
-                            <MessageContent isUser={message.role === "user"}>
-                                {message.blocks.map((block) => {
-                                    if (block.type === "thinking") {
-                                        return (
-                                            <ChainOfThought key={block.id} defaultOpen={false} className="mb-2">
-                                                <ChainOfThoughtHeader>Thinking</ChainOfThoughtHeader>
-                                                <ChainOfThoughtContent>
-                                                    <div className="space-y-1 text-xs">
-                                                        {block.content.split("\n\n").map((step, stepIdx) => (
-                                                            <ChainOfThoughtStep key={stepIdx} label={step} status="complete" />
-                                                        ))}
-                                                    </div>
-                                                </ChainOfThoughtContent>
-                                            </ChainOfThought>
-                                        );
-                                    }
+                    <Conversation>
+                        <ConversationContent className="max-w-3xl gap-3 px-4 pb-6 pt-3">
+                            {messages.length === 0 && !isLoading && (
+                                <div
+                                    className="mx-auto w-full rounded-lg border px-4 py-5 text-center"
+                                    style={{ borderColor: styles.borderDefault, backgroundColor: styles.surfacePrimary }}
+                                >
+                                    <p className="text-sm font-medium" style={{ color: styles.contentPrimary }}>
+                                        Start a new conversation
+                                    </p>
+                                    <p className="mt-1 text-xs" style={{ color: styles.contentSecondary }}>
+                                        Choose an agent, ask a task, and keep follow-up prompts in queue while it works.
+                                    </p>
+                                </div>
+                            )}
 
-                                    if (block.type === "image") {
-                                        return (
-                                            <div key={block.id} className="mb-2">
-                                                <img
-                                                    src={block.content}
-                                                    alt="Attached image"
-                                                    className="max-w-xs max-h-48 rounded-lg object-cover cursor-pointer"
-                                                    onClick={() => window.open(block.content, "_blank")}
-                                                />
-                                            </div>
-                                        );
-                                    }
-
-                                    if (block.type === "text") {
-                                        return (
-                                            <MessageResponse key={block.id} className="mb-2">
-                                                {block.content}
-                                            </MessageResponse>
-                                        );
-                                    }
-
-                                    if (block.type === "tool") {
-                                        const toolCall = block.toolCall;
-
-                                        // Check if this is a render_ui tool with UI data
-                                        const uiData = parseNoetectUIData(toolCall.output);
-                                        if (uiData) {
-                                            return (
-                                                <div key={block.id} className="mb-2">
-                                                    <RenderedUI
-                                                        html={uiData.html}
-                                                        title={uiData.title}
-                                                        height={uiData.height}
-                                                    />
-                                                </div>
-                                            );
+                            {messages.map((message) => (
+                                <Message key={message.id} from={message.role}>
+                                    <div
+                                        className={message.role === "user"
+                                            ? "ml-auto w-fit max-w-[90%] rounded-lg border px-2.5 py-2"
+                                            : "w-full rounded-lg border px-2.5 py-2"
                                         }
+                                        style={{
+                                            borderColor: styles.borderDefault,
+                                            backgroundColor: message.role === "user" ? styles.surfaceAccent : styles.surfaceSecondary,
+                                        }}
+                                    >
+                                        <div
+                                            className={message.role === "user"
+                                                ? "mb-1 flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-[0.08em]"
+                                                : "mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em]"
+                                            }
+                                            style={{ color: styles.contentSecondary }}
+                                        >
+                                            {message.role === "user" ? (
+                                                <>
+                                                    <span>You</span>
+                                                    <UserRound className="h-3.5 w-3.5" />
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Bot className="h-3.5 w-3.5" />
+                                                    <span>Agent</span>
+                                                </>
+                                            )}
+                                        </div>
 
-                                        return (
-                                            <Tool key={block.id} defaultOpen={false} className="mb-2">
-                                                <ToolHeader
-                                                    title={(toolCall.input?.description as string) || toolCall.name}
-                                                    type={`tool-${toolCall.name}` as `tool-${string}`}
-                                                    state={toolCall.state}
-                                                />
-                                                <ToolContent>
-                                                    {toolCall.input && <ToolInput input={toolCall.input} />}
-                                                    {(toolCall.output || toolCall.errorText) && (
-                                                        <ToolOutput output={toolCall.output} errorText={toolCall.errorText} />
-                                                    )}
-                                                </ToolContent>
-                                            </Tool>
-                                        );
-                                    }
+                                        <MessageContent className="min-w-0">
+                                            {message.blocks.map((block) => {
+                                                if (block.type === "thinking") {
+                                                    return (
+                                                        <ChainOfThought key={block.id} defaultOpen={false} className="mb-2">
+                                                            <ChainOfThoughtHeader>Thinking</ChainOfThoughtHeader>
+                                                            <ChainOfThoughtContent>
+                                                                <div className="space-y-1 text-xs">
+                                                                    {block.content.split("\n\n").map((step, stepIdx) => (
+                                                                        <ChainOfThoughtStep key={stepIdx} label={step} status="complete" />
+                                                                    ))}
+                                                                </div>
+                                                            </ChainOfThoughtContent>
+                                                        </ChainOfThought>
+                                                    );
+                                                }
 
-                                    return null;
-                                })}
-                            </MessageContent>
-                        </Message>
-                    ))}
-                    {isLoading && (() => {
-                        const lastMessage = messages[messages.length - 1];
-                        const hasContent = lastMessage?.role === "assistant" && lastMessage.blocks.length > 0;
-                        if (hasContent) return null;
-                        return (
-                            <Message from="assistant">
-                                <MessageContent>
-                                    <Loader />
-                                </MessageContent>
-                            </Message>
-                        );
-                    })()}
-                    </ConversationContent>
-                </Conversation>
+                                                if (block.type === "image") {
+                                                    return (
+                                                        <div key={block.id} className="mb-2">
+                                                            <img
+                                                                src={block.content}
+                                                                alt="Attached image"
+                                                                className="max-h-52 max-w-xs cursor-pointer rounded-lg object-cover"
+                                                                onClick={() => window.open(block.content, "_blank")}
+                                                            />
+                                                        </div>
+                                                    );
+                                                }
+
+                                                if (block.type === "text") {
+                                                    return (
+                                                        <MessageResponse key={block.id} className="mb-2">
+                                                            {block.content}
+                                                        </MessageResponse>
+                                                    );
+                                                }
+
+                                                if (block.type === "tool") {
+                                                    const toolCall = block.toolCall;
+
+                                                    // Check if this is a render_ui tool with UI data
+                                                    const uiData = parseNoetectUIData(toolCall.output);
+                                                    if (uiData) {
+                                                        return (
+                                                            <div key={block.id} className="mb-2">
+                                                                <RenderedUI
+                                                                    html={uiData.html}
+                                                                    title={uiData.title}
+                                                                    height={uiData.height}
+                                                                />
+                                                            </div>
+                                                        );
+                                                    }
+
+                                                    return (
+                                                        <Tool key={block.id} defaultOpen={false} className="mb-2">
+                                                            <ToolHeader
+                                                                title={(toolCall.input?.description as string) || toolCall.name}
+                                                                type={`tool-${toolCall.name}` as `tool-${string}`}
+                                                                state={toolCall.state}
+                                                            />
+                                                            <ToolContent>
+                                                                {toolCall.input && <ToolInput input={toolCall.input} />}
+                                                                {(toolCall.output || toolCall.errorText) && (
+                                                                    <ToolOutput output={toolCall.output} errorText={toolCall.errorText} />
+                                                                )}
+                                                            </ToolContent>
+                                                        </Tool>
+                                                    );
+                                                }
+
+                                                return null;
+                                            })}
+                                        </MessageContent>
+                                    </div>
+                                </Message>
+                            ))}
+
+                            {isLoading && (() => {
+                                const lastMessage = messages[messages.length - 1];
+                                const hasContent = lastMessage?.role === "assistant" && lastMessage.blocks.length > 0;
+                                if (hasContent) return null;
+                                return (
+                                    <Message from="assistant">
+                                        <div
+                                            className="w-full rounded-lg border px-2.5 py-2"
+                                            style={{ borderColor: styles.borderDefault, backgroundColor: styles.surfaceSecondary }}
+                                        >
+                                            <div className="mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentSecondary }}>
+                                                <Bot className="h-3.5 w-3.5" />
+                                                <span>Agent</span>
+                                            </div>
+                                            <MessageContent>
+                                                <Loader />
+                                            </MessageContent>
+                                        </div>
+                                    </Message>
+                                );
+                            })()}
+                        </ConversationContent>
+                    </Conversation>
                 )}
             </OverlayScrollbar>
 
             {/* Permission Request Banner */}
             {pendingPermission && (
-                <div className="mx-auto w-full max-w-3xl px-6 pb-2">
+                <div className="mx-auto w-full max-w-3xl px-4 pb-2">
                     <div
-                        className="flex items-center justify-between gap-3 rounded-lg px-3 py-2"
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-2.5 py-2"
                         style={{
-                            backgroundColor: currentTheme.styles.surfaceSecondary,
+                            backgroundColor: styles.surfaceSecondary,
+                            borderColor: styles.borderDefault,
                         }}
                     >
-                        <div className="flex items-center gap-2 min-w-0">
-                            <svg
-                                className="h-4 w-4 flex-shrink-0"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                style={{ color: currentTheme.styles.contentSecondary }}
-                            >
-                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10" />
-                            </svg>
-                            <span className="text-sm" style={{ color: currentTheme.styles.contentSecondary }}>
-                                Allow <span className="font-mono" style={{ color: currentTheme.styles.contentPrimary }}>{pendingPermission.toolName}</span>?
+                        <div className="flex min-w-0 items-center gap-2">
+                            <ShieldAlert className="h-4 w-4 flex-shrink-0" style={{ color: styles.contentSecondary }} />
+                            <span className="text-sm" style={{ color: styles.contentSecondary }}>
+                                Allow <span className="font-mono" style={{ color: styles.contentPrimary }}>{pendingPermission.toolName}</span>?
                             </span>
                         </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
+                        <div className="flex items-center gap-1.5">
                             <button
                                 onClick={() => respondToPermission("deny")}
-                                className="px-2.5 py-1 text-xs font-medium rounded transition-colors hover:opacity-80"
-                                style={{ color: currentTheme.styles.contentSecondary }}
+                                className="rounded px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-80"
+                                style={{ color: styles.contentSecondary }}
                             >
                                 Deny
                             </button>
                             <button
                                 onClick={() => respondToPermission("allow")}
-                                className="px-2.5 py-1 text-xs font-medium rounded transition-colors hover:opacity-80"
-                                style={{ color: currentTheme.styles.contentSecondary }}
+                                className="rounded px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-80"
+                                style={{ color: styles.contentSecondary }}
                             >
                                 Allow
                             </button>
                             <button
                                 onClick={() => respondToPermission("allow", { alwaysAllow: true })}
-                                className="px-2.5 py-1 text-xs font-medium rounded transition-colors hover:opacity-90"
-                                style={{ backgroundColor: currentTheme.styles.contentPrimary, color: currentTheme.styles.surfacePrimary }}
+                                className="rounded px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-90"
+                                style={{ backgroundColor: styles.contentPrimary, color: styles.surfacePrimary }}
                             >
                                 Always Allow
                             </button>
@@ -928,7 +1001,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                 </div>
             )}
 
-            <div className="mx-auto w-full max-w-3xl px-6 pb-4">
+            <div className="mx-auto w-full max-w-3xl px-4 pb-4">
                 {/* Queued messages list */}
                 <QueuedMessagesList
                     messages={messageQueue}
@@ -941,13 +1014,14 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                 {/* Queue paused banner */}
                 {queuePaused && messageQueue.length > 0 && (
                     <div
-                        className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 mb-2 text-sm"
+                        className="mb-2 flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-xs"
                         style={{
-                            backgroundColor: currentTheme.styles.surfaceSecondary,
-                            borderColor: currentTheme.styles.borderDefault,
+                            backgroundColor: styles.surfaceSecondary,
+                            borderColor: styles.borderDefault,
                         }}
                     >
-                        <span style={{ color: currentTheme.styles.contentSecondary }}>
+                        <span className="flex items-center gap-1.5" style={{ color: styles.contentSecondary }}>
+                            <PauseCircle className="h-3.5 w-3.5" />
                             Queue paused ({messageQueue.length} remaining)
                         </span>
                         <Button
@@ -962,51 +1036,62 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                     </div>
                 )}
 
-                <ProseMirrorPromptInput onSubmit={handleSubmit}>
-                    <ProseMirrorPromptTextarea
-                        ref={inputRef}
-                        placeholder={isLoading ? "Type to queue next message..." : "Message..."}
-                        disabled={!!pendingPermission}
-                        enterToSend={chatInputEnterToSend}
-                    />
-                    <ProseMirrorPromptFooter className="justify-between">
-                        <div className="flex items-center gap-1">
-                            <AgentSelector
-                                currentAgentId={currentAgentId}
-                                onAgentChange={setCurrentAgentId}
-                                disabled={isLoading}
-                            />
-                            <ProseMirrorPromptAttach disabled={!!pendingPermission} />
-                        </div>
-                        <div className="flex items-center gap-1">
-                            {isLoading && (
-                                <Button
-                                    type="button"
-                                    onClick={handleCancel}
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 rounded-full p-0"
-                                    title="Stop"
-                                >
-                                    <StopCircle className="h-4 w-4" />
-                                </Button>
-                            )}
-                            {isLoading ? (
-                                <Button
-                                    type="submit"
-                                    size="icon"
-                                    className="h-8 w-8 rounded-full p-0"
-                                    disabled={!!pendingPermission}
-                                    title="Queue message"
-                                >
-                                    <ListPlus className="h-4 w-4" />
-                                </Button>
-                            ) : (
-                                <ProseMirrorPromptSubmit disabled={!!pendingPermission} className="rounded-full" />
-                            )}
-                        </div>
-                    </ProseMirrorPromptFooter>
-                </ProseMirrorPromptInput>
+                <div
+                    className="rounded-lg border p-2"
+                    style={{
+                        borderColor: styles.borderDefault,
+                        backgroundColor: styles.surfacePrimary,
+                    }}
+                >
+                    <ProseMirrorPromptInput onSubmit={handleSubmit} className="border-0 bg-transparent shadow-none">
+                        <ProseMirrorPromptTextarea
+                            ref={inputRef}
+                            placeholder={isLoading ? "Type to queue next message..." : "Message..."}
+                            disabled={!!pendingPermission}
+                            enterToSend={chatInputEnterToSend}
+                        />
+                        <ProseMirrorPromptFooter className="justify-between">
+                            <div className="flex items-center gap-1">
+                                <AgentSelector
+                                    currentAgentId={currentAgentId}
+                                    onAgentChange={setCurrentAgentId}
+                                    disabled={isLoading}
+                                />
+                                <ProseMirrorPromptAttach disabled={!!pendingPermission} />
+                            </div>
+                            <div className="flex items-center gap-1">
+                                {isLoading && (
+                                    <Button
+                                        type="button"
+                                        onClick={handleCancel}
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 rounded-full p-0"
+                                        title="Stop"
+                                    >
+                                        <StopCircle className="h-4 w-4" />
+                                    </Button>
+                                )}
+                                {isLoading ? (
+                                    <Button
+                                        type="submit"
+                                        size="icon"
+                                        className="h-8 w-8 rounded-full p-0"
+                                        disabled={!!pendingPermission}
+                                        title="Queue message"
+                                    >
+                                        <ListPlus className="h-4 w-4" />
+                                    </Button>
+                                ) : (
+                                    <ProseMirrorPromptSubmit disabled={!!pendingPermission} className="rounded-full" />
+                                )}
+                            </div>
+                        </ProseMirrorPromptFooter>
+                    </ProseMirrorPromptInput>
+                    <p className="px-2 pb-1 text-[11px]" style={{ color: styles.contentSecondary }}>
+                        {chatInputEnterToSend ? "Enter sends, Shift+Enter adds a new line." : "Enter adds a new line."}
+                    </p>
+                </div>
             </div>
         </div>
     );
