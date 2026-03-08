@@ -5,7 +5,7 @@ import { subscribe } from "@/lib/events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AlertCircle, CheckCircle2, Clock, Calendar, Eye, EyeOff, MoreHorizontal, Archive, Search, Plus, Settings, Circle } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Calendar, Eye, EyeOff, MoreHorizontal, Archive, Search, Plus, Settings, Circle, ArrowLeft, FileSearch } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { TodoCard } from "./TodoCard";
@@ -22,6 +22,7 @@ import { initCalendarChangeListener } from "./calendar-change-bridge";
 import type { Attachment } from "@/types/attachments";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useTheme } from "@/hooks/useTheme";
 import {
     DndContext,
     DragEndEvent,
@@ -49,7 +50,10 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     // Support both 'project' and 'filterProject' prop names for backward compatibility
     const filterProject = project;
     const { loading, setLoading } = usePlugin();
-    const { activeTab, setTabName, openTab, getProjectPreferences, setProjectPreferences } = useWorkspaceContext();
+    const { activeTab, activeTabId, setTabName, openTab, replaceTabWithNewView, getProjectPreferences, setProjectPreferences } = useWorkspaceContext();
+    const { currentTheme } = useTheme();
+    const isProjectScopedView = filterProject !== null && filterProject !== undefined;
+    const projectDisplayName = filterProject === "" ? "No Project" : filterProject;
 
     const todosAPI = useTodosAPI();
     const [todos, setTodos] = useState<Todo[]>([]);
@@ -385,6 +389,11 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             props: { project: filterProject }
         });
     };
+
+    const goBackToProjects = useCallback(() => {
+        if (!activeTabId) return;
+        replaceTabWithNewView(activeTabId, { id: "todos", name: "Todos", icon: "list-todo" }, { view: "projects" });
+    }, [activeTabId, replaceTabWithNewView]);
 
     const archiveAllDone = async () => {
         const doneTodos = todos.filter(t => t.status === "done");
@@ -753,6 +762,30 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         }
         return order;
     }, [todosByColumn, displayColumns]);
+
+    const boardCounts = useMemo(() => ({
+        all: todos.length,
+        todo: todos.filter((todo) => todo.status === "todo" || todo.status === "later").length,
+        inProgress: todos.filter((todo) => todo.status === "in_progress").length,
+        done: todos.filter((todo) => todo.status === "done").length,
+    }), [todos]);
+
+    const headerStats = useMemo(() => {
+        const stats: Array<{ key: string; label: string; value: number }> = [
+            { key: "all", label: "tasks", value: boardCounts.all },
+            { key: "todo", label: "todo", value: boardCounts.todo },
+            { key: "visible", label: "visible", value: flattenedTodos.length },
+        ];
+
+        if (boardCounts.inProgress > 0) {
+            stats.splice(2, 0, { key: "inProgress", label: "in progress", value: boardCounts.inProgress });
+        }
+        if (boardCounts.done > 0) {
+            stats.splice(stats.length - 1, 0, { key: "done", label: "done", value: boardCounts.done });
+        }
+
+        return stats;
+    }, [boardCounts, flattenedTodos.length]);
 
     // Get column and index for a given todo
     const getTodoPosition = useCallback((todoId: string | null): { columnId: string; index: number } | null => {
@@ -1513,24 +1546,29 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         const safeColumnTodos = Array.isArray(columnTodos) ? columnTodos : [];
 
         return (
-            <div className="flex-1 min-w-0 flex flex-col">
+            <div className="flex-1 min-w-[280px] max-w-[360px] flex flex-col">
                 <div
-                    className="flex items-center gap-2 mb-3 flex-shrink-0 group cursor-pointer"
+                    className="flex items-center gap-1.5 mb-2.5 flex-shrink-0 group cursor-pointer rounded-md px-1.5 py-1 transition-colors"
                     onMouseEnter={() => setHeaderHovered(true)}
                     onMouseLeave={() => setHeaderHovered(false)}
                     onClick={onAddTodo}
+                    style={{ color: currentTheme.styles.contentSecondary }}
                 >
                     {icon}
-                    <h3 className="font-semibold text-sm">{title}</h3>
+                    <h3 className="text-[11px] font-medium uppercase tracking-[0.08em]">{title}</h3>
                     <Badge variant="secondary" className="text-xs">
                         {safeColumnTodos.length}
                     </Badge>
                     <button
                         type="button"
-                        className={`ml-auto p-1 rounded hover:bg-muted text-text-secondary transition-opacity ${headerHovered ? 'opacity-100' : 'opacity-0'}`}
+                        className={`ml-auto p-1 rounded transition-opacity ${headerHovered ? 'opacity-100' : 'opacity-0'}`}
                         onClick={(e) => {
                             e.stopPropagation();
                             onAddTodo();
+                        }}
+                        style={{
+                            color: currentTheme.styles.contentSecondary,
+                            backgroundColor: headerHovered ? currentTheme.styles.surfaceAccent : "transparent",
                         }}
                     >
                         <Plus className="size-4" />
@@ -1539,7 +1577,11 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                 <SortableContext items={safeColumnTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
                     <div
                         ref={setNodeRef}
-                        className={`space-y-2 bg-muted/30 rounded-lg py-3 px-1.5 transition-all duration-200 border border-[1.5px] ${isOver ? 'border-accent/60' : 'border-transparent'}`}
+                        className="space-y-2 rounded-lg py-3 px-1.5 transition-colors border"
+                        style={{
+                            borderColor: isOver ? currentTheme.styles.surfaceAccent : currentTheme.styles.borderDefault,
+                            backgroundColor: currentTheme.styles.surfaceSecondary,
+                        }}
                     >
                         {safeColumnTodos.map((todo) => (
                             <SortableTodoCard
@@ -1551,7 +1593,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                             />
                         ))}
                         {safeColumnTodos.length === 0 && (
-                            <div className="text-center text-muted-foreground text-sm py-8">
+                            <div className="text-center text-xs py-8" style={{ color: currentTheme.styles.contentTertiary }}>
                                 Drop tasks here
                             </div>
                         )}
@@ -1562,34 +1604,89 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     }
 
     return (
-        <div className="px-6 py-4 h-full flex flex-col overflow-hidden">
-            {/* Project header when viewing a specific project */}
-            {filterProject && (
-                <h1 className="text-2xl font-bold mb-4 flex-shrink-0">{filterProject}</h1>
-            )}
-            <div className="flex items-center justify-between flex-shrink-0 mb-6">
-                <div className="flex items-center gap-3">
-                    <CreateTodoDialog
-                        open={createDialogOpen}
-                        onOpenChange={(open) => {
-                            setCreateDialogOpen(open);
-                            if (!open) {
-                                resetNewTodoDraft();
-                            }
-                        }}
-                        newTodo={newTodo}
-                        onNewTodoChange={setNewTodo}
-                        onCreateTodo={createTodo}
-                        loading={loading}
-                        projectLocked={!!filterProject}
-                        availableTags={availableTags}
-                        availableProjects={availableProjects}
-                    />
-                    <div className="relative w-64">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
+        <div
+            className="h-full min-h-0 overflow-y-auto"
+            style={{ backgroundColor: currentTheme.styles.surfacePrimary, color: currentTheme.styles.contentPrimary }}
+        >
+            <div className="mx-auto w-full max-w-[1400px] px-3 pt-3 pb-6 h-full min-h-0 flex flex-col">
+                <div className="shrink-0 flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                            <FileSearch className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
+                            <span className="text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentSecondary }}>
+                                {isProjectScopedView ? "Project Board" : "Todos Board"}
+                            </span>
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 min-w-0">
+                            {isProjectScopedView && (
+                                <span
+                                    className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-[0.08em] shrink-0"
+                                    style={{ color: currentTheme.styles.contentSecondary, backgroundColor: currentTheme.styles.surfaceSecondary }}
+                                >
+                                    project
+                                </span>
+                            )}
+                            <h1 className="text-xl font-semibold truncate" style={{ color: currentTheme.styles.contentPrimary }}>
+                                {isProjectScopedView ? projectDisplayName : "All Todos"}
+                            </h1>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            {headerStats.map((item) => (
+                                <span
+                                    key={item.key}
+                                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium"
+                                    style={{ backgroundColor: currentTheme.styles.surfaceSecondary, color: currentTheme.styles.contentSecondary }}
+                                >
+                                    <span className="tabular-nums" style={{ color: currentTheme.styles.contentPrimary }}>
+                                        {item.value}
+                                    </span>
+                                    <span>{item.label}</span>
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                        {isProjectScopedView && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={goBackToProjects}
+                                className="h-7 px-2 text-[11px] rounded-md"
+                            >
+                                <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+                                back
+                            </Button>
+                        )}
+                        <CreateTodoDialog
+                            open={createDialogOpen}
+                            onOpenChange={(open) => {
+                                setCreateDialogOpen(open);
+                                if (!open) {
+                                    resetNewTodoDraft();
+                                }
+                            }}
+                            newTodo={newTodo}
+                            onNewTodoChange={setNewTodo}
+                            onCreateTodo={createTodo}
+                            loading={loading}
+                            projectLocked={!!filterProject}
+                            availableTags={availableTags}
+                            availableProjects={availableProjects}
+                            triggerLabel="+ new"
+                            hideTriggerIcon
+                            triggerVariant="default"
+                            triggerClassName="h-7 px-2 text-[11px] font-medium rounded-md"
+                        />
+                    </div>
+                </div>
+
+                <div className="shrink-0 mt-2.5 flex items-center gap-1.5">
+                    <div className="relative flex-1 min-w-[220px] max-w-[420px]">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3" style={{ color: currentTheme.styles.contentTertiary }} />
                         <Input
                             ref={searchInputRef}
-                            placeholder="Search todos..."
+                            placeholder="search todos..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             onKeyDown={(e) => {
@@ -1638,107 +1735,109 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                     }
                                 }
                             }}
-                            className="pl-8 h-9"
+                            className="h-8 pl-8 text-xs bg-transparent"
+                            style={{ borderColor: currentTheme.styles.borderDefault, color: currentTheme.styles.contentPrimary }}
                         />
                     </div>
-                </div>
-                <div className="flex items-center gap-2">
-                    <TagFilter
-                        availableTags={availableTags}
-                        selectedTags={selectedTags}
-                        onTagToggle={handleTagToggle}
-                        onClearAll={handleClearAllTags}
-                    />
-                    <PriorityFilter
-                        selectedPriority={selectedPriority}
-                        onPriorityChange={setSelectedPriority}
-                    />
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm">
-                                <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={openArchivedView}>
-                                <Archive className="w-4 h-4 mr-2" />
-                                Open Archived
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                onClick={archiveAllDone}
-                                disabled={todos.filter(t => t.status === "done").length === 0}
-                            >
-                                <Archive className="w-4 h-4 mr-2" />
-                                Archive All Done ({todos.filter(t => t.status === "done").length})
-                            </DropdownMenuItem>
 
-                            {/* Board Settings Link - Show for project views */}
-                            {filterProject && filterProject !== "" && (
-                                <DropdownMenuItem onClick={() => setBoardSettingsOpen(true)}>
-                                    <Settings className="w-4 h-4 mr-2" />
-                                    {boardConfig ? "Board Settings" : "Setup Custom Board"}
+                    <div className="ml-auto flex items-center gap-2">
+                        <TagFilter
+                            availableTags={availableTags}
+                            selectedTags={selectedTags}
+                            onTagToggle={handleTagToggle}
+                            onClearAll={handleClearAllTags}
+                        />
+                        <PriorityFilter
+                            selectedPriority={selectedPriority}
+                            onPriorityChange={setSelectedPriority}
+                        />
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm" className="h-7 px-2">
+                                    <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={openArchivedView}>
+                                    <Archive className="w-4 h-4 mr-2" />
+                                    Open Archived
                                 </DropdownMenuItem>
-                            )}
+                                <DropdownMenuItem
+                                    onClick={archiveAllDone}
+                                    disabled={todos.filter(t => t.status === "done").length === 0}
+                                >
+                                    <Archive className="w-4 h-4 mr-2" />
+                                    Archive All Done ({todos.filter(t => t.status === "done").length})
+                                </DropdownMenuItem>
 
-                            <DropdownMenuItem onClick={toggleShowLaterColumn}>
-                                {showLaterColumn ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
-                                {showLaterColumn ? "Hide Later Column" : "Show Later Column"}
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                                {/* Board Settings Link - Show for project views */}
+                                {filterProject && filterProject !== "" && (
+                                    <DropdownMenuItem onClick={() => setBoardSettingsOpen(true)}>
+                                        <Settings className="w-4 h-4 mr-2" />
+                                        {boardConfig ? "Board Settings" : "Setup Custom Board"}
+                                    </DropdownMenuItem>
+                                )}
+
+                                <DropdownMenuItem onClick={toggleShowLaterColumn}>
+                                    {showLaterColumn ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
+                                    {showLaterColumn ? "Hide Later Column" : "Show Later Column"}
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
                 </div>
+
+                {/* Kanban Board */}
+                <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDragEnd={handleDragEnd}
+                >
+                    <div ref={scrollContainerRef} tabIndex={0} className="mt-2.5 flex gap-3 flex-1 min-h-0 overflow-x-auto overflow-y-auto outline-none pb-2">
+                        {displayColumns.map((col) => {
+                            let Icon = Circle;
+                            if (col.id === "todo") Icon = AlertCircle;
+                            else if (col.id === "in_progress") Icon = Clock;
+                            else if (col.id === "done") Icon = CheckCircle2;
+                            else if (col.id === "later") Icon = Calendar;
+
+                            return (
+                                <KanbanColumn
+                                    key={col.id}
+                                    title={col.title}
+                                    columnId={col.id}
+                                    todos={todosByColumn[col.id] || []}
+                                    icon={<Icon className="w-3.5 h-3.5" style={{ color: currentTheme.styles.contentTertiary }} />}
+                                    onAddTodo={() => {
+                                        if (boardConfig) {
+                                            openCreateDialogWithStatus("todo", col.id);
+                                        } else {
+                                            // Legacy: col.id is the status
+                                            openCreateDialogWithStatus(col.id as any);
+                                        }
+                                    }}
+                                />
+                            );
+                        })}
+                    </div>
+                    <DragOverlay>
+                        {draggedTodo ? (
+                            <div className="transform rotate-2 opacity-80">
+                                <TodoCard
+                                    todo={draggedTodo}
+                                    onEdit={() => { }}
+                                    onDelete={() => { }}
+                                    onArchive={() => { }}
+                                    hideProject={!!filterProject}
+                                    hideStatusIcon={true}
+                                />
+                            </div>
+                        ) : null}
+                    </DragOverlay>
+                </DndContext>
             </div>
-
-            {/* Kanban Board */}
-            <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
-                onDragEnd={handleDragEnd}
-            >
-                <div ref={scrollContainerRef} tabIndex={0} className="flex gap-6 flex-1 overflow-y-auto outline-none">
-                    {displayColumns.map((col) => {
-                        let Icon = Circle;
-                        if (col.id === "todo") Icon = AlertCircle;
-                        else if (col.id === "in_progress") Icon = Clock;
-                        else if (col.id === "done") Icon = CheckCircle2;
-                        else if (col.id === "later") Icon = Calendar;
-
-                        return (
-                            <KanbanColumn
-                                key={col.id}
-                                title={col.title}
-                                columnId={col.id}
-                                todos={todosByColumn[col.id] || []}
-                                icon={<Icon className="w-4 h-4 text-text-secondary" />}
-                                onAddTodo={() => {
-                                    if (boardConfig) {
-                                        openCreateDialogWithStatus("todo", col.id);
-                                    } else {
-                                        // Legacy: col.id is the status
-                                        openCreateDialogWithStatus(col.id as any);
-                                    }
-                                }}
-                            />
-                        );
-                    })}
-                </div>
-                <DragOverlay>
-                    {draggedTodo ? (
-                        <div className="transform rotate-2 opacity-80">
-                            <TodoCard
-                                todo={draggedTodo}
-                                onEdit={() => { }}
-                                onDelete={() => { }}
-                                onArchive={() => { }}
-                                hideProject={!!filterProject}
-                                hideStatusIcon={true}
-                            />
-                        </div>
-                    ) : null}
-                </DragOverlay>
-            </DndContext>
 
             {/* Edit Todo Modal */}
             <TaskCardEditor todo={todoToEdit} open={editDialogOpen} onOpenChange={setEditDialogOpen} onSave={handleSaveTodo} onDelete={deleteTodoWithToast} saving={editSaving} availableTags={availableTags} availableProjects={availableProjects} />

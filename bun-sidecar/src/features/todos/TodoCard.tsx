@@ -5,7 +5,15 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { parseLocalDateString } from "@/features/notes/date-utils";
 import { DateTimePicker } from "./pickers";
+import { useTheme } from "@/hooks/useTheme";
 
+/**
+ * TodoCard is a standalone display component for a single todo item.
+ * Currently used in various parts of the app for displaying tasks in a card format.
+ * 
+ * Note: The Inbox view (inbox-view.tsx) currently uses its own inline implementation
+ * of a todo item for custom styling, so changes here might not reflect there.
+ */
 export function TodoCard({
     todo,
     selected,
@@ -27,6 +35,8 @@ export function TodoCard({
     hideStatusIcon?: boolean;
     onDateChange?: (todo: Todo, dates: { dueDate?: string; startDate?: string }) => void;
 }) {
+    const { currentTheme } = useTheme();
+
     const handleCopy = async (e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
@@ -50,42 +60,68 @@ export function TodoCard({
         onToggleDone?.(todo);
     };
 
-    const borderColor = todo.priority ? PRIORITY_CONFIG.find(p => p.value === todo.priority)?.color : undefined;
+    const isOverdue = Boolean(
+        todo.dueDate
+        && todo.status !== "done"
+        && !Number.isNaN(new Date(todo.dueDate).getTime())
+        && new Date(todo.dueDate).getTime() < Date.now()
+    );
+    const priorityColor = todo.priority ? PRIORITY_CONFIG.find((item) => item.value === todo.priority)?.color : undefined;
 
     return (
         <Card
-            className={`mb-2 hover:shadow-md transition-shadow duration-150 ${todo.archived ? 'opacity-60 bg-muted/30' : ''}`}
-            style={borderColor ? { borderLeft: `3px solid ${borderColor}` } : undefined}
+            className={`mb-0 transition-colors duration-150 overflow-hidden ${todo.archived ? 'opacity-70' : ''}`}
+            style={{
+                backgroundColor: selected ? currentTheme.styles.surfaceAccent : currentTheme.styles.surfacePrimary,
+                boxShadow: priorityColor ? `inset 3px 0 0 ${priorityColor}` : undefined,
+            }}
         >
             <CardHeader className="pb-1 pt-2 px-3">
                 <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2 flex-1">
+                    <div className="flex items-start gap-2 flex-1 min-w-0">
                         {!hideStatusIcon && (
                             <button
                                 type="button"
                                 onClick={handleToggleDone}
-                                className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                                className="mt-0.5 shrink-0 transition-colors"
                                 title={todo.status === "done" ? "Mark as incomplete" : "Mark as done"}
+                                style={{ color: currentTheme.styles.contentTertiary }}
                             >
                                 {todo.status === "done" ? (
-                                    <CheckCircle2 className="size-4 text-success" />
+                                    <CheckCircle2 className="size-4" style={{ color: currentTheme.styles.semanticSuccess }} />
                                 ) : (
                                     <Circle className="size-4" />
                                 )}
                             </button>
                         )}
-                        <CardTitle className={`text-sm font-medium leading-tight ${todo.status === "done" ? "line-through text-muted-foreground" : ""
-                            }`}>
+                        <CardTitle className={`text-sm font-medium leading-tight min-w-0 break-words [overflow-wrap:anywhere] ${todo.status === "done" ? "line-through text-muted-foreground" : ""
+                            }`} style={{ color: todo.status === "done" ? currentTheme.styles.contentTertiary : currentTheme.styles.contentPrimary }}>
                             {todo.title}
                         </CardTitle>
                     </div>
-                    {todo.archived && <span className="text-[10px] text-muted-foreground bg-muted px-1 rounded shrink-0">Archived</span>}
+                    {todo.archived && (
+                        <span
+                            className="text-[10px] px-1 rounded shrink-0"
+                            style={{ color: currentTheme.styles.contentTertiary, backgroundColor: currentTheme.styles.surfaceSecondary }}
+                        >
+                            Archived
+                        </span>
+                    )}
                 </div>
-                {!hideProject && todo.project && <p className="text-[10px] text-accent">{todo.project}</p>}
+                {!hideProject && todo.project && (
+                    <p className="text-[10px] truncate" style={{ color: currentTheme.styles.contentAccent }}>
+                        {todo.project}
+                    </p>
+                )}
                 {todo.tags && todo.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
                         {todo.tags.map((tag) => (
-                            <Badge key={tag} variant="outline" className="text-[10px] px-1 py-0 h-4">
+                            <Badge
+                                key={tag}
+                                variant="outline"
+                                className="text-[10px] px-1 py-0 h-4"
+                                style={{ borderColor: currentTheme.styles.borderDefault, color: currentTheme.styles.contentSecondary }}
+                            >
                                 {tag}
                             </Badge>
                         ))}
@@ -94,67 +130,78 @@ export function TodoCard({
             </CardHeader>
             {todo.description && (
                 <CardContent className="pt-0 px-3 pb-1">
-                    <p className="text-[11px] text-muted-foreground line-clamp-2">{todo.description}</p>
+                    <p className="text-[11px] line-clamp-2 break-words [overflow-wrap:anywhere]" style={{ color: currentTheme.styles.contentTertiary }}>
+                        {todo.description}
+                    </p>
                 </CardContent>
             )}
-            <div className="px-3 pb-2 flex items-center justify-between">
-                {onDateChange ? (
-                    <div
-                        className={`inline-flex ${!todo.dueDate ? 'opacity-0 group-hover/card:opacity-100' : ''} transition-opacity`}
-                        onClick={(e) => { e.stopPropagation(); }}
-                        onDoubleClick={(e) => { e.stopPropagation(); }}
-                        onPointerDown={(e) => { e.stopPropagation(); }}
-                    >
-                        <DateTimePicker
-                            dueDate={todo.dueDate}
-                            startDate={todo.startDate}
-                            onChange={(dates) => onDateChange(todo, dates)}
-                            compact
-                        />
-                    </div>
-                ) : (
-                    todo.dueDate ? (
-                        <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                            <CalendarDays className="size-3" />
-                            {parseLocalDateString(todo.dueDate.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                            {(() => {
-                                const startTime = todo.startDate?.includes('T') ? todo.startDate.split('T')[1] : null;
-                                const dueTime = todo.dueDate.includes('T') ? todo.dueDate.split('T')[1] : null;
-                                if (startTime && dueTime) return ` ${startTime}–${dueTime}`;
-                                if (dueTime) return ` ${dueTime}`;
-                                return null;
-                            })()}
-                        </p>
+            <div className="px-3 pb-2 flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                    {onDateChange ? (
+                        <div
+                            className={`inline-flex max-w-full ${!todo.dueDate ? 'opacity-0 group-hover/card:opacity-100' : ''} transition-opacity`}
+                            onClick={(e) => { e.stopPropagation(); }}
+                            onDoubleClick={(e) => { e.stopPropagation(); }}
+                            onPointerDown={(e) => { e.stopPropagation(); }}
+                        >
+                            <DateTimePicker
+                                dueDate={todo.dueDate}
+                                startDate={todo.startDate}
+                                onChange={(dates) => onDateChange(todo, dates)}
+                                compact
+                            />
+                        </div>
                     ) : (
-                        <div />
-                    )
-                )}
+                        todo.dueDate ? (
+                            <p
+                                className="text-[10px] flex items-center gap-1 truncate"
+                                style={{ color: isOverdue ? currentTheme.styles.semanticDestructive : currentTheme.styles.contentTertiary }}
+                            >
+                                <CalendarDays className="size-3 shrink-0" />
+                                <span className="truncate">
+                                    {parseLocalDateString(todo.dueDate.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                    {(() => {
+                                        const startTime = todo.startDate?.includes('T') ? todo.startDate.split('T')[1] : null;
+                                        const dueTime = todo.dueDate.includes('T') ? todo.dueDate.split('T')[1] : null;
+                                        if (startTime && dueTime) return ` ${startTime}–${dueTime}`;
+                                        if (dueTime) return ` ${dueTime}`;
+                                        return null;
+                                    })()}
+                                </span>
+                            </p>
+                        ) : (
+                            <div />
+                        )
+                    )}
+                </div>
                 {/* Actions - show when selected */}
-                <div className={`flex items-center gap-0.5 transition-opacity duration-0 ${selected ? 'opacity-100' : 'opacity-0'}`}>
+                <div className={`shrink-0 flex items-center gap-0.5 transition-opacity duration-150 ${selected ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100'}`}>
                     <button
                         type="button"
-                        className="inline-flex items-center justify-center size-6 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                        className="inline-flex items-center justify-center size-6 rounded hover:bg-surface-elevated"
                         onClick={(e) => {
                             e.stopPropagation();
                             onEdit?.(todo);
                         }}
                         title="Edit"
                         aria-label="Edit todo"
+                        style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         <Settings className="size-3" />
                     </button>
                     <button
                         type="button"
-                        className="inline-flex items-center justify-center size-6 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                        className="inline-flex items-center justify-center size-6 rounded hover:bg-surface-elevated"
                         onClick={handleCopy}
                         title="Copy"
                         aria-label="Copy todo content"
+                        style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         <Copy className="size-3" />
                     </button>
                     <button
                         type="button"
-                        className="inline-flex items-center justify-center size-6 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                        className="inline-flex items-center justify-center size-6 rounded hover:bg-surface-elevated"
                         onClick={(e) => {
                             e.stopPropagation();
                             e.preventDefault();
@@ -162,18 +209,20 @@ export function TodoCard({
                         }}
                         title={todo.archived ? "Unarchive" : "Archive"}
                         aria-label={todo.archived ? "Unarchive todo" : "Archive todo"}
+                        style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         {todo.archived ? <ArchiveRestore className="size-3" /> : <Archive className="size-3" />}
                     </button>
                     <button
                         type="button"
-                        className="inline-flex items-center justify-center size-6 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                        className="inline-flex items-center justify-center size-6 rounded hover:bg-destructive/10"
                         onClick={(e) => {
                             e.stopPropagation();
                             onDelete?.(todo);
                         }}
                         title="Delete"
                         aria-label="Delete todo"
+                        style={{ color: currentTheme.styles.semanticDestructive }}
                     >
                         <Trash2 className="size-3" />
                     </button>

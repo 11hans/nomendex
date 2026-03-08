@@ -30,6 +30,10 @@ interface TaskCardEditorProps {
     availableProjects: string[];
 }
 
+/**
+ * TaskCardEditor is the primary popup/dialog component for editing todo details.
+ * It is triggered when a user clicks on a todo in the Kanban board or Inbox view.
+ */
 export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, saving, availableTags, availableProjects }: TaskCardEditorProps) {
     const [editedTodo, setEditedTodo] = useState<Todo | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
