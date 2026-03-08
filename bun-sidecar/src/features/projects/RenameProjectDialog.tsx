@@ -84,12 +84,26 @@ export function RenameProjectDialog({
                 showCloseButton={true}
                 style={{
                     backgroundColor: styles.surfacePrimary,
-                    width: "450px",
+                    width: "520px",
                     maxWidth: "90vw",
                 }}
             >
-                {/* Content Area */}
-                <div className="px-6 pt-6 pb-4 space-y-4">
+                <div
+                    className="px-6 py-3 flex items-center justify-between"
+                    style={{
+                        backgroundColor: styles.surfaceSecondary,
+                        borderBottom: `1px solid ${styles.borderDefault}`,
+                    }}
+                >
+                    <span className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
+                        Rename Project
+                    </span>
+                    <span className="text-[10px]" style={{ color: styles.contentTertiary }}>
+                        Enter to confirm
+                    </span>
+                </div>
+
+                <div className="px-6 pt-5 pb-4 space-y-4">
                     <div className="flex items-start gap-3">
                         <div
                             className="p-2 rounded-full"
@@ -114,12 +128,15 @@ export function RenameProjectDialog({
                     </div>
 
                     <div className="space-y-2">
+                        <div className="text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                            New name
+                        </div>
                         <Input
                             ref={inputRef}
                             value={newName}
                             onChange={(e) => setNewName(e.target.value)}
                             placeholder="New project name"
-                            className="text-base"
+                            className="h-10 text-sm border rounded-md px-3 focus-visible:ring-0"
                             style={{
                                 color: styles.contentPrimary,
                                 backgroundColor: styles.surfaceSecondary,
@@ -183,7 +200,7 @@ export function RenameProjectDialog({
                         onClick={() => onOpenChange(false)}
                         variant="ghost"
                         size="sm"
-                        className="h-9 px-4"
+                        className="h-8 px-3 text-xs"
                     >
                         Cancel
                     </Button>
@@ -193,7 +210,7 @@ export function RenameProjectDialog({
                                 onClick={handleRename}
                                 disabled={!isValid || loading}
                                 size="sm"
-                                className="h-9 px-4"
+                                className="h-8 px-3 text-xs"
                             >
                                 {loading ? "Renaming..." : "Rename"}
                             </Button>

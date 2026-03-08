@@ -59,12 +59,26 @@ export function DeleteProjectDialog({
                 showCloseButton={true}
                 style={{
                     backgroundColor: styles.surfacePrimary,
-                    width: "450px",
+                    width: "520px",
                     maxWidth: "90vw",
                 }}
             >
-                {/* Content Area */}
-                <div className="px-6 pt-6 pb-4 space-y-4">
+                <div
+                    className="px-6 py-3 flex items-center justify-between"
+                    style={{
+                        backgroundColor: styles.surfaceSecondary,
+                        borderBottom: `1px solid ${styles.borderDefault}`,
+                    }}
+                >
+                    <span className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
+                        Delete Project
+                    </span>
+                    <span className="text-[10px]" style={{ color: styles.contentTertiary }}>
+                        Permanent action
+                    </span>
+                </div>
+
+                <div className="px-6 pt-5 pb-4 space-y-4">
                     <div className="flex items-start gap-3">
                         <div
                             className="p-2 rounded-full"
@@ -168,7 +182,7 @@ export function DeleteProjectDialog({
                         onClick={() => onOpenChange(false)}
                         variant="ghost"
                         size="sm"
-                        className="h-9 px-4"
+                        className="h-8 px-3 text-xs"
                         autoFocus
                     >
                         Cancel
@@ -178,7 +192,7 @@ export function DeleteProjectDialog({
                         disabled={loading}
                         variant="destructive"
                         size="sm"
-                        className="h-9 px-4"
+                        className="h-8 px-3 text-xs"
                     >
                         {loading ? "Deleting..." : cascade ? "Delete All" : "Delete Project"}
                     </Button>

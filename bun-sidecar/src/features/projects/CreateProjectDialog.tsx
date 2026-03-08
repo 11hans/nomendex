@@ -71,26 +71,36 @@ export function CreateProjectDialog({
                 showCloseButton={true}
                 style={{
                     backgroundColor: styles.surfacePrimary,
-                    width: '400px',
+                    width: '440px',
                     maxWidth: '90vw',
                 }}
             >
-                {/* Content Area */}
-                <div className="px-6 pt-6 pb-4 space-y-4">
-                    <h2
-                        className="text-lg font-semibold"
-                        style={{ color: styles.contentPrimary }}
-                    >
+                <div
+                    className="px-6 py-3 flex items-center justify-between"
+                    style={{
+                        backgroundColor: styles.surfaceSecondary,
+                        borderBottom: `1px solid ${styles.borderDefault}`,
+                    }}
+                >
+                    <span className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
                         Create Project
-                    </h2>
+                    </span>
+                    <span className="text-[10px]" style={{ color: styles.contentTertiary }}>
+                        Enter to confirm
+                    </span>
+                </div>
 
+                <div className="px-6 pt-5 pb-4 space-y-3">
                     <div className="space-y-2">
+                        <div className="text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                            Name
+                        </div>
                         <Input
                             ref={inputRef}
                             value={projectName}
                             onChange={(e) => setProjectName(e.target.value)}
                             placeholder="Project name"
-                            className="text-base"
+                            className="h-10 text-sm border rounded-md px-3 focus-visible:ring-0"
                             style={{
                                 color: styles.contentPrimary,
                                 backgroundColor: styles.surfaceSecondary,
@@ -118,7 +128,7 @@ export function CreateProjectDialog({
                         onClick={() => onOpenChange(false)}
                         variant="ghost"
                         size="sm"
-                        className="h-9 px-4"
+                        className="h-8 px-3 text-xs"
                     >
                         Cancel
                     </Button>
@@ -128,7 +138,7 @@ export function CreateProjectDialog({
                                 onClick={handleCreate}
                                 disabled={!isValid || loading}
                                 size="sm"
-                                className="h-9 px-4"
+                                className="h-8 px-3 text-xs"
                             >
                                 {loading ? "Creating..." : "Create"}
                             </Button>
