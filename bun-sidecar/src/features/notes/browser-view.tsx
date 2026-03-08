@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useTheme } from "@/hooks/useTheme";
 
-import { Search, FileText, FilePlus, FolderPlus, Maximize2 } from "lucide-react";
+import { Search, FileText, FilePlus, FolderPlus } from "lucide-react";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
 import { Note, NoteFolder, notesPluginSerial } from "./index";
@@ -27,6 +28,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     }
     const { activeTab, setTabName, openTab, getViewSelfPlacement, setSidebarTabId, showHiddenFiles } = useWorkspaceContext();
     const { loading, error, setLoading, setError } = usePlugin();
+    const { currentTheme } = useTheme();
     const [notes, setNotes] = useState<Array<Note>>([]);
     const [folders, setFolders] = useState<NoteFolder[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
@@ -344,7 +346,12 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     );
 
     return (
-        <div className="h-full flex flex-col" ref={containerRef} tabIndex={-1}>
+        <div
+            className="h-full flex flex-col"
+            ref={containerRef}
+            tabIndex={-1}
+            style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
+        >
             {/* Create Note Dialog */}
             <Dialog open={createDialogOpen} onOpenChange={(open) => {
                 setCreateDialogOpen(open);
@@ -399,34 +406,40 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
             </Dialog>
 
             {/* Main Content - Split Layout */}
-            <div className="flex-1 flex overflow-hidden">
+            <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Left Panel - File Tree */}
-                <div className="w-64 border-r border-border flex flex-col h-full bg-bg-secondary">
-                    {/* Search and Create */}
-                    <div className="px-3 py-3 border-b border-border space-y-2">
-                        <div className="flex items-center gap-2">
-                            <div className="relative flex-1 min-w-0">
-                                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-text-secondary" />
-                                <Input
-                                    ref={searchInputRef}
-                                    placeholder="Search notes..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === "Escape") {
-                                            if (searchQuery) {
-                                                e.preventDefault();
-                                                setSearchQuery("");
-                                            } else {
-                                                searchInputRef.current?.blur();
-                                            }
-                                        }
-                                    }}
-                                    className="pl-7"
-                                    autoFocus
-                                />
+                <div
+                    className="w-72 shrink-0 border-r flex flex-col h-full min-h-0"
+                    style={{
+                        backgroundColor: currentTheme.styles.surfacePrimary,
+                        borderColor: currentTheme.styles.borderDefault,
+                    }}
+                >
+                    {/* Header + Search */}
+                    <div
+                        className="shrink-0 px-4 py-2.5 border-b space-y-2"
+                        style={{
+                            backgroundColor: currentTheme.styles.surfacePrimary,
+                            borderColor: currentTheme.styles.borderDefault,
+                        }}
+                    >
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <FileText size={15} style={{ color: currentTheme.styles.contentAccent }} />
+                                <h2
+                                    className="text-[11px] font-medium uppercase tracking-[0.14em] truncate"
+                                    style={{ color: currentTheme.styles.contentPrimary }}
+                                >
+                                    Notes
+                                </h2>
+                                <span
+                                    className="text-[10px] shrink-0"
+                                    style={{ color: currentTheme.styles.contentTertiary }}
+                                >
+                                    ({notes.length})
+                                </span>
                             </div>
-                            <div className="flex items-center">
+                            <div className="flex items-center gap-0.5 shrink-0">
                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
                                     openDialog({
                                         title: "Create New Note",
@@ -442,8 +455,38 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                             </div>
                         </div>
 
+                        <div className="relative">
+                            <Search
+                                className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4"
+                                style={{ color: currentTheme.styles.contentTertiary }}
+                            />
+                            <Input
+                                ref={searchInputRef}
+                                placeholder="Search notes..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Escape") {
+                                        if (searchQuery) {
+                                            e.preventDefault();
+                                            setSearchQuery("");
+                                        } else {
+                                            searchInputRef.current?.blur();
+                                        }
+                                    }
+                                }}
+                                className="h-8 pl-8 text-xs bg-transparent"
+                                style={{
+                                    backgroundColor: currentTheme.styles.surfaceSecondary,
+                                    borderColor: currentTheme.styles.borderDefault,
+                                    color: currentTheme.styles.contentPrimary,
+                                }}
+                                autoFocus
+                            />
+                        </div>
+
                         {error && (
-                            <Alert variant="destructive" className="mt-2">
+                            <Alert variant="destructive">
                                 <AlertDescription>{error}</AlertDescription>
                             </Alert>
                         )}
@@ -471,33 +514,32 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                 </div>
 
                 {/* Right Panel - Editor */}
-                <div className="flex-1 flex flex-col overflow-hidden relative">
+                <div
+                    className="flex-1 flex flex-col overflow-hidden relative min-w-0"
+                    style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
+                >
                     {selectedNote ? (
                         <>
-                            {/* Focus button - opens note in dedicated tab */}
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="absolute top-2 right-2 z-20 h-8 w-8"
-                                onClick={() => handleOpenNote(selectedNote.fileName)}
-                                title="Focus note in new tab"
-                            >
-                                <Maximize2 className="h-4 w-4" />
-                            </Button>
                             <div className="flex-1 overflow-hidden">
                                 <NotesView
                                     noteFileName={selectedNote.fileName}
                                     tabId={tabId}
                                     autoFocus={false}
                                     compact={true}
+                                    onRequestFullscreen={() => handleOpenNote(selectedNote.fileName)}
                                 />
                             </div>
                         </>
                     ) : !loading && notes.length > 0 ? (
-                        <div className="flex-1 flex items-center justify-center">
+                        <div className="flex-1 flex items-center justify-center p-6">
                             <div className="text-center space-y-2">
-                                <FileText className="h-12 w-12 mx-auto text-text-muted" />
-                                <p className="text-xs text-text-secondary">Select a note to edit</p>
+                                <FileText
+                                    className="h-12 w-12 mx-auto"
+                                    style={{ color: currentTheme.styles.contentTertiary }}
+                                />
+                                <p className="text-xs" style={{ color: currentTheme.styles.contentSecondary }}>
+                                    Select a note to edit
+                                </p>
                             </div>
                         </div>
                     ) : null}

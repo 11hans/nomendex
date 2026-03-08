@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,21 +51,32 @@ export function CreateFolderDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="sm:max-w-md"
+                className="sm:max-w-md p-0 overflow-hidden gap-0"
+                showCloseButton={true}
                 style={{
                     backgroundColor: currentTheme.styles.surfacePrimary,
                     borderColor: currentTheme.styles.borderDefault,
                 }}
             >
-                <DialogHeader>
-                    <DialogTitle style={{ color: currentTheme.styles.contentPrimary }}>
+                <div
+                    className="px-6 py-3"
+                    style={{
+                        backgroundColor: currentTheme.styles.surfaceSecondary,
+                        borderBottom: `1px solid ${currentTheme.styles.borderDefault}`,
+                    }}
+                >
+                    <div className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: currentTheme.styles.contentPrimary }}>
                         {parentName ? `New Folder in "${parentName}"` : "New Folder"}
-                    </DialogTitle>
-                </DialogHeader>
-                <div className="py-4">
+                    </div>
+                    <div className="text-[10px] mt-1" style={{ color: currentTheme.styles.contentTertiary }}>
+                        Enter to confirm
+                    </div>
+                </div>
+                <div className="px-6 pt-5 pb-4 space-y-2">
                     <Label
                         htmlFor="folder-name"
-                        style={{ color: currentTheme.styles.contentSecondary }}
+                        className="text-[10px] uppercase tracking-[0.08em]"
+                        style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         Folder Name
                     </Label>
@@ -75,8 +86,12 @@ export function CreateFolderDialog({
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Enter folder name..."
                         autoFocus
-                        className="mt-2"
-                        style={{ color: currentTheme.styles.contentPrimary }}
+                        className="h-9 text-sm"
+                        style={{
+                            color: currentTheme.styles.contentPrimary,
+                            backgroundColor: currentTheme.styles.surfacePrimary,
+                            borderColor: currentTheme.styles.borderDefault,
+                        }}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && name.trim()) {
                                 handleCreate();
@@ -84,17 +99,22 @@ export function CreateFolderDialog({
                         }}
                     />
                 </div>
-                <DialogFooter>
-                    <Button variant="ghost" onClick={() => onOpenChange(false)} autoFocus>
-                        Cancel
-                    </Button>
-                    <div className="flex flex-col items-center">
-                        <Button onClick={handleCreate} disabled={!name.trim()}>
+                <div
+                    className="px-6 py-3 border-t"
+                    style={{
+                        backgroundColor: currentTheme.styles.surfaceSecondary,
+                        borderColor: currentTheme.styles.borderDefault,
+                    }}
+                >
+                    <DialogFooter className="mt-0 pt-0">
+                        <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => onOpenChange(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleCreate} disabled={!name.trim()} size="sm" className="h-8 px-3 text-xs">
                             Create
                         </Button>
-                        <span className="text-[10px] text-muted-foreground mt-1">Enter</span>
-                    </div>
-                </DialogFooter>
+                    </DialogFooter>
+                </div>
             </DialogContent>
         </Dialog>
     );
@@ -140,21 +160,34 @@ export function RenameFolderDialog({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="sm:max-w-md"
+                className="sm:max-w-md p-0 overflow-hidden gap-0"
+                showCloseButton={true}
                 style={{
                     backgroundColor: currentTheme.styles.surfacePrimary,
                     borderColor: currentTheme.styles.borderDefault,
                 }}
             >
-                <DialogHeader>
-                    <DialogTitle style={{ color: currentTheme.styles.contentPrimary }}>
+                <DialogHeader
+                    className="px-6 py-3 gap-1"
+                    style={{
+                        backgroundColor: currentTheme.styles.surfaceSecondary,
+                        borderBottom: `1px solid ${currentTheme.styles.borderDefault}`,
+                    }}
+                >
+                    <DialogTitle className="text-[11px] uppercase tracking-[0.08em]" style={{ color: currentTheme.styles.contentPrimary }}>
                         Rename Folder
                     </DialogTitle>
+                    {folder && (
+                        <DialogDescription className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                            Current: {folder.path}
+                        </DialogDescription>
+                    )}
                 </DialogHeader>
-                <div className="py-4">
+                <div className="px-6 pt-5 pb-4 space-y-2">
                     <Label
                         htmlFor="folder-name"
-                        style={{ color: currentTheme.styles.contentSecondary }}
+                        className="text-[10px] uppercase tracking-[0.08em]"
+                        style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         Folder Name
                     </Label>
@@ -164,8 +197,12 @@ export function RenameFolderDialog({
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Enter folder name..."
                         autoFocus
-                        className="mt-2"
-                        style={{ color: currentTheme.styles.contentPrimary }}
+                        className="h-9 text-sm"
+                        style={{
+                            color: currentTheme.styles.contentPrimary,
+                            backgroundColor: currentTheme.styles.surfacePrimary,
+                            borderColor: currentTheme.styles.borderDefault,
+                        }}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && name.trim()) {
                                 handleRename();
@@ -173,17 +210,22 @@ export function RenameFolderDialog({
                         }}
                     />
                 </div>
-                <DialogFooter>
-                    <Button variant="ghost" onClick={() => onOpenChange(false)} autoFocus>
-                        Cancel
-                    </Button>
-                    <div className="flex flex-col items-center">
-                        <Button onClick={handleRename} disabled={!name.trim()}>
+                <div
+                    className="px-6 py-3 border-t"
+                    style={{
+                        backgroundColor: currentTheme.styles.surfaceSecondary,
+                        borderColor: currentTheme.styles.borderDefault,
+                    }}
+                >
+                    <DialogFooter className="mt-0 pt-0">
+                        <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={() => onOpenChange(false)}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleRename} disabled={!name.trim()} size="sm" className="h-8 px-3 text-xs">
                             Rename
                         </Button>
-                        <span className="text-[10px] text-muted-foreground mt-1">Enter</span>
-                    </div>
-                </DialogFooter>
+                    </DialogFooter>
+                </div>
             </DialogContent>
         </Dialog>
     );

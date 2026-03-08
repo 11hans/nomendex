@@ -9,6 +9,7 @@ import { useNotesAPI } from "@/hooks/useNotesAPI";
 import { notesPluginSerial } from "@/features/notes";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
+import { useTheme } from "@/hooks/useTheme";
 
 interface CreateNoteDialogProps {
     onSuccess?: (fileName: string) => void;
@@ -19,6 +20,7 @@ export function CreateNoteDialog({ onSuccess }: CreateNoteDialogProps) {
     const [isCreating, setIsCreating] = React.useState(false);
     const { closeDialog } = useCommandDialog();
     const { addNewTab, setActiveTabId } = useWorkspaceContext();
+    const { currentTheme } = useTheme();
     const api = useNotesAPI();
 
     const doCreate = React.useCallback(async () => {
@@ -81,28 +83,38 @@ export function CreateNoteDialog({ onSuccess }: CreateNoteDialogProps) {
 
     return (
         <form onSubmit={handleSubmit}>
-            <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="name" className="text-right">
-                        Name
-                    </Label>
-                    <Input
-                        id="name"
-                        value={noteName}
-                        onChange={(e) => setNoteName(e.target.value)}
-                        placeholder="My New Note"
-                        className="col-span-3"
-                        autoFocus
-                    />
-                </div>
+            <div className="space-y-2 py-1">
+                <Label
+                    htmlFor="name"
+                    className="text-[10px] uppercase tracking-[0.08em]"
+                    style={{ color: currentTheme.styles.contentTertiary }}
+                >
+                    Note Name
+                </Label>
+                <Input
+                    id="name"
+                    value={noteName}
+                    onChange={(e) => setNoteName(e.target.value)}
+                    placeholder="My New Note"
+                    className="h-9 text-sm"
+                    autoFocus
+                    style={{
+                        color: currentTheme.styles.contentPrimary,
+                        backgroundColor: currentTheme.styles.surfacePrimary,
+                        borderColor: currentTheme.styles.borderDefault,
+                    }}
+                />
             </div>
-            <DialogFooter>
-                <Button type="button" variant="outline" onClick={closeDialog}>
+            <DialogFooter
+                className="mt-4 border-t pt-3"
+                style={{ borderColor: currentTheme.styles.borderDefault }}
+            >
+                <Button type="button" variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={closeDialog}>
                     Cancel
                 </Button>
-                <Button type="submit" disabled={!noteName.trim() || isCreating}>
-                    {isCreating ? "Creating..." : "Create Note"}
-                    <KeyboardIndicator keys={["cmd", "enter"]} />
+                <Button type="submit" size="sm" className="h-8 px-3 text-xs gap-2" disabled={!noteName.trim() || isCreating}>
+                    {isCreating ? "Creating..." : "Create"}
+                    {!isCreating && <KeyboardIndicator keys={["cmd", "enter"]} />}
                 </Button>
             </DialogFooter>
         </form>

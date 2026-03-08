@@ -168,6 +168,7 @@ function flattenVisibleNotes(
 function TreeItem({
     node,
     depth,
+    isFirstRow,
     selectedNoteFileName,
     expandedFolders,
     onToggleExpand,
@@ -184,6 +185,7 @@ function TreeItem({
 }: {
     node: TreeNode;
     depth: number;
+    isFirstRow: boolean;
     selectedNoteFileName: string | null;
     expandedFolders: Set<string>;
     onToggleExpand: (folderPath: string) => void;
@@ -207,17 +209,16 @@ function TreeItem({
         return (
             <div>
                 <div
-                    className={cn(
-                        "flex items-center gap-1 py-1 px-2 cursor-pointer group"
-                    )}
+                    className="group flex items-center gap-1.5 px-2.5 py-1 cursor-pointer transition-colors hover:bg-accent/40"
                     style={{
-                        paddingLeft: `${depth * 16 + 8}px`,
+                        paddingLeft: `${depth * 14 + 10}px`,
+                        borderTop: isFirstRow ? "none" : `1px solid ${currentTheme.styles.borderDefault}`,
                     }}
                     onClick={() => onToggleExpand(node.path)}
                 >
                     <button
                         type="button"
-                        className="p-0.5 rounded shrink-0"
+                        className="p-0.5 rounded shrink-0 hover:bg-accent/50"
                         onClick={(e) => {
                             e.stopPropagation();
                             onToggleExpand(node.path);
@@ -250,8 +251,10 @@ function TreeItem({
                         />
                     )}
                     <span
-                        className="flex-1 truncate text-sm"
-                        style={{ color: currentTheme.styles.contentPrimary }}
+                        className="flex-1 truncate text-[11px]"
+                        style={{
+                            color: currentTheme.styles.contentPrimary,
+                        }}
                     >
                         {node.name}
                     </span>
@@ -308,7 +311,7 @@ function TreeItem({
                     </DropdownMenu>
                 </div>
                 {isExpanded &&
-                    node.children.map((child) => (
+                    node.children.map((child, index) => (
                         <TreeItem
                             key={child.path}
                             node={child}
@@ -326,6 +329,7 @@ function TreeItem({
                             onMoveToFolder={onMoveToFolder}
                             onRenameNote={onRenameNote}
                             rowRefs={rowRefs}
+                            isFirstRow={index === 0}
                         />
                     ))}
             </div>
@@ -348,28 +352,24 @@ function TreeItem({
                     rowRefs.current.delete(note.fileName);
                 }
             }}
-            className={cn(
-                "flex items-center gap-1 py-1 px-2 cursor-pointer group"
-            )}
+            className="group flex items-center gap-1.5 px-2.5 py-0.5 cursor-pointer transition-colors"
             style={{
-                paddingLeft: `${depth * 16 + 8}px`,
+                paddingLeft: `${depth * 14 + 10}px`,
+                borderTop: isFirstRow ? "none" : `1px solid ${currentTheme.styles.borderDefault}`,
                 backgroundColor: isSelected
                     ? currentTheme.styles.surfaceAccent
                     : undefined,
-                border: isSelected
-                    ? `1px solid ${currentTheme.styles.contentAccent}`
-                    : "1px solid transparent",
             }}
             onClick={() => onSelectNote(note)}
             onDoubleClick={() => onOpenNote(note.fileName)}
         >
             <div className="w-4 shrink-0" /> {/* Spacer for alignment */}
             <FileText
-                className="size-4 shrink-0"
+                className="size-3.5 shrink-0"
                 style={{ color: currentTheme.styles.contentSecondary }}
             />
             <span
-                className="flex-1 truncate text-sm"
+                className="flex-1 truncate text-xs py-1"
                 style={{ color: currentTheme.styles.contentPrimary }}
             >
                 {displayTitle}
@@ -377,7 +377,7 @@ function TreeItem({
             <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                     type="button"
-                    className="p-0.5 shrink-0"
+                    className="p-0.5 shrink-0 rounded hover:bg-accent/50"
                     onClick={(e) => {
                         e.stopPropagation();
                         onRenameNote(note.fileName);
@@ -391,7 +391,7 @@ function TreeItem({
                 </button>
                 <button
                     type="button"
-                    className="p-0.5 shrink-0"
+                    className="p-0.5 shrink-0 rounded hover:bg-accent/50"
                     onClick={(e) => {
                         e.stopPropagation();
                         onMoveToFolder(note);
@@ -405,7 +405,7 @@ function TreeItem({
                 </button>
                 <button
                     type="button"
-                    className="p-0.5 shrink-0"
+                    className="p-0.5 shrink-0 rounded hover:bg-accent/50"
                     onClick={(e) => {
                         e.stopPropagation();
                         // onDeleteNote now shows confirmation dialog (handled by parent)
@@ -679,46 +679,55 @@ export function NotesFileTree({
 
     return (
         <div className="flex flex-col h-full" ref={containerRef} tabIndex={-1}>
-            <OverlayScrollbar className="flex-1 py-1">
+            <OverlayScrollbar className="flex-1" reserveScrollbarSpace={false}>
                 {hasNoResults ? (
                     <div
-                        className="p-4 text-center text-sm"
-                        style={{ color: currentTheme.styles.contentSecondary }}
+                        className="p-4 text-center text-[11px]"
+                        style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         No notes match "{searchQuery}"
                     </div>
                 ) : tree.length === 0 ? (
                     <div
                         className="p-4 text-center"
-                        style={{ color: currentTheme.styles.contentSecondary }}
+                        style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         <FileText
                             className="h-8 w-8 mx-auto mb-2"
                             style={{ color: currentTheme.styles.contentTertiary }}
                         />
-                        <p className="text-sm">No notes yet</p>
+                        <p className="text-[11px]">No notes yet</p>
                     </div>
                 ) : (
-                    tree.map((node) => (
-                        <TreeItem
-                            key={node.path}
-                            node={node}
-                            depth={0}
-                            selectedNoteFileName={selectedNoteFileName}
-                            expandedFolders={expandedFolders}
-                            onToggleExpand={toggleExpand}
-                            onSelectNote={onSelectNote}
-                            onOpenNote={onOpenNote}
-                            onDeleteNote={onDeleteNote}
-                            onCreateFolder={onCreateFolder}
-                            onCreateNoteInFolder={onCreateNoteInFolder}
-                            onRenameFolder={onRenameFolder}
-                            onDeleteFolder={onDeleteFolder}
-                            onMoveToFolder={onMoveToFolder}
-                            onRenameNote={onRenameNote}
-                            rowRefs={rowRefs}
-                        />
-                    ))
+                    <div
+                        className="overflow-hidden border"
+                        style={{
+                            borderColor: currentTheme.styles.borderDefault,
+                            backgroundColor: currentTheme.styles.surfaceSecondary,
+                        }}
+                    >
+                        {tree.map((node, index) => (
+                            <TreeItem
+                                key={node.path}
+                                node={node}
+                                depth={0}
+                                isFirstRow={index === 0}
+                                selectedNoteFileName={selectedNoteFileName}
+                                expandedFolders={expandedFolders}
+                                onToggleExpand={toggleExpand}
+                                onSelectNote={onSelectNote}
+                                onOpenNote={onOpenNote}
+                                onDeleteNote={onDeleteNote}
+                                onCreateFolder={onCreateFolder}
+                                onCreateNoteInFolder={onCreateNoteInFolder}
+                                onRenameFolder={onRenameFolder}
+                                onDeleteFolder={onDeleteFolder}
+                                onMoveToFolder={onMoveToFolder}
+                                onRenameNote={onRenameNote}
+                                rowRefs={rowRefs}
+                            />
+                        ))}
+                    </div>
                 )}
             </OverlayScrollbar>
         </div>

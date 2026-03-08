@@ -33,18 +33,14 @@ import {
 } from "@/components/prosemirror/tag-links";
 import "@/components/prosemirror/tag-links/tag-links.css";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-    Breadcrumb,
-    BreadcrumbItem,
-    BreadcrumbList,
-    BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { FileText, Lock, Maximize2, Minimize2 } from "lucide-react";
 import "prosemirror-example-setup/style/style.css";
 import "prosemirror-view/style/prosemirror.css";
 import "@/components/prosemirror/tables/tables.css";
 import "./simple-todo.css";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
-import { Note } from "./index";
+import { Note, notesPluginSerial } from "./index";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/useTheme";
 import { useTabScrollPersistence } from "@/hooks/useTabScrollPersistence";
@@ -69,6 +65,7 @@ interface NotesViewProps {
     autoFocus?: boolean;
     compact?: boolean; // Hides header toolbar when embedded
     scrollToLine?: number; // Line number to scroll to on initial load
+    onRequestFullscreen?: () => void;
 }
 
 interface Heading {
@@ -78,11 +75,11 @@ interface Heading {
 }
 
 export function NotesView(props: NotesViewProps) {
-    const { noteFileName, tabId, autoFocus = true, compact = false, scrollToLine} = props;
+    const { noteFileName, tabId, autoFocus = true, compact = false, scrollToLine, onRequestFullscreen } = props;
     if (!tabId) {
         throw new Error("tabId is required");
     }
-    const { activeTab, setTabName, openTab } = useWorkspaceContext();
+    const { activeTab, setTabName, openTab, replaceTabWithNewView } = useWorkspaceContext();
     const { loading, error, setLoading, setError } = usePlugin();
     const [note, setNote] = useState<Note | null>(null);
     const [content, setContent] = useState("");
@@ -90,7 +87,7 @@ export function NotesView(props: NotesViewProps) {
     const [tags, setTags] = useState<string[]>([]);
     const [project, setProject] = useState<string | null>(null);
 
-    const [isRichTextMode] = useState(true);
+    const [isRichTextMode, setIsRichTextMode] = useState(true);
     const [headings, setHeadings] = useState<Heading[]>([]);
     const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null);
     const [focusedHeadingIndex, setFocusedHeadingIndex] = useState<number>(0);
@@ -110,6 +107,7 @@ export function NotesView(props: NotesViewProps) {
     const [isSearchOpen, setIsSearchOpen] = useState(false);
 
     const editorRef = useRef<HTMLDivElement>(null);
+    const plainTextareaRef = useRef<HTMLTextAreaElement>(null);
     const viewRef = useRef<EditorView | null>(null);
     const toolbarContainerRef = useRef<HTMLDivElement>(null);
     const scrollRef = useTabScrollPersistence(tabId);
@@ -254,6 +252,25 @@ export function NotesView(props: NotesViewProps) {
 
         return extractedHeadings;
     }, []);
+
+    // Keep markdown textarea height content-driven so outer OverlayScrollbar
+    // is the only scrollbar in both rich and markdown modes.
+    const adjustPlainTextareaHeight = useCallback(() => {
+        const textarea = plainTextareaRef.current;
+        if (!textarea) return;
+        textarea.style.height = "auto";
+        textarea.style.height = `${textarea.scrollHeight}px`;
+    }, []);
+
+    const setEditorMode = useCallback((mode: "rich" | "markdown") => {
+        if (mode === "markdown" && viewRef.current) {
+            // Keep plain text mode in sync with latest rich editor state before switching.
+            const markdown = tableMarkdownSerializer.serialize(viewRef.current.state.doc);
+            setContent(markdown);
+            setHeadings(parseHeadings(markdown));
+        }
+        setIsRichTextMode(mode === "rich");
+    }, [parseHeadings]);
 
     // Scroll to heading in editor (preview only - doesn't move cursor or change focus)
     const scrollToHeadingPreview = useCallback(
@@ -1100,6 +1117,24 @@ export function NotesView(props: NotesViewProps) {
         }
     }, [activeTab?.id, tabId, autoFocus]);
 
+    // Focus plain textarea when tab becomes active in markdown mode
+    useEffect(() => {
+        if (activeTab?.id === tabId && autoFocus && !isRichTextMode) {
+            requestAnimationFrame(() => {
+                plainTextareaRef.current?.focus();
+                adjustPlainTextareaHeight();
+            });
+        }
+    }, [activeTab?.id, tabId, autoFocus, isRichTextMode, adjustPlainTextareaHeight]);
+
+    // Recalculate markdown textarea height when content/mode changes.
+    useEffect(() => {
+        if (isRichTextMode) return;
+        requestAnimationFrame(() => {
+            adjustPlainTextareaHeight();
+        });
+    }, [content, isRichTextMode, adjustPlainTextareaHeight]);
+
     // Check for external changes when tab becomes active (not on initial mount)
     useEffect(() => {
         const wasActive = prevActiveTabIdRef.current === tabId;
@@ -1255,6 +1290,8 @@ export function NotesView(props: NotesViewProps) {
 
     // Keyboard navigation for mini-map and search
     useEffect(() => {
+        if (!isRichTextMode) return;
+
         const handleKeyDown = (e: KeyboardEvent) => {
             // CMD+F to open search
             if ((e.metaKey || e.ctrlKey) && e.key === "f") {
@@ -1330,59 +1367,158 @@ export function NotesView(props: NotesViewProps) {
         return () => {
             document.removeEventListener("keydown", handleKeyDown);
         };
-    }, [isMinimapFocused, headings, focusedHeadingIndex, activeHeadingId, scrollToHeading, scrollToHeadingPreview]);
+    }, [isMinimapFocused, headings, focusedHeadingIndex, activeHeadingId, scrollToHeading, scrollToHeadingPreview, isRichTextMode]);
 
     // Single OverlayScrollbar stays mounted across all states for scroll persistence
+    const pathWithoutExt = noteFileName.replace(/\.md$/, "");
+    const pathSegments = pathWithoutExt.split("/");
+    const fileName = pathSegments[pathSegments.length - 1] || pathWithoutExt;
+    const folderPath = pathSegments.slice(0, -1);
+
     return (
-        <div className="h-full overflow-hidden flex flex-col">
+        <div
+            className={cn("h-full overflow-hidden", !compact && "p-2")}
+            style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
+        >
+            <div
+                className={cn("h-full overflow-hidden flex flex-col", !compact && "rounded-lg border")}
+                style={!compact ? {
+                    borderColor: currentTheme.styles.borderDefault,
+                    backgroundColor: currentTheme.styles.surfacePrimary,
+                } : undefined}
+            >
             {/* Header: only visible when content is loaded */}
             {!loading && !error && note && (
                 <div
-                    className="shrink-0"
+                    className="shrink-0 border-b"
                     style={{
                         backgroundColor: currentTheme.styles.surfacePrimary,
-                        borderBottom: `1px solid ${currentTheme.styles.borderDefault}`,
+                        borderColor: currentTheme.styles.borderDefault,
                     }}
                 >
-                    <div className="px-4 py-2 flex items-center gap-3">
-                        <div className="flex flex-col items-start gap-1 min-w-0">
-                            {/* Breadcrumb for folder path */}
-                            {(() => {
-                                const pathWithoutExt = noteFileName.replace(/\.md$/, "");
-                                const parts = pathWithoutExt.split("/");
-                                const fileName = parts.pop() || pathWithoutExt;
-                                const folderPath = parts;
-
-                                return (
-                                    <>
-                                        {folderPath.length > 0 && (
-                                            <Breadcrumb>
-                                                <BreadcrumbList className="text-xs">
-                                                    {folderPath.map((folder, index) => (
-                                                        <BreadcrumbItem key={index}>
-                                                            <span style={{ color: currentTheme.styles.contentTertiary }}>
-                                                                {folder}
-                                                            </span>
-                                                            {index < folderPath.length - 1 && <BreadcrumbSeparator />}
-                                                        </BreadcrumbItem>
-                                                    ))}
-                                                </BreadcrumbList>
-                                            </Breadcrumb>
-                                        )}
-                                        <div
-                                            className="text-3xl font-bold"
-                                            style={{ color: currentTheme.styles.contentPrimary }}
+                    <div className="px-4 py-2.5 flex items-start gap-3">
+                        <div className="w-full flex items-start gap-3">
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                    <FileText className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
+                                    <span
+                                        className="text-[11px] font-medium uppercase tracking-[0.14em]"
+                                        style={{ color: currentTheme.styles.contentPrimary }}
+                                    >
+                                        Note
+                                    </span>
+                                    {isLocked && (
+                                        <span
+                                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md"
+                                            style={{
+                                                color: currentTheme.styles.contentTertiary,
+                                                backgroundColor: currentTheme.styles.surfaceSecondary,
+                                            }}
                                         >
-                                            {fileName}
-                                        </div>
-                                    </>
-                                );
-                            })()}
+                                            <Lock className="size-2.5" />
+                                            locked
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="mt-1 min-w-0">
+                                    <h1
+                                        className="text-sm font-medium truncate"
+                                        style={{ color: currentTheme.styles.contentPrimary }}
+                                    >
+                                        {fileName}
+                                    </h1>
+                                    <p
+                                        className="text-[10px] truncate"
+                                        style={{ color: currentTheme.styles.contentTertiary }}
+                                    >
+                                        {folderPath.length > 0 ? folderPath.join(" / ") : "root"}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="min-w-0 flex flex-col items-end gap-1">
+                                <div className="flex items-center gap-1.5">
+                                    {compact && onRequestFullscreen && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7"
+                                            style={{
+                                                backgroundColor: currentTheme.styles.surfaceSecondary,
+                                                border: `1px solid ${currentTheme.styles.borderDefault}`,
+                                            }}
+                                            onClick={onRequestFullscreen}
+                                            title="Open in full tab"
+                                        >
+                                            <Maximize2 className="size-3.5" />
+                                        </Button>
+                                    )}
+                                    {!compact && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-7 w-7"
+                                            style={{
+                                                backgroundColor: currentTheme.styles.surfaceSecondary,
+                                                border: `1px solid ${currentTheme.styles.borderDefault}`,
+                                            }}
+                                            onClick={() => replaceTabWithNewView(tabId, notesPluginSerial, { view: "browser" })}
+                                            title="Back to notes browser"
+                                        >
+                                            <Minimize2 className="size-3.5" />
+                                        </Button>
+                                    )}
+                                    <div
+                                        className="inline-flex items-center rounded-md p-0.5"
+                                        style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}
+                                    >
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 px-2 text-[10px]"
+                                            style={isRichTextMode ? {
+                                                backgroundColor: currentTheme.styles.surfaceAccent,
+                                                color: currentTheme.styles.contentPrimary,
+                                            } : {
+                                                color: currentTheme.styles.contentTertiary,
+                                            }}
+                                            onClick={() => setEditorMode("rich")}
+                                        >
+                                            Rich
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 px-2 text-[10px]"
+                                            style={!isRichTextMode ? {
+                                                backgroundColor: currentTheme.styles.surfaceAccent,
+                                                color: currentTheme.styles.contentPrimary,
+                                            } : {
+                                                color: currentTheme.styles.contentTertiary,
+                                            }}
+                                            onClick={() => setEditorMode("markdown")}
+                                        >
+                                            MD
+                                        </Button>
+                                    </div>
+                                </div>
+                                <div
+                                    ref={toolbarContainerRef}
+                                    className={cn(
+                                        "min-h-8 min-w-0 max-w-[420px] flex items-center justify-end gap-1 overflow-x-auto",
+                                        (!isRichTextMode || compact) && "hidden"
+                                    )}
+                                />
+                            </div>
                         </div>
                     </div>
 
                     {/* Project and Tags row */}
-                    <div className="px-4 pb-2 flex items-center gap-4">
+                    <div className="px-4 pb-2 flex items-center gap-3 overflow-x-auto">
                         <ProjectInput project={project} onProjectChange={handleProjectChange} />
                         <TagInput tags={tags} onTagsChange={handleTagsChange} placeholder="Add tag..." />
                     </div>
@@ -1421,10 +1557,13 @@ export function NotesView(props: NotesViewProps) {
                         ) : isRichTextMode ? (
                             // Rich text editor
                             <div className={compact ? 'compact-editor' : ''}>
-                                <div className="w-full max-w-4xl mx-auto px-6 py-4">
+                                <div className={cn(
+                                    "w-full mx-auto py-3",
+                                    compact ? "max-w-none px-4" : "max-w-[900px] px-5"
+                                )}>
                                     <div
                                         ref={editorRef}
-                                        className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none editor-content"
+                                        className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none editor-content p-5"
                                         style={
                                             {
                                                 "--tw-prose-body": currentTheme.styles.contentPrimary,
@@ -1478,13 +1617,20 @@ export function NotesView(props: NotesViewProps) {
                         ) : (
                             // Plain text editor
                             <div className="h-full bg-background">
-                                <div className="w-full max-w-4xl mx-auto px-6 py-4">
+                                <div className={cn(
+                                    "w-full mx-auto py-3",
+                                    compact ? "max-w-none px-4" : "max-w-[900px] px-5"
+                                )}>
                                     <textarea
+                                        ref={plainTextareaRef}
                                         value={content}
-                                        onChange={(e) => updateContent(e.target.value)}
+                                        onChange={(e) => {
+                                            updateContent(e.target.value);
+                                            requestAnimationFrame(() => adjustPlainTextareaHeight());
+                                        }}
                                         onBlur={() => saveImmediately(content)}
                                         placeholder="Write your markdown here..."
-                                        className="w-full h-full min-h-[calc(100vh-200px)] bg-transparent border-0 resize-none font-mono text-sm focus:outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground"
+                                        className="w-full min-h-[calc(100vh-200px)] bg-transparent border-0 resize-none overflow-hidden font-mono text-sm focus:outline-none focus:ring-0 text-foreground placeholder:text-muted-foreground p-5"
                                         autoFocus
                                     />
                                 </div>
@@ -1493,14 +1639,15 @@ export function NotesView(props: NotesViewProps) {
                     </OverlayScrollbar>
                 </div>
 
-                {/* Sidebar with TOC and Backlinks - only visible when content is loaded */}
-                {!loading && !error && note && isRichTextMode && !compact && (
+                {/* Sidebar with TOC and Backlinks - visible in both compact and full modes */}
+                {!loading && !error && note && (
                     <div
                         ref={minimapRef}
                         tabIndex={-1}
                         className={cn(
-                            "w-48 shrink-0 border-l focus:outline-none transition-colors",
-                            isMinimapFocused && "bg-accent/20"
+                            "shrink-0 border-l focus:outline-none transition-colors",
+                            compact ? "w-56" : "w-48",
+                            !compact && isRichTextMode && isMinimapFocused && "bg-accent/20"
                         )}
                         style={{
                             borderColor: currentTheme.styles.borderDefault,
@@ -1513,9 +1660,9 @@ export function NotesView(props: NotesViewProps) {
                         }}
                     >
                         <OverlayScrollbar className="h-full">
-                            <div className="p-3 pt-4 space-y-4">
+                            <div className={cn("space-y-4", compact ? "p-2 pt-2" : "p-3 pt-4")}>
                                 {/* Table of Contents (On This Page) */}
-                                {headings.length > 0 && (
+                                {isRichTextMode && headings.length > 0 && (
                                     <CollapsibleSection title="On This Page" count={headings.length} defaultOpen={true}>
                                         <nav
                                             ref={(el) => {
@@ -1594,6 +1741,7 @@ export function NotesView(props: NotesViewProps) {
                     </div>
                 )}
             </div>
+        </div>
         </div>
     );
 }

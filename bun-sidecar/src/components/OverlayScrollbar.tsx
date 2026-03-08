@@ -6,6 +6,7 @@ interface OverlayScrollbarProps {
     className?: string;
     style?: React.CSSProperties;
     scrollRef?: React.RefObject<HTMLDivElement | null>;
+    reserveScrollbarSpace?: boolean;
 }
 
 // Scrollbar width to hide (macOS native scrollbar is typically 15-17px)
@@ -20,6 +21,7 @@ export function OverlayScrollbar({
     className = "",
     style = {},
     scrollRef: externalScrollRef,
+    reserveScrollbarSpace = true,
 }: OverlayScrollbarProps) {
     const { currentTheme } = useTheme();
     const internalScrollRef = useRef<HTMLDivElement>(null);
@@ -217,7 +219,7 @@ export function OverlayScrollbar({
                 style={{
                     // Push the native scrollbar outside the visible area
                     marginRight: `-${SCROLLBAR_WIDTH}px`,
-                    paddingRight: `${SCROLLBAR_WIDTH}px`,
+                    paddingRight: reserveScrollbarSpace ? `${SCROLLBAR_WIDTH}px` : 0,
                 }}
             >
                 {children}

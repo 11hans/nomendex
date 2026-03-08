@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { useTheme } from "@/hooks/useTheme";
 
 interface DialogState {
     open: boolean;
@@ -27,6 +28,7 @@ export function useCommandDialog() {
 
 export function CommandDialogProvider({ children }: { children: React.ReactNode }) {
     const [dialogState, setDialogState] = React.useState<DialogState>({ open: false });
+    const { currentTheme } = useTheme();
 
     const openDialog = React.useCallback((config: Omit<DialogState, "open">) => {
         setDialogState({ ...config, open: true });
@@ -43,7 +45,15 @@ export function CommandDialogProvider({ children }: { children: React.ReactNode 
         <CommandDialogContext.Provider value={{ openDialog, closeDialog }}>
             {children}
             <Dialog open={dialogState.open} onOpenChange={(open) => !open && closeDialog()}>
-                <DialogContent size={dialogState.size} style={dialogState.width ? { width: dialogState.width, maxWidth: '90vw' } : undefined}>
+                <DialogContent
+                    size={dialogState.size}
+                    style={{
+                        width: dialogState.width,
+                        maxWidth: dialogState.width ? "90vw" : undefined,
+                        backgroundColor: currentTheme.styles.surfacePrimary,
+                        borderColor: currentTheme.styles.borderDefault,
+                    }}
+                >
                     {dialogState.title && (
                         <DialogHeader className={isJumbo ? "shrink-0" : undefined}>
                             <DialogTitle>{dialogState.title}</DialogTitle>

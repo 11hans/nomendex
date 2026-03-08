@@ -6,6 +6,7 @@ import { useCommandDialog } from "@/components/CommandDialogProvider";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
+import { useTheme } from "@/hooks/useTheme";
 
 interface RenameNoteDialogProps {
     noteFileName: string;
@@ -20,6 +21,7 @@ export function RenameNoteDialog({ noteFileName, onSuccess }: RenameNoteDialogPr
     const [error, setError] = React.useState<string | null>(null);
     const { closeDialog } = useCommandDialog();
     const { renameNoteTabs } = useWorkspaceContext();
+    const { currentTheme } = useTheme();
     const api = useNotesAPI();
     const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -75,13 +77,17 @@ export function RenameNoteDialog({ noteFileName, onSuccess }: RenameNoteDialogPr
 
     return (
         <>
-            <DialogHeader>
+            <DialogHeader className="space-y-1">
                 <DialogTitle>Rename Note</DialogTitle>
-                <DialogDescription>
-                    Enter a new name for "{noteFileName}"
-                </DialogDescription>
+                <DialogDescription>Current: {noteFileName}</DialogDescription>
             </DialogHeader>
-            <div className="py-4">
+            <div className="space-y-2 py-1">
+                <div
+                    className="text-[10px] uppercase tracking-[0.08em]"
+                    style={{ color: currentTheme.styles.contentTertiary }}
+                >
+                    New Name
+                </div>
                 <Input
                     ref={inputRef}
                     value={newName}
@@ -92,24 +98,39 @@ export function RenameNoteDialog({ noteFileName, onSuccess }: RenameNoteDialogPr
                     onKeyDown={handleKeyDown}
                     placeholder="Note name"
                     disabled={isRenaming}
+                    className="h-9 text-sm"
+                    style={{
+                        color: currentTheme.styles.contentPrimary,
+                        backgroundColor: currentTheme.styles.surfacePrimary,
+                        borderColor: error ? currentTheme.styles.semanticDestructive : currentTheme.styles.borderDefault,
+                    }}
                 />
                 {error && (
-                    <p className="text-sm text-destructive mt-2">{error}</p>
+                    <p className="text-xs mt-1" style={{ color: currentTheme.styles.semanticDestructive }}>{error}</p>
                 )}
             </div>
-            <DialogFooter>
-                <Button variant="ghost" onClick={closeDialog} disabled={isRenaming}>
-                    Cancel
-                </Button>
-                <Button
-                    onClick={handleRename}
-                    disabled={isRenaming || !newName.trim()}
-                    className="gap-2"
-                >
-                    {isRenaming ? "Renaming..." : "Rename"}
-                    {!isRenaming && <KeyboardIndicator keys={["cmd", "↵"]} />}
-                </Button>
-            </DialogFooter>
+            <div
+                className="-mx-6 -mb-6 mt-4 border-t px-6 py-3"
+                style={{
+                    backgroundColor: currentTheme.styles.surfacePrimary,
+                    borderColor: currentTheme.styles.borderDefault,
+                }}
+            >
+                <DialogFooter className="mt-0 pt-0">
+                    <Button variant="ghost" size="sm" className="h-8 px-3 text-xs" onClick={closeDialog} disabled={isRenaming}>
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={handleRename}
+                        disabled={isRenaming || !newName.trim()}
+                        size="sm"
+                        className="h-8 px-3 text-xs gap-2"
+                    >
+                        {isRenaming ? "Renaming..." : "Rename"}
+                        {!isRenaming && <KeyboardIndicator keys={["cmd", "↵"]} />}
+                    </Button>
+                </DialogFooter>
+            </div>
         </>
     );
 }
