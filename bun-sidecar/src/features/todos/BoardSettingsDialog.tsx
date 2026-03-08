@@ -22,6 +22,7 @@ import {
     verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useTheme } from "@/hooks/useTheme";
 
 interface BoardSettingsDialogProps {
     open: boolean;
@@ -120,6 +121,8 @@ export function BoardSettingsDialog({
     const [columns, setColumns] = useState<BoardColumn[]>(config.columns);
     const [newColumnTitle, setNewColumnTitle] = useState("");
     const [saving, setSaving] = useState(false);
+    const { currentTheme } = useTheme();
+    const { styles } = currentTheme;
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -212,13 +215,28 @@ export function BoardSettingsDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                    <DialogTitle>Board Settings</DialogTitle>
-                    <DialogDescription>Configure custom columns for your Kanban board. Drag to reorder.</DialogDescription>
+            <DialogContent
+                className="p-0 overflow-hidden gap-0"
+                style={{
+                    backgroundColor: styles.surfacePrimary,
+                    width: "640px",
+                    maxWidth: "92vw",
+                }}
+            >
+                <DialogHeader
+                    className="px-6 py-3"
+                    style={{
+                        backgroundColor: styles.surfaceSecondary,
+                        borderBottom: `1px solid ${styles.borderDefault}`,
+                    }}
+                >
+                    <DialogTitle className="text-[11px] uppercase tracking-[0.08em] font-medium">Board Settings</DialogTitle>
+                    <DialogDescription className="text-[10px]">
+                        Configure custom columns for your Kanban board and drag to reorder.
+                    </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4 py-4">
+                <div className="space-y-4 px-6 py-4">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground px-2">
                         <span className="w-6"></span>
                         <span className="flex-1">Column Name</span>
@@ -250,7 +268,7 @@ export function BoardSettingsDialog({
                         </SortableContext>
                     </DndContext>
 
-                    <div className="flex gap-2 pt-2 border-t">
+                    <div className="flex gap-2 pt-2 border-t" style={{ borderColor: styles.borderDefault }}>
                         <Input
                             placeholder="New column name..."
                             value={newColumnTitle}
@@ -268,9 +286,15 @@ export function BoardSettingsDialog({
                     </p>
                 </div>
 
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-                    <Button onClick={handleSave} disabled={saving}>
+                <DialogFooter
+                    className="px-6 py-3"
+                    style={{
+                        backgroundColor: styles.surfaceSecondary,
+                        borderTop: `1px solid ${styles.borderDefault}`,
+                    }}
+                >
+                    <Button variant="outline" onClick={() => onOpenChange(false)} className="h-8 px-3 text-xs">Cancel</Button>
+                    <Button onClick={handleSave} disabled={saving} className="h-8 px-3 text-xs">
                         {saving ? "Saving..." : "Save Changes"}
                     </Button>
                 </DialogFooter>

@@ -90,116 +90,138 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 className="p-0 overflow-hidden gap-0"
+                showCloseButton={false}
                 style={{
                     backgroundColor: styles.surfacePrimary,
-                    width: '700px',
+                    width: '720px',
                     maxWidth: '90vw',
                 }}
             >
-                {/* Content Area */}
-                <div className="px-6 pt-6 pb-4 space-y-4">
-                    <div className="flex flex-col gap-3">
-                        <div className="flex items-center gap-1.5">
-                            <DateTimePicker
-                                dueDate={editedTodo.dueDate}
-                                startDate={editedTodo.startDate}
-                                onChange={({ dueDate, startDate }) => setEditedTodo({ ...editedTodo, dueDate, startDate })}
-                            />
-                            <PriorityPicker
-                                value={editedTodo.priority}
-                                onChange={(priority) => setEditedTodo({ ...editedTodo, priority })}
-                            />
-                        </div>
+                <div
+                    className="px-6 py-3 flex items-center justify-between"
+                    style={{
+                        backgroundColor: styles.surfaceSecondary,
+                        borderBottom: `1px solid ${styles.borderDefault}`,
+                    }}
+                >
+                    <span className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
+                        Edit Task
+                    </span>
+                    <span className="text-[10px]" style={{ color: styles.contentTertiary }}>
+                        Cmd+Enter to save
+                    </span>
+                </div>
 
-                        {/* Title Row */}
+                <div className="px-6 pt-5 pb-4 space-y-4">
+                    <div>
+                        <div className="mb-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                            Title
+                        </div>
                         <Input
                             value={editedTodo.title}
                             onChange={(e) => setEditedTodo({ ...editedTodo, title: e.target.value })}
                             placeholder="Task title"
-                            className="text-2xl font-bold border-0 px-[13px] py-1.5 h-auto rounded-md hover:bg-black/5 dark:hover:bg-white/5 focus-visible:bg-black/5 dark:focus-visible:bg-white/5 focus-visible:border-black/10 dark:focus-visible:border-white/10 focus-visible:ring-0 placeholder:font-normal placeholder:text-muted-foreground/40 w-full transition-all"
+                            className="h-10 text-base font-semibold border rounded-md px-3 focus-visible:ring-0 placeholder:font-normal"
                             style={{
                                 color: styles.contentPrimary,
-                                backgroundColor: 'transparent',
-                                borderColor: 'transparent',
-                                boxShadow: 'none',
+                                backgroundColor: styles.surfaceSecondary,
+                                borderColor: styles.borderDefault,
                             }}
                             autoFocus
                         />
                     </div>
 
-                    {/* Description */}
-                    <Textarea
-                        value={editedTodo.description || ""}
-                        onChange={(e) => setEditedTodo({ ...editedTodo, description: e.target.value })}
-                        placeholder="Add description..."
-                        className="resize-none text-sm px-3 py-2.5 rounded-lg focus-visible:ring-1 placeholder:text-muted-foreground/40"
-                        style={{
-                            color: styles.contentPrimary,
-                            backgroundColor: styles.surfaceSecondary,
-                            border: `1px solid ${styles.borderDefault}`,
-                            minHeight: '180px',
-                        }}
-                    />
+                    <div>
+                        <div className="mb-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                            Description
+                        </div>
+                        <Textarea
+                            value={editedTodo.description || ""}
+                            onChange={(e) => setEditedTodo({ ...editedTodo, description: e.target.value })}
+                            placeholder="Add description..."
+                            className="resize-none text-sm px-3 py-2.5 rounded-md focus-visible:ring-0"
+                            style={{
+                                color: styles.contentPrimary,
+                                backgroundColor: styles.surfaceSecondary,
+                                border: `1px solid ${styles.borderDefault}`,
+                                minHeight: '150px',
+                            }}
+                        />
+                    </div>
 
-                    {/* Attachments Row */}
                     {editedTodo.attachments && editedTodo.attachments.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-2 pt-2">
-                            {editedTodo.attachments.map((attachment) => (
-                                <AttachmentThumbnail
-                                    key={attachment.id}
-                                    attachment={attachment}
-                                    onRemove={() => removeAttachment(attachment.id)}
-                                    size="md"
-                                />
-                            ))}
+                        <div className="pt-1">
+                            <div className="mb-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                                Attachments
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {editedTodo.attachments.map((attachment) => (
+                                    <AttachmentThumbnail
+                                        key={attachment.id}
+                                        attachment={attachment}
+                                        onRemove={() => removeAttachment(attachment.id)}
+                                        size="md"
+                                    />
+                                ))}
+                            </div>
                         </div>
                     )}
 
-                    {/* Tags Row - displayed inline */}
                     {editedTodo.tags && editedTodo.tags.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-2 pt-2">
-                            {editedTodo.tags.map((tag) => (
-                                <span
-                                    key={tag}
-                                    className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium"
-                                    style={{
-                                        backgroundColor: styles.surfaceTertiary,
-                                        color: styles.contentPrimary,
-                                    }}
-                                >
-                                    {tag}
-                                    <button
-                                        type="button"
-                                        onClick={() => removeTag(tag)}
-                                        className="p-0.5 rounded-full hover:bg-black/10 transition-colors"
+                        <div className="pt-1">
+                            <div className="mb-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                                Tags
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {editedTodo.tags.map((tag) => (
+                                    <span
+                                        key={tag}
+                                        className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium"
+                                        style={{
+                                            backgroundColor: styles.surfaceTertiary,
+                                            color: styles.contentPrimary,
+                                        }}
                                     >
-                                        <X className="size-3" />
-                                    </button>
-                                </span>
-                            ))}
+                                        {tag}
+                                        <button
+                                            type="button"
+                                            onClick={() => removeTag(tag)}
+                                            className="p-0.5 rounded-full transition-colors"
+                                            style={{ backgroundColor: "transparent" }}
+                                        >
+                                            <X className="size-3" />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
 
-                {/* Footer */}
                 <div
-                    className="px-6 py-3 flex items-center justify-between"
+                    className="px-6 py-3 flex flex-wrap items-center justify-between gap-2"
                     style={{
                         backgroundColor: styles.surfaceSecondary,
                         borderTop: `1px solid ${styles.borderDefault}`,
                     }}
                 >
-                    {/* Metadata Pills */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <StatusPicker
                             value={editedTodo.status}
                             onChange={(status) => setEditedTodo({ ...editedTodo, status })}
                         />
+                        <PriorityPicker
+                            value={editedTodo.priority}
+                            onChange={(priority) => setEditedTodo({ ...editedTodo, priority })}
+                        />
+                        <DateTimePicker
+                            dueDate={editedTodo.dueDate}
+                            startDate={editedTodo.startDate}
+                            onChange={({ dueDate, startDate }) => setEditedTodo({ ...editedTodo, dueDate, startDate })}
+                        />
 
-                        {/* Separator */}
                         <div className="h-5 w-px mx-0.5" style={{ backgroundColor: styles.borderDefault }} />
 
-                        {/* Group 2: Context & Metadata */}
                         <ProjectPicker
                             value={editedTodo.project}
                             onChange={(project) => setEditedTodo({ ...editedTodo, project })}
@@ -216,8 +238,7 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
                         />
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 ml-auto">
                         {onDelete && (
                             <Button
                                 onClick={() => {
@@ -232,25 +253,33 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
                                 }}
                                 variant={confirmDelete ? "destructive" : "ghost"}
                                 size="sm"
-                                className={`h-9 px-3 mr-auto transition-all ${confirmDelete
+                                className={`h-8 px-3 text-xs transition-all ${confirmDelete
                                     ? "bg-destructive hover:bg-destructive/90 text-primary-foreground"
                                     : "text-destructive hover:text-destructive hover:bg-destructive/10"
                                     }`}
                             >
-                                <Trash2 className="size-4 mr-2" />
+                                <Trash2 className="size-3.5 mr-1.5" />
                                 {confirmDelete ? "Sure?" : "Delete"}
                             </Button>
                         )}
+                        <Button
+                            onClick={() => onOpenChange(false)}
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-3 text-xs"
+                        >
+                            Cancel
+                        </Button>
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button
                                     onClick={handleSave}
                                     disabled={saving || !editedTodo.title.trim()}
                                     size="sm"
-                                    className="h-9 px-4"
+                                    className="h-8 px-3 text-xs"
                                     data-task-editor-save
                                 >
-                                    <Save className="size-4 mr-2" />
+                                    <Save className="size-3.5 mr-1.5" />
                                     {saving ? "Saving..." : "Save"}
                                 </Button>
                             </TooltipTrigger>

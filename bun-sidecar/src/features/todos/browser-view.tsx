@@ -77,6 +77,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         status: "todo" | "in_progress" | "done" | "later";
         tags: string[];
         dueDate?: string;
+        priority?: "high" | "medium" | "low" | "none";
         attachments?: Attachment[];
         customColumnId?: string; // Add support for creating in specific column
     }>({
@@ -86,9 +87,25 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         status: "todo",
         tags: [],
         dueDate: undefined,
+        priority: undefined,
         attachments: undefined,
         customColumnId: undefined,
     });
+
+    const resetNewTodoDraft = useCallback(() => {
+        const projectValue = filterProject && filterProject !== "" ? filterProject : "";
+        setNewTodo({
+            title: "",
+            description: "",
+            project: projectValue,
+            status: "todo",
+            tags: [],
+            dueDate: undefined,
+            priority: undefined,
+            attachments: undefined,
+            customColumnId: undefined,
+        });
+    }, [filterProject]);
 
     const [boardConfig, setBoardConfig] = useState<BoardConfig | null>(null);
     const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
@@ -277,21 +294,12 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                 status: newTodo.status,
                 tags: newTodo.tags.length > 0 ? newTodo.tags : undefined,
                 dueDate: newTodo.dueDate,
+                priority: newTodo.priority,
                 attachments: newTodo.attachments,
                 customColumnId: newTodo.customColumnId,
             });
 
-            // Keep the project populated if viewing from a project
-            const projectValue = filterProject && filterProject !== "" ? filterProject : "";
-            setNewTodo({
-                title: "",
-                description: "",
-                project: projectValue,
-                status: "todo",
-                tags: [],
-                dueDate: undefined,
-                attachments: undefined,
-            });
+            resetNewTodoDraft();
             setCreateDialogOpen(false);
             await loadTodos();
 
@@ -1563,7 +1571,12 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                 <div className="flex items-center gap-3">
                     <CreateTodoDialog
                         open={createDialogOpen}
-                        onOpenChange={setCreateDialogOpen}
+                        onOpenChange={(open) => {
+                            setCreateDialogOpen(open);
+                            if (!open) {
+                                resetNewTodoDraft();
+                            }
+                        }}
                         newTodo={newTodo}
                         onNewTodoChange={setNewTodo}
                         onCreateTodo={createTodo}

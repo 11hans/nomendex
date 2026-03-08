@@ -104,92 +104,121 @@ export function CreateTodoDialog({
                 showCloseButton={false}
                 style={{
                     backgroundColor: styles.surfacePrimary,
-                    width: '700px',
+                    width: '720px',
                     maxWidth: '90vw',
                 }}
             >
-                {/* Content Area */}
-                <div className="px-6 pt-6 pb-4 space-y-4">
-                    {/* Title */}
-                    <Input
-                        value={newTodo.title}
-                        onChange={(e) => onNewTodoChange({ ...newTodo, title: e.target.value })}
-                        placeholder="Task title"
-                        className="text-xl font-semibold border-0 px-0 h-auto focus-visible:ring-0 placeholder:font-normal placeholder:text-muted-foreground/40"
-                        style={{
-                            color: styles.contentPrimary,
-                            backgroundColor: 'transparent',
-                        }}
-                        onKeyDown={handleKeyDown}
-                        autoFocus
-                    />
+                <div
+                    className="px-6 py-3 flex items-center justify-between"
+                    style={{
+                        backgroundColor: styles.surfaceSecondary,
+                        borderBottom: `1px solid ${styles.borderDefault}`,
+                    }}
+                >
+                    <span className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
+                        Create Task
+                    </span>
+                    <span className="text-[10px]" style={{ color: styles.contentTertiary }}>
+                        Cmd+Enter to save
+                    </span>
+                </div>
 
-                    {/* Description */}
-                    <Textarea
-                        value={newTodo.description}
-                        onChange={(e) => onNewTodoChange({ ...newTodo, description: e.target.value })}
-                        placeholder="Add description..."
-                        className="resize-none text-sm px-3 py-2.5 rounded-lg focus-visible:ring-1 placeholder:text-muted-foreground/40"
-                        style={{
-                            color: styles.contentPrimary,
-                            backgroundColor: styles.surfaceSecondary,
-                            border: `1px solid ${styles.borderDefault}`,
-                            minHeight: '180px',
-                        }}
-                        onKeyDown={handleKeyDown}
-                    />
+                <div className="px-6 pt-5 pb-4 space-y-4">
+                    <div>
+                        <div className="mb-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                            Title
+                        </div>
+                        <Input
+                            value={newTodo.title}
+                            onChange={(e) => onNewTodoChange({ ...newTodo, title: e.target.value })}
+                            placeholder="Task title"
+                            className="h-10 text-base font-semibold border rounded-md px-3 focus-visible:ring-0 placeholder:font-normal"
+                            style={{
+                                color: styles.contentPrimary,
+                                backgroundColor: styles.surfaceSecondary,
+                                borderColor: styles.borderDefault,
+                            }}
+                            onKeyDown={handleKeyDown}
+                            autoFocus
+                        />
+                    </div>
 
-                    {/* Attachments Row */}
+                    <div>
+                        <div className="mb-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                            Description
+                        </div>
+                        <Textarea
+                            value={newTodo.description}
+                            onChange={(e) => onNewTodoChange({ ...newTodo, description: e.target.value })}
+                            placeholder="Add description..."
+                            className="resize-none text-sm px-3 py-2.5 rounded-md focus-visible:ring-0"
+                            style={{
+                                color: styles.contentPrimary,
+                                backgroundColor: styles.surfaceSecondary,
+                                border: `1px solid ${styles.borderDefault}`,
+                                minHeight: '150px',
+                            }}
+                            onKeyDown={handleKeyDown}
+                        />
+                    </div>
+
                     {(newTodo.attachments && newTodo.attachments.length > 0) && (
-                        <div className="flex flex-wrap items-center gap-2 pt-2">
-                            {newTodo.attachments.map((attachment) => (
-                                <AttachmentThumbnail
-                                    key={attachment.id}
-                                    attachment={attachment}
-                                    onRemove={() => removeAttachment(attachment.id)}
-                                    size="md"
-                                />
-                            ))}
+                        <div className="pt-1">
+                            <div className="mb-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                                Attachments
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {newTodo.attachments.map((attachment) => (
+                                    <AttachmentThumbnail
+                                        key={attachment.id}
+                                        attachment={attachment}
+                                        onRemove={() => removeAttachment(attachment.id)}
+                                        size="md"
+                                    />
+                                ))}
+                            </div>
                         </div>
                     )}
 
-                    {/* Tags Row - displayed inline */}
                     {newTodo.tags.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-2 pt-2">
-                            {newTodo.tags.map((tag) => (
-                                <span
-                                    key={tag}
-                                    className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium"
-                                    style={{
-                                        backgroundColor: styles.surfaceTertiary,
-                                        color: styles.contentPrimary,
-                                    }}
-                                >
-                                    {tag}
-                                    <button
-                                        type="button"
-                                        onClick={() => removeTag(tag)}
-                                        className="p-0.5 rounded-full hover:bg-black/10 transition-colors"
+                        <div className="pt-1">
+                            <div className="mb-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                                Tags
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {newTodo.tags.map((tag) => (
+                                    <span
+                                        key={tag}
+                                        className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full text-xs font-medium"
+                                        style={{
+                                            backgroundColor: styles.surfaceTertiary,
+                                            color: styles.contentPrimary,
+                                        }}
                                     >
-                                        <X className="size-3" />
-                                    </button>
-                                </span>
-                            ))}
+                                        {tag}
+                                        <button
+                                            type="button"
+                                            onClick={() => removeTag(tag)}
+                                            className="p-0.5 rounded-full transition-colors"
+                                            style={{ backgroundColor: "transparent" }}
+                                        >
+                                            <X className="size-3" />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
 
-                {/* Footer */}
                 <div
-                    className="px-6 py-3 flex items-center justify-between"
+                    className="px-6 py-3 flex flex-wrap items-center justify-between gap-2"
                     style={{
                         backgroundColor: styles.surfaceSecondary,
                         borderTop: `1px solid ${styles.borderDefault}`,
                     }}
                 >
-                    {/* Metadata Pills — grouped with separator */}
-                    <div className="flex items-center gap-2">
-                        {/* Group 1: Status */}
+                    <div className="flex flex-wrap items-center gap-2">
                         <StatusPicker
                             value={newTodo.status}
                             onChange={(status) => onNewTodoChange({ ...newTodo, status })}
@@ -199,10 +228,8 @@ export function CreateTodoDialog({
                             onChange={(priority) => onNewTodoChange({ ...newTodo, priority })}
                         />
 
-                        {/* Separator */}
                         <div className="h-5 w-px mx-0.5" style={{ backgroundColor: styles.borderDefault }} />
 
-                        {/* Group 2: Context & Metadata */}
                         <ProjectPicker
                             value={newTodo.project || undefined}
                             onChange={(project) => onNewTodoChange({ ...newTodo, project })}
@@ -225,13 +252,12 @@ export function CreateTodoDialog({
                         />
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 ml-auto">
                         <Button
                             onClick={() => onOpenChange(false)}
                             variant="ghost"
                             size="sm"
-                            className="h-9 px-4"
+                            className="h-8 px-3 text-xs"
                         >
                             Cancel
                         </Button>
@@ -241,9 +267,9 @@ export function CreateTodoDialog({
                                     onClick={onCreateTodo}
                                     disabled={loading || !newTodo.title.trim()}
                                     size="sm"
-                                    className="h-9 px-4"
+                                    className="h-8 px-3 text-xs"
                                 >
-                                    <Plus className="size-4 mr-2" />
+                                    <Plus className="size-3.5 mr-1.5" />
                                     {loading ? "Creating..." : "Create"}
                                 </Button>
                             </TooltipTrigger>

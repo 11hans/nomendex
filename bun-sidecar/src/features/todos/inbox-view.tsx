@@ -12,6 +12,18 @@ import { syncTaskToCalendar, removeTaskFromCalendar } from "./calendar-bridge";
 import { syncTaskToReminders, removeTaskFromReminders } from "./reminder-bridge";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import {
+    DndContext,
+    DragCancelEvent,
+    DragEndEvent,
+    DragStartEvent,
+    PointerSensor,
+    useDraggable,
+    useDroppable,
+    useSensor,
+    useSensors,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
+import {
     Archive,
     ArchiveRestore,
     ChevronRight,
@@ -21,6 +33,20 @@ import {
 
 type InboxFilter = "all" | "active" | "completed" | "archived";
 
+const INBOX_PROJECT = "Inbox";
+
+function normalizeProjectName(project?: string): string {
+    const normalized = project?.trim();
+    if (!normalized || normalized.toLowerCase() === "inbox") return INBOX_PROJECT;
+    return normalized;
+}
+
+function compareGroupNames(a: string, b: string): number {
+    if (a === INBOX_PROJECT && b !== INBOX_PROJECT) return -1;
+    if (b === INBOX_PROJECT && a !== INBOX_PROJECT) return 1;
+    return a.localeCompare(b);
+}
+
 function getFilterForTodo(todo: Todo): Exclude<InboxFilter, "all"> {
     if (todo.archived) return "archived";
     if (todo.status === "done") return "completed";
@@ -28,9 +54,7 @@ function getFilterForTodo(todo: Todo): Exclude<InboxFilter, "all"> {
 }
 
 function getGroupName(todo: Todo): string {
-    const project = todo.project?.trim();
-    if (!project || project.toLowerCase() === "inbox") return "uncategorized";
-    return project;
+    return normalizeProjectName(todo.project);
 }
 
 function formatRelativeDateLabel(dateString?: string): string {
@@ -50,6 +74,115 @@ function formatRelativeDateLabel(dateString?: string): string {
     return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function DroppableGroup({
+    groupName,
+    children,
+    borderColor,
+    backgroundColor,
+    dropHighlightColor,
+}: {
+    groupName: string;
+    children: React.ReactNode;
+    borderColor: string;
+    backgroundColor: string;
+    dropHighlightColor: string;
+}) {
+    const { setNodeRef, isOver } = useDroppable({
+        id: `project-group:${groupName}`,
+    });
+
+    return (
+        <div
+            ref={setNodeRef}
+            className="overflow-hidden rounded-lg border transition-colors"
+            style={{
+                borderColor: isOver ? dropHighlightColor : borderColor,
+                backgroundColor,
+            }}
+        >
+            {children}
+        </div>
+    );
+}
+
+function DraggableTodoRow({
+    todo,
+    selected,
+    borderColor,
+    selectedBackground,
+    contentPrimary,
+    contentTertiary,
+    onOpen,
+    onToggleArchive,
+}: {
+    todo: Todo;
+    selected: boolean;
+    borderColor: string;
+    selectedBackground: string;
+    contentPrimary: string;
+    contentTertiary: string;
+    onOpen: (todo: Todo) => void;
+    onToggleArchive: (todo: Todo) => void;
+}) {
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+        id: todo.id,
+        disabled: todo.archived,
+    });
+
+    const statusType = getFilterForTodo(todo);
+    const dateLabel = formatRelativeDateLabel(todo.updatedAt);
+    const leadTag = todo.tags?.[0];
+
+    return (
+        <div
+            ref={setNodeRef}
+            className="group border-t px-2.5 py-0.5 flex items-center gap-1.5"
+            style={{
+                borderColor,
+                backgroundColor: selected ? selectedBackground : undefined,
+                transform: CSS.Translate.toString(transform),
+                opacity: isDragging ? 0.55 : 1,
+            }}
+            {...attributes}
+            {...listeners}
+        >
+            <button
+                onClick={() => onOpen(todo)}
+                className="flex-1 min-w-0 py-1.5 flex items-center gap-1.5 text-left"
+            >
+                <span
+                    className={`size-2 rounded-full shrink-0 ${
+                        statusType === "active"
+                            ? "bg-primary"
+                            : statusType === "completed"
+                                ? "bg-success"
+                                : "bg-text-muted/40"
+                    }`}
+                />
+
+                <span className="truncate text-xs" style={{ color: contentPrimary }}>{todo.title}</span>
+
+                <span className="ml-auto flex items-center gap-2 text-[10px] shrink-0" style={{ color: contentTertiary }}>
+                    {leadTag && <span>#{leadTag}</span>}
+                    {dateLabel && <span>{dateLabel}</span>}
+                    <ChevronRight className="size-3 opacity-60" />
+                </span>
+            </button>
+
+            <button
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleArchive(todo);
+                }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-surface-elevated"
+                title={todo.archived ? "restore" : "archive"}
+            >
+                {todo.archived ? <ArchiveRestore className="size-3" /> : <Archive className="size-3" />}
+            </button>
+        </div>
+    );
+}
+
 export function InboxListView() {
     const { loading, setLoading } = usePlugin();
     const { activeTab, setTabName } = useWorkspaceContext();
@@ -59,6 +192,7 @@ export function InboxListView() {
     const [todos, setTodos] = useState<Todo[]>([]);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
+    const [projectGroups, setProjectGroups] = useState<string[]>([INBOX_PROJECT]);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
@@ -66,8 +200,18 @@ export function InboxListView() {
     const [editSaving, setEditSaving] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [filter, setFilter] = useState<InboxFilter>("all");
-    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+    const [draggedTodoId, setDraggedTodoId] = useState<string | null>(null);
+    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
+        [INBOX_PROJECT]: true,
+    });
     const hasSetTabNameRef = useRef<boolean>(false);
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        })
+    );
 
     const [newTodo, setNewTodo] = useState<{
         title: string;
@@ -75,13 +219,32 @@ export function InboxListView() {
         project: string;
         status: "todo" | "in_progress" | "done" | "later";
         tags: string[];
+        dueDate?: string;
+        priority?: "high" | "medium" | "low" | "none";
+        attachments?: Todo["attachments"];
     }>({
         title: "",
         description: "",
         project: "Inbox",
         status: "todo",
         tags: [],
+        dueDate: undefined,
+        priority: undefined,
+        attachments: undefined,
     });
+
+    const resetNewTodoDraft = useCallback(() => {
+        setNewTodo({
+            title: "",
+            description: "",
+            project: "Inbox",
+            status: "todo",
+            tags: [],
+            dueDate: undefined,
+            priority: undefined,
+            attachments: undefined,
+        });
+    }, []);
 
     useEffect(() => {
         return subscribe("workspace:closeAllTabs", () => {
@@ -101,11 +264,12 @@ export function InboxListView() {
     const loadTodos = useCallback(async () => {
         setLoading(true);
         try {
-            const [activeTodos, archivedTodos, tags, projects] = await Promise.all([
-                todosAPI.getTodos({ project: "Inbox" }),
-                todosAPI.getArchivedTodos({ project: "Inbox" }),
+            const [activeTodos, archivedTodos, tags, projectsList, todoProjects] = await Promise.all([
+                todosAPI.getTodos({}),
+                todosAPI.getArchivedTodos({}),
                 todosAPI.getTags(),
-                todosAPI.getProjects(),
+                todosAPI.getProjectsList().catch(() => []),
+                todosAPI.getProjects().catch(() => []),
             ]);
 
             const allTodos = [
@@ -113,9 +277,27 @@ export function InboxListView() {
                 ...archivedTodos.map((todo) => ({ ...todo, archived: true })),
             ];
 
+            const projectsFromConfig = projectsList
+                .filter((project) => !project.archived)
+                .map((project) => project.name.trim())
+                .filter(Boolean);
+
+            const projectsFromTodos = allTodos.map((todo) => normalizeProjectName(todo.project));
+            const normalizedTodoProjects = todoProjects.map((name) => normalizeProjectName(name));
+
+            const mergedProjects = Array.from(
+                new Set([
+                    INBOX_PROJECT,
+                    ...projectsFromConfig,
+                    ...projectsFromTodos,
+                    ...normalizedTodoProjects,
+                ])
+            ).sort(compareGroupNames);
+
             setTodos(allTodos);
             setAvailableTags(tags);
-            setAvailableProjects(projects);
+            setAvailableProjects(mergedProjects);
+            setProjectGroups(mergedProjects);
         } catch (error) {
             console.error("Failed to load todos:", error);
         } finally {
@@ -179,15 +361,12 @@ export function InboxListView() {
                 project: newTodo.project.trim() || undefined,
                 status: newTodo.status,
                 tags: newTodo.tags,
+                dueDate: newTodo.dueDate,
+                priority: newTodo.priority,
+                attachments: newTodo.attachments,
             });
 
-            setNewTodo({
-                title: "",
-                description: "",
-                project: "Inbox",
-                status: "todo",
-                tags: [],
-            });
+            resetNewTodoDraft();
             setCreateDialogOpen(false);
             await loadTodos();
         } catch (error) {
@@ -289,6 +468,71 @@ export function InboxListView() {
         }
     }, [todosAPI, loadTodos]);
 
+    const moveTodoToProject = useCallback(async (todo: Todo, targetGroupName: string) => {
+        const currentProject = normalizeProjectName(todo.project);
+        const targetProject = normalizeProjectName(targetGroupName);
+        if (currentProject === targetProject) return;
+
+        const now = new Date().toISOString();
+
+        setProjectGroups((prev) => {
+            if (prev.includes(targetProject)) return prev;
+            return [...prev, targetProject].sort(compareGroupNames);
+        });
+
+        setTodos((prev) =>
+            prev.map((item) =>
+                item.id === todo.id
+                    ? { ...item, project: targetProject, updatedAt: now }
+                    : item
+            )
+        );
+
+        try {
+            await todosAPI.updateTodo({
+                todoId: todo.id,
+                updates: { project: targetProject },
+            });
+            const updatedTodo: Todo = { ...todo, project: targetProject, updatedAt: now };
+            syncTaskToCalendar(updatedTodo).catch(() => { });
+            syncTaskToReminders(updatedTodo).catch(() => { });
+            toast.success(`Moved to ${targetProject}`);
+        } catch (error) {
+            console.error("Failed to move task to project:", error);
+            setTodos((prev) =>
+                prev.map((item) =>
+                    item.id === todo.id
+                        ? { ...item, project: todo.project, updatedAt: todo.updatedAt }
+                        : item
+                )
+            );
+            toast.error("Failed to move task");
+        }
+    }, [todosAPI]);
+
+    const handleDragStart = useCallback((event: DragStartEvent) => {
+        setDraggedTodoId(String(event.active.id));
+    }, []);
+
+    const handleDragCancel = useCallback((_event: DragCancelEvent) => {
+        setDraggedTodoId(null);
+    }, []);
+
+    const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+        setDraggedTodoId(null);
+        if (!event.over) return;
+
+        const overId = String(event.over.id);
+        if (!overId.startsWith("project-group:")) return;
+
+        const targetGroupName = overId.substring("project-group:".length);
+        const todoId = String(event.active.id);
+        const draggedTodo = todos.find((todo) => todo.id === todoId);
+        if (!draggedTodo) return;
+
+        await moveTodoToProject(draggedTodo, targetGroupName);
+    }, [todos, moveTodoToProject]);
+
     const openTodoForEdit = (todo: Todo) => {
         setSelectedTodoId(todo.id);
         setTodoToEdit(todo);
@@ -337,15 +581,19 @@ export function InboxListView() {
     }, [todos, searchQuery, filter]);
 
     const groupedTodos = useMemo(() => {
-        const grouped = filteredTodos.reduce<Record<string, Todo[]>>((acc, todo) => {
-            const group = getGroupName(todo);
-            if (!acc[group]) acc[group] = [];
-            acc[group].push(todo);
+        const grouped = projectGroups.reduce<Record<string, Todo[]>>((acc, groupName) => {
+            acc[groupName] = [];
             return acc;
         }, {});
 
-        return Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b));
-    }, [filteredTodos]);
+        for (const todo of filteredTodos) {
+            const group = getGroupName(todo);
+            if (!grouped[group]) grouped[group] = [];
+            grouped[group].push(todo);
+        }
+
+        return Object.entries(grouped).sort(([a], [b]) => compareGroupNames(a, b));
+    }, [filteredTodos, projectGroups]);
 
     useEffect(() => {
         if (groupedTodos.length === 0) return;
@@ -353,7 +601,9 @@ export function InboxListView() {
         setExpandedGroups((prev) => {
             const next = { ...prev };
             for (const [groupName] of groupedTodos) {
-                if (next[groupName] === undefined) next[groupName] = true;
+                if (next[groupName] === undefined) {
+                    next[groupName] = groupName === INBOX_PROJECT;
+                }
             }
             return next;
         });
@@ -385,17 +635,22 @@ export function InboxListView() {
                     <div className="ml-auto">
                         <CreateTodoDialog
                             open={createDialogOpen}
-                            onOpenChange={setCreateDialogOpen}
+                            onOpenChange={(open) => {
+                                setCreateDialogOpen(open);
+                                if (!open) {
+                                    resetNewTodoDraft();
+                                }
+                            }}
                             newTodo={newTodo}
                             onNewTodoChange={setNewTodo}
                             onCreateTodo={createTodo}
                             loading={loading}
-                            projectLocked={true}
+                            projectLocked={false}
                             availableTags={availableTags}
                             availableProjects={availableProjects}
                             triggerLabel="+ new"
                             hideTriggerIcon
-                            triggerVariant="outline"
+                            triggerVariant="default"
                             triggerClassName="h-7 px-2 text-[11px] font-medium rounded-md"
                         />
                     </div>
@@ -434,21 +689,30 @@ export function InboxListView() {
                 </div>
 
                 <div className="mt-2.5">
-                    {groupedTodos.length === 0 ? (
-                        <div className="py-8 text-center text-[11px]" style={{ color: currentTheme.styles.contentTertiary }}>
-                            <div className="mb-1">no tasks found</div>
-                            <p className="text-[10px] opacity-70">create a task or change filters</p>
+                    {filteredTodos.length === 0 && (
+                        <div className="py-3 text-center text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                            no tasks match current filters
                         </div>
-                    ) : (
+                    )}
+
+                    <DndContext
+                        sensors={sensors}
+                        onDragStart={handleDragStart}
+                        onDragCancel={handleDragCancel}
+                        onDragEnd={handleDragEnd}
+                    >
                         <div className="space-y-2 pb-2">
                             {groupedTodos.map(([groupName, groupItems]) => {
                                 const expanded = expandedGroups[groupName] ?? true;
+                                const isInbox = groupName === INBOX_PROJECT;
 
                                 return (
-                                    <div
+                                    <DroppableGroup
                                         key={groupName}
-                                        className="overflow-hidden rounded-lg border"
-                                        style={{ borderColor: currentTheme.styles.borderDefault, backgroundColor: currentTheme.styles.surfaceSecondary }}
+                                        groupName={groupName}
+                                        borderColor={currentTheme.styles.borderDefault}
+                                        backgroundColor={currentTheme.styles.surfaceSecondary}
+                                        dropHighlightColor={currentTheme.styles.surfaceAccent}
                                     >
                                         <button
                                             onClick={() => {
@@ -461,69 +725,43 @@ export function InboxListView() {
                                             style={{ color: currentTheme.styles.contentTertiary }}
                                         >
                                             <ChevronRight className={`size-3 transition-transform opacity-70 ${expanded ? "rotate-90" : ""}`} />
-                                            <span className="font-medium uppercase tracking-[0.08em]">{groupName}</span>
+                                            <span className="font-medium uppercase tracking-[0.08em]">{isInbox ? INBOX_PROJECT : groupName}</span>
                                             <span className="opacity-70">{groupItems.length}</span>
                                         </button>
 
                                         {expanded && (
                                             <div>
-                                                {groupItems.map((todo) => {
-                                                    const statusType = getFilterForTodo(todo);
-                                                    const dateLabel = formatRelativeDateLabel(todo.updatedAt);
-                                                    const leadTag = todo.tags?.[0];
-
-                                                    return (
-                                                        <div
+                                                {groupItems.length === 0 ? (
+                                                    <div
+                                                        className="border-t px-2.5 py-2 text-[10px]"
+                                                        style={{ borderColor: currentTheme.styles.borderDefault, color: currentTheme.styles.contentTertiary }}
+                                                    >
+                                                        {draggedTodoId ? "drop task here to move into this project" : "no tasks"}
+                                                    </div>
+                                                ) : (
+                                                    groupItems.map((todo) => (
+                                                        <DraggableTodoRow
                                                             key={todo.id}
-                                                            className={`group border-t px-2.5 py-0.5 flex items-center gap-1.5`}
-                                                            style={{
-                                                                borderColor: currentTheme.styles.borderDefault,
-                                                                backgroundColor: selectedTodoId === todo.id ? currentTheme.styles.surfaceAccent : undefined,
+                                                            todo={todo}
+                                                            selected={selectedTodoId === todo.id}
+                                                            borderColor={currentTheme.styles.borderDefault}
+                                                            selectedBackground={currentTheme.styles.surfaceAccent}
+                                                            contentPrimary={currentTheme.styles.contentPrimary}
+                                                            contentTertiary={currentTheme.styles.contentTertiary}
+                                                            onOpen={openTodoForEdit}
+                                                            onToggleArchive={(todoToArchive) => {
+                                                                void toggleArchiveWithToast(todoToArchive);
                                                             }}
-                                                        >
-                                                            <button
-                                                                onClick={() => openTodoForEdit(todo)}
-                                                                className="flex-1 min-w-0 py-1.5 flex items-center gap-1.5 text-left"
-                                                            >
-                                                                <span
-                                                                    className={`size-2 rounded-full shrink-0 ${
-                                                                        statusType === "active"
-                                                                            ? "bg-primary"
-                                                                            : statusType === "completed"
-                                                                                ? "bg-success"
-                                                                                : "bg-text-muted/40"
-                                                                    }`}
-                                                                />
-
-                                                                <span className="truncate text-xs" style={{ color: currentTheme.styles.contentPrimary }}>{todo.title}</span>
-
-                                                                <span className="ml-auto flex items-center gap-2 text-[10px] shrink-0" style={{ color: currentTheme.styles.contentTertiary }}>
-                                                                    {leadTag && <span>#{leadTag}</span>}
-                                                                    {dateLabel && <span>{dateLabel}</span>}
-                                                                    <ChevronRight className="size-3 opacity-60" />
-                                                                </span>
-                                                            </button>
-
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    void toggleArchiveWithToast(todo);
-                                                                }}
-                                                                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-surface-elevated"
-                                                                title={todo.archived ? "restore" : "archive"}
-                                                            >
-                                                                {todo.archived ? <ArchiveRestore className="size-3" /> : <Archive className="size-3" />}
-                                                            </button>
-                                                        </div>
-                                                    );
-                                                })}
+                                                        />
+                                                    ))
+                                                )}
                                             </div>
                                         )}
-                                    </div>
+                                    </DroppableGroup>
                                 );
                             })}
                         </div>
-                    )}
+                    </DndContext>
                 </div>
             </div>
 
