@@ -51,15 +51,15 @@ function DialogOverlay({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
   return (
-          <DialogPrimitive.Overlay
-        data-slot="dialog-overlay"
-        className={cn(
-          "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 backdrop-blur-sm pointer-events-auto",
-          className
-        )}
-        style={{ backgroundColor: 'rgba(0, 0, 0, 0.6)' }}
-        {...props}
-      />
+    <DialogPrimitive.Overlay
+      data-slot="dialog-overlay"
+      className={cn(
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 backdrop-blur-sm pointer-events-auto",
+        className
+      )}
+      style={{ backgroundColor: "rgba(0, 0, 0, 0.6)" }}
+      {...props}
+    />
   )
 }
 
@@ -68,14 +68,14 @@ const dialogContentVariants = cva(
   {
     variants: {
       size: {
-        default: "grid gap-4 max-w-[calc(100%-2rem)] p-6 sm:max-w-lg",
-        sm: "grid gap-4 max-w-[calc(100%-2rem)] p-4 sm:max-w-sm",
-        md: "grid gap-4 max-w-[calc(100%-2rem)] p-6 sm:max-w-md",
-        lg: "grid gap-4 max-w-[calc(100%-2rem)] p-6 sm:max-w-2xl",
-        xl: "grid gap-4 max-w-[calc(100%-2rem)] p-6 sm:max-w-4xl",
-        "2xl": "grid gap-4 max-w-[calc(100%-2rem)] p-6 sm:max-w-6xl",
-        full: "grid gap-4 max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)] p-6 sm:max-w-[calc(100%-4rem)] sm:max-h-[calc(100%-4rem)]",
-        jumbo: "flex flex-col w-[90vw] h-[90vh] max-w-[90vw] max-h-[90vh] p-6",
+        default: "grid gap-2 max-w-[calc(100%-2rem)] p-3 sm:max-w-lg",
+        sm: "grid gap-2 max-w-[calc(100%-2rem)] p-2.5 sm:max-w-sm",
+        md: "grid gap-2 max-w-[calc(100%-2rem)] p-3 sm:max-w-md",
+        lg: "grid gap-2 max-w-[calc(100%-2rem)] p-3 sm:max-w-2xl",
+        xl: "grid gap-2 max-w-[calc(100%-2rem)] p-3 sm:max-w-4xl",
+        "2xl": "grid gap-2 max-w-[calc(100%-2rem)] p-3 sm:max-w-6xl",
+        full: "grid gap-2 max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)] p-3 sm:max-w-[calc(100%-4rem)] sm:max-h-[calc(100%-4rem)]",
+        jumbo: "flex flex-col w-[90vw] h-[90vh] max-w-[90vw] max-h-[90vh] p-3",
       },
     },
     defaultVariants: {
@@ -119,7 +119,7 @@ function DialogContent({
           <DialogPrimitive.Close
             data-slot="dialog-close"
             tabIndex={-1}
-            className="absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className="absolute top-2.5 right-2.5 rounded-xs opacity-70 transition-opacity hover:opacity-100 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-3.5"
             style={{
               color: styles.contentSecondary,
             }}
@@ -137,7 +137,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-1.5 text-center sm:text-left", className)}
+      className={cn("flex flex-col gap-1 text-center sm:text-left", className)}
       {...props}
     />
   )
@@ -148,7 +148,7 @@ function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="dialog-footer"
       className={cn(
-        "mt-2 flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end",
+        "mt-1 flex flex-col-reverse gap-1 pt-1 sm:flex-row sm:justify-end",
         className
       )}
       {...props}
@@ -167,7 +167,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-base leading-none font-semibold", className)}
+      className={cn("text-xs leading-none font-semibold", className)}
       style={{
         color: styles.contentPrimary,
         ...style,

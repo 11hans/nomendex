@@ -11,12 +11,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         unstyled: true,
         classNames: {
-          toast: "flex items-center gap-3 w-full min-w-[360px] px-4 py-3 rounded-lg border",
+          toast: "flex items-center gap-2 w-full min-w-[320px] px-3 py-2.5 rounded-lg border",
           content: "flex-1 min-w-0",
-          title: "text-sm font-medium truncate",
+          title: "text-xs font-medium truncate",
           description: "hidden",
-          actionButton: "shrink-0 text-xs font-medium px-2.5 py-1 rounded",
-          cancelButton: "shrink-0 text-xs font-medium px-2.5 py-1 rounded opacity-70 hover:opacity-100",
+          actionButton: "shrink-0 text-[11px] font-medium px-2 py-1 rounded",
+          cancelButton: "shrink-0 text-[11px] font-medium px-2 py-1 rounded opacity-70 hover:opacity-100",
         },
         style: {
           backgroundColor: styles.surfaceSecondary,

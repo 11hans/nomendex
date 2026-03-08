@@ -18,7 +18,7 @@ function Input({ className, type, autoComplete, autoCorrect, autoCapitalize, spe
       autoCapitalize={autoCapitalize ?? "off"}
       spellCheck={spellCheck ?? false}
       className={cn(
-        "flex h-9 w-full min-w-0 border px-3 py-1 text-base transition-all file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm placeholder:text-[var(--input-placeholder)]",
+        "flex h-8 w-full min-w-0 border px-2.5 py-1 text-[11px] transition-all file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-[10px] file:font-medium focus-visible:outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 placeholder:text-[var(--input-placeholder)]",
         className,
       )}
       style={{
