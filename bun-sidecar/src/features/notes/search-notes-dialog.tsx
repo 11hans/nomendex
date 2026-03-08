@@ -20,7 +20,7 @@ export function SearchNotesDialog({ onSuccess }: SearchNotesDialogProps) {
     const [previewNote, setPreviewNote] = React.useState<Note | null>(null);
     const [isLoadingPreview, setIsLoadingPreview] = React.useState(false);
     const { closeDialog } = useCommandDialog();
-    const { addNewTab, setActiveTabId } = useWorkspaceContext();
+    const { addNewTab, setActiveTabId, updateTabProps } = useWorkspaceContext();
     const { navigate, currentPath } = useRouting();
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
@@ -97,11 +97,15 @@ export function SearchNotesDialog({ onSuccess }: SearchNotesDialogProps) {
         const newTab = addNewTab({
             pluginMeta: notesPluginSerial,
             view: "editor",
-            props: { noteFileName: fileName, scrollToLine }
+            props: { noteFileName: fileName, scrollToLine },
+            preferExisting: true,
         });
 
         if (newTab) {
             setActiveTabId(newTab.id);
+            if (scrollToLine && scrollToLine > 0) {
+                updateTabProps(newTab.id, { scrollToLine });
+            }
         }
 
         // Navigate to workspace if not already there
@@ -111,7 +115,7 @@ export function SearchNotesDialog({ onSuccess }: SearchNotesDialogProps) {
 
         closeDialog();
         onSuccess?.();
-    }, [addNewTab, setActiveTabId, closeDialog, onSuccess, navigate, currentPath]);
+    }, [addNewTab, setActiveTabId, updateTabProps, closeDialog, onSuccess, navigate, currentPath]);
 
     // Handle keyboard navigation
     React.useEffect(() => {

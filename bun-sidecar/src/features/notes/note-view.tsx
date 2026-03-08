@@ -121,6 +121,7 @@ export function NotesView(props: NotesViewProps) {
     const minimapRef = useRef<HTMLDivElement>(null);
     const lastKnownMtimeRef = useRef<number | null>(null);
     const prevActiveTabIdRef = useRef<string | undefined>(undefined);
+    const lastAppliedScrollToLineRef = useRef<number | null>(null);
     const { currentTheme } = useTheme();
     const { isLocked: isFileLocked } = useFileLocks();
     const isLocked = isFileLocked(noteFileName);
@@ -630,6 +631,51 @@ export function NotesView(props: NotesViewProps) {
         updateActiveHeadingFromCursorRef.current = updateActiveHeadingFromCursor;
     }, [updateActiveHeadingFromCursor]);
 
+    const scrollEditorToLine = useCallback((lineNum: number) => {
+        const view = viewRef.current;
+        if (!view || lineNum <= 0) return;
+
+        const doc = view.state.doc;
+        const linePositions: number[] = [0]; // Position of each line start (1-indexed, so [0] is unused)
+
+        // Build array of line start positions
+        doc.descendants((node, pos) => {
+            if (node.isBlock && node.type.name !== "doc") {
+                linePositions.push(pos);
+            }
+            return true;
+        });
+
+        // Calculate scroll target (a few lines before the match for context)
+        const contextLines = 5;
+        const scrollTargetLine = Math.max(1, lineNum - contextLines);
+        const scrollTargetPos = linePositions[scrollTargetLine] ?? 0;
+
+        // Get the actual target position for cursor placement
+        const targetPos = linePositions[lineNum] ?? linePositions[linePositions.length - 1] ?? 0;
+
+        // First scroll the context line into view at the top
+        const scrollTr = view.state.tr.setSelection(
+            TextSelection.create(view.state.doc, scrollTargetPos)
+        );
+        view.dispatch(scrollTr.scrollIntoView());
+
+        // Then set cursor at the actual target line (without scrolling again)
+        requestAnimationFrame(() => {
+            const cursorTr = view.state.tr.setSelection(
+                TextSelection.create(view.state.doc, targetPos)
+            );
+            view.dispatch(cursorTr);
+        });
+
+        lastAppliedScrollToLineRef.current = lineNum;
+    }, []);
+
+    useEffect(() => {
+        // Same note can receive new "open from search" requests; allow re-applying line jumps.
+        lastAppliedScrollToLineRef.current = null;
+    }, [noteFileName]);
+
     // Initialize ProseMirror editor - wait for content to be loaded
     useEffect(() => {
         if (!editorRef.current || !isRichTextMode || !note) {
@@ -894,42 +940,6 @@ export function NotesView(props: NotesViewProps) {
             return toggleTodoAtLine(view.state, view.dispatch);
         });
 
-        // Helper to scroll to a specific line number with context above
-        const scrollToLineNumber = (lineNum: number) => {
-            const doc = view.state.doc;
-            const linePositions: number[] = [0]; // Position of each line start (1-indexed, so [0] is unused)
-
-            // Build array of line start positions
-            doc.descendants((node, pos) => {
-                if (node.isBlock && node.type.name !== "doc") {
-                    linePositions.push(pos);
-                }
-                return true;
-            });
-
-            // Calculate scroll target (a few lines before the match for context)
-            const contextLines = 5;
-            const scrollTargetLine = Math.max(1, lineNum - contextLines);
-            const scrollTargetPos = linePositions[scrollTargetLine] ?? 0;
-
-            // Get the actual target position for cursor placement
-            const targetPos = linePositions[lineNum] ?? linePositions[linePositions.length - 1] ?? 0;
-
-            // First scroll the context line into view at the top
-            const scrollTr = view.state.tr.setSelection(
-                TextSelection.create(view.state.doc, scrollTargetPos)
-            );
-            view.dispatch(scrollTr.scrollIntoView());
-
-            // Then set cursor at the actual target line (without scrolling again)
-            requestAnimationFrame(() => {
-                const cursorTr = view.state.tr.setSelection(
-                    TextSelection.create(view.state.doc, targetPos)
-                );
-                view.dispatch(cursorTr);
-            });
-        };
-
         // Focus editor and handle cursor/scroll position
         if (autoFocus) {
             requestAnimationFrame(() => {
@@ -937,7 +947,7 @@ export function NotesView(props: NotesViewProps) {
                     view.focus();
                     // If scrollToLine is specified, scroll to that line
                     if (scrollToLine && scrollToLine > 0) {
-                        scrollToLineNumber(scrollToLine);
+                        scrollEditorToLine(scrollToLine);
                     } else {
                         // Try to restore saved cursor position, otherwise place at start
                         restoreCursor(view);
@@ -951,7 +961,7 @@ export function NotesView(props: NotesViewProps) {
             requestAnimationFrame(() => {
                 try {
                     if (scrollToLine && scrollToLine > 0) {
-                        scrollToLineNumber(scrollToLine);
+                        scrollEditorToLine(scrollToLine);
                     } else {
                         restoreCursor(view);
                     }
@@ -980,6 +990,22 @@ export function NotesView(props: NotesViewProps) {
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isRichTextMode, noteFileName, note, updateContent, saveImmediately]); // content and updateActiveHeadingFromCursor intentionally omitted to prevent editor recreation
+
+    // Handle "open existing tab and jump to line" use case (e.g., search results on already mounted note view)
+    useEffect(() => {
+        if (activeTab?.id !== tabId) return;
+        if (!scrollToLine || scrollToLine <= 0) return;
+        if (!viewRef.current) return;
+        if (lastAppliedScrollToLineRef.current === scrollToLine) return;
+
+        requestAnimationFrame(() => {
+            try {
+                scrollEditorToLine(scrollToLine);
+            } catch {
+                // no-op
+            }
+        });
+    }, [activeTab?.id, tabId, scrollToLine, scrollEditorToLine]);
 
     // Update editor content when content changes externally (only after initial load)
     useEffect(() => {

@@ -157,6 +157,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                 pluginMeta: notesPluginSerial,
                 view: "editor",
                 props: { noteFileName, compact: true },
+                preferExisting: true,
             });
             if (newTab) openInPlacement(newTab.id);
         },
@@ -168,6 +169,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
             pluginMeta: todosPluginSerial,
             view: "browser",
             props: { project: projectName },
+            preferExisting: true,
         });
         if (newTab) openInPlacement(newTab.id);
     }, [addNewTab, projectName, openInPlacement]);

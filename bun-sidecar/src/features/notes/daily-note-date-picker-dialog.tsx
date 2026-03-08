@@ -62,6 +62,7 @@ export function DailyNoteDatePickerDialog({ onSuccess }: DailyNoteDatePickerDial
                 pluginMeta: notesPluginSerial,
                 view: "editor",
                 props: { noteFileName: fileName },
+                preferExisting: true,
             });
 
             if (newTab) {

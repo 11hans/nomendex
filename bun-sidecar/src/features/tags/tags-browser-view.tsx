@@ -90,6 +90,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                 pluginMeta: tagsPluginSerial,
                 view: "detail",
                 props: { tagName },
+                preferExisting: true,
             });
             if (newTab) {
                 if (placement === "sidebar") {

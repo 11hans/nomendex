@@ -133,6 +133,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                     pluginMeta: notesPluginSerial,
                     view: "editor",
                     props: { noteFileName: file.path, compact: true },
+                    preferExisting: true,
                 });
                 if (newTab) {
                     if (placement === "sidebar") {
@@ -148,6 +149,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                     pluginMeta: todosPluginSerial,
                     view: "editor",
                     props: { todoId },
+                    preferExisting: true,
                 });
                 if (newTab) {
                     if (placement === "sidebar") {

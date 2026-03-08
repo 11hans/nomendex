@@ -215,6 +215,7 @@ export function CreateTodoCommandDialog({ onSuccess }: CreateTodoCommandDialogPr
                 pluginMeta: todosPluginSerial,
                 view: "browser",
                 props: project ? { project } : {},
+                preferExisting: true,
             });
 
             if (newTab) {

@@ -7,6 +7,41 @@ import { emit } from "@/lib/events";
 // Helper to generate unique IDs
 const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
+const BROWSER_EQUIVALENT_PLUGINS = new Set(["notes", "chat", "tags", "projects", "uploads"]);
+
+function areViewsEquivalent(pluginId: string, leftView: string, rightView: string): boolean {
+    if (leftView === rightView) {
+        return true;
+    }
+
+    if (!BROWSER_EQUIVALENT_PLUGINS.has(pluginId)) {
+        return false;
+    }
+
+    const isBrowserLikeView = (view: string) => view === "default" || view === "browser";
+    return isBrowserLikeView(leftView) && isBrowserLikeView(rightView);
+}
+
+function shallowEqualProps(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+    const leftKeys = Object.keys(left);
+    const rightKeys = Object.keys(right);
+
+    if (leftKeys.length !== rightKeys.length) {
+        return false;
+    }
+
+    for (const key of leftKeys) {
+        if (!Object.prototype.hasOwnProperty.call(right, key)) {
+            return false;
+        }
+        if (!Object.is(left[key], right[key])) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 export function useWorkspace(_initialRoute?: RouteParams) {
     const [workspace, setWorkspace] = useState<WorkspaceState>({
         tabs: [],
@@ -137,28 +172,64 @@ export function useWorkspace(_initialRoute?: RouteParams) {
     // Note that this does not set the tab as active
     // In split mode, adds to the active pane
     const addNewTab = useCallback(
-        ({ pluginMeta, view = "default", props = {} }: { pluginMeta: SerializablePlugin; view: string; props?: Record<string, unknown> }) => {
+        ({
+            pluginMeta,
+            view = "default",
+            props = {},
+            preferExisting = false,
+        }: {
+            pluginMeta: SerializablePlugin;
+            view: string;
+            props?: Record<string, unknown>;
+            preferExisting?: boolean;
+        }): WorkspaceTab | null => {
             let resultTab: WorkspaceTab | null = null;
             try {
-                const pluginInstance = createPluginInstance({ pluginMeta, viewId: view, props });
-                const newTab: WorkspaceTab = {
-                    id: generateId("tab"),
-                    title: pluginInstance.plugin.name,
-                    pluginInstance,
-                };
-                resultTab = newTab;
-
                 updateWorkspace((prev) => {
                     // In split mode, add to the active pane
                     if (prev.layoutMode === "split") {
                         const targetPaneId = prev.activePaneId ?? prev.panes[0]?.id;
                         if (!targetPaneId) return prev;
+                        const targetPane = prev.panes.find((p) => p.id === targetPaneId);
+                        if (!targetPane) return prev;
+
+                        if (preferExisting) {
+                            const existingTab = targetPane.tabs.find((tab) => tabMatchesCriteria(tab, pluginMeta, view, props));
+                            if (existingTab) {
+                                resultTab = existingTab;
+                                return prev;
+                            }
+                        }
+
+                        const pluginInstance = createPluginInstance({ pluginMeta, viewId: view, props });
+                        const newTab: WorkspaceTab = {
+                            id: generateId("tab"),
+                            title: pluginInstance.plugin.name,
+                            pluginInstance,
+                        };
+                        resultTab = newTab;
 
                         const newPanes = prev.panes.map((p) =>
                             p.id === targetPaneId ? { ...p, tabs: [...p.tabs, newTab] } : p
                         );
                         return { ...prev, panes: newPanes };
                     }
+
+                    if (preferExisting) {
+                        const existingTab = prev.tabs.find((tab) => tabMatchesCriteria(tab, pluginMeta, view, props));
+                        if (existingTab) {
+                            resultTab = existingTab;
+                            return prev;
+                        }
+                    }
+
+                    const pluginInstance = createPluginInstance({ pluginMeta, viewId: view, props });
+                    const newTab: WorkspaceTab = {
+                        id: generateId("tab"),
+                        title: pluginInstance.plugin.name,
+                        pluginInstance,
+                    };
+                    resultTab = newTab;
 
                     // Single mode: add to legacy tabs
                     return { ...prev, tabs: [...prev.tabs, newTab] };
@@ -175,24 +246,26 @@ export function useWorkspace(_initialRoute?: RouteParams) {
     // Helper to check if a tab matches the given criteria
     const tabMatchesCriteria = (tab: WorkspaceTab, pluginMeta: SerializablePlugin, view: string, props: Record<string, unknown>): boolean => {
         const instance = tab.pluginInstance;
+        const requestedView = view || "default";
+        const existingView = instance.viewId || "default";
 
         // Match on plugin ID and view
-        if (instance.plugin.id !== pluginMeta.id || instance.viewId !== view) {
+        if (instance.plugin.id !== pluginMeta.id || !areViewsEquivalent(pluginMeta.id, requestedView, existingView)) {
             return false;
         }
 
-        // Match on props - do a deep comparison of the key properties
+        // Match on props - plugin-specific rules first, then shallow fallback
         const existingProps = instance.instanceProps ?? {};
 
-        // For notes: match on noteFileName
-        if (pluginMeta.id === "notes" && props.noteFileName) {
+        // Notes editor identity is the note file itself; UI props (e.g. scrollToLine) don't create distinct tabs
+        if (pluginMeta.id === "notes" && requestedView === "editor" && props.noteFileName) {
             return existingProps.noteFileName === props.noteFileName;
         }
 
         // For todos: match on project and view type
         if (pluginMeta.id === "todos") {
             // For browser/kanban views, match on project filter
-            if (view === "browser" || view === "kanban") {
+            if (requestedView === "browser" || requestedView === "kanban") {
                 return existingProps.project === props.project;
             }
             // For other views (projects, default), just match the view type
@@ -200,12 +273,12 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         }
 
         // For tags: match on tagName
-        if (pluginMeta.id === "tags" && props.tagName) {
+        if (pluginMeta.id === "tags" && requestedView === "detail" && props.tagName) {
             return existingProps.tagName === props.tagName;
         }
 
         // For chat: match on sessionId
-        if (pluginMeta.id === "chat" && view === "chat") {
+        if (pluginMeta.id === "chat" && requestedView === "chat") {
             // If opening an existing chat (has sessionId), match on sessionId
             if (props.sessionId) {
                 return existingProps.sessionId === props.sessionId;
@@ -214,12 +287,8 @@ export function useWorkspace(_initialRoute?: RouteParams) {
             return false;
         }
 
-        // For other plugins, match if view is the same and props are empty or match
-        if (Object.keys(props).length === 0 && Object.keys(existingProps).length === 0) {
-            return true;
-        }
-
-        return false;
+        // Generic fallback for plugins/views without explicit identity rules
+        return shallowEqualProps(props, existingProps);
     };
 
     // Opens a new tab AND sets it as active in a single atomic update
@@ -927,35 +996,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                 if (!pane) return prev;
 
                 // Check for existing matching tab in this pane
-                const existingTab = pane.tabs.find((tab) => {
-                    const instance = tab.pluginInstance;
-                    if (instance.plugin.id !== pluginMeta.id || instance.viewId !== view) {
-                        return false;
-                    }
-                    const existingProps = instance.instanceProps ?? {};
-                    if (pluginMeta.id === "notes" && props.noteFileName) {
-                        return existingProps.noteFileName === props.noteFileName;
-                    }
-                    if (pluginMeta.id === "todos") {
-                        if (view === "browser" || view === "kanban") {
-                            return existingProps.project === props.project;
-                        }
-                        return true;
-                    }
-                    if (pluginMeta.id === "tags" && props.tagName) {
-                        return existingProps.tagName === props.tagName;
-                    }
-                    if (pluginMeta.id === "chat" && view === "chat") {
-                        if (props.sessionId) {
-                            return existingProps.sessionId === props.sessionId;
-                        }
-                        return false;
-                    }
-                    if (Object.keys(props).length === 0 && Object.keys(existingProps).length === 0) {
-                        return true;
-                    }
-                    return false;
-                });
+                const existingTab = pane.tabs.find((tab) => tabMatchesCriteria(tab, pluginMeta, view, props));
 
                 if (existingTab) {
                     resultTab = existingTab;

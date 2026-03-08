@@ -210,6 +210,7 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                 pluginMeta: chatPluginSerial,
                 view: "chat",
                 props: { sessionId },
+                preferExisting: true,
             });
             if (newTab) {
                 if (placement === "sidebar") {

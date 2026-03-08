@@ -41,7 +41,8 @@ export function CreateNoteDialog({ onSuccess }: CreateNoteDialogProps) {
             const newTab = addNewTab({
                 pluginMeta: notesPluginSerial,
                 view: "editor",
-                props: { noteFileName: fileName }
+                props: { noteFileName: fileName },
+                preferExisting: true,
             });
 
             if (newTab) {
