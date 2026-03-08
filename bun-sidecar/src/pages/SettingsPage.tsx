@@ -74,19 +74,19 @@ function StorageSettings() {
     const hasUnsavedHiddenFiles = pendingHiddenFiles !== null && pendingHiddenFiles !== showHiddenFiles;
 
     return (
-        <Card>
-            <CardHeader>
+        <Card className="rounded-lg border-border shadow-none">
+            <CardHeader className="p-3 pb-2">
                 <CardTitle className="flex items-center gap-2">
-                    <FolderOpen className="h-5 w-5" />
+                    <FolderOpen className="h-4 w-4" />
                     Storage Settings
                 </CardTitle>
                 <CardDescription>
                     Configure where your files are stored in the workspace
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-4 p-3 pt-0">
                 <div
-                    className="p-4 rounded-lg border bg-secondary border-border"
+                    className="p-3 rounded-lg border bg-secondary border-border"
                 >
                     <h4 className="font-medium mb-2">
                         Notes Location
@@ -130,10 +130,10 @@ function StorageSettings() {
                                 Changing notes location requires a page reload. Your existing notes will not be moved automatically.
                             </p>
                             <div className="flex gap-2">
-                                <Button size="sm" onClick={applyChange}>
+                                <Button size="sm" className="h-7 px-2 text-[11px]" onClick={applyChange}>
                                     Apply & Reload
                                 </Button>
-                                <Button size="sm" variant="ghost" onClick={cancelChange}>
+                                <Button size="sm" className="h-7 px-2 text-[11px]" variant="ghost" onClick={cancelChange}>
                                     Cancel
                                 </Button>
                             </div>
@@ -144,7 +144,7 @@ function StorageSettings() {
 
                 {/* Show Hidden Files Setting */}
                 <div
-                    className="p-4 rounded-lg border bg-secondary border-border"
+                    className="p-3 rounded-lg border bg-secondary border-border"
                 >
                     <h4 className="font-medium mb-2">
                         Show Hidden Files
@@ -188,12 +188,14 @@ function StorageSettings() {
                                 onClick={handleSaveHiddenFiles}
                                 disabled={savingHiddenFiles}
                                 size="sm"
+                                className="h-7 px-2 text-[11px]"
                             >
                                 {savingHiddenFiles ? "Saving..." : "Save"}
                             </Button>
                             <Button
                                 variant="ghost"
                                 size="sm"
+                                className="h-7 px-2 text-[11px]"
                                 onClick={() => setPendingHiddenFiles(null)}
                             >
                                 Cancel
@@ -522,19 +524,34 @@ function SettingsContent() {
         custom: "Custom",
         editor: "Editor (Tables)",
     };
+    const customShortcutCount = shortcuts.filter((shortcut) => !!shortcut.customKeys).length;
+    const configuredSecretsCount = secrets.filter((secret) => secret.hasValue).length;
+    const totalSecretCount = secrets.length;
 
     return (
         <div
-            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full bg-bg text-foreground"
+            className="h-full min-h-0 overflow-y-auto [&_.text-base]:text-[11px] [&_.text-sm]:text-[10px] [&_.text-xs]:text-[10px] [&_.md\\:text-sm]:md:text-[10px] [&_[data-slot=card]]:rounded-lg [&_[data-slot=card]]:shadow-none [&_[data-slot=card-header]]:!p-3 [&_[data-slot=card-header]]:!pb-2 [&_[data-slot=card-content]]:!p-3 [&_[data-slot=card-content]]:!pt-0 [&_[data-slot=card-footer]]:!p-3 [&_[data-slot=card-footer]]:!pt-0 [&_[data-slot=card-title]]:text-[11px] [&_[data-slot=card-description]]:text-[10px] [&_[data-slot=tabs-trigger]]:text-[10px] [&_[data-slot=button]]:text-[10px] [&_[data-slot=input]]:text-[10px] [&_[data-slot=select-trigger]]:text-[10px] [&_[data-slot=select-item]]:text-[10px] [&_[data-slot=table]]:text-[10px] [&_[data-slot=table-head]]:h-8 [&_[data-slot=table-cell]]:py-1.5 [&_h3]:text-xs [&_h4]:text-xs [&_label]:text-[10px] [&_th]:text-[10px] [&_td]:text-[10px]"
+            style={{ backgroundColor: currentTheme.styles.surfacePrimary, color: currentTheme.styles.contentPrimary }}
         >
-            <div className="flex-shrink-0 mb-6">
-                <h1 className="text-2xl font-bold">Settings</h1>
-                <p className="text-sm text-muted-foreground">Manage your application settings and configuration.</p>
-            </div>
+            <div className="mx-auto w-full max-w-[980px] px-3 pt-3 pb-6 space-y-2.5">
+                <div className="shrink-0 flex items-center gap-1.5 flex-wrap">
+                    <Info className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
+                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>
+                        Settings
+                    </span>
+                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                        {shortcuts.length} shortcuts
+                    </span>
+                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                        {customShortcutCount} custom
+                    </span>
+                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                        {configuredSecretsCount}/{totalSecretCount || 0} keys
+                    </span>
+                </div>
 
-            <div className="flex-1 overflow-y-auto outline-none pr-2">
-                <Tabs defaultValue="keyboard" className="space-y-4">
-                    <TabsList>
+                <Tabs defaultValue="keyboard" className="space-y-3">
+                    <TabsList className="h-auto flex-wrap justify-start rounded-xl border border-border bg-bg-secondary p-1 [&_[data-slot=tabs-trigger]]:h-7 [&_[data-slot=tabs-trigger]]:text-[10px]">
                         <TabsTrigger value="keyboard">Keyboard Shortcuts</TabsTrigger>
                         <TabsTrigger value="preferences">Preferences</TabsTrigger>
                         <TabsTrigger value="theme">Theme</TabsTrigger>
@@ -543,7 +560,7 @@ function SettingsContent() {
                         <TabsTrigger value="about">About</TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="keyboard">
+                    <TabsContent value="keyboard" className="mt-0">
                         <Card>
                             <CardHeader>
                                 <div className="flex items-center justify-between">
@@ -554,14 +571,15 @@ function SettingsContent() {
                                     <Button
                                         variant="outline"
                                         size="sm"
+                                        className="h-7 px-2 text-[10px]"
                                         onClick={resetAllShortcuts}
                                     >
-                                        <RotateCcw className="mr-2 h-4 w-4" />
+                                        <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
                                         Reset All
                                     </Button>
                                 </div>
                             </CardHeader>
-                            <CardContent className="space-y-6">
+                            <CardContent className="space-y-4">
                                 {Object.entries(
                                     shortcuts.reduce((acc, shortcut) => {
                                         if (!acc[shortcut.category]) acc[shortcut.category] = [];
@@ -570,15 +588,15 @@ function SettingsContent() {
                                     }, {} as Record<string, typeof shortcuts>)
                                 ).map(([category, categoryShortcuts]) => (
                                     <div key={category} className="space-y-2">
-                                        <h3 className="font-medium text-sm text-muted-foreground">
+                                        <h3 className="font-medium text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
                                             {categoryLabels[category as keyof typeof categoryLabels] || category}
                                         </h3>
-                                        <Table>
+                                        <Table className="[&_[data-slot=table-row]]:h-9 [&_[data-slot=table-head]]:h-7 [&_[data-slot=table-head]]:py-1 [&_[data-slot=table-cell]]:py-1 [&_kbd]:h-4 [&_kbd]:px-1 [&_kbd]:text-[9px]">
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead className="w-[40%]">Action</TableHead>
-                                                    <TableHead className="w-[30%]">Shortcut</TableHead>
-                                                    <TableHead className="w-[30%]">Actions</TableHead>
+                                                    <TableHead className="w-[40%] text-[10px] uppercase tracking-[0.08em]">Action</TableHead>
+                                                    <TableHead className="w-[30%] text-[10px] uppercase tracking-[0.08em]">Shortcut</TableHead>
+                                                    <TableHead className="w-[30%] text-[10px] uppercase tracking-[0.08em]">Actions</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -592,28 +610,28 @@ function SettingsContent() {
                                                         <TableRow key={shortcut.id}>
                                                             <TableCell>
                                                                 <div className="space-y-1">
-                                                                    <div className="font-medium">{shortcut.name}</div>
-                                                                    <div className="text-xs text-muted-foreground">
+                                                                    <div className="font-medium text-[11px]">{shortcut.name}</div>
+                                                                    <div className="text-[10px] text-muted-foreground">
                                                                         {shortcut.description}
                                                                     </div>
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell>
-                                                                <div className="flex items-center gap-2">
+                                                                <div className="flex items-center gap-1.5">
                                                                     {isEditing ? (
-                                                                        <div className="flex items-center gap-2">
-                                                                            <span className="text-sm text-muted-foreground">
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <span className="text-[10px] text-muted-foreground">
                                                                                 Press keys...
                                                                             </span>
                                                                             {recordingKeys.length > 0 && (
-                                                                                <KeyboardIndicator keys={recordingKeys} />
+                                                                                <KeyboardIndicator keys={recordingKeys} className="[&_kbd]:h-4 [&_kbd]:px-1 [&_kbd]:text-[9px]" />
                                                                             )}
                                                                         </div>
                                                                     ) : (
                                                                         <>
-                                                                            <KeyboardIndicator keys={currentKeys} />
+                                                                            <KeyboardIndicator keys={currentKeys} className="[&_kbd]:h-4 [&_kbd]:px-1 [&_kbd]:text-[9px]" />
                                                                             {isCustom && (
-                                                                                <Badge variant="secondary" className="text-xs">
+                                                                                <Badge variant="secondary" className="h-5 px-1.5 text-[9px]">
                                                                                     Custom
                                                                                 </Badge>
                                                                             )}
@@ -622,15 +640,16 @@ function SettingsContent() {
                                                                 </div>
                                                             </TableCell>
                                                             <TableCell>
-                                                                <div className="flex items-center gap-2">
+                                                                <div className="flex items-center gap-1.5">
                                                                     {isDocOnly ? (
-                                                                        <span className="text-xs text-muted-foreground">
+                                                                        <span className="text-[10px] text-muted-foreground">
                                                                             Editor shortcut
                                                                         </span>
                                                                     ) : isEditing ? (
                                                                         <Button
                                                                             variant="ghost"
                                                                             size="sm"
+                                                                            className="h-6 px-1.5 text-[10px]"
                                                                             onClick={() => {
                                                                                 setEditingShortcut(null);
                                                                                 setRecordingKeys([]);
@@ -643,6 +662,7 @@ function SettingsContent() {
                                                                             <Button
                                                                                 variant="ghost"
                                                                                 size="sm"
+                                                                                className="h-6 px-1.5 text-[10px]"
                                                                                 onClick={() => setEditingShortcut(shortcut.id)}
                                                                             >
                                                                                 Edit
@@ -651,6 +671,7 @@ function SettingsContent() {
                                                                                 <Button
                                                                                     variant="ghost"
                                                                                     size="sm"
+                                                                                    className="h-6 px-1.5 text-[10px]"
                                                                                     onClick={() => resetShortcut(shortcut.id)}
                                                                                 >
                                                                                     Reset
@@ -671,7 +692,7 @@ function SettingsContent() {
                         </Card>
                     </TabsContent>
 
-                    <TabsContent value="preferences">
+                    <TabsContent value="preferences" className="mt-0">
                         <Card>
                             <CardHeader>
                                 <CardTitle>Chat Input Preferences</CardTitle>
@@ -680,7 +701,7 @@ function SettingsContent() {
                             <CardContent className="space-y-4">
                                 <div className="flex items-center justify-between">
                                     <div className="space-y-0.5">
-                                        <Label className="text-base">
+                                        <Label className="text-[10px]">
                                             Send message with
                                         </Label>
                                         <p className="text-sm text-muted-foreground">
@@ -696,7 +717,7 @@ function SettingsContent() {
                                                 setPendingEnterToSend(newValue);
                                             }}
                                         >
-                                            <SelectTrigger className="w-[180px]">
+                                            <SelectTrigger className="w-[170px] h-8 text-[10px]">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -739,8 +760,8 @@ function SettingsContent() {
                         </Card>
                     </TabsContent>
 
-                    <TabsContent value="theme">
-                        <div className="space-y-6">
+                    <TabsContent value="theme" className="mt-0">
+                        <div className="space-y-4">
                             {/* Current Theme Display */}
                             <Card>
                                 <CardHeader>
@@ -893,13 +914,13 @@ function SettingsContent() {
                         </div>
                     </TabsContent>
 
-                    <TabsContent value="secrets">
-                        <div className="space-y-6">
+                    <TabsContent value="secrets" className="mt-0">
+                        <div className="space-y-4">
                             {/* Predefined Secrets */}
                             <Card>
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-2">
-                                        <Key className="h-5 w-5" />
+                                        <Key className="h-4 w-4" />
                                         System API Keys
                                     </CardTitle>
                                     <CardDescription>
@@ -914,7 +935,7 @@ function SettingsContent() {
                                             {secrets.filter((s) => s.isPredefined).map((secret) => (
                                                 <div
                                                     key={secret.key}
-                                                    className="p-4 rounded-lg border bg-secondary border-border"
+                                                    className="p-3 rounded-lg border bg-secondary border-border"
                                                 >
                                                     <div className="flex items-start justify-between mb-2">
                                                         <div>
@@ -1042,6 +1063,7 @@ function SettingsContent() {
                                             <Button
                                                 variant="outline"
                                                 size="sm"
+                                                className="h-7 px-2 text-[11px]"
                                                 onClick={() => setIsAddingCustom(true)}
                                             >
                                                 <Plus className="mr-2 h-4 w-4" />
@@ -1054,7 +1076,7 @@ function SettingsContent() {
                                     {/* Add new custom secret form */}
                                     {isAddingCustom && (
                                         <div
-                                            className="p-4 rounded-lg border bg-secondary border-accent"
+                                            className="p-3 rounded-lg border bg-secondary border-accent"
                                         >
                                             <h4 className="font-medium mb-3">
                                                 New API Key
@@ -1117,12 +1139,14 @@ function SettingsContent() {
                                                         onClick={handleAddCustomSecret}
                                                         disabled={savingSecret}
                                                         size="sm"
+                                                        className="h-7 px-2 text-[11px]"
                                                     >
                                                         {savingSecret ? "Saving..." : "Add Key"}
                                                     </Button>
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
+                                                        className="h-7 px-2 text-[11px]"
                                                         onClick={() => {
                                                             setIsAddingCustom(false);
                                                             setNewSecretKey("");
@@ -1148,7 +1172,7 @@ function SettingsContent() {
                                             {secrets.filter((s) => !s.isPredefined).map((secret) => (
                                                 <div
                                                     key={secret.key}
-                                                    className="p-4 rounded-lg border bg-secondary border-border"
+                                                    className="p-3 rounded-lg border bg-secondary border-border"
                                                 >
                                                     <div className="flex items-start justify-between mb-2">
                                                         <div>
@@ -1241,25 +1265,25 @@ function SettingsContent() {
                         </div>
                     </TabsContent>
 
-                    <TabsContent value="storage">
+                    <TabsContent value="storage" className="mt-0">
                         <StorageSettings />
                     </TabsContent>
 
-                    <TabsContent value="about">
+                    <TabsContent value="about" className="mt-0">
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
-                                    <Info className="h-5 w-5" />
+                                    <Info className="h-4 w-4" />
                                     About Nomendex
                                 </CardTitle>
                                 <CardDescription>
                                     Version information and updates
                                 </CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-6">
+                            <CardContent className="space-y-4">
                                 {/* Version Info */}
                                 <div
-                                    className="p-4 rounded-lg border bg-secondary border-border"
+                                    className="p-3 rounded-lg border bg-secondary border-border"
                                 >
                                     <div className="flex items-center justify-between">
                                         <div>
@@ -1280,6 +1304,8 @@ function SettingsContent() {
                                             onClick={handleCheckForUpdates}
                                             disabled={checkingForUpdates}
                                             variant="outline"
+                                            size="sm"
+                                            className="h-7 px-2 text-[11px]"
                                         >
                                             <RefreshCw className={`mr-2 h-4 w-4 ${checkingForUpdates ? "animate-spin" : ""}`} />
                                             Check for Updates

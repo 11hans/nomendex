@@ -1,7 +1,31 @@
 import * as React from "react";
-import { FileText, Settings, Trash2, ListTodo, ListChecks, FolderOpen, Plus, Calendar, CalendarMinus, CalendarPlus, CalendarDays, Save, MessageCircle, AlertTriangle, Columns2 } from "lucide-react";
-import { Command as CommandRoot, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+    FileText,
+    Settings,
+    Trash2,
+    ListTodo,
+    ListChecks,
+    FolderOpen,
+    Plus,
+    Calendar,
+    CalendarMinus,
+    CalendarPlus,
+    CalendarDays,
+    Save,
+    MessageCircle,
+    AlertTriangle,
+    Columns2,
+    Command,
+} from "lucide-react";
+import {
+    CommandDialog,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+    CommandSeparator,
+} from "@/components/ui/command";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useRouting } from "@/hooks/useRouting";
 import { useCommandDialog } from "./CommandDialogProvider";
@@ -9,24 +33,62 @@ import { getNotesCommands } from "@/features/notes";
 import { getTodosCommands } from "@/features/todos";
 import { getChatCommands } from "@/features/chat/commands";
 import { getCoreCommands } from "@/commands/core-commands";
-import type { Command } from "@/types/Commands";
+import type { Command as AppCommand } from "@/types/Commands";
 import { subscribe } from "@/lib/events";
 import { SearchNotesDialog } from "@/features/notes/search-notes-dialog";
 
+const iconMap = {
+    Settings,
+    Trash2,
+    FileText,
+    ListTodo,
+    ListChecks,
+    FolderOpen,
+    Plus,
+    Calendar,
+    CalendarMinus,
+    CalendarPlus,
+    CalendarDays,
+    Save,
+    MessageCircle,
+    AlertTriangle,
+    Columns2,
+} as const;
+
+const groupTitles: Record<string, string> = {
+    core: "General",
+    todos: "Todos",
+    notes: "Notes",
+    chat: "Chat",
+};
+
 export function CommandMenu() {
     const [open, setOpen] = React.useState(false);
-    const { addNewTab, openTab, setActiveTabId, workspace, closeTab, closeAllTabs, setSidebarTabId, sidebarTabId, setSidebarOpen, sidebarOpen, activeTab, toggleLayoutMode, layoutMode } =
-        useWorkspaceContext();
+    const {
+        addNewTab,
+        openTab,
+        setActiveTabId,
+        workspace,
+        closeTab,
+        closeAllTabs,
+        setSidebarTabId,
+        sidebarTabId,
+        setSidebarOpen,
+        sidebarOpen,
+        activeTab,
+        toggleLayoutMode,
+        layoutMode,
+    } = useWorkspaceContext();
     const { navigate, currentPath } = useRouting();
     const { openDialog, closeDialog } = useCommandDialog();
     const inputRef = React.useRef<HTMLInputElement | null>(null);
-    const [featureCommands, setFeatureCommands] = React.useState<Record<string, Command[]>>({});
+    const [featureCommands, setFeatureCommands] = React.useState<Record<string, AppCommand[]>>({});
 
     React.useEffect(() => {
         const down = (e: KeyboardEvent) => {
             if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
-                setOpen((open) => !open);
+                setOpen((prev) => !prev);
             }
         };
 
@@ -34,7 +96,6 @@ export function CommandMenu() {
         return () => document.removeEventListener("keydown", down);
     }, []);
 
-    // Listen for search dialog event
     React.useEffect(() => {
         return subscribe("notes:openSearch", () => {
             openDialog({
@@ -46,22 +107,18 @@ export function CommandMenu() {
         });
     }, [openDialog]);
 
-    // Focus input when dialog opens
     React.useEffect(() => {
         if (open) {
-            // Next tick to ensure input exists
             const t = setTimeout(() => inputRef.current?.focus(), 0);
             return () => clearTimeout(t);
         }
     }, [open]);
 
-    // Load commands from features
     React.useEffect(() => {
         async function loadCommands() {
-            const commands: Record<string, Command[]> = {};
+            const commands: Record<string, AppCommand[]> = {};
 
-            // Core commands (built-in)
-            commands["core"] = getCoreCommands({
+            commands.core = getCoreCommands({
                 openDialog,
                 closeDialog,
                 closeCommandMenu: () => setOpen(false),
@@ -78,7 +135,6 @@ export function CommandMenu() {
                 getLayoutMode: () => layoutMode,
             });
 
-            // Get commands from Todos plugin (placed first for better search priority)
             try {
                 const todosCommands = await getTodosCommands({
                     openDialog,
@@ -92,15 +148,13 @@ export function CommandMenu() {
                     navigate,
                     currentPath,
                 });
-
                 if (todosCommands.length > 0) {
-                    commands["todos"] = todosCommands;
+                    commands.todos = todosCommands;
                 }
             } catch (error) {
                 console.error("Failed to load todos commands:", error);
             }
 
-            // Get commands from Notes plugin
             const notesCommands = getNotesCommands({
                 openDialog,
                 closeDialog,
@@ -113,12 +167,10 @@ export function CommandMenu() {
                 navigate,
                 currentPath,
             });
-
             if (notesCommands.length > 0) {
-                commands["notes"] = notesCommands;
+                commands.notes = notesCommands;
             }
 
-            // Get commands from Chat feature
             const chatCommands = getChatCommands({
                 closeCommandMenu: () => setOpen(false),
                 addNewTab,
@@ -127,9 +179,8 @@ export function CommandMenu() {
                 navigate,
                 currentPath,
             });
-
             if (chatCommands.length > 0) {
-                commands["chat"] = chatCommands;
+                commands.chat = chatCommands;
             }
 
             setFeatureCommands(commands);
@@ -156,21 +207,14 @@ export function CommandMenu() {
         layoutMode,
     ]);
 
-    // Custom filter that prioritizes shorter/exact matches
     const customFilter = React.useCallback((value: string, search: string) => {
         const valueLower = value.toLowerCase();
         const searchLower = search.toLowerCase();
 
-        // Exact match gets highest score
         if (valueLower === searchLower) return 1;
-
-        // Starts with search gets high score
         if (valueLower.startsWith(searchLower)) return 0.9;
-
-        // Contains the search term
         if (valueLower.includes(searchLower)) return 0.5;
 
-        // Check if any word in value starts with search
         const words = valueLower.split(/\s+/);
         for (const word of words) {
             if (word.startsWith(searchLower)) return 0.8;
@@ -179,96 +223,91 @@ export function CommandMenu() {
         return 0;
     }, []);
 
+    const commandGroups = React.useMemo(() => {
+        return Object.entries(featureCommands)
+            .map(([featureId, commands]) => {
+                const visibleCommands = commands.filter((cmd) => {
+                    if (!cmd.when) return true;
+
+                    const currentViewId = activeTab?.pluginInstance?.viewId;
+                    const currentPluginId = activeTab?.pluginInstance?.plugin?.id;
+
+                    if (cmd.when.activeViewId && currentViewId !== cmd.when.activeViewId) {
+                        return false;
+                    }
+                    if (cmd.when.activePluginId && currentPluginId !== cmd.when.activePluginId) {
+                        return false;
+                    }
+                    return true;
+                });
+
+                return {
+                    featureId,
+                    title: groupTitles[featureId] || (featureId.charAt(0).toUpperCase() + featureId.slice(1)),
+                    commands: visibleCommands,
+                };
+            })
+            .filter((group) => group.commands.length > 0);
+    }, [featureCommands, activeTab?.pluginInstance?.viewId, activeTab?.pluginInstance?.plugin?.id]);
+
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
-            <DialogHeader className="sr-only">
-                <DialogTitle>Command Palette</DialogTitle>
-                <DialogDescription>Search for a command to run...</DialogDescription>
-            </DialogHeader>
-            <DialogContent className="overflow-hidden p-0" showCloseButton={false}>
-                <CommandRoot
-                    filter={customFilter}
-                    className="[&_[cmdk-group-heading]]:text-muted-foreground **:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5"
-                >
-                    <CommandInput ref={inputRef} placeholder="Type a command or search..." />
-            <CommandList>
+        <CommandDialog
+            open={open}
+            onOpenChange={setOpen}
+            showCloseButton={false}
+            className="max-w-[620px]"
+            commandClassName="bg-bg text-foreground"
+            title="Command Palette"
+            description="Search for a command to run"
+        >
+            <div className="border-b px-3 py-2" data-slot="command-toolbar">
+                <div className="flex items-center gap-1.5">
+                    <Command className="size-3 text-muted-foreground" />
+                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]">Command Palette</span>
+                    <span className="text-[10px] text-muted-foreground">{commandGroups.reduce((acc, g) => acc + g.commands.length, 0)} commands</span>
+                    <span className="ml-auto text-[10px] text-muted-foreground">Cmd/Ctrl + K</span>
+                </div>
+            </div>
+
+            <CommandInput ref={inputRef} placeholder="Search commands..." className="h-8 text-xs" />
+            <CommandList className="max-h-[420px]">
                 <CommandEmpty>No results found.</CommandEmpty>
 
-                {/* Feature Commands */}
-                {Object.entries(featureCommands).map(([featureId, commands]) => {
-                    if (commands.length === 0) return null;
+                {commandGroups.map((group, index) => (
+                    <React.Fragment key={group.featureId}>
+                        <CommandGroup heading={group.title}>
+                            {group.commands.map((command) => {
+                                const IconComponent = iconMap[command.icon as keyof typeof iconMap] || FileText;
 
-                    const feature = featureId.charAt(0).toUpperCase() + featureId.slice(1);
-                    return (
-                        <React.Fragment key={featureId}>
-                            <CommandGroup heading={feature}>
-                                {commands
-                                    .filter((command) => {
-                                        // Filter commands based on when conditions
-                                        if (command.when) {
-                                            const currentViewId = activeTab?.pluginInstance?.viewId;
-                                            const currentPluginId = activeTab?.pluginInstance?.plugin?.id;
+                                let searchValue = command.name;
+                                if (command.id === "notes.open") {
+                                    searchValue = "notes";
+                                } else if (command.id === "notes.openTomorrow") {
+                                    searchValue = `${command.name} tom tomorrow`;
+                                }
 
-                                            // Check activeViewId if specified
-                                            if (command.when.activeViewId && currentViewId !== command.when.activeViewId) {
-                                                return false;
-                                            }
-                                            // Check activePluginId if specified
-                                            if (command.when.activePluginId && currentPluginId !== command.when.activePluginId) {
-                                                return false;
-                                            }
-                                        }
-                                        // Show command if no condition specified or all conditions pass
-                                        return true;
-                                    })
-                                    .map((command) => {
-                                        // Map icon names to components
-                                        const iconMap = {
-                                            Settings,
-                                            Trash2,
-                                            FileText,
-                                            ListTodo,
-                                            ListChecks,
-                                            FolderOpen,
-                                            Plus,
-                                            Calendar,
-                                            CalendarMinus,
-                                            CalendarPlus,
-                                            CalendarDays,
-                                            Save,
-                                            MessageCircle,
-                                            AlertTriangle,
-                                            Columns2,
-                                        };
-                                        const IconComponent = iconMap[command.icon as keyof typeof iconMap] || FileText;
-
-                                        // Add keywords for better search matching
-                                        let searchValue = command.name;
-                                        if (command.id === "notes.open") {
-                                            // Short value for best prefix match on "n", "no", "not", "note", "notes"
-                                            searchValue = "notes";
-                                        } else if (command.id === "notes.openTomorrow") {
-                                            // Add "tom" as explicit keyword for tomorrow's note
-                                            searchValue = `${command.name} tom tomorrow`;
-                                        }
-
-                                        return (
-                                            <CommandItem key={command.id} onSelect={command.callback} value={searchValue}>
-                                                <IconComponent className="mr-2 h-4 w-4" />
-                                                <span>{command.name}</span>
-                                            </CommandItem>
-                                        );
-                                    })}
-                            </CommandGroup>
-                            <CommandSeparator />
-                        </React.Fragment>
-                    );
-                })}
-
-                {/* Only two groups: core and notes */}
+                                return (
+                                    <CommandItem
+                                        key={command.id}
+                                        onSelect={() => {
+                                            void command.callback();
+                                        }}
+                                        value={searchValue}
+                                        className="items-start gap-2 py-2"
+                                    >
+                                        <IconComponent className="mt-0.5 h-3.5 w-3.5" />
+                                        <div className="flex min-w-0 flex-col">
+                                            <span className="truncate text-xs font-medium">{command.name}</span>
+                                            <span className="truncate text-[10px] text-muted-foreground">{command.description}</span>
+                                        </div>
+                                    </CommandItem>
+                                );
+                            })}
+                        </CommandGroup>
+                        {index < commandGroups.length - 1 && <CommandSeparator />}
+                    </React.Fragment>
+                ))}
             </CommandList>
-                </CommandRoot>
-            </DialogContent>
-        </Dialog>
+        </CommandDialog>
     );
 }

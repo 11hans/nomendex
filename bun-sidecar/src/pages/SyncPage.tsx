@@ -8,6 +8,7 @@ import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useGHSync } from "@/contexts/GHSyncContext";
 import { chatPluginSerial } from "@/features/chat";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useTheme } from "@/hooks/useTheme";
 import {
     GitBranch,
     CheckCircle2,
@@ -138,6 +139,7 @@ function SyncContent() {
     const navigate = useNavigate();
     const { addNewTab, setActiveTabId, autoSync, setAutoSyncConfig } = useWorkspaceContext();
     const { status: syncStatus, setupStatus, needsSetup, checkForChanges, sync, recheckSetup, clearMergeConflict, gitAuthMode, setGitAuthMode } = useGHSync();
+    const { currentTheme } = useTheme();
     const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
     const [loading, setLoading] = useState(true);
     const [repoUrl, setRepoUrl] = useState("");
@@ -413,21 +415,52 @@ After you provide the merged content, I will manually update the file and mark t
     }
 
     const isReady = gitStatus?.initialized && gitStatus?.hasRemote;
+    const unresolvedConflictCount = conflicts.filter((file) => !file.resolved).length;
+    const repositoryState = !gitStatus?.initialized
+        ? "Not initialized"
+        : gitStatus.hasRemote
+            ? "Connected"
+            : "Remote missing";
+    const pendingChanges = gitStatus?.hasUncommittedChanges ? (gitStatus.changedFiles ?? 0) : 0;
+    const autoSyncState = !autoSync.enabled
+        ? "Disabled"
+        : autoSync.paused
+            ? "Paused"
+            : autoSync.syncOnChanges
+                ? "Changes + interval"
+                : "Interval only";
 
     return (
         <div
-            className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full bg-bg text-foreground"
+            className="h-full min-h-0 overflow-y-auto [&_.text-sm]:text-xs [&_.text-base]:text-sm [&_.text-xs]:text-[11px]"
+            style={{ backgroundColor: currentTheme.styles.surfacePrimary, color: currentTheme.styles.contentPrimary }}
         >
-            <div className="flex-shrink-0 mb-6">
-                <h1 className="text-2xl font-bold text-foreground">
-                    Sync
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                    Workspace Sync
-                </p>
-            </div>
+            <div className="mx-auto w-full max-w-[780px] px-3 pt-3 pb-6 space-y-2.5">
+                <div className="shrink-0 flex items-center gap-1.5 flex-wrap">
+                    <GitBranch className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
+                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>
+                        Sync
+                    </span>
+                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                        {repositoryState}
+                    </span>
+                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                        {pendingChanges} changed
+                    </span>
+                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                        auto {autoSyncState.toLowerCase()}
+                    </span>
+                    {hasMergeConflict && (
+                        <span className="text-[10px]" style={{ color: currentTheme.styles.semanticDestructive }}>
+                            {unresolvedConflictCount} unresolved
+                        </span>
+                    )}
+                    <Button variant="outline" size="sm" className="ml-auto h-7 px-2 text-[11px] rounded-md" onClick={() => recheckSetup()}>
+                        <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                        recheck
+                    </Button>
+                </div>
 
-            <div className="flex-1 overflow-y-auto outline-none pr-2">
                 {/* Auth Mode Setting */}
                 <div className="border rounded-lg p-4">
                     <div className="flex items-center justify-between">
@@ -497,12 +530,29 @@ After you provide the merged content, I will manually update the file and mark t
                         </div>
                         <button
                             onClick={() => setAutoSyncConfig({ enabled: !autoSync.enabled })}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${autoSync.enabled ? "bg-primary" : "bg-muted"
-                                }`}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                                autoSync.enabled ? "bg-sky-500" : "bg-muted border border-border"
+                            }`}
+                            style={
+                                autoSync.enabled
+                                    ? {
+                                        boxShadow: "0 0 0 1px rgba(14, 165, 233, 0.45), 0 0 14px rgba(14, 165, 233, 0.35)",
+                                    }
+                                    : undefined
+                            }
                         >
                             <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoSync.enabled ? "translate-x-6" : "translate-x-1"
-                                    }`}
+                                className={`inline-block h-4 w-4 transform rounded-full transition-transform ${
+                                    autoSync.enabled ? "translate-x-6 border" : "translate-x-1 bg-white"
+                                }`}
+                                style={
+                                    autoSync.enabled
+                                        ? {
+                                            backgroundColor: currentTheme.styles.semanticPrimary,
+                                            borderColor: currentTheme.styles.semanticPrimary,
+                                        }
+                                        : undefined
+                                }
                             />
                         </button>
                     </div>
@@ -518,12 +568,29 @@ After you provide the merged content, I will manually update the file and mark t
                             </div>
                             <button
                                 onClick={() => setAutoSyncConfig({ syncOnChanges: !autoSync.syncOnChanges })}
-                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${autoSync.syncOnChanges ? "bg-primary" : "bg-muted"
-                                    }`}
+                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                                    autoSync.syncOnChanges ? "bg-sky-500" : "bg-muted border border-border"
+                                }`}
+                                style={
+                                    autoSync.syncOnChanges
+                                        ? {
+                                            boxShadow: "0 0 0 1px rgba(14, 165, 233, 0.45), 0 0 14px rgba(14, 165, 233, 0.35)",
+                                        }
+                                        : undefined
+                                }
                             >
                                 <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoSync.syncOnChanges ? "translate-x-6" : "translate-x-1"
-                                        }`}
+                                    className={`inline-block h-4 w-4 transform rounded-full transition-transform ${
+                                        autoSync.syncOnChanges ? "translate-x-6 border" : "translate-x-1 bg-white"
+                                    }`}
+                                    style={
+                                        autoSync.syncOnChanges
+                                            ? {
+                                                backgroundColor: currentTheme.styles.semanticPrimary,
+                                                borderColor: currentTheme.styles.semanticPrimary,
+                                            }
+                                            : undefined
+                                    }
                                 />
                             </button>
                         </div>
@@ -1072,7 +1139,7 @@ After you provide the merged content, I will manually update the file and mark t
 
                     </div>
                 )}
-            </div>
+                </div>
         </div>
     );
 }

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/alert";
 import { useMcpServersAPI } from "@/hooks/useMcpServersAPI";
 import type { UserMcpServer, TransportConfig } from "@/features/mcp-servers/mcp-server-types";
-import { Plus, Pencil, Trash2, ArrowLeft, Server, AlertTriangle, Globe, Terminal } from "lucide-react";
+import { Plus, Pencil, Trash2, ArrowLeft, Server, AlertTriangle, Globe, Terminal, ChevronRight } from "lucide-react";
 
 type TransportType = "stdio" | "sse" | "http";
 
@@ -93,98 +93,99 @@ function McpServersContent() {
     }
 
     return (
-        <div className="px-6 py-4 h-full flex flex-col overflow-hidden max-w-4xl mx-auto w-full bg-bg text-foreground">
-            <div className="flex items-center justify-between flex-shrink-0 mb-6">
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => navigate("/agents")}>
-                        <ArrowLeft className="h-4 w-4" />
-                    </Button>
-                    <div>
-                        <h1 className="text-2xl font-bold">
-                            MCP Servers
-                        </h1>
-                        <p className="text-sm text-muted-foreground">
-                            Configure Model Context Protocol servers for your agents.
-                        </p>
+        <div className="h-full min-h-0 overflow-y-auto bg-bg text-foreground">
+            <div className="mx-auto w-full max-w-[620px] px-3 pt-3 pb-6">
+                <div className="shrink-0 flex items-center gap-1.5">
+                    <Server className="size-3 text-muted-foreground" />
+                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]">MCP Servers</span>
+                    <span className="text-[10px] text-muted-foreground">{servers.length} items</span>
+
+                    <div className="ml-auto flex items-center gap-1">
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate("/agents")} title="Back">
+                            <ArrowLeft className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" className="h-7 px-2 text-[11px]" onClick={() => navigate("/mcp-servers/new")}>
+                            <Plus className="mr-1 h-4 w-4" />
+                            New
+                        </Button>
                     </div>
                 </div>
-                <Button onClick={() => navigate("/mcp-servers/new")}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Server
-                </Button>
-            </div>
 
-            <div className="flex-1 overflow-y-auto outline-none pr-2 pb-8 space-y-4">
-                {oauthWarning && (
-                    <Alert>
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertDescription className="text-sm">{oauthWarning}</AlertDescription>
-                    </Alert>
-                )}
+                <div className="mt-2.5 space-y-2">
+                    {oauthWarning && (
+                        <Alert>
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertDescription className="text-sm">{oauthWarning}</AlertDescription>
+                        </Alert>
+                    )}
 
-                {servers.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                        <Server className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                        <p>No MCP servers configured yet.</p>
-                        <p className="text-sm mt-1">Click "New Server" to add one.</p>
-                    </div>
-                ) : (
-                    servers.map((server) => (
-                        <Card key={server.id}>
-                            <CardHeader className="pb-3">
-                                <div className="flex items-start justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
-                                            {getTransportIcon(server.transport)}
+                    {servers.length === 0 ? (
+                        <div className="py-4 text-center text-[10px] text-muted-foreground">
+                            no mcp servers configured yet
+                        </div>
+                    ) : (
+                        servers.map((server) => (
+                            <Card key={server.id} className="overflow-hidden rounded-lg border">
+                                <CardHeader className="px-2.5 py-2 pb-1.5">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div className="flex min-w-0 items-start gap-2">
+                                            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border bg-bg-secondary">
+                                                {getTransportIcon(server.transport)}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <CardTitle className="flex items-center gap-1.5 text-xs">
+                                                    <span className="truncate">{server.name}</span>
+                                                    {server.isBuiltIn && (
+                                                        <Badge variant="secondary" className="px-1 py-0 text-[10px]">Built-in</Badge>
+                                                    )}
+                                                    <Badge variant="outline" className="px-1 py-0 text-[10px]">
+                                                        {getTransportType(server.transport).toUpperCase()}
+                                                    </Badge>
+                                                </CardTitle>
+                                                <CardDescription className="text-[10px]">
+                                                    {server.description || "No description"}
+                                                </CardDescription>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <CardTitle className="flex items-center gap-2">
-                                                {server.name}
-                                                {server.isBuiltIn && (
-                                                    <Badge variant="secondary">Built-in</Badge>
-                                                )}
-                                                <Badge variant="outline">
-                                                    {getTransportType(server.transport).toUpperCase()}
-                                                </Badge>
-                                            </CardTitle>
-                                            <CardDescription>{server.description || "No description"}</CardDescription>
-                                        </div>
+                                        {!server.isBuiltIn && (
+                                            <div className="flex items-center gap-0.5">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6"
+                                                    onClick={() => navigate(`/mcp-servers/${server.id}/edit`)}
+                                                    title="Edit"
+                                                >
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-6 w-6"
+                                                    onClick={() => setDeleteConfirmServer(server)}
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
+                                        )}
                                     </div>
-                                    {!server.isBuiltIn && (
-                                        <div className="flex items-center gap-1">
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => navigate(`/mcp-servers/${server.id}/edit`)}
-                                                title="Edit"
-                                            >
-                                                <Pencil className="h-4 w-4" />
-                                            </Button>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                onClick={() => setDeleteConfirmServer(server)}
-                                                title="Delete"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
+                                </CardHeader>
+                                <CardContent className="px-2.5 py-1.5 pt-0">
+                                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                        <ChevronRight className="size-3 opacity-70" />
+                                        <span className="truncate font-mono">{getTransportLabel(server.transport)}</span>
+                                    </div>
+                                    {server.notes && (
+                                        <p className="mt-1 text-[10px] text-muted-foreground">
+                                            {server.notes}
+                                        </p>
                                     )}
-                                </div>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="text-sm font-mono truncate text-muted-foreground">
-                                    {getTransportLabel(server.transport)}
-                                </div>
-                                {server.notes && (
-                                    <p className="text-xs mt-2 text-muted-foreground">
-                                        {server.notes}
-                                    </p>
-                                )}
-                            </CardContent>
-                        </Card>
-                    ))
-                )}
+                                </CardContent>
+                            </Card>
+                        ))
+                    )}
+                </div>
             </div>
 
             {/* Delete Confirmation Dialog */}

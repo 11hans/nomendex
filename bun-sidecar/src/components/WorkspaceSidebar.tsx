@@ -66,8 +66,20 @@ export function WorkspaceSidebar() {
         navigate(path);
     };
 
+    const handleOpenInbox = () => {
+        if (currentPath !== "/") {
+            navigate("/");
+        }
+        openTab({
+            pluginMeta: plugins.find(p => p.id === "todos") || plugins[0],
+            view: "inbox",
+            props: { project: "Inbox" },
+        });
+    };
+
     const activePluginId = activeTab?.pluginInstance?.plugin?.id ?? null;
     const activeViewId = activeTab?.pluginInstance?.viewId ?? null;
+    const isWorkspaceView = currentPath === "/";
 
     return (
         <div className="flex flex-col h-full min-h-0">
@@ -77,18 +89,14 @@ export function WorkspaceSidebar() {
                 <NavItem
                     icon={Inbox}
                     label="Inbox"
-                    isActive={activePluginId === "todos" && activeViewId === "inbox"}
-                    onClick={() => openTab({
-                        pluginMeta: plugins.find(p => p.id === 'todos') || plugins[0],
-                        view: "inbox",
-                        props: { project: "Inbox" }
-                    })}
+                    isActive={isWorkspaceView && activePluginId === "todos" && activeViewId === "inbox"}
+                    onClick={handleOpenInbox}
                 />
                 {plugins.filter(p => p.id !== 'chat').map((plugin) => {
                     const IconComponent = getIcon(plugin.icon);
                     const isPluginActive = plugin.id === "todos"
-                        ? activePluginId === "todos" && activeViewId !== "inbox"
-                        : activePluginId === plugin.id;
+                        ? isWorkspaceView && activePluginId === "todos" && activeViewId !== "inbox"
+                        : isWorkspaceView && activePluginId === plugin.id;
 
                     return (
                         <NavItem
@@ -113,7 +121,7 @@ export function WorkspaceSidebar() {
                             key={plugin.id}
                             icon={IconComponent}
                             label={plugin.name || plugin.id}
-                            isActive={activePluginId === plugin.id}
+                            isActive={isWorkspaceView && activePluginId === plugin.id}
                             onClick={() => handleAddPlugin(plugin)}
                         />
                     );
