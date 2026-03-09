@@ -379,10 +379,11 @@ class CalendarManager {
     // MARK: - Helpers
     
     private func findEvent(taskId: String) -> EKEvent? {
+        eventStore.reset()
         let nomendexCalendars = getNomendexCalendars()
         guard !nomendexCalendars.isEmpty else { return nil }
-        let start = Date().addingTimeInterval(-365 * 24 * 3600)
-        let end = Date().addingTimeInterval(365 * 24 * 3600)
+        let start = Date().addingTimeInterval(-5 * 365 * 24 * 3600)
+        let end = Date().addingTimeInterval(5 * 365 * 24 * 3600)
         let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
         let events = eventStore.events(matching: predicate)
 

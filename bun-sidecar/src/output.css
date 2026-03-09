@@ -41,7 +41,6 @@
     --tracking-tight: -0.025em;
     --tracking-wide: 0.025em;
     --tracking-wider: 0.05em;
-    --tracking-widest: 0.1em;
     --leading-tight: 1.25;
     --leading-relaxed: 1.625;
     --radius-xs: 0.125rem;
@@ -306,14 +305,14 @@
   .top-2 {
     top: calc(var(--spacing) * 2);
   }
+  .top-2\.5 {
+    top: calc(var(--spacing) * 2.5);
+  }
   .top-3 {
     top: calc(var(--spacing) * 3);
   }
   .top-3\.5 {
     top: calc(var(--spacing) * 3.5);
-  }
-  .top-4 {
-    top: calc(var(--spacing) * 4);
   }
   .top-7 {
     top: calc(var(--spacing) * 7);
@@ -351,11 +350,11 @@
   .right-2 {
     right: calc(var(--spacing) * 2);
   }
+  .right-2\.5 {
+    right: calc(var(--spacing) * 2.5);
+  }
   .right-3 {
     right: calc(var(--spacing) * 3);
-  }
-  .right-4 {
-    right: calc(var(--spacing) * 4);
   }
   .-bottom-12 {
     bottom: calc(var(--spacing) * -12);
@@ -857,8 +856,8 @@
   .min-h-8 {
     min-height: calc(var(--spacing) * 8);
   }
-  .min-h-16 {
-    min-height: calc(var(--spacing) * 16);
+  .min-h-12 {
+    min-height: calc(var(--spacing) * 12);
   }
   .min-h-24 {
     min-height: calc(var(--spacing) * 24);
@@ -950,9 +949,6 @@
   .w-8 {
     width: calc(var(--spacing) * 8);
   }
-  .w-9 {
-    width: calc(var(--spacing) * 9);
-  }
   .w-10 {
     width: calc(var(--spacing) * 10);
   }
@@ -998,11 +994,11 @@
   .w-\[40\%\] {
     width: 40%;
   }
+  .w-\[88px\] {
+    width: 88px;
+  }
   .w-\[90vw\] {
     width: 90vw;
-  }
-  .w-\[100px\] {
-    width: 100px;
   }
   .w-\[170px\] {
     width: 170px;
@@ -1139,6 +1135,9 @@
   .min-w-5 {
     min-width: calc(var(--spacing) * 5);
   }
+  .min-w-7 {
+    min-width: calc(var(--spacing) * 7);
+  }
   .min-w-8 {
     min-width: calc(var(--spacing) * 8);
   }
@@ -1175,8 +1174,8 @@
   .min-w-\[300px\] {
     min-width: 300px;
   }
-  .min-w-\[360px\] {
-    min-width: 360px;
+  .min-w-\[320px\] {
+    min-width: 320px;
   }
   .min-w-\[var\(--cell-size\,2rem\)\] {
     min-width: var(--cell-size,2rem);
@@ -1921,6 +1920,9 @@
   .p-2 {
     padding: calc(var(--spacing) * 2);
   }
+  .p-2\.5 {
+    padding: calc(var(--spacing) * 2.5);
+  }
   .p-3 {
     padding: calc(var(--spacing) * 3);
   }
@@ -1936,8 +1938,8 @@
   .p-8 {
     padding: calc(var(--spacing) * 8);
   }
-  .p-\[3px\] {
-    padding: 3px;
+  .p-\[2px\] {
+    padding: 2px;
   }
   .p-px {
     padding: 1px;
@@ -2143,9 +2145,6 @@
     font-size: var(--text-xs);
     line-height: var(--tw-leading, var(--text-xs--line-height));
   }
-  .text-\[0\.8rem\] {
-    font-size: 0.8rem;
-  }
   .text-\[9px\] {
     font-size: 9px;
   }
@@ -2210,10 +2209,6 @@
   .tracking-wider {
     --tw-tracking: var(--tracking-wider);
     letter-spacing: var(--tracking-wider);
-  }
-  .tracking-widest {
-    --tw-tracking: var(--tracking-widest);
-    letter-spacing: var(--tracking-widest);
   }
   .\[overflow-wrap\:anywhere\] {
     overflow-wrap: anywhere;
@@ -2868,9 +2863,9 @@
       display: inline-flex;
     }
   }
-  .file\:h-7 {
+  .file\:h-6 {
     &::file-selector-button {
-      height: calc(var(--spacing) * 7);
+      height: calc(var(--spacing) * 6);
     }
   }
   .file\:border-0 {
@@ -2884,10 +2879,9 @@
       background-color: transparent;
     }
   }
-  .file\:text-sm {
+  .file\:text-\[10px\] {
     &::file-selector-button {
-      font-size: var(--text-sm);
-      line-height: var(--tw-leading, var(--text-sm--line-height));
+      font-size: 10px;
     }
   }
   .file\:font-medium {
@@ -3408,9 +3402,14 @@
       grid-template-columns: calc(var(--spacing) * 4) 1fr;
     }
   }
-  .has-\[\>svg\]\:gap-x-3 {
+  .has-\[\>svg\]\:gap-x-2\.5 {
     &:has(>svg) {
-      column-gap: calc(var(--spacing) * 3);
+      column-gap: calc(var(--spacing) * 2.5);
+    }
+  }
+  .has-\[\>svg\]\:px-2 {
+    &:has(>svg) {
+      padding-inline: calc(var(--spacing) * 2);
     }
   }
   .has-\[\>svg\]\:px-2\.5 {
@@ -3421,11 +3420,6 @@
   .has-\[\>svg\]\:px-3 {
     &:has(>svg) {
       padding-inline: calc(var(--spacing) * 3);
-    }
-  }
-  .has-\[\>svg\]\:px-4 {
-    &:has(>svg) {
-      padding-inline: calc(var(--spacing) * 4);
     }
   }
   .aria-disabled\:pointer-events-none {
@@ -3802,13 +3796,6 @@
       }
     }
   }
-  .\*\*\:data-\[slot\=command-input-wrapper\]\:h-12 {
-    :is(& *) {
-      &[data-slot="command-input-wrapper"] {
-        height: calc(var(--spacing) * 12);
-      }
-    }
-  }
   .\*\*\:data-\[slot\=command-input-wrapper\]\:h-auto {
     :is(& *) {
       &[data-slot="command-input-wrapper"] {
@@ -4163,9 +4150,9 @@
       justify-content: flex-end;
     }
   }
-  .sm\:gap-2\.5 {
+  .sm\:gap-2 {
     @media (width >= 40rem) {
-      gap: calc(var(--spacing) * 2.5);
+      gap: calc(var(--spacing) * 2);
     }
   }
   .sm\:pr-2\.5 {
@@ -4242,20 +4229,14 @@
       flex-direction: row;
     }
   }
-  .md\:gap-1\.5 {
+  .md\:gap-1 {
     @media (width >= 48rem) {
-      gap: calc(var(--spacing) * 1.5);
+      gap: calc(var(--spacing) * 1);
     }
   }
   .md\:text-left {
     @media (width >= 48rem) {
       text-align: left;
-    }
-  }
-  .md\:text-sm {
-    @media (width >= 48rem) {
-      font-size: var(--text-sm);
-      line-height: var(--tw-leading, var(--text-sm--line-height));
     }
   }
   .md\:opacity-0 {
@@ -4572,15 +4553,14 @@
       padding-inline: calc(var(--spacing) * 2);
     }
   }
-  .\[\&_\[cmdk-group-heading\]\]\:py-1\.5 {
+  .\[\&_\[cmdk-group-heading\]\]\:py-1 {
     & [cmdk-group-heading] {
-      padding-block: calc(var(--spacing) * 1.5);
+      padding-block: calc(var(--spacing) * 1);
     }
   }
-  .\[\&_\[cmdk-group-heading\]\]\:text-xs {
+  .\[\&_\[cmdk-group-heading\]\]\:text-\[10px\] {
     & [cmdk-group-heading] {
-      font-size: var(--text-xs);
-      line-height: var(--tw-leading, var(--text-xs--line-height));
+      font-size: 10px;
     }
   }
   .\[\&_\[cmdk-group-heading\]\]\:font-medium {
@@ -4594,9 +4574,9 @@
       color: var(--color-muted-foreground);
     }
   }
-  .\[\&_\[cmdk-group\]\]\:px-2 {
+  .\[\&_\[cmdk-group\]\]\:px-1\.5 {
     & [cmdk-group] {
-      padding-inline: calc(var(--spacing) * 2);
+      padding-inline: calc(var(--spacing) * 1.5);
     }
   }
   .\[\&_\[cmdk-group\]\:not\(\[hidden\]\)_\~\[cmdk-group\]\]\:pt-0 {
@@ -4604,19 +4584,9 @@
       padding-top: calc(var(--spacing) * 0);
     }
   }
-  .\[\&_\[cmdk-input-wrapper\]_svg\]\:h-5 {
-    & [cmdk-input-wrapper] svg {
-      height: calc(var(--spacing) * 5);
-    }
-  }
-  .\[\&_\[cmdk-input-wrapper\]_svg\]\:w-5 {
-    & [cmdk-input-wrapper] svg {
-      width: calc(var(--spacing) * 5);
-    }
-  }
-  .\[\&_\[cmdk-input\]\]\:h-12 {
+  .\[\&_\[cmdk-input\]\]\:h-8 {
     & [cmdk-input] {
-      height: calc(var(--spacing) * 12);
+      height: calc(var(--spacing) * 8);
     }
   }
   .\[\&_\[cmdk-item\]\]\:px-2 {
@@ -4624,19 +4594,15 @@
       padding-inline: calc(var(--spacing) * 2);
     }
   }
-  .\[\&_\[cmdk-item\]\]\:py-3 {
+  .\[\&_\[cmdk-item\]\]\:py-1 {
     & [cmdk-item] {
-      padding-block: calc(var(--spacing) * 3);
+      padding-block: calc(var(--spacing) * 1);
     }
   }
-  .\[\&_\[cmdk-item\]_svg\]\:h-5 {
+  .\[\&_\[cmdk-item\]_svg\]\:size-3\.5 {
     & [cmdk-item] svg {
-      height: calc(var(--spacing) * 5);
-    }
-  }
-  .\[\&_\[cmdk-item\]_svg\]\:w-5 {
-    & [cmdk-item] svg {
-      width: calc(var(--spacing) * 5);
+      width: calc(var(--spacing) * 3.5);
+      height: calc(var(--spacing) * 3.5);
     }
   }
   .\[\&_\[data-slot\=button\]\]\:text-\[10px\] {
@@ -4693,6 +4659,17 @@
     & [data-slot=card] {
       --tw-shadow: 0 0 #0000;
       box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+    }
+  }
+  .\[\&_\[data-slot\=command-input-wrapper\]\]\:h-8 {
+    & [data-slot=command-input-wrapper] {
+      height: calc(var(--spacing) * 8);
+    }
+  }
+  .\[\&_\[data-slot\=command-input-wrapper\]_svg\]\:size-3\.5 {
+    & [data-slot=command-input-wrapper] svg {
+      width: calc(var(--spacing) * 3.5);
+      height: calc(var(--spacing) * 3.5);
     }
   }
   .\[\&_\[data-slot\=input\]\]\:text-\[10px\] {
@@ -4812,6 +4789,12 @@
   .\[\&_svg\]\:shrink-0 {
     & svg {
       flex-shrink: 0;
+    }
+  }
+  .\[\&_svg\:not\(\[class\*\=\'size-\'\]\)\]\:size-3\.5 {
+    & svg:not([class*='size-']) {
+      width: calc(var(--spacing) * 3.5);
+      height: calc(var(--spacing) * 3.5);
     }
   }
   .\[\&_svg\:not\(\[class\*\=\'size-\'\]\)\]\:size-4 {
