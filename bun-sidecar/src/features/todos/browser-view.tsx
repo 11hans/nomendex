@@ -1511,7 +1511,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                         onArchive={archiveTodoWithToast}
                         onToggleDone={toggleDoneWithToast}
                         hideProject={hideProject}
-                        hideStatusIcon={true}
                         onDateChange={handleInlineDateChange}
                     />
                 </div>
@@ -1546,7 +1545,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         const safeColumnTodos = Array.isArray(columnTodos) ? columnTodos : [];
 
         return (
-            <div className="flex-1 min-w-[280px] max-w-[360px] flex flex-col">
+            <div className="flex-1 min-w-0 flex flex-col">
                 <div
                     className="flex items-center gap-1.5 mb-2.5 flex-shrink-0 group cursor-pointer rounded-md px-1.5 py-1 transition-colors"
                     onMouseEnter={() => setHeaderHovered(true)}

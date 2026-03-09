@@ -1,4 +1,5 @@
-import { Settings, Trash2, Archive, ArchiveRestore, Copy, CalendarDays, CheckCircle2, Circle } from "lucide-react";
+import { Settings, Trash2, Archive, ArchiveRestore, Copy, CalendarDays } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Todo, PRIORITY_CONFIG } from "./todo-types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -54,12 +55,6 @@ export function TodoCard({
         }
     };
 
-    const handleToggleDone = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        e.preventDefault();
-        onToggleDone?.(todo);
-    };
-
     const isOverdue = Boolean(
         todo.dueDate
         && todo.status !== "done"
@@ -78,35 +73,30 @@ export function TodoCard({
         >
             <CardHeader className="pb-1 pt-2 px-3">
                 <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2 flex-1 min-w-0">
-                        {!hideStatusIcon && (
-                            <button
-                                type="button"
-                                onClick={handleToggleDone}
-                                className="mt-0.5 shrink-0 transition-colors"
-                                title={todo.status === "done" ? "Mark as incomplete" : "Mark as done"}
-                                style={{ color: currentTheme.styles.contentTertiary }}
+                    <CardTitle className={`text-sm font-medium leading-tight min-w-0 break-words [overflow-wrap:anywhere] flex-1 ${todo.status === "done" ? "line-through text-muted-foreground" : ""
+                        }`} style={{ color: todo.status === "done" ? currentTheme.styles.contentTertiary : currentTheme.styles.contentPrimary }}>
+                        {todo.title}
+                    </CardTitle>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                        {todo.archived && (
+                            <span
+                                className="text-[10px] px-1 rounded"
+                                style={{ color: currentTheme.styles.contentTertiary, backgroundColor: currentTheme.styles.surfaceSecondary }}
                             >
-                                {todo.status === "done" ? (
-                                    <CheckCircle2 className="size-4" style={{ color: currentTheme.styles.semanticSuccess }} />
-                                ) : (
-                                    <Circle className="size-4" />
-                                )}
-                            </button>
+                                Archived
+                            </span>
                         )}
-                        <CardTitle className={`text-sm font-medium leading-tight min-w-0 break-words [overflow-wrap:anywhere] ${todo.status === "done" ? "line-through text-muted-foreground" : ""
-                            }`} style={{ color: todo.status === "done" ? currentTheme.styles.contentTertiary : currentTheme.styles.contentPrimary }}>
-                            {todo.title}
-                        </CardTitle>
+                        {!hideStatusIcon && (
+                            <Checkbox
+                                checked={todo.status === "done"}
+                                onCheckedChange={(checked) => {
+                                    if (checked !== "indeterminate") onToggleDone?.(todo);
+                                }}
+                                onClick={(e) => { e.stopPropagation(); }}
+                                title={todo.status === "done" ? "Mark as incomplete" : "Mark as done"}
+                            />
+                        )}
                     </div>
-                    {todo.archived && (
-                        <span
-                            className="text-[10px] px-1 rounded shrink-0"
-                            style={{ color: currentTheme.styles.contentTertiary, backgroundColor: currentTheme.styles.surfaceSecondary }}
-                        >
-                            Archived
-                        </span>
-                    )}
                 </div>
                 {!hideProject && todo.project && (
                     <p className="text-[10px] truncate" style={{ color: currentTheme.styles.contentAccent }}>
