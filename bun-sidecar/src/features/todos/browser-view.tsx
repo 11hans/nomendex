@@ -307,9 +307,10 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             setCreateDialogOpen(false);
             await loadTodos();
 
-            // Focus selection on the newly created todo
             if (createdTodo?.id) {
                 setSelectedTodoId(createdTodo.id);
+                syncTaskToCalendar(createdTodo).catch(() => { });
+                syncTaskToReminders(createdTodo).catch(() => { });
             }
         } catch (error) {
             console.error("Failed to create todo:", error);

@@ -319,9 +319,9 @@ class CalendarManager {
             event.isAllDay = !startDateStr.contains("T")
         } else if let dueDateStr = dueDate, let due = parseISO(dueDateStr) {
             if dueDateStr.contains("T") {
-                // Time-specific: use due as end, calculate start from duration
-                event.endDate = due
-                event.startDate = due.addingTimeInterval(TimeInterval(-duration * 60))
+                // Time-specific: use due as start, calculate end from duration
+                event.startDate = due
+                event.endDate = due.addingTimeInterval(TimeInterval(duration * 60))
                 event.isAllDay = false
             } else {
                 // All-day event

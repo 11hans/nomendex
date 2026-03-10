@@ -17,10 +17,9 @@ export function initCalendarChangeListener(todosAPI: any) {
         for (const change of changes) {
             try {
                 if (change.deleted) {
-                    // Update the todo to remove dates, but keep the task itself
-                    await todosAPI.updateTodo({
+                    // Delete the task entirely from Nomendex
+                    await todosAPI.deleteTodo({
                         todoId: change.taskId,
-                        updates: { dueDate: null, startDate: null }
                     });
                     hasChangesToApply = true;
                 } else {

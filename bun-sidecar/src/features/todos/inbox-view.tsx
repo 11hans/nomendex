@@ -355,7 +355,7 @@ export function InboxListView() {
 
         setLoading(true);
         try {
-            await todosAPI.createTodo({
+            const createdTodo = await todosAPI.createTodo({
                 title: newTodo.title.trim(),
                 description: newTodo.description,
                 project: newTodo.project.trim() || undefined,
@@ -369,6 +369,11 @@ export function InboxListView() {
             resetNewTodoDraft();
             setCreateDialogOpen(false);
             await loadTodos();
+
+            if (createdTodo?.id) {
+                syncTaskToCalendar(createdTodo).catch(() => { });
+                syncTaskToReminders(createdTodo).catch(() => { });
+            }
         } catch (error) {
             console.error("Failed to create todo:", error);
         } finally {
