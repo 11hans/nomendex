@@ -47,11 +47,25 @@ export const AgentConfigSchema = z.object({
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
+// Built-in agent IDs that cannot be updated or deleted
+export const BUILT_IN_AGENT_IDS = ["default", "bpagent"] as const;
+export type BuiltInAgentId = (typeof BUILT_IN_AGENT_IDS)[number];
+
+export function isBuiltInAgentId(id: string): id is BuiltInAgentId {
+    return (BUILT_IN_AGENT_IDS as readonly string[]).includes(id);
+}
+
 // Agent preferences schema
 export const AgentPreferencesSchema = z.object({
     lastUsedAgentId: z.string(),
-    defaultAgentAllowedTools: z.array(z.string()).optional(), // Allowed tools for the default agent
+    builtInAgentAllowedTools: z.record(z.string(), z.array(z.string())).default({}),
 });
+
+// Legacy schema shape for migration detection
+export interface LegacyAgentPreferences {
+    lastUsedAgentId: string;
+    defaultAgentAllowedTools?: string[];
+}
 
 export type AgentPreferences = z.infer<typeof AgentPreferencesSchema>;
 
@@ -109,7 +123,22 @@ export const DEFAULT_AGENT: AgentConfig = {
     updatedAt: "2025-01-01T00:00:00.000Z",
 };
 
+// BPagent - built-in PKM agent
+export const BPAGENT_AGENT: AgentConfig = {
+    id: "bpagent",
+    name: "BPagent",
+    description: "PKM workflows: review, planning, note organization, and vault-oriented work",
+    systemPrompt: "", // Set at runtime from built-in-bpagent.ts
+    model: "claude-sonnet-4-5-20250929", // Same as General Assistant in v1
+    mcpServers: [],
+    allowedTools: [],
+    isDefault: false,
+    createdAt: "2025-01-01T00:00:00.000Z",
+    updatedAt: "2025-01-01T00:00:00.000Z",
+};
+
 // Default preferences
 export const DEFAULT_PREFERENCES: AgentPreferences = {
     lastUsedAgentId: "default",
+    builtInAgentAllowedTools: {},
 };

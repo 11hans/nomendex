@@ -5,6 +5,7 @@ export const SkillSchema = z.object({
     name: z.string(),
     title: z.string(),
     preview: z.string(),
+    source: z.string().optional(),
 });
 
 export type Skill = z.infer<typeof SkillSchema>;

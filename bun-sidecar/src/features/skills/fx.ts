@@ -9,6 +9,7 @@ type SkillFrontMatter = {
     name?: string;
     title?: string;
     description?: string;
+    source?: string;
 };
 
 function formatAsTitle(name: string): string {
@@ -87,6 +88,7 @@ async function getSkills(): Promise<Skill[]> {
             let preview = "";
             let skillName = entry;
             let skillTitle = formatAsTitle(entry);
+            let skillSource: string | undefined;
 
             if (await skillMdFile.exists()) {
                 const content = await skillMdFile.text();
@@ -104,12 +106,17 @@ async function getSkills(): Promise<Skill[]> {
                 if (frontMatter?.title) {
                     skillTitle = frontMatter.title;
                 }
+                // Track source ownership
+                if (frontMatter?.source) {
+                    skillSource = frontMatter.source;
+                }
             }
 
             skills.push({
                 name: skillName,
                 title: skillTitle,
                 preview,
+                source: skillSource,
             });
         }
 

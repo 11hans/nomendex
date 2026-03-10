@@ -6,10 +6,14 @@ import {
     type AgentConfig,
     AgentConfigSchema,
     type AgentPreferences,
+    type LegacyAgentPreferences,
+    AgentPreferencesSchema,
     DEFAULT_AGENT,
     DEFAULT_PREFERENCES,
+    BPAGENT_AGENT,
     MCP_REGISTRY,
     type McpServerDefinition,
+    isBuiltInAgentId,
 } from "./index";
 
 // Create logger for agents feature
@@ -34,13 +38,34 @@ function getAgentFilePath(id: string): string {
     return path.join(getAgentsPath(), `${sanitizedId}.json`);
 }
 
-// Read preferences
+// Read preferences (with lazy migration from legacy schema)
 async function getPreferences(): Promise<AgentPreferences> {
     try {
         await ensureAgentsDir();
         const file = Bun.file(getPreferencesFile());
         if (await file.exists()) {
-            return await file.json();
+            const raw = await file.json() as Record<string, unknown>;
+
+            // Lazy migration: detect legacy defaultAgentAllowedTools field
+            if ("defaultAgentAllowedTools" in raw) {
+                const legacy = raw as unknown as LegacyAgentPreferences;
+                const migrated: AgentPreferences = {
+                    lastUsedAgentId: legacy.lastUsedAgentId,
+                    builtInAgentAllowedTools: {
+                        default: legacy.defaultAgentAllowedTools || [],
+                    },
+                };
+                agentsLogger.info("Migrating legacy defaultAgentAllowedTools to builtInAgentAllowedTools");
+                await savePreferences(migrated);
+                return migrated;
+            }
+
+            const result = AgentPreferencesSchema.safeParse(raw);
+            if (result.success) {
+                return result.data;
+            }
+            agentsLogger.warn("Invalid preferences, returning defaults", { issues: result.error.issues });
+            return DEFAULT_PREFERENCES;
         }
         return DEFAULT_PREFERENCES;
     } catch (error) {
@@ -64,9 +89,12 @@ async function savePreferences(preferences: AgentPreferences): Promise<void> {
 async function getAgent(input: { agentId: string }): Promise<AgentConfig | null> {
     agentsLogger.info(`Getting agent: ${input.agentId}`);
 
-    // Return default agent if requested
+    // Return built-in agents if requested
     if (input.agentId === "default") {
         return DEFAULT_AGENT;
+    }
+    if (input.agentId === "bpagent") {
+        return BPAGENT_AGENT;
     }
 
     try {
@@ -102,7 +130,7 @@ async function listAgents(): Promise<AgentConfig[]> {
 
     try {
         await ensureAgentsDir();
-        const agents: AgentConfig[] = [DEFAULT_AGENT];
+        const agents: AgentConfig[] = [DEFAULT_AGENT, BPAGENT_AGENT];
 
         // Read all JSON files in agents directory except _preferences.json
         const { readdir } = await import("node:fs/promises");
@@ -129,10 +157,12 @@ async function listAgents(): Promise<AgentConfig[]> {
             }
         }
 
-        // Sort: default first, then by name
+        // Sort: default first, then bpagent, then user agents by name
         agents.sort((a, b) => {
-            if (a.isDefault) return -1;
-            if (b.isDefault) return 1;
+            if (a.id === "default") return -1;
+            if (b.id === "default") return 1;
+            if (a.id === "bpagent") return -1;
+            if (b.id === "bpagent") return 1;
             return a.name.localeCompare(b.name);
         });
 
@@ -140,7 +170,7 @@ async function listAgents(): Promise<AgentConfig[]> {
         return agents;
     } catch (error) {
         agentsLogger.error("Failed to list agents", { error });
-        return [DEFAULT_AGENT];
+        return [DEFAULT_AGENT, BPAGENT_AGENT];
     }
 }
 
@@ -195,10 +225,10 @@ async function updateAgent(input: {
 }): Promise<AgentConfig | null> {
     agentsLogger.info(`Updating agent: ${input.agentId}`);
 
-    // Cannot update default agent's core properties
-    if (input.agentId === "default") {
-        agentsLogger.warn("Cannot update default agent");
-        return DEFAULT_AGENT;
+    // Cannot update built-in agents
+    if (isBuiltInAgentId(input.agentId)) {
+        agentsLogger.warn(`Cannot update built-in agent: ${input.agentId}`);
+        return input.agentId === "bpagent" ? BPAGENT_AGENT : DEFAULT_AGENT;
     }
 
     try {
@@ -230,9 +260,9 @@ async function updateAgent(input: {
 async function deleteAgent(input: { agentId: string }): Promise<{ success: boolean }> {
     agentsLogger.info(`Deleting agent: ${input.agentId}`);
 
-    // Cannot delete default agent
-    if (input.agentId === "default") {
-        agentsLogger.warn("Cannot delete default agent");
+    // Cannot delete built-in agents
+    if (isBuiltInAgentId(input.agentId)) {
+        agentsLogger.warn(`Cannot delete built-in agent: ${input.agentId}`);
         return { success: false };
     }
 
@@ -246,7 +276,7 @@ async function deleteAgent(input: { agentId: string }): Promise<{ success: boole
         // If deleted agent was the last used, reset to default
         const prefs = await getPreferences();
         if (prefs.lastUsedAgentId === input.agentId) {
-            await savePreferences({ lastUsedAgentId: "default" });
+            await savePreferences({ ...prefs, lastUsedAgentId: "default" });
         }
 
         return { success: true };
@@ -287,17 +317,20 @@ async function addAllowedTool(input: { agentId: string; toolName: string }): Pro
     agentsLogger.info(`Adding allowed tool ${input.toolName} to agent ${input.agentId}`);
 
     try {
-        if (input.agentId === "default") {
-            // For default agent, store in preferences
+        if (isBuiltInAgentId(input.agentId)) {
+            // For built-in agents, store in preferences under builtInAgentAllowedTools
             const prefs = await getPreferences();
-            const currentTools = prefs.defaultAgentAllowedTools || [];
+            const currentTools = prefs.builtInAgentAllowedTools[input.agentId] || [];
 
             if (!currentTools.includes(input.toolName)) {
                 await savePreferences({
                     ...prefs,
-                    defaultAgentAllowedTools: [...currentTools, input.toolName],
+                    builtInAgentAllowedTools: {
+                        ...prefs.builtInAgentAllowedTools,
+                        [input.agentId]: [...currentTools, input.toolName],
+                    },
                 });
-                agentsLogger.info(`Added ${input.toolName} to default agent's allowed tools`);
+                agentsLogger.info(`Added ${input.toolName} to ${input.agentId}'s allowed tools`);
             }
             return true;
         }
@@ -326,11 +359,11 @@ async function addAllowedTool(input: { agentId: string; toolName: string }): Pro
     }
 }
 
-// Get allowed tools for an agent (handles default agent specially)
+// Get allowed tools for an agent (handles built-in agents via preferences)
 async function getAgentAllowedTools(input: { agentId: string }): Promise<string[]> {
-    if (input.agentId === "default") {
+    if (isBuiltInAgentId(input.agentId)) {
         const prefs = await getPreferences();
-        return prefs.defaultAgentAllowedTools || [];
+        return prefs.builtInAgentAllowedTools[input.agentId] || [];
     }
 
     const agent = await getAgent({ agentId: input.agentId });

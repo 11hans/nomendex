@@ -7,6 +7,7 @@ export const SkillMetadataSchema = z.object({
     name: z.string(),
     description: z.string(),
     version: z.number().int().positive(),
+    source: z.string().optional(),
 });
 
 export type SkillMetadata = z.infer<typeof SkillMetadataSchema>;

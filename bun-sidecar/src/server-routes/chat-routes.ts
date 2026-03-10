@@ -1,8 +1,8 @@
-import { query, type SDKMessage, type McpServerConfig, type HookCallback, type PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
+import { query, type SDKMessage, type McpServerConfig, type HookCallback, type PreToolUseHookInput, type AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { existsSync, mkdirSync } from "node:fs";
 import { appendFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
-import { getRootPath, getNomendexPath, getUploadsPath } from "@/storage/root-path";
+import { getRootPath, getNomendexPath, getUploadsPath, getNotesPath } from "@/storage/root-path";
 import { getAgent, getPreferences, savePreferences, addAllowedTool, getAgentAllowedTools } from "@/features/agents/fx";
 import { DEFAULT_AGENT, MCP_REGISTRY } from "@/features/agents/index";
 import { listUserMcpServers, expandEnvVars } from "@/features/mcp-servers/fx";
@@ -11,6 +11,8 @@ import { createServiceLogger } from "@/lib/logger";
 import { secrets } from "@/lib/secrets";
 import { uiRendererServer } from "@/mcp-servers/ui-renderer";
 import { acquireFileLock, getActiveNoteFileNameForPath, releaseFileLockForToolUse } from "@/services/file-locks";
+import { buildBpagentSubagents } from "@/features/pkm-pack/subagents";
+import { buildBpagentSystemPrompt } from "@/features/pkm-pack/built-in-bpagent";
 
 // Create logger for chat routes
 const chatLogger = createServiceLogger("CHAT");
@@ -337,7 +339,8 @@ export const chatRoutes = {
                 console.log("[API] Agent mcpServers:", agentConfig.mcpServers);
 
                 // Update last used agent preference
-                await savePreferences({ lastUsedAgentId: agentConfig.id });
+                const currentPrefs = await getPreferences();
+                await savePreferences({ ...currentPrefs, lastUsedAgentId: agentConfig.id });
 
                 const targetDir = getRootPath();
                 console.log("[API] User message:", message);
@@ -499,6 +502,7 @@ export const chatRoutes = {
                     mcpServers: Record<string, McpServerConfig>;
                     pathToClaudeCodeExecutable: string;
                     settingSources: Array<"user" | "project">;
+                    agents?: Record<string, AgentDefinition>;
                 } = {
                     model: agentConfig.model,
                     cwd: targetDir,
@@ -513,7 +517,17 @@ export const chatRoutes = {
                 // Build context-aware system prompt
                 // Always include agent context (date, workspace folder) for all agents
                 const agentContext = buildAgentContext(targetDir);
-                if (agentConfig.systemPrompt) {
+
+                if (agentConfig.id === "bpagent") {
+                    // BPagent: use dedicated PKM system prompt with real notes path + context
+                    const notesPath = getNotesPath();
+                    sdkOptions.systemPrompt = `${agentContext}\n\n${buildBpagentSystemPrompt(notesPath)}`;
+                    // Inject programmatic PKM subagents
+                    sdkOptions.agents = buildBpagentSubagents();
+                    chatLogger.info("BPagent session: injected PKM subagents", {
+                        subagents: Object.keys(sdkOptions.agents),
+                    });
+                } else if (agentConfig.systemPrompt) {
                     // Custom agent: prepend context to their system prompt
                     sdkOptions.systemPrompt = `${agentContext}\n\n${agentConfig.systemPrompt}`;
                 } else {

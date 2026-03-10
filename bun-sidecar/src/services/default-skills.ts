@@ -22,7 +22,8 @@ const DEFAULT_SKILLS: DefaultSkill[] = [
       "SKILL.md": `---
 name: todos
 description: Manages project todos via REST API. BEFORE using this skill, you must THINK: "Does the user mention a project? Does the user imply a specific column like Today?". Use when the user asks to create, view, update, or delete todos.
-version: 5
+version: 6
+source: nomendex
 ---
 
 # Todos Management
@@ -247,7 +248,8 @@ See the **projects** skill for full documentation on loading board configuration
       "SKILL.md": `---
 name: manage-skills
 description: Manages Claude Code skills - creates, updates, and maintains skills following established design principles. Use when the user asks to create a skill, update a skill, refactor a skill, or wants to teach Claude a new capability.
-version: 3
+version: 4
+source: nomendex
 ---
 
 # Skill Management
@@ -301,7 +303,8 @@ For rendering interactive HTML interfaces in chat, use the **create-interface** 
       "SKILL.md": `---
 name: projects
 description: Working with projects and custom Kanban boards. BEFORE using this skill, you must THINK: "Does the user assume the project already exists? Am I creating a duplicate because of case sensitivity?". Use when the user mentions a project name.
-version: 3
+version: 4
+source: nomendex
 ---
 
 # Projects Skill
@@ -453,7 +456,8 @@ Columns without a status field don't affect the todo's status when items are mov
       "SKILL.md": `---
 name: create-interface
 description: Renders interactive HTML interfaces in chat using the render_ui tool. Use when the user asks to display UI, create a widget, show a form, render a chart, build an interface, or display interactive content.
-version: 1
+version: 2
+source: nomendex
 ---
 
 # Create Interface
@@ -650,7 +654,8 @@ Set a fixed \`height\` parameter to disable auto-resize.
       "SKILL.md": `---
 name: daily-notes
 description: Manages daily notes stored in the daily-notes/ subfolder with M-D-YYYY format (e.g., 1-1-2026.md). Use when the user asks to view recent notes, create daily notes, read today's notes, summarize the week, or references dates.
-version: 2
+version: 3
+source: nomendex
 ---
 
 # Daily Notes Management
@@ -831,6 +836,1948 @@ esac
 `,
     },
   },
+  {
+    name: "adopt",
+    files: {
+      "SKILL.md": `---
+name: adopt
+description: Scaffold the PKM system onto an existing Obsidian vault. Scans your vault structure, maps folders interactively, and generates configuration — no template required.
+version: 1
+source: nomendex
+---
+
+# Adopt Skill
+
+Bring Your Own Vault (BYOV) — install the Codex PKM system onto an existing Obsidian vault.
+
+## Usage
+
+\`\`\`
+/adopt    # Run from the root of your existing Obsidian vault
+\`\`\`
+
+## When to Use
+
+- You have an existing Obsidian vault and want to add the Codex PKM system
+- You don't want to start from the vault template
+- You want to keep your current folder structure
+
+## Phase 1: Scan Vault Structure
+
+Analyze the existing vault to understand its organization.
+
+### Steps
+
+1. **List top-level directories** using \`ls\`, excluding system dirs (\`.obsidian\`, \`.git\`, \`.Codex\`, \`.trash\`, \`.Codex-plugin\`)
+
+2. **For each directory**, gather signals:
+   - Count \`.md\` files (using Glob)
+   - Check for date-named files (\`YYYY-MM-DD*.md\`) — indicates daily notes
+   - Grep for goal/review/template keywords in filenames and content
+   - Check for existing \`AGENTS.md\` in subdirs — indicates projects
+
+3. **Detect organization method** based on signals:
+   - **PARA**: Folders named Projects, Areas, Resources, Archives
+   - **Zettelkasten**: Numeric-prefixed notes, heavy wiki-linking, flat structure
+   - **Johnny Decimal**: \`00-09\`, \`10-19\` style folder names
+   - **LYT (Linking Your Thinking)**: Folders named Atlas, Calendar, Cards, Extras, Sources
+   - **Flat**: Few folders, most files at root
+   - **Custom**: None of the above patterns match
+
+4. **Present findings** to the user:
+   \`\`\`
+   Vault scan complete!
+
+   Found 342 notes across 8 folders:
+     Daily/           → 180 notes (date-named — likely daily notes)
+     Projects/        → 45 notes (has AGENTS.md files — likely projects)
+     Goals/           → 12 notes (contains goal keywords)
+     Templates/       → 8 notes (contains template keywords)
+     Archive/         → 67 notes
+     Inbox/           → 15 notes
+     Resources/       → 10 notes
+     Meeting Notes/   → 5 notes
+
+   Detected method: PARA-like structure
+   \`\`\`
+
+## Phase 2: Map Folders to Roles
+
+Use AskUserQuestion to confirm or correct the detected mappings.
+
+### Roles to Map
+
+Each role maps a PKM function to a folder in the user's vault:
+
+| Role | Purpose | Detection Signal |
+|------|---------|-----------------|
+| Daily Notes | Daily journal entries | Date-named files (\`YYYY-MM-DD\`) |
+| Goals | Goal cascade (3-year → weekly) | Files with goal/review keywords |
+| Projects | Active projects | Subdirs with AGENTS.md or project keywords |
+| Templates | Reusable note structures | Files with template keywords or in Templates/ |
+| Archives | Completed/inactive content | Folder named Archive(s) or with old dates |
+| Inbox | Uncategorized captures | Folder named Inbox, or files tagged #inbox |
+
+### Interactive Mapping
+
+For each role, ask the user to confirm or correct:
+
+**Question format (use AskUserQuestion):**
+- "Which folder holds your **daily notes**?"
+- Options: detected candidate(s), "I don't have one (create it)", "Skip — I don't use this"
+- For optional roles (Inbox), include "Skip" as a default
+
+**Edge cases:**
+- **Existing AGENTS.md at root**: Ask the user — back up as \`AGENTS.md.backup\` or merge content
+- **No candidate for a role**: Offer to create the folder
+- **Multiple candidates**: Present all and let the user choose
+
+### Save Mappings
+
+Store the folder mapping for use in later phases:
+\`\`\`
+dailyNotes → "Daily"
+goals → "Goals"
+projects → "Projects"
+templates → "Templates"
+archives → "Archive"
+inbox → "Inbox"     (or null if skipped)
+\`\`\`
+
+## Phase 3: Personalize Preferences
+
+Ask the same 4 questions as \`/onboard\`:
+
+**Question 1: Your name**
+- "What should I call you?"
+- Used for personalized prompts and greetings
+
+**Question 2: Preferred review day**
+- "What day do you prefer for your weekly review?"
+- Options: Sunday (Recommended), Saturday, Monday, Friday
+- Used by \`/review\` auto-detection and session-init nudges
+
+**Question 3: Primary goal areas**
+- "Which areas are most important to you right now? (Pick 2-4)"
+- Options: Career & Professional, Health & Wellness, Relationships, Personal Growth
+- Also offer: Financial, Creativity & Fun, Learning, Other
+- multiSelect: true
+- Used to customize goal template suggestions
+
+**Question 4: Work style**
+- "How do you prefer Codex to interact?"
+- Options: Direct and concise (Recommended), Coaching and challenging, Detailed and thorough, Minimal — just do the task
+- Sets output style preference
+
+## Phase 4: Generate Configuration
+
+### 4a. Write \`settings.json\`
+
+Write \`.Codex/settings.json\` with permissions scoped to the user's actual folders:
+
+\`\`\`json
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write **/{mapped-daily}/**",
+      "Write **/{mapped-goals}/**",
+      "Write **/{mapped-projects}/**",
+      "Write **/{mapped-templates}/**",
+      "Edit **/{mapped-daily}/**",
+      "Edit **/{mapped-goals}/**",
+      "Edit **/{mapped-projects}/**",
+      "Glob",
+      "Grep"
+    ]
+  }
+}
+\`\`\`
+
+Replace \`{mapped-*}\` with actual folder names from Phase 2.
+
+### 4b. Write root \`AGENTS.md\`
+
+Generate a root \`AGENTS.md\` that describes the user's **actual** vault structure. Use the same format as the template's AGENTS.md but with:
+- Their folder names in the Directory Structure table
+- Their goal areas in the System Purpose section
+- Their actual skills table (same as template)
+- Cascade section adapted to their folder names
+
+If the user had an existing \`AGENTS.md\`, merge their content into the appropriate sections (preserve their mission statement, custom conventions, etc.).
+
+### 4c. Write \`vault-config.json\`
+
+Write \`vault-config.json\` in the vault root:
+\`\`\`json
+{
+  "name": "User's name",
+  "reviewDay": "Sunday",
+  "goalAreas": ["Career & Professional", "Health & Wellness"],
+  "workStyle": "Direct and concise",
+  "setupDate": "2026-02-17",
+  "version": "3.1",
+  "adoptedVault": true,
+  "folderMapping": {
+    "dailyNotes": "Daily",
+    "goals": "Goals",
+    "projects": "Projects",
+    "templates": "Templates",
+    "archives": "Archive",
+    "inbox": "Inbox"
+  }
+}
+\`\`\`
+
+### 4d. Set Environment Variables
+
+Write or update \`Codex.local.md\` with env var exports for hooks:
+\`\`\`markdown
+## Environment Overrides
+
+These env vars allow hooks and scripts to find your folders:
+
+<!--
+Export these in your shell profile or they'll be set by session-init:
+-->
+DAILY_NOTES_DIR={mapped daily notes folder}
+GOALS_DIR={mapped goals folder}
+PROJECTS_DIR={mapped projects folder}
+TEMPLATES_DIR={mapped templates folder}
+INBOX_DIR={mapped inbox folder}
+ARCHIVES_DIR={mapped archives folder}
+\`\`\`
+
+Also create \`.Codex/hooks/adopt-env.sh\` that exports these variables:
+\`\`\`bash
+#!/bin/bash
+# Environment variables for adopted vault folder mapping
+# Generated by /adopt — edit vault-config.json and re-run /adopt to update
+
+export DAILY_NOTES_DIR="{mapped daily notes}"
+export GOALS_DIR="{mapped goals}"
+export PROJECTS_DIR="{mapped projects}"
+export TEMPLATES_DIR="{mapped templates}"
+export INBOX_DIR="{mapped inbox}"
+export ARCHIVES_DIR="{mapped archives}"
+\`\`\`
+
+Then add a \`source\` line to \`session-init.sh\` if not already present:
+\`\`\`bash
+# Source adopted vault env vars if present
+ADOPT_ENV="$VAULT_PATH/.Codex/hooks/adopt-env.sh"
+if [ -f "$ADOPT_ENV" ]; then
+    source "$ADOPT_ENV"
+fi
+\`\`\`
+
+## Phase 5: Scaffold Missing Pieces
+
+Check what's missing and offer to create it. **Always ask before creating.**
+
+### 5a. Goal Cascade Files
+
+If the goals folder is empty or newly created:
+- "Your goals folder is empty. Want me to create the goal cascade? (3-year vision, yearly goals, monthly goals, weekly review)"
+- If yes: copy the standard templates, adapting paths to the user's folder names
+- If no: skip
+
+### 5b. Templates
+
+If the templates folder is empty or newly created:
+- "Want me to add standard templates? (Daily, Weekly Review, Project)"
+- If yes: copy templates, adapting internal links to the user's folder names
+- If no: skip
+
+### 5c. Codex.local.md.template
+
+If \`Codex.local.md.template\` doesn't exist:
+- Copy it from the standard template
+- Adapt any folder references
+
+### 5d. Codex Config Directories
+
+Ensure these directories exist (create silently):
+- \`.Codex/skills/\` (for future skill additions)
+- \`.Codex/rules/\`
+- \`.Codex/hooks/\`
+- \`.Codex/agents/\`
+
+Copy standard rules files if \`.Codex/rules/\` is empty:
+- \`markdown-standards.md\`
+- \`productivity-workflow.md\`
+- \`project-management.md\`
+- \`task-tracking.md\`
+
+## Phase 6: Verify & Next Steps
+
+### 6a. Validation
+
+Run quick checks:
+- \`vault-config.json\` is valid JSON (read it back)
+- All mapped folders exist
+- \`AGENTS.md\` is present and non-empty
+- \`.Codex/hooks/adopt-env.sh\` is present and executable
+
+### 6b. Summary
+
+Present a summary:
+\`\`\`
+Adoption complete!
+
+Vault: /path/to/vault
+Method: PARA-like (preserved your existing structure)
+Mapped folders:
+  Daily Notes → Daily/
+  Goals       → Goals/
+  Projects    → Projects/
+  Templates   → Templates/
+  Archives    → Archive/
+  Inbox       → Inbox/
+
+Created:
+  ✓ AGENTS.md (vault context)
+  ✓ vault-config.json (preferences)
+  ✓ .Codex/hooks/adopt-env.sh (folder mapping)
+  ✓ Goal cascade files (4 files)
+  ✓ Standard templates (3 files)
+
+Your vault structure is unchanged — only configuration files were added.
+\`\`\`
+
+### 6c. Next Steps
+
+Suggest what to do next:
+- "Try \`/daily\` to create today's note using your vault's structure"
+- "Try \`/review\` for a guided weekly review"
+- "Run \`/push\` to commit these changes to git"
+- "Edit \`Codex.local.md\` for private preferences (not committed to git)"
+
+## Error Handling
+
+- **Not in a vault**: If no \`.obsidian\` directory found, warn: "This doesn't look like an Obsidian vault. Continue anyway?"
+- **Already adopted**: If \`vault-config.json\` exists with \`adoptedVault: true\`, ask: "This vault was already adopted. Re-run adoption? (This will regenerate config files.)"
+- **Permission errors**: If \`.Codex/\` can't be written, suggest checking permissions
+- **Empty vault**: If no \`.md\` files found, suggest using \`/onboard\` with the template instead
+
+## Integration
+
+Works with:
+- \`/onboard\` — adopt replaces onboard for existing vaults
+- \`/daily\` — uses mapped daily notes folder
+- \`/weekly\` — uses mapped goals folder
+- \`/review\` — respects adopted vault structure
+- \`/push\` — commits adoption changes
+- All hooks — read env vars from \`adopt-env.sh\`
+`,
+    },
+  },
+  {
+    name: "check-links",
+    files: {
+      "SKILL.md": `---
+name: check-links
+description: Find broken wiki-links in the vault. Read-only analysis — scans for [[links]] and verifies target files exist. No writes, no dependencies.
+version: 2
+source: nomendex
+---
+
+# Check Links Skill
+
+Finds broken \`[[wiki-links]]\` across your vault by extracting link targets and verifying that each target file exists. Read-only — never modifies files.
+
+## Usage
+
+\`\`\`
+/check-links
+\`\`\`
+
+Or ask:
+- "Check for broken links in my vault"
+- "Find dead wiki-links"
+- "Are there any broken links?"
+
+## How to Execute
+
+### Step 1: Extract all wiki-links
+
+Use **Grep** to find all \`[[...]]\` patterns in markdown files:
+
+\`\`\`
+Grep:
+  pattern: "\\\\[\\\\[([^\\\\]|]+)"
+  glob: "*.md"
+  output_mode: content
+  -n: true
+\`\`\`
+
+This captures the link target (before any \`|\` alias). Exclude \`.Codex/\` and \`.obsidian/\` directories from results.
+
+### Step 2: Build unique target list
+
+From the grep results, extract the unique link targets. For each match like \`[[My Note]]\` or \`[[My Note|display text]]\`, the target is \`My Note\`.
+
+Strip:
+- Heading anchors: \`[[Note#heading]]\` → target is \`Note\`
+- Block references: \`[[Note^block-id]]\` → target is \`Note\`
+- Aliases: \`[[Note|alias]]\` → target is \`Note\`
+
+### Step 3: Verify each target exists
+
+For each unique target, use **Glob** to check if a matching file exists:
+
+\`\`\`
+Glob:
+  pattern: "**/<target>.md"
+\`\`\`
+
+A link is **broken** if no file matches. A link is **valid** if at least one file matches.
+
+### Step 4: Report results
+
+Group broken links by source file:
+
+\`\`\`markdown
+## Broken Links Report
+
+### Daily Notes/2024-01-15.md
+- [[Projet Alpha]] — no matching file found
+- [[Old Goal]] — no matching file found
+
+### Projects/Project Beta.md
+- [[Meeting Notes Jan]] — no matching file found
+
+---
+
+**Summary:** 3 broken links across 2 files (out of 45 total links checked)
+\`\`\`
+
+### Step 5: Suggest fixes
+
+For each broken link, try to find a close match:
+
+1. Use **Glob** with a partial pattern: \`**/*<partial-target>*.md\`
+2. If a similar filename exists, suggest it:
+   \`\`\`
+   - [[Projet Alpha]] — Did you mean [[Project Alpha]]?
+   \`\`\`
+3. If no close match, just report "no matching file found"
+
+## Edge Cases
+
+- **Embedded images** (\`![[image.png]]\`) — skip these, they reference attachments
+- **External links** (\`[text](https://...)\`) — skip these, they are not wiki-links
+- **Template placeholders** (\`[[{{date}}]]\`) — skip anything with \`{{\` in the target
+- **Empty links** (\`[[]]\`) — report as malformed, not broken
+
+## No Broken Links
+
+If all links are valid:
+
+\`\`\`
+✅ All wiki-links verified — no broken links found across X files (Y links checked)
+\`\`\`
+
+## Tips
+
+- Run \`/check-links\` periodically to catch link rot
+- After renaming files, run this to find links that need updating
+- Combine with \`/search\` to find notes that reference deleted content
+`,
+    },
+  },
+  {
+    name: "daily",
+    files: {
+      "SKILL.md": `---
+name: daily
+description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
+version: 1
+source: nomendex
+---
+
+# Daily Workflow Skill
+
+Creates daily notes and provides structured workflows for morning planning, midday check-ins, and evening shutdowns.
+
+## Usage
+
+Invoke with \`/daily\` or ask Codex to create today's note or help with daily routines.
+
+### Create Today's Note
+\`\`\`
+/daily
+\`\`\`
+
+Or simply ask:
+- "Create today's daily note"
+- "Start my morning routine"
+- "Help me with evening shutdown"
+
+## Daily Note Creation
+
+### What Happens
+1. **Checks if today's note exists**
+   - If yes: Opens the existing note
+   - If no: Creates new note from template
+
+2. **Template Processing**
+   - Replaces \`{{date}}\` with today's date
+   - Replaces \`{{date:format}}\` with formatted dates
+   - Handles date arithmetic (e.g., \`{{date-1}}\` for yesterday)
+
+3. **Automatic Organization**
+   - Places note in \`Daily Notes/\` folder
+   - Names file with today's date (YYYY-MM-DD.md)
+   - Preserves template structure
+
+### Template Variables
+Your daily template can use:
+- \`{{date}}\` - Today's date in default format
+- \`{{date:dddd}}\` - Day name (e.g., Monday)
+- \`{{date:MMMM DD, YYYY}}\` - Formatted date
+- \`{{date-1:YYYY-MM-DD}}\` - Yesterday's date
+- \`{{date+1:YYYY-MM-DD}}\` - Tomorrow's date
+- \`{{time}}\` - Current time
+
+## Morning Routine (5-10 minutes)
+
+### Automated Steps
+1. Create today's daily note (if not exists)
+2. Pull incomplete tasks from yesterday
+3. Read this week's ONE Big Thing from \`Goals/3. Weekly Review.md\`
+4. Surface active project next-actions from \`Projects/*/AGENTS.md\`
+5. Review weekly goals for today's priority
+
+### Cascade Context Surfacing
+Before interactive prompts, automatically surface:
+- **ONE Big Thing** from most recent weekly review
+- **Active project next-actions** from \`Projects/*/AGENTS.md\` (read "Next Actions" section)
+- **Monthly priority** from \`Goals/2. Monthly Goals.md\`
+
+Display as a brief context block at the top of the morning routine:
+\`\`\`markdown
+### Today's Context
+- **Week's ONE Big Thing:** [from weekly review]
+- **Active Projects:** [project names with first next-action each]
+- **Monthly Focus:** [from monthly goals]
+\`\`\`
+
+### Interactive Prompts
+- "What's your ONE thing for today?"
+- "What might get in the way?"
+- "How do you want to feel at end of day?"
+
+### Task Creation Guidance
+When adding tasks to the daily note, recommend linking to goals/projects:
+\`\`\`markdown
+- [ ] Draft API spec — Supports: [[Projects/MyApp]]
+- [ ] Review chapter 3 — Supports: [[1. Yearly Goals#Read 12 books]]
+\`\`\`
+
+### Morning Checklist
+- [ ] Daily note created
+- [ ] Cascade context reviewed (ONE Big Thing, projects, monthly focus)
+- [ ] Yesterday's incomplete tasks reviewed
+- [ ] ONE priority identified
+- [ ] Time blocks set
+- [ ] Potential obstacles identified
+
+## Midday Check-in (2-3 minutes)
+
+### Quick Review
+1. Check morning task completion
+2. Compare actual vs planned time use
+3. Assess energy level
+4. Identify afternoon priorities
+
+### Adjustments
+- Reschedule incomplete morning tasks
+- Add urgent items that emerged
+- Reorder by current energy level
+- Note any blockers
+
+### Midday Questions
+- "How's your energy right now?"
+- "What's the most important thing for this afternoon?"
+- "What can you let go of today?"
+
+## Evening Shutdown (5 minutes)
+
+### Capture
+1. Mark completed tasks with [x]
+2. Add notes and learnings
+3. Log energy levels (1-10)
+4. Record gratitude items
+
+### Goal & Project Attention Summary
+Automatically generate an end-of-day summary showing which goals and projects received attention:
+\`\`\`markdown
+### Today's Cascade Impact
+- **Goals touched:** [[Goal 1]] (2 tasks), [[Goal 3]] (1 task)
+- **Projects advanced:** [[ProjectA]] (3 tasks), [[ProjectB]] (1 task)
+- **Unlinked tasks:** 2 (consider linking to a goal or project)
+\`\`\`
+
+### Reflect
+- What went well today?
+- What could be better?
+- What did I learn?
+- What am I grateful for?
+
+### Prepare
+1. Identify tomorrow's priority (preview)
+2. Move incomplete tasks to tomorrow or delete
+3. Commit changes to git (\`/push\`)
+
+### Shutdown Checklist
+- [ ] All tasks updated (done/moved/deleted)
+- [ ] Reflection completed
+- [ ] Tomorrow's priority identified
+- [ ] Changes committed
+
+## Daily Note Structure
+
+Standard daily note template:
+
+\`\`\`markdown
+# {{date}}
+
+## Focus
+> What's the ONE thing that would make today successful?
+
+## Time Blocks
+- Morning (9-12):
+- Afternoon (12-5):
+- Evening (5+):
+
+## Tasks
+### Must Do Today
+- [ ]
+
+### Work
+- [ ]
+
+### Personal
+- [ ]
+
+## Notes
+[Capture thoughts, meeting notes, ideas]
+
+## Reflection
+- **Wins:**
+- **Challenges:**
+- **Learned:**
+- **Grateful for:**
+- **Energy:** /10
+- **Tomorrow's priority:**
+\`\`\`
+
+## Time Block Strategies
+
+### Energy-Based
+- High energy tasks in morning
+- Administrative work after lunch
+- Creative work when naturally alert
+
+### Context-Based
+- Batch similar tasks together
+- Minimize context switching
+- Protect deep work blocks
+
+## Configuration
+
+Customize paths to match your vault:
+- Daily notes folder: \`Daily Notes/\`
+- Template location: \`Templates/Daily Template.md\`
+- Date format: \`YYYY-MM-DD\`
+
+### Different Date Formats
+- \`YYYY-MM-DD\` - Standard ISO format (recommended)
+- \`MM-DD-YYYY\` - US format
+- \`DD-MM-YYYY\` - European format
+- \`YYYY-MM-DD-ddd\` - Include day abbreviation
+
+### Folder Organization by Month
+Organize daily notes by month/year:
+\`\`\`
+Daily Notes/2024/01/2024-01-15.md
+\`\`\`
+
+## Task-Based Progress Tracking
+
+The daily skill uses session tasks to show progress during multi-step routines.
+
+### Morning Routine Tasks
+
+Create tasks at skill start:
+
+\`\`\`
+TaskCreate:
+  subject: "Create daily note"
+  description: "Create or open today's daily note from template"
+  activeForm: "Creating daily note..."
+
+TaskCreate:
+  subject: "Pull incomplete tasks"
+  description: "Carry forward uncompleted tasks from yesterday"
+  activeForm: "Pulling incomplete tasks from yesterday..."
+
+TaskCreate:
+  subject: "Surface relevant goals"
+  description: "Review weekly/monthly goals for today's priority"
+  activeForm: "Surfacing relevant goals..."
+
+TaskCreate:
+  subject: "Set time blocks"
+  description: "Establish time blocks based on energy and priorities"
+  activeForm: "Setting time blocks..."
+\`\`\`
+
+### Dependencies
+
+Morning routine tasks run sequentially:
+\`\`\`
+TaskUpdate: "Pull incomplete tasks", addBlockedBy: [create-daily-note-id]
+TaskUpdate: "Surface relevant goals", addBlockedBy: [pull-incomplete-tasks-id]
+TaskUpdate: "Set time blocks", addBlockedBy: [surface-relevant-goals-id]
+\`\`\`
+
+### Evening Shutdown Tasks
+
+\`\`\`
+TaskCreate:
+  subject: "Update task statuses"
+  description: "Mark completed tasks, note blockers"
+  activeForm: "Updating task statuses..."
+
+TaskCreate:
+  subject: "Generate reflection prompts"
+  description: "Prompt for wins, challenges, learnings, gratitude"
+  activeForm: "Generating reflection prompts..."
+
+TaskCreate:
+  subject: "Prepare tomorrow's preview"
+  description: "Identify tomorrow's priority and move incomplete tasks"
+  activeForm: "Preparing tomorrow's preview..."
+\`\`\`
+
+Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
+
+Task tools provide visibility into what's happening during longer operations. Tasks are session-scoped and don't persist between Codex sessions—your actual work items remain in your daily note markdown checkboxes.
+
+## Integration
+
+Works with:
+- \`/push\` - Commit end-of-day changes
+- \`/weekly\` - Weekly planning uses daily notes
+- \`/monthly\` - Monthly goals inform daily focus
+- \`/project\` - Surface project next-actions in morning
+- \`/onboard\` - Load context before planning
+- Goal tracking skill - Align daily tasks to goals
+- Productivity Coach - Accountability for daily routines
+`,
+    },
+  },
+  {
+    name: "goal-tracking",
+    files: {
+      "SKILL.md": `---
+name: goal-tracking
+description: Track progress toward 3-year, yearly, monthly, and weekly goals. Calculate completion percentages, surface stalled goals, connect daily tasks to objectives. Use for goal reviews and progress tracking.
+version: 2
+source: nomendex
+---
+
+# Goal Tracking Skill
+
+Track and manage the cascading goal system from long-term vision to daily tasks.
+
+## Goal Hierarchy
+
+\`\`\`
+Goals/0. Three Year Goals.md   <- Vision (Life areas)
+    ↓
+Goals/1. Yearly Goals.md       <- Annual objectives
+    ↓
+Projects/*/AGENTS.md           <- Active projects (bridge layer)
+    ↓
+Goals/2. Monthly Goals.md      <- Current month focus
+    ↓
+Goals/3. Weekly Review.md      <- Weekly planning
+    ↓
+Daily Notes/*.md               <- Daily tasks and actions
+\`\`\`
+
+## Goal File Formats
+
+### Three Year Goals
+\`\`\`markdown
+## Life Areas
+- Career: [Vision statement]
+- Health: [Vision statement]
+- Relationships: [Vision statement]
+- Financial: [Vision statement]
+- Learning: [Vision statement]
+- Personal: [Vision statement]
+\`\`\`
+
+### Yearly Goals
+\`\`\`markdown
+## 2024 Goals
+- [ ] Goal 1 (XX% complete)
+- [ ] Goal 2 (XX% complete)
+- [x] Goal 3 (100% complete)
+\`\`\`
+
+### Monthly Goals
+\`\`\`markdown
+## This Month's Focus
+1. **Primary:** [Main focus]
+2. **Secondary:** [Supporting goal]
+3. **Stretch:** [If time permits]
+
+### Key Results
+- [ ] Measurable outcome 1
+- [ ] Measurable outcome 2
+\`\`\`
+
+## Progress Calculation
+
+### Checklist-Based Goals
+\`\`\`
+Progress = (Completed checkboxes / Total checkboxes) * 100
+\`\`\`
+
+### Metric-Based Goals
+\`\`\`
+Progress = (Current value / Target value) * 100
+\`\`\`
+
+### Time-Based Goals
+\`\`\`
+Progress = (Days elapsed / Total days) * 100
+\`\`\`
+
+## Common Operations
+
+### View Goal Progress
+1. Read all goal files
+2. Parse checkbox completion rates
+3. Calculate overall and per-goal progress
+4. Identify stalled or at-risk goals
+
+### Update Goal Status
+1. Find goal in appropriate file
+2. Update checkbox or percentage
+3. Add date stamp for significant milestones
+4. Update related weekly review
+
+### Connect Task to Goal
+When adding tasks to daily notes:
+1. Identify which goal the task supports
+2. Add goal reference: \`Supports: [[1. Yearly Goals#Goal Name]]\`
+3. Use appropriate priority tag
+
+### Surface Stalled Goals
+1. Check last activity date for each goal
+2. Flag goals with no progress in 14+ days
+3. Suggest actions to restart momentum
+
+## Project-Aware Progress
+
+### Project Integration
+When calculating goal progress, include project data:
+1. Scan \`Projects/*/AGENTS.md\` for all active projects
+2. Match projects to goals via their "Goal Link" / "Supports" field
+3. Include project completion % in goal progress calculations
+4. Surface which projects support each goal
+
+### Orphan Goal Detection
+Flag goals that have no active project supporting them:
+- A goal with 0 linked projects may need a project created (\`/project new\`)
+- A goal with only completed/archived projects may need a new initiative
+
+## Progress Report Format
+
+\`\`\`markdown
+## Goal Progress Report
+
+### Overall: XX%
+
+### By Goal
+| Goal | Progress | Projects | Last Activity | Status |
+|------|----------|----------|---------------|--------|
+| Goal 1 | 75% | [[ProjectA]] (80%), [[ProjectB]] (60%) | 2 days ago | On Track |
+| Goal 2 | 30% | (none) | 14 days ago | Stalled |
+
+### Project Status
+| Project | Goal | Progress | Phase |
+|---------|------|----------|-------|
+| [[ProjectA]] | Goal 1 | 80% | Active |
+| [[ProjectB]] | Goal 1 | 60% | Active |
+
+### Orphan Goals (no active project)
+- Goal 2 — Consider \`/project new\` to create a supporting project
+
+### This Week's Contributions
+- [Task] -> [[Goal 1]] via [[ProjectA]]
+- [Task] -> [[Goal 2]]
+
+### Recommended Focus
+1. [Stalled goal needs attention]
+2. [Nearly complete goal - finish it]
+3. [Orphan goal needs a project]
+\`\`\`
+
+## Task-Based Progress Tracking
+
+The goal tracking skill uses session tasks when generating comprehensive progress reports.
+
+### Progress Report Tasks
+
+Create tasks at skill start:
+
+\`\`\`
+TaskCreate:
+  subject: "Read three-year goals"
+  description: "Load vision statements from Goals/0. Three Year Goals.md"
+  activeForm: "Reading three-year goals..."
+
+TaskCreate:
+  subject: "Read yearly goals"
+  description: "Load annual objectives from Goals/1. Yearly Goals.md"
+  activeForm: "Reading yearly goals..."
+
+TaskCreate:
+  subject: "Read monthly goals"
+  description: "Load current month focus from Goals/2. Monthly Goals.md"
+  activeForm: "Reading monthly goals..."
+
+TaskCreate:
+  subject: "Scan recent daily notes"
+  description: "Find task completions and goal contributions from past week"
+  activeForm: "Scanning recent daily notes..."
+
+TaskCreate:
+  subject: "Calculate completion percentages"
+  description: "Compute progress for each goal based on checkboxes and metrics"
+  activeForm: "Calculating completion percentages..."
+
+TaskCreate:
+  subject: "Identify stalled goals"
+  description: "Flag goals with no progress in 14+ days"
+  activeForm: "Identifying stalled goals..."
+\`\`\`
+
+### Dependencies
+
+Goal file reads can run in parallel, but analysis depends on having all data:
+\`\`\`
+TaskUpdate: "Scan recent daily notes", addBlockedBy: [read-monthly-goals-id]
+TaskUpdate: "Calculate completion percentages", addBlockedBy: [scan-recent-daily-notes-id]
+TaskUpdate: "Identify stalled goals", addBlockedBy: [calculate-completion-percentages-id]
+\`\`\`
+
+Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
+
+Task tools are session-scoped and don't persist—your actual goal progress is tracked through markdown checkboxes and percentages in your goal files.
+
+## Integration Points
+
+- \`/weekly\` review: Full progress assessment with project rollup
+- \`/daily\` planning: Surface relevant goals and project next-actions
+- \`/monthly\` review: Adjust goals as needed, check quarterly milestones
+- \`/project status\`: Project completion feeds goal calculations
+- Quarterly review: Cascade from 3-year vision
+`,
+    },
+  },
+  {
+    name: "monthly",
+    files: {
+      "SKILL.md": `---
+name: monthly
+description: Monthly review and planning. Roll up weekly reviews, check quarterly milestones, set next month's focus. Use at end of month or start of new month.
+version: 1
+source: nomendex
+---
+
+# Monthly Review Skill
+
+Facilitates monthly review and planning by rolling up weekly reviews, checking quarterly milestones, and setting next month's focus.
+
+## Usage
+
+\`\`\`
+/monthly              # Run monthly review for current month
+\`\`\`
+
+Or ask:
+- "Help me with my monthly review"
+- "Plan next month"
+- "How did this month go?"
+
+## What This Skill Does
+
+1. **Creates or opens monthly goals file** (\`Goals/2. Monthly Goals.md\`)
+2. **Rolls up weekly reviews** from the past month
+3. **Checks quarterly milestones** against yearly goals
+4. **Plans next month's** focus areas and priorities
+
+## Review Process
+
+### Phase 1: Collect Monthly Data (10 minutes)
+
+1. Read all weekly reviews from the past month (\`Goals/3. Weekly Review.md\` or weekly review notes)
+2. Read daily notes from past 30 days (scan for patterns)
+3. Read current \`Goals/2. Monthly Goals.md\` for this month's targets
+4. Scan \`Projects/*/AGENTS.md\` for project status updates
+
+**Extract:**
+- Wins from each week
+- Challenges and recurring blockers
+- Goal progress percentages
+- Project milestones completed
+- Habits tracked (completion rates)
+
+### Phase 2: Reflect on Month (10 minutes)
+
+1. Read \`Goals/1. Yearly Goals.md\` for quarterly milestones
+2. Calculate which quarter we're in and check milestone progress
+3. Identify patterns across weeks (energy, productivity, focus areas)
+4. Compare planned vs actual outcomes
+
+**Generate:**
+- Monthly accomplishment summary
+- Quarterly milestone progress check
+- Pattern analysis (what worked, what didn't)
+- Goal alignment assessment
+
+### Phase 3: Plan Next Month (10 minutes)
+
+1. Identify next month's quarterly milestones
+2. Surface projects that need attention
+3. Set next month's primary focus (ONE thing)
+4. Define 3-tier priorities (must/should/nice-to-have)
+5. Plan habits to build or maintain
+
+**Write:**
+- Update \`Goals/2. Monthly Goals.md\` with next month's plan
+- Set specific weekly milestones for the month ahead
+
+## Output Format
+
+\`\`\`markdown
+## Monthly Review: [Month Year]
+
+### Month Summary
+- Weeks reviewed: 4
+- Daily notes analyzed: [N]
+- Projects active: [N]
+
+### Wins
+1. [Major accomplishment]
+2. [Progress milestone]
+3. [Habit success]
+
+### Challenges
+1. [Recurring blocker]
+2. [Missed target]
+
+### Patterns
+- **Energy:** [When were you most productive?]
+- **Focus:** [What got the most attention?]
+- **Gaps:** [What was consistently avoided?]
+
+### Goal Progress
+| Goal | Start of Month | End of Month | Delta |
+|------|---------------|-------------|-------|
+| [Goal 1] | 30% | 45% | +15% |
+| [Goal 2] | 50% | 55% | +5% |
+
+### Quarterly Milestone Check
+**Quarter: Q[N] ([Month Range])**
+| Milestone | Status | Notes |
+|-----------|--------|-------|
+| [Milestone 1] | On Track | [Detail] |
+| [Milestone 2] | At Risk | [What's needed] |
+
+### Project Status
+| Project | Progress | Status | Next Month Focus |
+|---------|----------|--------|-----------------|
+| [Project 1] | 60% | Active | [Key deliverable] |
+
+### Next Month Plan
+
+**ONE Focus:** [Primary objective]
+
+**Must Complete:**
+1. [Non-negotiable deliverable]
+2. [Critical milestone]
+3. [Key commitment]
+
+**Should Complete:**
+1. [Important but flexible]
+2. [Supporting goal]
+
+**Nice to Have:**
+1. [Stretch goal]
+
+**Weekly Milestones:**
+- Week 1: [Focus]
+- Week 2: [Focus]
+- Week 3: [Focus]
+- Week 4: [Focus + monthly review]
+
+### Wellbeing Check
+- Physical Health: /10
+- Mental Health: /10
+- Relationships: /10
+- Work Satisfaction: /10
+- Overall: /10
+
+### Questions to Consider
+- "What would make next month feel truly successful?"
+- "What commitment should you drop or delegate?"
+- "Which goal needs a different approach?"
+\`\`\`
+
+## Data Sources
+
+Always read these files:
+- \`Goals/0. Three Year Goals.md\` - Long-term vision context
+- \`Goals/1. Yearly Goals.md\` - Quarterly milestones and annual objectives
+- \`Goals/2. Monthly Goals.md\` - Current month's plan (to review) and next month's (to write)
+- \`Goals/3. Weekly Review.md\` - Weekly reviews from past month
+- \`Daily Notes/*.md\` - Past 30 days of notes
+- \`Projects/*/AGENTS.md\` - All active project statuses
+
+## Task-Based Progress Tracking
+
+### Monthly Review Tasks
+\`\`\`
+TaskCreate:
+  subject: "Phase 1: Collect monthly data"
+  description: "Read weekly reviews, daily notes, and project files from past month"
+  activeForm: "Collecting monthly data..."
+
+TaskCreate:
+  subject: "Phase 2: Reflect on month"
+  description: "Analyze patterns, check quarterly milestones, assess goal alignment"
+  activeForm: "Reflecting on monthly patterns..."
+
+TaskCreate:
+  subject: "Phase 3: Plan next month"
+  description: "Set focus, define priorities, establish weekly milestones"
+  activeForm: "Planning next month..."
+
+TaskCreate:
+  subject: "Write monthly review note"
+  description: "Generate and save the monthly review document"
+  activeForm: "Writing monthly review..."
+\`\`\`
+
+### Dependencies
+\`\`\`
+TaskUpdate: "Phase 2: Reflect", addBlockedBy: [phase-1-id]
+TaskUpdate: "Phase 3: Plan", addBlockedBy: [phase-2-id]
+TaskUpdate: "Write monthly review", addBlockedBy: [phase-3-id]
+\`\`\`
+
+Mark each task \`in_progress\` when starting, \`completed\` when done.
+
+## Integration
+
+Works with:
+- \`/weekly\` - Monthly review rolls up weekly reviews
+- \`/goal-tracking\` - Quarterly milestone progress
+- \`/project status\` - Project progress feeds monthly assessment
+- \`/daily\` - Next month's plan informs daily priorities
+- \`/push\` - Commit after completing review
+`,
+    },
+  },
+  {
+    name: "obsidian-vault-ops",
+    files: {
+      "SKILL.md": `---
+name: obsidian-vault-ops
+description: Read and write Obsidian vault files, manage wiki-links, process markdown with YAML frontmatter. Use when working with vault file operations, creating notes, or managing links.
+version: 2
+source: nomendex
+---
+
+# Obsidian Vault Operations Skill
+
+Core operations for reading, writing, and managing files in an Obsidian vault.
+
+## Vault Structure
+
+\`\`\`
+vault-root/
+├── AGENTS.md           # Main context (always read first)
+├── Daily Notes/        # YYYY-MM-DD.md format
+├── Goals/              # Goal cascade files
+├── Projects/           # Project folders with AGENTS.md
+├── Templates/          # Reusable note structures
+└── Archives/           # Completed/inactive content
+\`\`\`
+
+## File Operations
+
+### Reading Notes
+- Use Glob to find files: \`*.md\`, \`Daily Notes/*.md\`
+- Read AGENTS.md first for vault context
+- Check for wiki-links to related notes
+
+### Creating Notes
+1. Check if note already exists
+2. Use appropriate template if available
+3. Add YAML frontmatter with date and tags
+4. Insert wiki-links to related notes
+
+### Editing Notes
+- Preserve YAML frontmatter structure
+- Maintain existing wiki-links
+- Use consistent heading hierarchy
+- Apply standard tag format
+
+## Wiki-Link Format
+
+\`\`\`markdown
+[[Note Name]]                    # Simple link
+[[Note Name|Display Text]]       # Link with alias
+[[Note Name#Section]]            # Link to section
+\`\`\`
+
+## YAML Frontmatter
+
+Standard frontmatter structure:
+\`\`\`yaml
+---
+date: 2024-01-15
+tags: [tag1, tag2]
+status: active
+---
+\`\`\`
+
+## Template Variables
+
+When processing templates, replace:
+- \`{{date}}\` - Today's date (YYYY-MM-DD)
+- \`{{date:format}}\` - Formatted date
+- \`{{date-1}}\` - Yesterday
+- \`{{date+1}}\` - Tomorrow
+- \`{{time}}\` - Current time
+
+## Common Patterns
+
+### Daily Note Creation
+1. Calculate today's date in YYYY-MM-DD format
+2. Check if \`Daily Notes/{date}.md\` exists
+3. If not, read \`Templates/Daily Template.md\`
+4. Replace template variables
+5. Write to \`Daily Notes/{date}.md\`
+
+### Finding Related Notes
+1. Extract key terms from current note
+2. Search vault for matching content
+3. Suggest wiki-links to related notes
+
+### Tag Operations
+- Priority: \`#priority/high\`, \`#priority/medium\`, \`#priority/low\`
+- Status: \`#active\`, \`#waiting\`, \`#completed\`, \`#archived\`
+- Context: \`#work\`, \`#personal\`, \`#health\`, \`#learning\`
+
+## Best Practices
+
+1. Always check AGENTS.md for vault-specific conventions
+2. Preserve existing structure when editing
+3. Use relative paths for internal links
+4. Add frontmatter to new notes
+5. Link to relevant goals when creating tasks
+`,
+    },
+  },
+  {
+    name: "pkm-project",
+    files: {
+      "SKILL.md": `---
+name: pkm-project
+description: Create, track, and archive projects linked to goals. The bridge between goals and daily tasks. Use for project creation, status dashboards, and archiving completed work.
+version: 1
+source: nomendex
+---
+
+# Project Skill
+
+Create, track, and archive projects that bridge the gap between goals and daily tasks.
+
+## Usage
+
+\`\`\`
+/project              # Interactive: create new project or view status
+/project new          # Create a new project
+/project status       # Dashboard of all active projects
+/project archive <name>  # Archive a completed project
+\`\`\`
+
+## Commands
+
+### \`/project\` or \`/project new\`
+
+Creates a new project folder with a AGENTS.md context file, interactively linked to a goal.
+
+**Steps:**
+1. Read \`Goals/1. Yearly Goals.md\` to list available goals
+2. Ask user which goal this project supports (or "none" for standalone)
+3. Ask for project name
+4. Create \`Projects/<ProjectName>/AGENTS.md\` with structure below
+5. If linked to a goal, add \`[[Projects/<ProjectName>]]\` reference in the yearly goals file
+
+**Project AGENTS.md Template:**
+\`\`\`markdown
+# Project: <Name>
+
+## Overview
+[Brief description of what this project achieves]
+
+## Goal Link
+Supports: [[1. Yearly Goals#<Goal Name>]]
+
+## Status
+- **Phase:** Planning | Active | Review | Complete
+- **Progress:** 0%
+- **Started:** <date>
+- **Target:** <date>
+
+## Key Decisions
+- [Decision 1] - [Date] - [Rationale]
+
+## Next Actions
+- [ ] [First concrete step]
+- [ ] [Second step]
+
+## Notes
+[Running log of updates, blockers, learnings]
+\`\`\`
+
+### \`/project status\`
+
+Scans all \`Projects/*/AGENTS.md\` files and displays a dashboard.
+
+**Steps:**
+1. Glob for \`Projects/*/AGENTS.md\`
+2. Read each file, extract: name, status/phase, progress%, goal linkage, next action
+3. Display dashboard table
+
+**Output Format:**
+\`\`\`markdown
+## Project Dashboard
+
+| Project | Phase | Progress | Goal | Next Action |
+|---------|-------|----------|------|-------------|
+| ProjectA | Active | 60% | [[Goal 1]] | Review PR |
+| ProjectB | Planning | 10% | [[Goal 3]] | Draft spec |
+
+### Summary
+- Active projects: N
+- Total progress (weighted): X%
+- Projects without goal link: [list]
+- Stalled projects (no update in 14+ days): [list]
+\`\`\`
+
+### \`/project archive <name>\`
+
+Moves a completed project to the archives.
+
+**Steps:**
+1. Verify \`Projects/<name>/\` exists
+2. Confirm with user before archiving
+3. Update project AGENTS.md status to "Complete" and progress to 100%
+4. Move folder: \`mv Projects/<name> Archives/Projects/<name>\`
+5. Create \`Archives/Projects/\` directory if it doesn't exist
+6. Update any goal references to note completion
+7. Report what was archived
+
+## Project Naming Conventions
+
+- Use PascalCase for folder names: \`Projects/LearnSpanish/\`
+- Keep names concise but descriptive
+- Avoid special characters
+
+## Cascade Integration
+
+Projects are the critical middle layer:
+
+\`\`\`
+Goals/1. Yearly Goals.md     <- "What I want to achieve"
+    |
+    v
+Projects/*/AGENTS.md         <- "How I'll achieve it" (THIS SKILL)
+    |
+    v
+Daily Notes/*.md             <- "What I'm doing today"
+\`\`\`
+
+When creating tasks in daily notes, reference the project:
+\`\`\`markdown
+- [ ] Draft API spec — [[Projects/MyApp/AGENTS.md|MyApp]]
+\`\`\`
+
+## Task-Based Progress Tracking
+
+### New Project Tasks
+\`\`\`
+TaskCreate:
+  subject: "Read yearly goals"
+  description: "Load goals for project linking"
+  activeForm: "Reading yearly goals..."
+
+TaskCreate:
+  subject: "Create project structure"
+  description: "Create folder and AGENTS.md for new project"
+  activeForm: "Creating project structure..."
+
+TaskCreate:
+  subject: "Link project to goal"
+  description: "Add project reference to yearly goals file"
+  activeForm: "Linking project to goal..."
+\`\`\`
+
+### Status Dashboard Tasks
+\`\`\`
+TaskCreate:
+  subject: "Scan project files"
+  description: "Glob and read all Projects/*/AGENTS.md files"
+  activeForm: "Scanning project files..."
+
+TaskCreate:
+  subject: "Generate dashboard"
+  description: "Compile status dashboard from project data"
+  activeForm: "Generating project dashboard..."
+\`\`\`
+
+Mark each task \`in_progress\` when starting, \`completed\` when done.
+
+## Integration
+
+Works with:
+- \`/daily\` - Surface project next-actions in morning routine
+- \`/weekly\` - Project status in weekly review
+- \`/goal-tracking\` - Project progress feeds goal calculations
+- \`/onboard\` - Discover and load project context
+- \`/push\` - Commit project changes
+`,
+    },
+  },
+  {
+    name: "review",
+    files: {
+      "SKILL.md": `---
+name: review
+description: Smart review router. Detects context (morning, Sunday, end of month) and launches the appropriate review workflow. Use anytime for the right review at the right time.
+version: 1
+source: nomendex
+---
+
+# Review Skill
+
+Smart router that detects context and launches the appropriate review workflow.
+
+## Usage
+
+\`\`\`
+/review           # Auto-detect the right review based on time/context
+/review daily     # Force daily review
+/review weekly    # Force weekly review
+/review monthly   # Force monthly review
+\`\`\`
+
+Or simply: "Help me review" — and the right workflow starts.
+
+## Auto-Detection Logic
+
+When invoked without arguments, detect context using these rules:
+
+### 1. Check the Time of Day
+
+\`\`\`bash
+HOUR=$(date +%H)
+\`\`\`
+
+- **Before noon (< 12):** Morning routine — delegate to \`/daily\` morning workflow
+- **After 5 PM (>= 17):** Evening shutdown — delegate to \`/daily\` evening workflow
+- **Midday (12-17):** Midday check-in — delegate to \`/daily\` midday workflow
+
+### 2. Check the Day of Week
+
+\`\`\`bash
+DAY_OF_WEEK=$(date +%u)  # 1=Monday, 7=Sunday
+\`\`\`
+
+- **Sunday (7) or Monday (1):** Weekly review — delegate to \`/weekly\`
+  - Override time-of-day detection
+  - Ask: "Ready for your weekly review?" before proceeding
+
+### 3. Check the Day of Month
+
+\`\`\`bash
+DAY_OF_MONTH=$(date +%d)
+DAYS_IN_MONTH=$(date -v+1m -v1d -v-1d +%d 2>/dev/null || date -d "$(date +%Y-%m-01) +1 month -1 day" +%d)
+\`\`\`
+
+- **Last 3 days of month (DAY_OF_MONTH >= DAYS_IN_MONTH - 2):** Monthly review — delegate to \`/monthly\`
+  - Override both time-of-day and day-of-week detection
+  - Ask: "End of month — ready for your monthly review?" before proceeding
+
+- **First day of month (DAY_OF_MONTH == 1):** Also suggest monthly review
+  - "It's the first of the month. Want to do your monthly review for last month?"
+
+### 4. Check Staleness
+
+Before routing, check for overdue reviews:
+
+\`\`\`bash
+# Read weekly review file for last date
+WEEKLY_REVIEW="Goals/3. Weekly Review.md"
+# If last weekly review > 7 days ago, suggest weekly regardless of day
+\`\`\`
+
+- **Weekly review overdue (>7 days):** Suggest weekly review
+  - "Your last weekly review was N days ago. Want to catch up?"
+  - If user says no, fall through to time-of-day detection
+
+## Routing Behavior
+
+After detecting context:
+
+1. Tell the user what was detected: "It's Sunday evening — launching your weekly review."
+2. Delegate to the appropriate skill's workflow
+3. The delegated skill handles everything from there
+
+### Delegation
+
+This skill does NOT duplicate the logic of \`/daily\`, \`/weekly\`, or \`/monthly\`. It:
+1. Detects context
+2. Informs the user
+3. Follows the instructions from the target skill's SKILL.md
+
+### Explicit Override
+
+If the user specifies a type (\`/review weekly\`), skip auto-detection entirely and go directly to that review type.
+
+## Output on Detection
+
+\`\`\`markdown
+### Review Router
+
+**Time:** 7:15 AM (Morning)
+**Day:** Sunday
+**Month day:** 15th
+
+**Detected:** Weekly review (Sunday override)
+**Last weekly review:** 3 days ago (not overdue)
+
+Launching weekly review...
+\`\`\`
+
+## Edge Cases
+
+- **Multiple triggers** (e.g., last Sunday of month): Monthly takes priority over weekly
+- **No daily note exists**: Create one first, then continue with review
+- **User says "no" to suggestion**: Fall through to next detection level
+- **Explicit argument overrides everything**: \`/review monthly\` runs monthly review even on a Tuesday morning
+
+## Integration
+
+Works with:
+- \`/daily\` — Morning, midday, and evening routines
+- \`/weekly\` — Full weekly review process
+- \`/monthly\` — Monthly review and planning
+- Session init hook — Staleness data already calculated
+`,
+    },
+  },
+  {
+    name: "search",
+    files: {
+      "SKILL.md": `---
+name: search
+description: Search vault content by keyword using Grep. Zero dependencies — works in any vault without indexes or plugins. Groups results by directory for easy scanning.
+version: 2
+source: nomendex
+---
+
+# Search Skill
+
+Fast keyword search across all vault markdown files using the Grep tool. No indexes, no plugins, no setup — just structured search with directory grouping.
+
+## Usage
+
+\`\`\`
+/search <term>
+\`\`\`
+
+Examples:
+- \`/search project planning\`
+- \`/search weekly review\`
+- \`/search TODO\`
+
+## How to Execute
+
+When the user invokes \`/search <term>\`:
+
+### Step 1: Search for the term
+
+Use the **Grep** tool to search all \`.md\` files for the term:
+
+\`\`\`
+Grep:
+  pattern: <search term>
+  glob: "*.md"
+  output_mode: content
+  -n: true
+  -C: 1
+\`\`\`
+
+Exclude hidden directories (\`.Codex/\`, \`.obsidian/\`) and templates:
+
+\`\`\`
+Grep:
+  pattern: <search term>
+  glob: "*.md"
+  path: .
+  output_mode: content
+  -n: true
+  -C: 1
+\`\`\`
+
+Filter out results from \`.Codex/\`, \`.obsidian/\`, and \`Templates/\` directories.
+
+### Step 2: Group results by directory
+
+Organise matches into sections by their parent directory:
+
+- **Daily Notes/** — journal entries
+- **Goals/** — goal and vision documents
+- **Projects/** — project notes
+- **Archives/** — archived content
+- **Inbox/** — unprocessed items
+- **(root)** — top-level notes
+
+### Step 3: Present results
+
+Format output as:
+
+\`\`\`markdown
+## Search: "<term>"
+
+### Daily Notes/
+- **2024-01-15.md** (line 23): ...matching context...
+- **2024-01-14.md** (line 8): ...matching context...
+
+### Projects/
+- **Project Alpha.md** (line 45): ...matching context...
+
+### Goals/
+- **2024 Goals.md** (line 12): ...matching context...
+
+**Found X matches across Y files**
+\`\`\`
+
+### Step 4: Suggest related content
+
+After showing results, check if any matched files contain \`[[wiki-links]]\` to other notes. If so, briefly mention:
+
+\`\`\`
+💡 Related notes mentioned in results: [[Note A]], [[Note B]]
+\`\`\`
+
+## No Results
+
+If no matches are found:
+1. Suggest alternative search terms (synonyms, related words)
+2. Offer to search with case-insensitive matching if the original search was case-sensitive
+3. Suggest checking \`Archives/\` if not already included
+
+## Tips
+
+- Search is case-sensitive by default. Add \`-i: true\` to the Grep call for case-insensitive search
+- Use regex patterns for advanced searches: \`task.*complete\`, \`#tag-name\`
+- Combine with \`/daily\` to quickly find when something was mentioned
+`,
+    },
+  },
+  {
+    name: "weekly",
+    files: {
+      "SKILL.md": `---
+name: weekly
+description: Facilitate weekly review process with reflection, goal alignment, and planning. Create review notes, analyze past week, plan next week. Use on Sundays or whenever doing weekly planning.
+version: 1
+source: nomendex
+---
+
+# Weekly Review Skill
+
+Facilitates your weekly review process by creating a review note and guiding reflection on the past week while planning the next.
+
+## Usage
+
+Invoke with \`/weekly\` or ask Codex to help with your weekly review.
+
+\`\`\`
+/weekly
+\`\`\`
+
+## What This Skill Does
+
+1. **Creates Weekly Review Note**
+   - Uses weekly review template
+   - Names it with current week's date
+   - Places in Goals folder
+
+2. **Guides Review Process**
+   - Reviews last week's accomplishments
+   - Identifies incomplete tasks
+   - Plans upcoming week
+   - Aligns with monthly goals
+
+3. **Automates Housekeeping**
+   - Archives old daily notes
+   - Updates project statuses
+   - Cleans up completed tasks
+
+## Review Process Steps
+
+### Step 1: Reflection (10 minutes)
+- Review daily notes from past week
+- Identify wins and challenges
+- Capture lessons learned
+
+### Step 2: Goal Alignment + Project Rollup (10 minutes)
+- Check monthly goal progress
+- Adjust weekly priorities
+- Ensure alignment with yearly goals
+- Auto-scan \`Projects/*/AGENTS.md\` for current status
+- Compile project progress table for the review note
+
+### Step 3: Planning (10 minutes)
+- Set ONE big thing for the week
+- Include project next-actions when planning week
+- Schedule important tasks
+- Block time for deep work
+
+## Interactive Prompts
+
+The skill guides you through:
+
+1. **"What were your top 3 wins this week?"**
+   - Celebrates progress
+   - Builds momentum
+   - Documents achievements
+
+2. **"What were your main challenges?"**
+   - Identifies obstacles
+   - Plans solutions
+   - Learns from difficulties
+
+3. **"What's your ONE big thing next week?"**
+   - Forces prioritization
+   - Creates focus
+   - Drives meaningful progress
+
+## Weekly Review Checklist
+
+- [ ] Review all daily notes
+- [ ] Process inbox items
+- [ ] Update project statuses
+- [ ] Check upcoming calendar
+- [ ] Review monthly goals
+- [ ] Plan next week's priorities
+- [ ] Block time for important work
+- [ ] Clean digital workspace
+- [ ] Archive completed items
+- [ ] Commit changes to Git
+
+## Weekly Review Note Format
+
+\`\`\`markdown
+# Weekly Review: YYYY-MM-DD
+
+## Last Week's Wins
+1.
+2.
+3.
+
+## Challenges & Lessons
+- Challenge:
+- Lesson:
+
+## Goal Progress
+### Monthly Goals
+- [ ] Goal 1 (XX%)
+- [ ] Goal 2 (XX%)
+
+### This Week's Contribution
+- [Task] -> [[Goal]]
+
+## Project Progress
+| Project | Phase | Progress | Next Action |
+|---------|-------|----------|-------------|
+| [[ProjectA]] | Active | 60% | [Next step] |
+| [[ProjectB]] | Planning | 10% | [Next step] |
+
+## Next Week Planning
+
+### ONE Big Thing
+>
+
+### Key Tasks
+- [ ]
+- [ ]
+- [ ]
+
+### Project Next-Actions
+- [ ] [ProjectA] - [specific next step]
+- [ ] [ProjectB] - [specific next step]
+
+### Time Blocks
+- Monday:
+- Tuesday:
+- Wednesday:
+- Thursday:
+- Friday:
+
+## Notes
+\`\`\`
+
+## Automation Features
+
+### Auto-Archive
+Suggest moving daily notes older than 30 days to Archives.
+
+### Project Status Update
+For each active project:
+- Update completion percentage
+- Note blockers
+- Set next actions
+
+### Habit Tracking
+Calculate habit success rates from daily notes:
+- Count habit checkboxes
+- Show completion percentage
+- Identify patterns
+
+## Best Practices
+
+### Consistent Timing
+- Same day each week (Sunday recommended)
+- Same time if possible
+- Block calendar time
+- Treat as non-negotiable
+
+### Preparation
+- Clean inbox before review
+- Have calendar ready
+- Gather project updates
+- Review any feedback
+
+### Follow-through
+- Share highlights with team/family
+- Update external systems
+- Communicate changes
+- Celebrate wins
+
+## Task-Based Progress Tracking
+
+The weekly skill uses session tasks to show progress through the 3-phase review.
+
+### Phase Tasks
+
+Create tasks at skill start:
+
+\`\`\`
+TaskCreate:
+  subject: "Phase 1: Collect"
+  description: "Gather daily notes from past week, extract wins and challenges"
+  activeForm: "Collecting daily notes and extracting highlights..."
+
+TaskCreate:
+  subject: "Phase 2: Reflect"
+  description: "Calculate goal progress, analyze alignment gaps"
+  activeForm: "Calculating goal progress and alignment..."
+
+TaskCreate:
+  subject: "Phase 3: Plan"
+  description: "Identify ONE Big Thing, plan daily focus areas for next week"
+  activeForm: "Planning next week's focus..."
+\`\`\`
+
+### Dependencies
+
+Phases must run in order:
+\`\`\`
+TaskUpdate: "Phase 2: Reflect", addBlockedBy: [phase-1-collect-id]
+TaskUpdate: "Phase 3: Plan", addBlockedBy: [phase-2-reflect-id]
+\`\`\`
+
+Reflect is blocked until Collect completes. Plan is blocked until Reflect completes. This provides visibility into the 30-minute review process.
+
+Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
+
+Task tools are session-scoped and don't persist between Codex sessions—your actual weekly review content is saved in the review note.
+
+## Agent Team Workflow (Optional)
+
+For a faster, more thorough weekly review, use agent teams to parallelize the collection phase:
+
+\`\`\`
+Team Lead (coordinator)
+├── collector agent — Read all daily notes, extract wins/challenges/tasks
+├── goal-analyzer agent — Read goal files, calculate progress, find gaps
+└── project-scanner agent — Scan Projects/*/AGENTS.md, get status updates
+\`\`\`
+
+### How to Use
+When invoking \`/weekly\`, you can request the team-based approach:
+\`\`\`
+/weekly
+"Use the team approach for a thorough review"
+\`\`\`
+
+The team lead:
+1. Spawns three agents to work in parallel
+2. Collector reads daily notes and extracts highlights
+3. Goal-analyzer reads all goal files and calculates progress
+4. Project-scanner reads all project AGENTS.md files for status
+5. Team lead synthesizes findings into the weekly review note
+
+This makes the review faster (parallel collection) and more thorough (dedicated analysis per area).
+
+### Vault Health Check (Ad-hoc)
+
+The weekly review can optionally include a vault health check using multiple agents:
+- **note-organizer**: Scan for broken links, orphan notes
+- **goal-aligner**: Check daily-to-goal alignment
+- **inbox-processor**: Check for unprocessed items
+
+Request with: "Include a vault health check in my weekly review"
+
+## Integration
+
+Works with:
+- \`/daily\` - Reviews daily notes from the week
+- \`/monthly\` - Weekly reviews feed monthly rollup
+- \`/project\` - Project status in review
+- \`/push\` - Commit after completing review
+- \`/onboard\` - Load context for informed review
+- Goal tracking skill - Progress calculations
+`,
+    },
+  }
 ];
 
 /**
@@ -892,6 +2839,30 @@ async function getInstalledSkillVersion(skillName: string): Promise<number | nul
 }
 
 /**
+ * Get the source field of an installed skill, or null if not installed / no source
+ */
+async function getInstalledSkillSource(skillName: string): Promise<string | null> {
+  if (!hasActiveWorkspace()) {
+    return null;
+  }
+
+  const skillPath = path.join(getSkillsPath(), skillName, "SKILL.md");
+  const file = Bun.file(skillPath);
+
+  if (!(await file.exists())) {
+    return null;
+  }
+
+  try {
+    const content = await file.text();
+    const metadata = parseSkillFrontmatter(content);
+    return metadata?.source ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Get metadata for an embedded default skill
  */
 function getDefaultSkillMetadata(skillName: string): SkillMetadata | null {
@@ -947,7 +2918,9 @@ async function writeDefaultSkill(skillName: string): Promise<boolean> {
 }
 
 /**
- * Check for available skill updates
+ * Check for available skill updates.
+ * Only considers skills where the installed copy has source: nomendex (or is missing).
+ * User-created skills with colliding names are skipped entirely.
  */
 async function checkForSkillUpdates(): Promise<SkillUpdateCheckResult> {
   const result: SkillUpdateCheckResult = {
@@ -969,15 +2942,44 @@ async function checkForSkillUpdates(): Promise<SkillUpdateCheckResult> {
     const installedVersion = await getInstalledSkillVersion(skill.name);
 
     if (installedVersion === null) {
-      // Skill not installed
+      // Skill directory might exist without a valid SKILL.md or version
+      // If directory exists at all, check ownership before treating as "new"
+      const skillDirPath = path.join(getSkillsPath(), skill.name);
+      const { stat } = await import("node:fs/promises");
+      let dirExists = false;
+      try {
+        const s = await stat(skillDirPath);
+        dirExists = s.isDirectory();
+      } catch {
+        // Directory doesn't exist — truly new
+      }
+
+      if (dirExists) {
+        // Directory exists — only treat as our skill if explicitly Nomendex-owned
+        const installedSource = await getInstalledSkillSource(skill.name);
+        if (installedSource !== "nomendex") {
+          // No source, broken frontmatter, or user-owned — don't touch
+          logger.info(`Skipping ${skill.name}: existing directory without nomendex ownership (source: ${installedSource ?? "none"})`);
+          continue;
+        }
+      }
       result.newSkills.push(skill.name);
-    } else if (installedVersion < defaultMetadata.version) {
-      // Update available
-      result.pendingUpdates.push({
-        skillName: skill.name,
-        currentVersion: installedVersion,
-        availableVersion: defaultMetadata.version,
-      });
+    } else {
+      // Skill exists with a parseable version — check ownership before offering update
+      const installedSource = await getInstalledSkillSource(skill.name);
+      if (installedSource !== null && installedSource !== "nomendex") {
+        // User-owned skill with colliding name — don't touch
+        logger.info(`Skipping update for ${skill.name}: user-owned skill (source: ${installedSource})`);
+        continue;
+      }
+
+      if (installedVersion < defaultMetadata.version) {
+        result.pendingUpdates.push({
+          skillName: skill.name,
+          currentVersion: installedVersion,
+          availableVersion: defaultMetadata.version,
+        });
+      }
     }
   }
 
@@ -986,9 +2988,9 @@ async function checkForSkillUpdates(): Promise<SkillUpdateCheckResult> {
 
 /**
  * Initialize default skills on workspace startup.
- * - Writes any missing default skills
- * - Checks for available updates
- * - Returns list of pending updates for UI notification
+ * - Writes any missing default skills (if no user-owned collision exists)
+ * - Auto-applies updates only for Nomendex-owned skills (source: nomendex)
+ * - Surfaces updates for skills without source as pending (toast flow)
  */
 export async function initializeDefaultSkills(): Promise<SkillUpdateCheckResult> {
   if (!hasActiveWorkspace()) {
@@ -998,7 +3000,7 @@ export async function initializeDefaultSkills(): Promise<SkillUpdateCheckResult>
 
   logger.info("Initializing default skills...");
 
-  // Check for new skills and updates
+  // Check for new skills and updates (already ownership-filtered)
   const updateCheck = await checkForSkillUpdates();
 
   // Write any new (missing) skills
@@ -1007,17 +3009,29 @@ export async function initializeDefaultSkills(): Promise<SkillUpdateCheckResult>
     await writeDefaultSkill(skillName);
   }
 
-  // Store pending updates for UI notification
-  pendingUpdates = updateCheck.pendingUpdates;
-
-  if (updateCheck.pendingUpdates.length > 0) {
-    logger.info(`${updateCheck.pendingUpdates.length} skill update(s) available`);
+  // Process pending updates with ownership-aware logic
+  const remainingPending: SkillUpdateInfo[] = [];
+  for (const update of updateCheck.pendingUpdates) {
+    const installedSource = await getInstalledSkillSource(update.skillName);
+    if (installedSource === "nomendex") {
+      // Already Nomendex-owned — safe to auto-update
+      logger.info(`Auto-updating Nomendex skill: ${update.skillName} (v${update.currentVersion} → v${update.availableVersion})`);
+      await writeDefaultSkill(update.skillName);
+    } else {
+      // No source yet (pre-ownership skill) or ambiguous — surface via toast
+      logger.info(`Pending update for ${update.skillName} (v${update.currentVersion} → v${update.availableVersion})`);
+      remainingPending.push(update);
+    }
   }
 
-  logger.info(`Default skills initialization complete. Installed ${updateCheck.newSkills.length} new skill(s).`);
+  // Store remaining pending updates for UI notification
+  pendingUpdates = remainingPending;
+
+  const autoApplied = updateCheck.pendingUpdates.length - remainingPending.length;
+  logger.info(`Default skills initialization complete. Installed ${updateCheck.newSkills.length} new, auto-updated ${autoApplied}, ${remainingPending.length} pending.`);
 
   return {
-    pendingUpdates: updateCheck.pendingUpdates,
+    pendingUpdates: remainingPending,
     newSkills: updateCheck.newSkills,
   };
 }
@@ -1030,9 +3044,20 @@ export function getPendingSkillUpdates(): SkillUpdateInfo[] {
 }
 
 /**
- * Apply a skill update (write new version to workspace)
+ * Apply a skill update (write new version to workspace).
+ * Enforces the same ownership check as startup — only writes if the
+ * installed skill has source: nomendex (or is missing entirely).
  */
 export async function applySkillUpdate(skillName: string): Promise<boolean> {
+  // Ownership gate: only allow updating Nomendex-owned skills
+  const installedSource = await getInstalledSkillSource(skillName);
+  if (installedSource !== null && installedSource !== "nomendex") {
+    logger.warn(`Refusing to update ${skillName}: not Nomendex-owned (source: ${installedSource})`);
+    // Remove from pending since it shouldn't be there
+    pendingUpdates = pendingUpdates.filter((u) => u.skillName !== skillName);
+    return false;
+  }
+
   const success = await writeDefaultSkill(skillName);
 
   if (success) {
