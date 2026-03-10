@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,40 @@ import { CalendarDays, Clock, X } from "lucide-react";
 import { toLocalDateString, parseLocalDateString } from "@/features/notes/date-utils";
 import type { DateRange, DayButton } from "react-day-picker";
 import { cn } from "@/lib/utils";
+
+/** Parse shorthand time strings: "1000" → "10:00", "930" → "09:30", "9" → "09:00", "10:30" → "10:30" */
+function parseTimeInput(raw: string): string | null {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+
+    // Already formatted HH:MM or H:MM
+    if (/^\d{1,2}:\d{2}$/.test(trimmed)) {
+        const [h, m] = trimmed.split(':').map(Number);
+        if (h >= 0 && h <= 23 && m >= 0 && m <= 59)
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+        return null;
+    }
+
+    const digits = trimmed.replace(/\D/g, '');
+    if (digits.length === 1 || digits.length === 2) {
+        // e.g. "9" → 09:00, "10" → 10:00
+        const h = parseInt(digits, 10);
+        if (h >= 0 && h <= 23) return `${String(h).padStart(2, '0')}:00`;
+    } else if (digits.length === 3) {
+        // e.g. "930" → 09:30
+        const h = parseInt(digits[0], 10);
+        const m = parseInt(digits.slice(1), 10);
+        if (h >= 0 && h <= 23 && m >= 0 && m <= 59)
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    } else if (digits.length === 4) {
+        // e.g. "1000" → 10:00, "2330" → 23:30
+        const h = parseInt(digits.slice(0, 2), 10);
+        const m = parseInt(digits.slice(2), 10);
+        if (h >= 0 && h <= 23 && m >= 0 && m <= 59)
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+    return null;
+}
 
 function PickerDayButton({ className, day: _day, modifiers, style, ...props }: React.ComponentProps<typeof DayButton>) {
     const ref = useRef<HTMLButtonElement>(null);
@@ -35,7 +69,7 @@ function PickerDayButton({ className, day: _day, modifiers, style, ...props }: R
                 modifiers.today && !modifiers.selected && "font-bold",
                 isSingleSelected && "rounded-md",
                 modifiers.range_start && "rounded-l-md rounded-r-none",
-                modifiers.range_end   && "rounded-r-md rounded-l-none",
+                modifiers.range_end && "rounded-r-md rounded-l-none",
                 modifiers.range_middle && "rounded-none",
                 modifiers.disabled && "opacity-40 cursor-not-allowed pointer-events-none",
                 modifiers.outside && "opacity-30",
@@ -59,6 +93,9 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
     const [localFrom, setLocalFrom] = useState<Date | undefined>();
     const [localTo, setLocalTo] = useState<Date | undefined>();
     const [localTime, setLocalTime] = useState<string>("");
+    const [displayTime, setDisplayTime] = useState<string>("");
+    const [showTimeInput, setShowTimeInput] = useState(false);
+    const timeInputRef = useRef<HTMLInputElement>(null);
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
 
@@ -77,8 +114,42 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
             setLocalTo(undefined);
         }
 
-        setLocalTime(dueDate?.includes('T') ? dueDate.split('T')[1] : "");
+        const time = dueDate?.includes('T') ? dueDate.split('T')[1] : "";
+        setLocalTime(time);
+        setDisplayTime(time);
+        setShowTimeInput(!!time);
     };
+
+    const handleAddTime = useCallback(() => {
+        setShowTimeInput(true);
+        setDisplayTime("");
+        // Focus the input on the next paint once it's mounted
+        setTimeout(() => timeInputRef.current?.focus(), 0);
+    }, []);
+
+    const handleClearTime = useCallback(() => {
+        setLocalTime("");
+        setDisplayTime("");
+        setShowTimeInput(false);
+    }, []);
+
+    const commitDisplayTime = useCallback(() => {
+        if (!displayTime.trim()) {
+            // If they cleared the field, remove the time
+            setLocalTime("");
+            setDisplayTime("");
+            setShowTimeInput(false);
+            return;
+        }
+        const parsed = parseTimeInput(displayTime);
+        if (parsed) {
+            setLocalTime(parsed);
+            setDisplayTime(parsed);
+        } else {
+            // Revert to previously committed time on invalid input
+            setDisplayTime(localTime);
+        }
+    }, [displayTime, localTime]);
 
     const handleOpenChange = (nextOpen: boolean) => {
         if (nextOpen) initLocalState();
@@ -143,6 +214,7 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
         setLocalFrom(undefined);
         setLocalTo(undefined);
         setLocalTime("");
+        setShowTimeInput(false);
     };
 
     const handleClear = () => {
@@ -260,17 +332,42 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
                         {/* Time / All-day section */}
                         <div className="pt-2 border-t" style={{ borderColor: styles.surfaceTertiary }}>
                             {isSingleDay ? (
-                                <div className="flex items-center gap-2">
-                                    <Clock className="size-3.5 shrink-0" style={{ color: styles.contentTertiary }} />
-                                    <Input
-                                        type="time"
-                                        value={localTime}
-                                        onChange={(e) => setLocalTime(e.target.value)}
-                                        className="h-8 text-sm flex-1"
+                                showTimeInput ? (
+                                    <div className="flex items-center gap-2">
+                                        <Clock className="size-3.5 shrink-0" style={{ color: styles.contentTertiary }} />
+                                        <Input
+                                            ref={timeInputRef}
+                                            type="text"
+                                            inputMode="numeric"
+                                            value={displayTime}
+                                            onChange={(e) => setDisplayTime(e.target.value)}
+                                            onBlur={commitDisplayTime}
+                                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitDisplayTime(); } }}
+                                            className="h-8 text-sm flex-1 font-mono"
+                                            placeholder="1400"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleClearTime}
+                                            className="p-1 rounded-sm hover:bg-black/10 transition-colors focus:outline-none"
+                                            style={{ color: styles.contentTertiary }}
+                                            title="Remove time"
+                                        >
+                                            <X className="size-3.5" />
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={handleAddTime}
                                         disabled={!localFrom}
-                                        placeholder="Add time"
-                                    />
-                                </div>
+                                        className="flex items-center gap-2 w-full px-1 py-1 rounded-md text-sm transition-colors hover:bg-black/5 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none"
+                                        style={{ color: styles.contentTertiary }}
+                                    >
+                                        <Clock className="size-3.5 shrink-0" />
+                                        <span>Add time</span>
+                                    </button>
+                                )
                             ) : (
                                 <div className="flex items-center justify-center py-1">
                                     <span className="text-xs" style={{ color: styles.contentTertiary }}>All day</span>

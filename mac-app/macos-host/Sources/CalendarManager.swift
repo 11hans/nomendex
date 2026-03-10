@@ -72,6 +72,8 @@ class CalendarManager {
     
     private func detectChanges() {
         guard let webView = webViewRef else { return }
+        // Reset store to ensure we get fresh data after EKEventStoreChanged
+        eventStore.reset()
         let nomendexCalendars = getNomendexCalendars()
         guard !nomendexCalendars.isEmpty else { return }
 
