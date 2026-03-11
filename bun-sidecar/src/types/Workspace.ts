@@ -14,6 +14,7 @@ export const McpServerStatusSchema = z.object({
 
 export const ProjectPreferencesSchema = z.object({
     hideLaterColumn: z.boolean().default(false),
+    sortByDate: z.boolean().default(false),
 });
 
 export const GitAuthModeSchema = z.enum(["pat", "local"]);
