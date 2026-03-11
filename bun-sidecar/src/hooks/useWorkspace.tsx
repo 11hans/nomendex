@@ -732,6 +732,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                     [projectKey]: {
                         ...prev.projectPreferences[projectKey],
                         hideLaterColumn: preferences.hideLaterColumn ?? prev.projectPreferences[projectKey]?.hideLaterColumn ?? false,
+                        sortByDate: preferences.sortByDate ?? prev.projectPreferences[projectKey]?.sortByDate ?? false,
                     },
                 },
             }));

@@ -5,7 +5,7 @@ import { subscribe } from "@/lib/events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AlertCircle, CheckCircle2, Clock, Calendar, Eye, EyeOff, MoreHorizontal, Archive, Search, Plus, Settings, Circle, ArrowLeft, FileSearch } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Calendar, Eye, EyeOff, MoreHorizontal, Archive, Search, Plus, Settings, Circle, ArrowLeft, FileSearch, ArrowUpDown, SortAsc } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { TodoCard } from "./TodoCard";
@@ -74,6 +74,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const projectPreferencesKey = filterProject === null || filterProject === undefined ? "__all__" : filterProject === "" ? "__none__" : filterProject;
     const projectPrefs = getProjectPreferences(projectPreferencesKey);
     const showLaterColumn = !projectPrefs.hideLaterColumn;
+    const sortByDate = projectPrefs.sortByDate ?? false;
     const [newTodo, setNewTodo] = useState<{
         title: string;
         description: string;
@@ -150,6 +151,11 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const toggleShowLaterColumn = useCallback(() => {
         setProjectPreferences(projectPreferencesKey, { hideLaterColumn: !projectPrefs.hideLaterColumn });
     }, [setProjectPreferences, projectPreferencesKey, projectPrefs.hideLaterColumn]);
+
+    // Toggle sort by due date - persists to workspace.json
+    const toggleSortByDate = useCallback(() => {
+        setProjectPreferences(projectPreferencesKey, { sortByDate: !projectPrefs.sortByDate });
+    }, [setProjectPreferences, projectPreferencesKey, projectPrefs.sortByDate]);
 
 
     // Update the tab name based on the project - only once when component mounts
@@ -751,8 +757,22 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             }
         });
 
+        // Sort by due date if enabled (closest first, no-date todos at bottom)
+        if (sortByDate) {
+            for (const colId of Object.keys(grouped)) {
+                grouped[colId].sort((a, b) => {
+                    const aHasDate = !!a.dueDate;
+                    const bHasDate = !!b.dueDate;
+                    if (aHasDate && bHasDate) return a.dueDate! < b.dueDate! ? -1 : a.dueDate! > b.dueDate! ? 1 : 0;
+                    if (aHasDate) return -1;
+                    if (bHasDate) return 1;
+                    return (a.order ?? 0) - (b.order ?? 0);
+                });
+            }
+        }
+
         return grouped;
-    }, [todos, selectedTags, selectedPriority, searchQuery, displayColumns, getColumnForTodo]);
+    }, [todos, selectedTags, selectedPriority, searchQuery, displayColumns, getColumnForTodo, sortByDate]);
 
 
     // Flattened list of all visible todos for keyboard navigation
@@ -1781,6 +1801,11 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                 <DropdownMenuItem onClick={toggleShowLaterColumn}>
                                     {showLaterColumn ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
                                     {showLaterColumn ? "Hide Later Column" : "Show Later Column"}
+                                </DropdownMenuItem>
+
+                                <DropdownMenuItem onClick={toggleSortByDate}>
+                                    {sortByDate ? <SortAsc className="w-4 h-4 mr-2" /> : <ArrowUpDown className="w-4 h-4 mr-2" />}
+                                    {sortByDate ? "Sort: By Due Date" : "Sort: Manual Order"}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
