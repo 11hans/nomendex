@@ -9,6 +9,9 @@ function isCalendarAvailable(): boolean {
     return !!window.webkit?.messageHandlers?.calendarSync;
 }
 
+// Serialize calendar sync calls to prevent duplicate events from concurrent upserts
+let calendarSyncQueue: Promise<void> = Promise.resolve();
+
 export async function syncTaskToCalendar(task: Todo): Promise<void> {
     if (!isCalendarAvailable()) return;
 
@@ -17,8 +20,15 @@ export async function syncTaskToCalendar(task: Todo): Promise<void> {
         return removeTaskFromCalendar(task.id);
     }
 
+    // Chain onto queue to prevent concurrent upserts creating duplicates
+    const op = calendarSyncQueue.then(() => doSyncTaskToCalendar(task));
+    calendarSyncQueue = op.catch(() => { /* swallow to keep chain alive */ });
+    return op;
+}
+
+function doSyncTaskToCalendar(task: Todo): Promise<void> {
     return new Promise<void>((resolve) => {
-        const callbackName = `__calendarSyncCallback`;
+        const callbackName = `__calendarSyncCallback_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         (window as unknown as Record<string, unknown>)[callbackName] = (result: CalendarSyncResult) => {
             if (!result.success && result.error) {
                 console.warn("[calendar-bridge] sync error:", result.error);
@@ -55,7 +65,7 @@ export async function removeTaskFromCalendar(taskId: string): Promise<void> {
     if (!isCalendarAvailable()) return;
 
     return new Promise<void>((resolve) => {
-        const callbackName = `__calendarSyncCallback`;
+        const callbackName = `__calendarSyncCallback_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         (window as unknown as Record<string, unknown>)[callbackName] = (result: CalendarSyncResult) => {
             if (!result.success && result.error) {
                 console.warn("[calendar-bridge] delete error:", result.error);
