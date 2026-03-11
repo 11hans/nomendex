@@ -104,6 +104,7 @@ export async function onStartup(): Promise<SkillUpdateCheckResult | null> {
                 ".nomendex/workspace.json",
                 ".nomendex/backlinks.json",
                 ".nomendex/tags.json",
+                ".nomendex/agent-memory/",
             ];
 
             let changed = false;

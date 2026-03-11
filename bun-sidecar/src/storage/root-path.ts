@@ -11,6 +11,7 @@ interface PathCache {
     agentsPath: string;
     skillsPath: string;
     uploadsPath: string;
+    agentMemoryPath: string;
 }
 
 let paths: PathCache | null = null;
@@ -60,6 +61,7 @@ export async function initializePaths(): Promise<void> {
         agentsPath: path.join(workspace.path, "agents"),
         skillsPath: path.join(workspace.path, ".claude", "skills"),
         uploadsPath: path.join(workspace.path, "uploads"),
+        agentMemoryPath: path.join(workspace.path, ".nomendex", "agent-memory", "items"),
     };
 }
 
@@ -148,4 +150,13 @@ export function getSkillsPath(): string {
 export function getUploadsPath(): string {
     if (!paths) throw new Error("No active workspace. Call initializePaths() first.");
     return paths.uploadsPath;
+}
+
+/**
+ * Get the agent memory items path of the active workspace.
+ * @throws Error if no workspace is active
+ */
+export function getAgentMemoryPath(): string {
+    if (!paths) throw new Error("No active workspace. Call initializePaths() first.");
+    return paths.agentMemoryPath;
 }

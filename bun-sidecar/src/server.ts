@@ -21,6 +21,7 @@ import { uploadsRoutes } from "./server-routes/uploads-routes";
 import { versionRoutes } from "./server-routes/version-routes";
 import { logsRoutes } from "./server-routes/logs-routes";
 import { dictionariesRoutes } from "./server-routes/dictionaries-routes";
+import { agentMemoryRoutes } from "./server-routes/agent-memory-routes";
 
 
 // Terminal WebSocket data type
@@ -92,6 +93,7 @@ const server = serve<WSData>({
         ...logsRoutes,
         ...dictionariesRoutes,
         ...projectsRoutes,
+        ...agentMemoryRoutes,
         // WebSocket route handler
         "/ws": {
             GET: (req, server) => {

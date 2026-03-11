@@ -3,6 +3,7 @@ import { initializePaths, hasActiveWorkspace, getActiveWorkspacePath } from "@/s
 import { initializeTodosService } from "@/features/todos/fx";
 import { initializeNotesService } from "@/features/notes/fx";
 import { initializeProjectsService } from "@/features/projects/fx";
+import { initializeAgentMemoryService, disposeAgentMemoryService } from "@/features/agent-memory/fx";
 import { secrets } from "@/lib/secrets";
 import { onStartup } from "@/onStartup";
 
@@ -59,6 +60,7 @@ export async function initializeWorkspaceServices(): Promise<void> {
             await initializeTodosService();
             await initializeNotesService();
             await initializeProjectsService();
+            await initializeAgentMemoryService();
             startupLog.info("Feature services initialized");
         } catch (error) {
             startupLog.error("Failed to initialize feature services", {
@@ -68,5 +70,7 @@ export async function initializeWorkspaceServices(): Promise<void> {
         }
     } else {
         startupLog.info("Skipping feature services (no active workspace)");
+        // Tear down services that may have been running for a previous workspace
+        disposeAgentMemoryService();
     }
 }

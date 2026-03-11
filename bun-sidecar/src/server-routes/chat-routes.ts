@@ -13,6 +13,8 @@ import { uiRendererServer } from "@/mcp-servers/ui-renderer";
 import { acquireFileLock, getActiveNoteFileNameForPath, releaseFileLockForToolUse } from "@/services/file-locks";
 import { buildBpagentSubagents } from "@/features/pkm-pack/subagents";
 import { buildBpagentSystemPrompt } from "@/features/pkm-pack/built-in-bpagent";
+import { buildMemoryPromptBlock } from "@/features/agent-memory/fx";
+import { buildAgentMemoryMcpServer } from "@/mcp-servers/agent-memory";
 
 // Create logger for chat routes
 const chatLogger = createServiceLogger("CHAT");
@@ -521,10 +523,36 @@ export const chatRoutes = {
                 if (agentConfig.id === "bpagent") {
                     // BPagent: use dedicated PKM system prompt with real notes path + context
                     const notesPath = getNotesPath();
-                    sdkOptions.systemPrompt = `${agentContext}\n\n${buildBpagentSystemPrompt(notesPath)}`;
+                    let bpagentPrompt = `${agentContext}\n\n${buildBpagentSystemPrompt(notesPath)}`;
+
+                    // Inject memory recall into system prompt (non-fatal on error)
+                    try {
+                        const memoryBlock = await buildMemoryPromptBlock({
+                            agentId: agentConfig.id,
+                            query: message || "",
+                            maxItems: 5,
+                        });
+                        if (memoryBlock) {
+                            bpagentPrompt = `${bpagentPrompt}\n\n${memoryBlock}`;
+                            chatLogger.info("BPagent session: injected memory prompt block");
+                        }
+                    } catch (memError) {
+                        chatLogger.warn("Failed to build memory prompt block", {
+                            error: memError instanceof Error ? memError.message : String(memError),
+                        });
+                    }
+
+                    sdkOptions.systemPrompt = bpagentPrompt;
+
+                    // Inject agent memory MCP server
+                    mcpServers["agent-memory"] = buildAgentMemoryMcpServer({
+                        agentId: agentConfig.id,
+                        sessionId,
+                    });
+
                     // Inject programmatic PKM subagents
                     sdkOptions.agents = buildBpagentSubagents();
-                    chatLogger.info("BPagent session: injected PKM subagents", {
+                    chatLogger.info("BPagent session: injected PKM subagents + memory", {
                         subagents: Object.keys(sdkOptions.agents),
                     });
                 } else if (agentConfig.systemPrompt) {
