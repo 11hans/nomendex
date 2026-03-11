@@ -4,38 +4,39 @@ import Foundation
 
 class CalendarManager {
     static let shared = CalendarManager()
-    
+
     private let eventStore = EKEventStore()
     private let defaultCalendarTitle = "Nomendex Tasks"
     private let calendarPrefix = "Nomendex"
-    
+    private let syncQueue = DispatchQueue(label: "com.nomendex.calendar-sync")
+
     private init() {}
-    
+
     // MARK: - Change Observation
-    
+
     private weak var webViewRef: WKWebView?
     private var changeObserver: NSObjectProtocol?
     private var knownEventStates: [String: EventState] = [:]  // taskId -> snapshot
-    private var ignoreNextChangeForTaskID: String? = nil
-    
+    private var ignoredTaskIDs: Set<String> = []
+
     struct EventState {
         let title: String
         let startDate: Date?
         let endDate: Date?
         let isAllDay: Bool
     }
-    
+
     func startObserving(webView: WKWebView) {
         self.webViewRef = webView
-        
+
         // Remove existing observer if any
         if let existing = changeObserver {
             NotificationCenter.default.removeObserver(existing)
         }
-        
+
         // Initial snapshot
         snapshotCurrentEvents()
-        
+
         changeObserver = NotificationCenter.default.addObserver(
             forName: .EKEventStoreChanged,
             object: eventStore,
@@ -43,10 +44,10 @@ class CalendarManager {
         ) { [weak self] _ in
             self?.detectChanges()
         }
-        
+
         log("Started observing calendar changes")
     }
-    
+
     private func snapshotCurrentEvents() {
         let nomendexCalendars = getNomendexCalendars()
         guard !nomendexCalendars.isEmpty else { return }
@@ -54,7 +55,7 @@ class CalendarManager {
         let end = Date().addingTimeInterval(365 * 24 * 3600)
         let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
         let events = eventStore.events(matching: predicate)
-        
+
         var newState: [String: EventState] = [:]
         for event in events {
             if let url = event.url?.absoluteString, url.hasPrefix("nomendex://task/") {
@@ -69,7 +70,7 @@ class CalendarManager {
         }
         knownEventStates = newState
     }
-    
+
     private func detectChanges() {
         guard let webView = webViewRef else { return }
         // Reset store to ensure we get fresh data after EKEventStoreChanged
@@ -81,7 +82,7 @@ class CalendarManager {
         let end = Date().addingTimeInterval(365 * 24 * 3600)
         let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
         let currentEvents = eventStore.events(matching: predicate)
-        
+
         var currentMap: [String: (EKEvent, EventState)] = [:]
         for event in currentEvents {
             if let url = event.url?.absoluteString, url.hasPrefix("nomendex://task/") {
@@ -94,44 +95,42 @@ class CalendarManager {
                 ))
             }
         }
-        
+
         var changesToSend: [[String: Any]] = []
-        
+
         // Check for modified or deleted events
         for (taskId, oldState) in knownEventStates {
-            // Skip detection if we just updated this task from Nomendex
-            if taskId == ignoreNextChangeForTaskID {
-                ignoreNextChangeForTaskID = nil
+            if ignoredTaskIDs.contains(taskId) {
+                ignoredTaskIDs.remove(taskId)
                 continue
             }
-            
+
             if let current = currentMap[taskId] {
                 let newState = current.1
-                let event = current.0
-                
+
                 var hasChanges = false
                 var syncPayload: [String: Any] = ["taskId": taskId]
-                
+
                 if oldState.title != newState.title {
                     hasChanges = true
                     let cleanTitle = newState.title.hasPrefix("✅ ") ? String(newState.title.dropFirst(2)) : newState.title
                     syncPayload["title"] = cleanTitle
                 }
-                
+
                 if oldState.startDate != newState.startDate || oldState.endDate != newState.endDate || oldState.isAllDay != newState.isAllDay {
                     hasChanges = true
-                    
+
                     let formatter = DateFormatter()
                     formatter.locale = Locale(identifier: "en_US_POSIX")
-                    formatter.timeZone = TimeZone.current // Added timezone
-                    
+                    formatter.timeZone = TimeZone.current
+
                     if let date = newState.startDate {
                         formatter.dateFormat = newState.isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm"
                         syncPayload["startDate"] = formatter.string(from: date)
                     } else {
                         syncPayload["startDate"] = NSNull()
                     }
-                    
+
                     if let date = newState.endDate {
                         formatter.dateFormat = newState.isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm"
                         syncPayload["dueDate"] = formatter.string(from: date)
@@ -139,30 +138,26 @@ class CalendarManager {
                         syncPayload["dueDate"] = NSNull()
                     }
                 }
-                
+
                 if hasChanges {
                     changesToSend.append(syncPayload)
                 }
             } else {
                 // Event was deleted
-                if taskId == ignoreNextChangeForTaskID {
-                    ignoreNextChangeForTaskID = nil
-                    continue
-                }
                 changesToSend.append([
                     "taskId": taskId,
                     "deleted": true
                 ])
             }
         }
-        
+
         // Update snapshot
         var nextState: [String: EventState] = [:]
         for (taskId, current) in currentMap {
             nextState[taskId] = current.1
         }
         knownEventStates = nextState
-        
+
         // Send to JS
         if !changesToSend.isEmpty {
             log("Detected calendar changes for \(changesToSend.count) tasks")
@@ -179,31 +174,35 @@ class CalendarManager {
             }
         }
     }
-    
+
     // MARK: - Public API
-    
+
     func syncTask(_ taskData: [String: Any], webView: WKWebView?, callback: String?) {
         requestAccess { granted in
             guard granted else {
                 self.sendResult(webView: webView, callback: callback, success: false, error: "Calendar access denied")
                 return
             }
-            
-            let action = taskData["action"] as? String ?? "upsert"
-            
-            switch action {
-            case "upsert":
-                self.upsertEvent(taskData: taskData, webView: webView, callback: callback)
-            case "delete":
-                self.deleteEvent(taskData: taskData, webView: webView, callback: callback)
-            default:
-                self.sendResult(webView: webView, callback: callback, success: false, error: "Unknown action: \(action)")
+
+            // Serialize upsert/delete on a dedicated queue to prevent concurrent
+            // findEvent calls from both missing an existing event and creating duplicates
+            self.syncQueue.async {
+                let action = taskData["action"] as? String ?? "upsert"
+
+                switch action {
+                case "upsert":
+                    self.upsertEvent(taskData: taskData, webView: webView, callback: callback)
+                case "delete":
+                    self.deleteEvent(taskData: taskData, webView: webView, callback: callback)
+                default:
+                    self.sendResult(webView: webView, callback: callback, success: false, error: "Unknown action: \(action)")
+                }
             }
         }
     }
-    
+
     // MARK: - Access Request
-    
+
     private func requestAccess(completion: @escaping (Bool) -> Void) {
         if #available(macOS 14.0, *) {
             eventStore.requestFullAccessToEvents { granted, error in
@@ -221,7 +220,7 @@ class CalendarManager {
             }
         }
     }
-    
+
     // MARK: - Calendar
 
     /// Returns all calendars whose title starts with "Nomendex"
@@ -267,9 +266,9 @@ class CalendarManager {
             return nil
         }
     }
-    
+
     // MARK: - Upsert Event
-    
+
     private func upsertEvent(taskData: [String: Any], webView: WKWebView?, callback: String?) {
         let projectName = taskData["projectName"] as? String
 
@@ -287,10 +286,10 @@ class CalendarManager {
         // Find existing event across all Nomendex calendars, or create new one
         let event = findEvent(taskId: taskId) ?? EKEvent(eventStore: eventStore)
         event.calendar = calendar
-        
+
         // Clear existing alarms to avoid duplicates
         event.alarms?.forEach { event.removeAlarm($0) }
-        
+
         // Status prefix
         let status = taskData["status"] as? String
         if status == "done" {
@@ -300,17 +299,17 @@ class CalendarManager {
             let cleanTitle = title.hasPrefix("✅ ") ? String(title.dropFirst(2)) : title
             event.title = cleanTitle
         }
-        
+
         // Notes / description
         if let description = taskData["description"] as? String, !description.isEmpty {
             event.notes = description
         }
-        
+
         // Parse dates
         let dueDate = taskData["dueDate"] as? String
         let startDate = taskData["startDate"] as? String
         let duration = taskData["duration"] as? Int ?? 60
-        
+
         if let startDateStr = startDate, let start = parseISO(startDateStr) {
             event.startDate = start
             if let dueDateStr = dueDate, let end = parseISO(dueDateStr) {
@@ -336,16 +335,13 @@ class CalendarManager {
             sendResult(webView: webView, callback: callback, success: true, error: nil)
             return
         }
-        
-        // Priority → Calendar alarm (Disabled per user feedback)
-        // if let priority = taskData["priority"] as? String { ... }
-        
+
         // Store task ID in event URL for lookup
         event.url = URL(string: "nomendex://task/\(taskId)")
-        
+
         // Prevent echo
-        ignoreNextChangeForTaskID = taskId
-        
+        ignoredTaskIDs.insert(taskId)
+
         do {
             try eventStore.save(event, span: .thisEvent)
             log("Saved calendar event for task: \(taskId)")
@@ -355,9 +351,9 @@ class CalendarManager {
             sendResult(webView: webView, callback: callback, success: false, error: error.localizedDescription)
         }
     }
-    
+
     // MARK: - Delete Event
-    
+
     private func deleteEvent(taskData: [String: Any], webView: WKWebView?, callback: String?) {
         guard let taskId = taskData["taskId"] as? String else {
             sendResult(webView: webView, callback: callback, success: false, error: "Missing taskId")
@@ -366,7 +362,7 @@ class CalendarManager {
 
         if let event = findEvent(taskId: taskId) {
             // Prevent echo
-            ignoreNextChangeForTaskID = taskId
+            ignoredTaskIDs.insert(taskId)
             do {
                 try eventStore.remove(event, span: .thisEvent)
                 log("Deleted calendar event for task: \(taskId)")
@@ -374,12 +370,12 @@ class CalendarManager {
                 log("Failed to delete event: \(error)")
             }
         }
-        
+
         sendResult(webView: webView, callback: callback, success: true, error: nil)
     }
-    
+
     // MARK: - Helpers
-    
+
     private func findEvent(taskId: String) -> EKEvent? {
         eventStore.reset()
         let nomendexCalendars = getNomendexCalendars()
@@ -392,17 +388,15 @@ class CalendarManager {
         let targetURL = URL(string: "nomendex://task/\(taskId)")
         return events.first { $0.url == targetURL }
     }
-    
+
     private func parseISO(_ string: String) -> Date? {
         if string.contains("T") {
-            // "2025-02-16T14:00" → add seconds for ISO8601
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
             formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.timeZone = TimeZone.current
             return formatter.date(from: string)
         } else {
-            // "2025-02-16"
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
             formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -410,10 +404,10 @@ class CalendarManager {
             return formatter.date(from: string)
         }
     }
-    
+
     private func sendResult(webView: WKWebView?, callback: String?, success: Bool, error: String?) {
         guard let callback = callback, let wv = webView else { return }
-        
+
         DispatchQueue.main.async {
             let errorStr = error.map { "\"\($0.replacingOccurrences(of: "\"", with: "\\\""))\"" } ?? "null"
             let js = "window.\(callback)({success: \(success), error: \(errorStr)})"
