@@ -5,7 +5,7 @@ import { todosPluginSerial } from "./index";
 import { WorkspaceTab } from "@/types/Workspace";
 import { SerializablePlugin } from "@/types/Plugin";
 import { todosAPI } from "@/hooks/useTodosAPI";
-import { syncTaskToCalendar } from "./calendar-bridge";
+import { syncTaskToCalendar, purgeCalendarEvents } from "./calendar-bridge";
 import { toast } from "sonner";
 
 interface CommandContext {
@@ -119,6 +119,9 @@ export async function getTodosCommands(context: CommandContext): Promise<Command
                         return;
                     }
 
+                    // Wipe all Nomendex calendars first, then recreate from scratch
+                    await purgeCalendarEvents();
+
                     toast.info(`Syncing ${toSync.length} items to calendar...`);
 
                     let count = 0;
@@ -130,7 +133,7 @@ export async function getTodosCommands(context: CommandContext): Promise<Command
                             console.error("Failed to sync", todo, e);
                         }
                     }
-                    toast.success(`Successfully synced ${count} items to Calendar.`);
+                    toast.success(`Synced ${count} items to Calendar.`);
                 } catch (error) {
                     console.error("Sync failed", error);
                     toast.error("Failed to sync to calendar.");

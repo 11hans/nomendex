@@ -58,14 +58,18 @@ Users can manually trigger a full synchronization of all tasks that have dates c
 - Open **Command Palette** (`Cmd+K`)
 - Run **"Force Sync All to Calendar"**
 
-This command fetches all tasks from the local storage and runs `syncTaskToCalendar(todo)` for each task containing a `startDate` or `dueDate`.
+Force sync performs a **delete-and-recreate** cycle:
+1. Sends a `purge` action to Swift which deletes all Nomendex calendars (e.g. "Nomendex Tasks", "Nomendex - ProjectName")
+2. Upserts each task with a `startDate` or `dueDate` — this recreates the calendars and events from scratch
+
+This approach avoids the need to read existing events (which requires full calendar access — write-only access can create events but cannot query them with `events(matching:)`).
 
 ## Calendar Event Behavior
 
 | Feature | Details |
 |---------|---------|
-| Calendar name | **Nomendex Tasks** (auto-created on first sync) |
-| Event lookup | Via `nomendex://task/{id}` URL in `EKEvent.url` |
+| Calendar name | **Nomendex Tasks** or **Nomendex - ProjectName** (auto-created on first sync) |
+| Event lookup | Cached `eventIdentifier` first, then `nomendex://task/{id}` URL fallback |
 | All-day events | Created when task has date only (no time) |
 | Timed events | Created when task has date + time |
 | Time range | `startDate` → event start, `dueDate` → event end |
@@ -130,9 +134,21 @@ window.webkit.messageHandlers.calendarSync.postMessage({
 });
 ```
 
-Both functions:
+### `purgeCalendarEvents()`
+
+Sends a purge message that deletes all Nomendex calendars (and their events). Used by Force Sync before recreating events.
+
+```typescript
+window.webkit.messageHandlers.calendarSync.postMessage({
+    action: "purge",
+    callback: "__calendarSyncCallback",
+});
+```
+
+All three functions:
 - Return a `Promise<void>` that resolves when Swift calls back
 - Have a 5-second timeout to prevent dangling promises
+- Are serialized on a shared `calendarSyncQueue` to prevent concurrent operations
 - Are no-ops when `window.webkit.messageHandlers.calendarSync` is unavailable
 
 ## Swift Implementation
@@ -153,14 +169,30 @@ class CalendarManager {
 
 | Method | Description |
 |--------|-------------|
-| `handleMessage(message:webView:)` | Entry point from WKScriptMessageHandler |
+| `syncTask(_:webView:callback:)` | Entry point — routes to upsert/delete/purge on `syncQueue` |
 | `requestAccess(completion:)` | Requests calendar permission (macOS 14+ API) |
-| `getOrCreateCalendar()` | Finds or creates the "Nomendex Tasks" calendar |
+| `getOrCreateCalendar(projectName:)` | Finds or creates a Nomendex calendar |
 | `upsertEvent(taskData:webView:callback:)` | Creates or updates a calendar event |
 | `deleteEvent(taskData:webView:callback:)` | Removes event by task ID lookup |
-| `findEvent(taskId:in:)` | Looks up event by `nomendex://task/{id}` URL |
-| `parseISO(_:)` | Parses both datetime and date-only strings |
-| `sendResult(webView:callback:success:error:)` | Calls back to JS with result |
+| `purgeOrphanedEvents(taskData:webView:callback:)` | Deletes all Nomendex calendars (force sync) |
+| `findEvent(taskId:)` | Looks up event by cached identifier or `nomendex://task/{id}` URL |
+| `detectChanges()` | Compares calendar state to snapshot, sends changes to JS |
+
+### Thread Safety
+
+All `EKEventStore`, `ignoredTaskIDs`, `knownEventStates`, and `eventIdentifierCache` access is serialized on a single `syncQueue` (serial `DispatchQueue`). This includes:
+- `upsertEvent` / `deleteEvent` / `purgeOrphanedEvents` (dispatched from `syncTask`)
+- `detectChanges` (dispatched from `EKEventStoreChanged` notification)
+- `snapshotCurrentEvents` (dispatched from `startObserving`)
+
+Only `evaluateJavaScript` and `sendResult` dispatch to `.main` (required by WKWebView).
+
+### Event Identifier Cache
+
+`eventIdentifierCache: [String: String]` maps `taskId` to `EKEvent.eventIdentifier`. This provides reliable event lookups without depending on `events(matching:)` (which may not work with write-only calendar access). The cache is:
+- Populated at startup from `snapshotCurrentEvents`
+- Updated after each `eventStore.save()`
+- Cleared on purge
 
 ## Permissions
 
@@ -194,8 +226,9 @@ mac-app/macos-host/
 
 ```
 bun-sidecar/src/features/todos/
-├── calendar-bridge.ts   # WebKit bridge with async callbacks (new)
-└── browser-view.tsx     # Sync calls after save/delete/drag-drop
+├── calendar-bridge.ts        # WebKit bridge with serialized queue
+├── calendar-change-bridge.ts # Incoming sync handler (Calendar.app → Nomendex)
+└── browser-view.tsx          # Sync calls after save/delete/drag-drop
 
 bun-sidecar/src/hooks/
 └── useTheme.tsx         # calendarSync in WebKitMessageHandlers type
