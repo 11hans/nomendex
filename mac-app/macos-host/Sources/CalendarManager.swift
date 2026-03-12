@@ -18,6 +18,7 @@ class CalendarManager {
     private var changeObserver: NSObjectProtocol?
     private var knownEventStates: [String: EventState] = [:]  // taskId -> snapshot
     private var ignoredTaskIDs: Set<String> = []
+    private var eventIdentifierCache: [String: String] = [:]  // taskId -> EKEvent.eventIdentifier
 
     struct EventState {
         let title: String
@@ -40,35 +41,44 @@ class CalendarManager {
         changeObserver = NotificationCenter.default.addObserver(
             forName: .EKEventStoreChanged,
             object: eventStore,
-            queue: .main
+            queue: nil
         ) { [weak self] _ in
-            self?.detectChanges()
+            // Dispatch to syncQueue so all eventStore and ignoredTaskIDs access
+            // happens on a single serial queue, preventing data races
+            self?.syncQueue.async {
+                self?.detectChanges()
+            }
         }
 
         log("Started observing calendar changes")
     }
 
     private func snapshotCurrentEvents() {
-        let nomendexCalendars = getNomendexCalendars()
-        guard !nomendexCalendars.isEmpty else { return }
-        let start = Date().addingTimeInterval(-365 * 24 * 3600)
-        let end = Date().addingTimeInterval(365 * 24 * 3600)
-        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
-        let events = eventStore.events(matching: predicate)
+        syncQueue.async { [weak self] in
+            guard let self = self else { return }
+            let nomendexCalendars = self.getNomendexCalendars()
+            guard !nomendexCalendars.isEmpty else { return }
+            let start = Date().addingTimeInterval(-365 * 24 * 3600)
+            let end = Date().addingTimeInterval(365 * 24 * 3600)
+            let predicate = self.eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
+            let events = self.eventStore.events(matching: predicate)
 
-        var newState: [String: EventState] = [:]
-        for event in events {
-            if let url = event.url?.absoluteString, url.hasPrefix("nomendex://task/") {
-                let taskId = String(url.dropFirst("nomendex://task/".count))
-                newState[taskId] = EventState(
-                    title: event.title ?? "",
-                    startDate: event.startDate,
-                    endDate: event.endDate,
-                    isAllDay: event.isAllDay
-                )
+            var newState: [String: EventState] = [:]
+            for event in events {
+                if let url = event.url?.absoluteString, url.hasPrefix("nomendex://task/") {
+                    let taskId = String(url.dropFirst("nomendex://task/".count))
+                    newState[taskId] = EventState(
+                        title: event.title ?? "",
+                        startDate: event.startDate,
+                        endDate: event.endDate,
+                        isAllDay: event.isAllDay
+                    )
+                    // Populate identifier cache for reliable lookups
+                    self.eventIdentifierCache[taskId] = event.eventIdentifier
+                }
             }
+            self.knownEventStates = newState
         }
-        knownEventStates = newState
     }
 
     private func detectChanges() {
@@ -194,6 +204,8 @@ class CalendarManager {
                     self.upsertEvent(taskData: taskData, webView: webView, callback: callback)
                 case "delete":
                     self.deleteEvent(taskData: taskData, webView: webView, callback: callback)
+                case "purge":
+                    self.purgeOrphanedEvents(taskData: taskData, webView: webView, callback: callback)
                 default:
                     self.sendResult(webView: webView, callback: callback, success: false, error: "Unknown action: \(action)")
                 }
@@ -344,6 +356,8 @@ class CalendarManager {
 
         do {
             try eventStore.save(event, span: .thisEvent)
+            // Cache the identifier for reliable lookups in subsequent syncs
+            eventIdentifierCache[taskId] = event.eventIdentifier
             log("Saved calendar event for task: \(taskId)")
             sendResult(webView: webView, callback: callback, success: true, error: nil)
         } catch {
@@ -374,10 +388,47 @@ class CalendarManager {
         sendResult(webView: webView, callback: callback, success: true, error: nil)
     }
 
+    // MARK: - Purge Orphaned Events
+
+    /// Removes ALL events from Nomendex calendars.
+    /// Called before a force sync to wipe the slate clean and recreate from scratch.
+    private func purgeOrphanedEvents(taskData: [String: Any], webView: WKWebView?, callback: String?) {
+        let nomendexCalendars = getNomendexCalendars()
+
+        guard !nomendexCalendars.isEmpty else {
+            sendResult(webView: webView, callback: callback, success: true, error: nil)
+            return
+        }
+
+        // Delete entire Nomendex calendars — this removes all events without needing read access.
+        // The calendars will be recreated by upsertEvent -> getOrCreateCalendar.
+        for calendar in nomendexCalendars {
+            do {
+                try eventStore.removeCalendar(calendar, commit: true)
+            } catch {
+                log("Failed to remove calendar \(calendar.title): \(error)")
+            }
+        }
+
+        // Clear caches
+        eventIdentifierCache.removeAll()
+        knownEventStates.removeAll()
+        ignoredTaskIDs.removeAll()
+
+        log("Purged \(nomendexCalendars.count) Nomendex calendars")
+        sendResult(webView: webView, callback: callback, success: true, error: nil)
+    }
+
     // MARK: - Helpers
 
     private func findEvent(taskId: String) -> EKEvent? {
-        eventStore.reset()
+        // Try cached eventIdentifier first (fast, reliable)
+        if let cachedId = eventIdentifierCache[taskId],
+           let event = eventStore.event(withIdentifier: cachedId) {
+            return event
+        }
+
+        // Fall back to URL-based search
         let nomendexCalendars = getNomendexCalendars()
         guard !nomendexCalendars.isEmpty else { return nil }
         let start = Date().addingTimeInterval(-5 * 365 * 24 * 3600)
@@ -386,7 +437,22 @@ class CalendarManager {
         let events = eventStore.events(matching: predicate)
 
         let targetURL = URL(string: "nomendex://task/\(taskId)")
-        return events.first { $0.url == targetURL }
+        let matches = events.filter { $0.url == targetURL }
+
+        guard let keeper = matches.first else { return nil }
+
+        // Cache the identifier for future lookups
+        eventIdentifierCache[taskId] = keeper.eventIdentifier
+
+        // Clean up duplicates if any exist
+        if matches.count > 1 {
+            log("Found \(matches.count) duplicate events for task \(taskId), cleaning up")
+            for duplicate in matches.dropFirst() {
+                try? eventStore.remove(duplicate, span: .thisEvent)
+            }
+        }
+
+        return keeper
     }
 
     private func parseISO(_ string: String) -> Date? {

@@ -64,6 +64,47 @@ function doSyncTaskToCalendar(task: Todo): Promise<void> {
 export async function removeTaskFromCalendar(taskId: string): Promise<void> {
     if (!isCalendarAvailable()) return;
 
+    // Chain onto queue to prevent racing with concurrent upserts
+    const op = calendarSyncQueue.then(() => doRemoveTaskFromCalendar(taskId));
+    calendarSyncQueue = op.catch(() => { /* swallow to keep chain alive */ });
+    return op;
+}
+
+/** Deletes all Nomendex calendars (wipe before force sync). Calendars are recreated by upsert. */
+export async function purgeCalendarEvents(): Promise<void> {
+    if (!isCalendarAvailable()) return;
+
+    const op = calendarSyncQueue.then(() => doPurgeCalendarEvents());
+    calendarSyncQueue = op.catch(() => { /* swallow to keep chain alive */ });
+    return op;
+}
+
+function doPurgeCalendarEvents(): Promise<void> {
+    return new Promise<void>((resolve) => {
+        const callbackName = `__calendarSyncCallback_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        (window as unknown as Record<string, unknown>)[callbackName] = (result: CalendarSyncResult) => {
+            if (!result.success && result.error) {
+                console.warn("[calendar-bridge] purge error:", result.error);
+            }
+            delete (window as unknown as Record<string, unknown>)[callbackName];
+            resolve();
+        };
+
+        window.webkit!.messageHandlers!.calendarSync!.postMessage({
+            action: "purge",
+            callback: callbackName,
+        });
+
+        setTimeout(() => {
+            if ((window as unknown as Record<string, unknown>)[callbackName]) {
+                delete (window as unknown as Record<string, unknown>)[callbackName];
+                resolve();
+            }
+        }, 5000);
+    });
+}
+
+function doRemoveTaskFromCalendar(taskId: string): Promise<void> {
     return new Promise<void>((resolve) => {
         const callbackName = `__calendarSyncCallback_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         (window as unknown as Record<string, unknown>)[callbackName] = (result: CalendarSyncResult) => {
