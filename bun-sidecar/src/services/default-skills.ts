@@ -841,14 +841,14 @@ esac
     files: {
       "SKILL.md": `---
 name: adopt
-description: Scaffold the PKM system onto an existing Obsidian vault. Scans your vault structure, maps folders interactively, and generates configuration — no template required.
-version: 1
+description: Scaffold the PKM system onto an existing Obsidian vault. Scans your vault structure, maps folders interactively, and generates configuration.
+version: 2
 source: nomendex
 ---
 
 # Adopt Skill
 
-Bring Your Own Vault (BYOV) — install the Codex PKM system onto an existing Obsidian vault.
+Bring Your Own Vault (BYOV) — set up the BPagent PKM system on an existing Obsidian vault.
 
 ## Usage
 
@@ -858,8 +858,7 @@ Bring Your Own Vault (BYOV) — install the Codex PKM system onto an existing Ob
 
 ## When to Use
 
-- You have an existing Obsidian vault and want to add the Codex PKM system
-- You don't want to start from the vault template
+- You have an existing Obsidian vault and want to add the BPagent PKM system
 - You want to keep your current folder structure
 
 ## Phase 1: Scan Vault Structure
@@ -868,18 +867,16 @@ Analyze the existing vault to understand its organization.
 
 ### Steps
 
-1. **List top-level directories** using \`ls\`, excluding system dirs (\`.obsidian\`, \`.git\`, \`.Codex\`, \`.trash\`, \`.Codex-plugin\`)
+1. **List top-level directories** using \`ls\`, excluding system dirs (\`.obsidian\`, \`.git\`, \`.trash\`, \`.nomendex\`)
 
 2. **For each directory**, gather signals:
    - Count \`.md\` files (using Glob)
-   - Check for date-named files (\`YYYY-MM-DD*.md\`) — indicates daily notes
+   - Check for date-named files (\`M-D-YYYY*.md\` or \`YYYY-MM-DD*.md\`) — indicates daily notes
    - Grep for goal/review/template keywords in filenames and content
-   - Check for existing \`AGENTS.md\` in subdirs — indicates projects
 
 3. **Detect organization method** based on signals:
    - **PARA**: Folders named Projects, Areas, Resources, Archives
    - **Zettelkasten**: Numeric-prefixed notes, heavy wiki-linking, flat structure
-   - **Johnny Decimal**: \`00-09\`, \`10-19\` style folder names
    - **LYT (Linking Your Thinking)**: Folders named Atlas, Calendar, Cards, Extras, Sources
    - **Flat**: Few folders, most files at root
    - **Custom**: None of the above patterns match
@@ -889,14 +886,12 @@ Analyze the existing vault to understand its organization.
    Vault scan complete!
 
    Found 342 notes across 8 folders:
-     Daily/           → 180 notes (date-named — likely daily notes)
-     Projects/        → 45 notes (has AGENTS.md files — likely projects)
+     daily-notes/     → 180 notes (date-named — likely daily notes)
+     Projects/        → 45 notes (likely projects)
      Goals/           → 12 notes (contains goal keywords)
      Templates/       → 8 notes (contains template keywords)
-     Archive/         → 67 notes
-     Inbox/           → 15 notes
-     Resources/       → 10 notes
-     Meeting Notes/   → 5 notes
+     Archives/        → 67 notes
+     inbox/           → 15 notes
 
    Detected method: PARA-like structure
    \`\`\`
@@ -907,15 +902,13 @@ Use AskUserQuestion to confirm or correct the detected mappings.
 
 ### Roles to Map
 
-Each role maps a PKM function to a folder in the user's vault:
-
 | Role | Purpose | Detection Signal |
 |------|---------|-----------------|
-| Daily Notes | Daily journal entries | Date-named files (\`YYYY-MM-DD\`) |
+| Daily Notes | Daily journal entries | Date-named files (\`M-D-YYYY\`) |
 | Goals | Goal cascade (3-year → weekly) | Files with goal/review keywords |
-| Projects | Active projects | Subdirs with AGENTS.md or project keywords |
+| Projects | Active projects | Subdirs with project keywords |
 | Templates | Reusable note structures | Files with template keywords or in Templates/ |
-| Archives | Completed/inactive content | Folder named Archive(s) or with old dates |
+| Archives | Completed/inactive content | Folder named Archive(s) |
 | Inbox | Uncategorized captures | Folder named Inbox, or files tagged #inbox |
 
 ### Interactive Mapping
@@ -928,25 +921,12 @@ For each role, ask the user to confirm or correct:
 - For optional roles (Inbox), include "Skip" as a default
 
 **Edge cases:**
-- **Existing AGENTS.md at root**: Ask the user — back up as \`AGENTS.md.backup\` or merge content
 - **No candidate for a role**: Offer to create the folder
 - **Multiple candidates**: Present all and let the user choose
 
-### Save Mappings
-
-Store the folder mapping for use in later phases:
-\`\`\`
-dailyNotes → "Daily"
-goals → "Goals"
-projects → "Projects"
-templates → "Templates"
-archives → "Archive"
-inbox → "Inbox"     (or null if skipped)
-\`\`\`
-
 ## Phase 3: Personalize Preferences
 
-Ask the same 4 questions as \`/onboard\`:
+Ask 4 questions:
 
 **Question 1: Your name**
 - "What should I call you?"
@@ -955,121 +935,45 @@ Ask the same 4 questions as \`/onboard\`:
 **Question 2: Preferred review day**
 - "What day do you prefer for your weekly review?"
 - Options: Sunday (Recommended), Saturday, Monday, Friday
-- Used by \`/review\` auto-detection and session-init nudges
 
 **Question 3: Primary goal areas**
 - "Which areas are most important to you right now? (Pick 2-4)"
 - Options: Career & Professional, Health & Wellness, Relationships, Personal Growth
 - Also offer: Financial, Creativity & Fun, Learning, Other
 - multiSelect: true
-- Used to customize goal template suggestions
 
 **Question 4: Work style**
-- "How do you prefer Codex to interact?"
+- "How do you prefer BPagent to interact?"
 - Options: Direct and concise (Recommended), Coaching and challenging, Detailed and thorough, Minimal — just do the task
-- Sets output style preference
 
-## Phase 4: Generate Configuration
+## Phase 4: Write \`vault-config.json\`
 
-### 4a. Write \`settings.json\`
+Write \`vault-config.json\` in the vault root. This is the **only configuration file** BPagent reads.
+It contains all personalization and folder mappings:
 
-Write \`.Codex/settings.json\` with permissions scoped to the user's actual folders:
-
-\`\`\`json
-{
-  "permissions": {
-    "allow": [
-      "Read",
-      "Write **/{mapped-daily}/**",
-      "Write **/{mapped-goals}/**",
-      "Write **/{mapped-projects}/**",
-      "Write **/{mapped-templates}/**",
-      "Edit **/{mapped-daily}/**",
-      "Edit **/{mapped-goals}/**",
-      "Edit **/{mapped-projects}/**",
-      "Glob",
-      "Grep"
-    ]
-  }
-}
-\`\`\`
-
-Replace \`{mapped-*}\` with actual folder names from Phase 2.
-
-### 4b. Write root \`AGENTS.md\`
-
-Generate a root \`AGENTS.md\` that describes the user's **actual** vault structure. Use the same format as the template's AGENTS.md but with:
-- Their folder names in the Directory Structure table
-- Their goal areas in the System Purpose section
-- Their actual skills table (same as template)
-- Cascade section adapted to their folder names
-
-If the user had an existing \`AGENTS.md\`, merge their content into the appropriate sections (preserve their mission statement, custom conventions, etc.).
-
-### 4c. Write \`vault-config.json\`
-
-Write \`vault-config.json\` in the vault root:
 \`\`\`json
 {
   "name": "User's name",
   "reviewDay": "Sunday",
   "goalAreas": ["Career & Professional", "Health & Wellness"],
   "workStyle": "Direct and concise",
-  "setupDate": "2026-02-17",
-  "version": "3.1",
+  "setupDate": "2026-03-14",
+  "version": "3.2",
   "adoptedVault": true,
   "folderMapping": {
-    "dailyNotes": "Daily",
+    "dailyNotes": "daily-notes",
     "goals": "Goals",
     "projects": "Projects",
     "templates": "Templates",
-    "archives": "Archive",
-    "inbox": "Inbox"
+    "archives": "Archives",
+    "inbox": "inbox"
   }
 }
 \`\`\`
 
-### 4d. Set Environment Variables
+Replace values with the user's actual answers from Phase 2 and 3.
 
-Write or update \`Codex.local.md\` with env var exports for hooks:
-\`\`\`markdown
-## Environment Overrides
-
-These env vars allow hooks and scripts to find your folders:
-
-<!--
-Export these in your shell profile or they'll be set by session-init:
--->
-DAILY_NOTES_DIR={mapped daily notes folder}
-GOALS_DIR={mapped goals folder}
-PROJECTS_DIR={mapped projects folder}
-TEMPLATES_DIR={mapped templates folder}
-INBOX_DIR={mapped inbox folder}
-ARCHIVES_DIR={mapped archives folder}
-\`\`\`
-
-Also create \`.Codex/hooks/adopt-env.sh\` that exports these variables:
-\`\`\`bash
-#!/bin/bash
-# Environment variables for adopted vault folder mapping
-# Generated by /adopt — edit vault-config.json and re-run /adopt to update
-
-export DAILY_NOTES_DIR="{mapped daily notes}"
-export GOALS_DIR="{mapped goals}"
-export PROJECTS_DIR="{mapped projects}"
-export TEMPLATES_DIR="{mapped templates}"
-export INBOX_DIR="{mapped inbox}"
-export ARCHIVES_DIR="{mapped archives}"
-\`\`\`
-
-Then add a \`source\` line to \`session-init.sh\` if not already present:
-\`\`\`bash
-# Source adopted vault env vars if present
-ADOPT_ENV="$VAULT_PATH/.Codex/hooks/adopt-env.sh"
-if [ -f "$ADOPT_ENV" ]; then
-    source "$ADOPT_ENV"
-fi
-\`\`\`
+**IMPORTANT:** Do NOT create \`AGENTS.md\`, \`.Codex/\`, \`.claude/settings.json\`, \`.claude/rules/\`, \`.claude/hooks/\`, or \`Codex.local.md\`. BPagent does not use these files — it reads only \`vault-config.json\`.
 
 ## Phase 5: Scaffold Missing Pieces
 
@@ -1079,35 +983,15 @@ Check what's missing and offer to create it. **Always ask before creating.**
 
 If the goals folder is empty or newly created:
 - "Your goals folder is empty. Want me to create the goal cascade? (3-year vision, yearly goals, monthly goals, weekly review)"
-- If yes: copy the standard templates, adapting paths to the user's folder names
+- If yes: create the 4 goal files, adapting paths to the user's folder names
 - If no: skip
 
 ### 5b. Templates
 
 If the templates folder is empty or newly created:
 - "Want me to add standard templates? (Daily, Weekly Review, Project)"
-- If yes: copy templates, adapting internal links to the user's folder names
+- If yes: create templates, adapting internal links to the user's folder names
 - If no: skip
-
-### 5c. Codex.local.md.template
-
-If \`Codex.local.md.template\` doesn't exist:
-- Copy it from the standard template
-- Adapt any folder references
-
-### 5d. Codex Config Directories
-
-Ensure these directories exist (create silently):
-- \`.Codex/skills/\` (for future skill additions)
-- \`.Codex/rules/\`
-- \`.Codex/hooks/\`
-- \`.Codex/agents/\`
-
-Copy standard rules files if \`.Codex/rules/\` is empty:
-- \`markdown-standards.md\`
-- \`productivity-workflow.md\`
-- \`project-management.md\`
-- \`task-tracking.md\`
 
 ## Phase 6: Verify & Next Steps
 
@@ -1116,8 +1000,6 @@ Copy standard rules files if \`.Codex/rules/\` is empty:
 Run quick checks:
 - \`vault-config.json\` is valid JSON (read it back)
 - All mapped folders exist
-- \`AGENTS.md\` is present and non-empty
-- \`.Codex/hooks/adopt-env.sh\` is present and executable
 
 ### 6b. Summary
 
@@ -1126,49 +1008,42 @@ Present a summary:
 Adoption complete!
 
 Vault: /path/to/vault
-Method: PARA-like (preserved your existing structure)
+Method: Custom (preserved your existing structure)
 Mapped folders:
-  Daily Notes → Daily/
+  Daily Notes → daily-notes/
   Goals       → Goals/
   Projects    → Projects/
   Templates   → Templates/
-  Archives    → Archive/
-  Inbox       → Inbox/
+  Archives    → Archives/
+  Inbox       → inbox/
 
 Created:
-  ✓ AGENTS.md (vault context)
-  ✓ vault-config.json (preferences)
-  ✓ .Codex/hooks/adopt-env.sh (folder mapping)
+  ✓ vault-config.json (preferences & folder mapping)
   ✓ Goal cascade files (4 files)
   ✓ Standard templates (3 files)
 
-Your vault structure is unchanged — only configuration files were added.
+Your vault structure is unchanged — only vault-config.json and templates were added.
 \`\`\`
 
 ### 6c. Next Steps
 
 Suggest what to do next:
-- "Try \`/daily\` to create today's note using your vault's structure"
+- "Try \`/daily\` to create today's note"
 - "Try \`/review\` for a guided weekly review"
-- "Run \`/push\` to commit these changes to git"
-- "Edit \`Codex.local.md\` for private preferences (not committed to git)"
+- "Fill in your goals in \`Goals/0. 3-Year Vision.md\`"
 
 ## Error Handling
 
-- **Not in a vault**: If no \`.obsidian\` directory found, warn: "This doesn't look like an Obsidian vault. Continue anyway?"
-- **Already adopted**: If \`vault-config.json\` exists with \`adoptedVault: true\`, ask: "This vault was already adopted. Re-run adoption? (This will regenerate config files.)"
-- **Permission errors**: If \`.Codex/\` can't be written, suggest checking permissions
-- **Empty vault**: If no \`.md\` files found, suggest using \`/onboard\` with the template instead
+- **Already adopted**: If \`vault-config.json\` exists with \`adoptedVault: true\`, ask: "This vault was already adopted. Re-run adoption? (This will regenerate vault-config.json.)"
+- **Empty vault**: If no \`.md\` files found, that's fine — the skill will create the folder structure from scratch
 
 ## Integration
 
 Works with:
-- \`/onboard\` — adopt replaces onboard for existing vaults
-- \`/daily\` — uses mapped daily notes folder
-- \`/weekly\` — uses mapped goals folder
+- \`/daily\` — uses mapped daily notes folder from vault-config.json
+- \`/weekly\` — uses mapped goals folder from vault-config.json
 - \`/review\` — respects adopted vault structure
-- \`/push\` — commits adoption changes
-- All hooks — read env vars from \`adopt-env.sh\`
+- \`/monthly\` — uses mapped goals folder from vault-config.json
 `,
     },
   },

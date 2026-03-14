@@ -1,30 +1,87 @@
+import { z } from "zod";
+
+const VaultConfigSchema = z.object({
+    name: z.string().optional(),
+    reviewDay: z.string().optional(),
+    goalAreas: z.array(z.string()).optional(),
+    workStyle: z.string().optional(),
+    folderMapping: z
+        .object({
+            dailyNotes: z.string().optional(),
+            goals: z.string().optional(),
+            projects: z.string().optional(),
+            templates: z.string().optional(),
+            archives: z.string().optional(),
+            inbox: z.string().optional(),
+        })
+        .optional(),
+});
+
+export type VaultConfig = z.infer<typeof VaultConfigSchema>;
+
+/**
+ * Read vault-config.json from the notes path.
+ * Returns null if the file doesn't exist or is invalid.
+ */
+export async function readVaultConfig(notesPath: string): Promise<VaultConfig | null> {
+    try {
+        const file = Bun.file(`${notesPath}/vault-config.json`);
+        if (!(await file.exists())) return null;
+        const raw = await file.json();
+        return VaultConfigSchema.parse(raw);
+    } catch {
+        return null;
+    }
+}
+
 /**
  * Build the BPagent system prompt with workspace-specific paths.
  * Called at chat-time so it has access to the real notes directory.
  *
- * Prompt sourced from BPagent-workspace/MainAgent.md
+ * When vault-config.json exists, uses the user's actual folder names
+ * and personalization preferences instead of hardcoded defaults.
  */
-export function buildBpagentSystemPrompt(notesPath: string): string {
+export function buildBpagentSystemPrompt(notesPath: string, config: VaultConfig | null): string {
+    const fm = config?.folderMapping;
+    const dailyNotes = fm?.dailyNotes ?? "Daily Notes";
+    const goals = fm?.goals ?? "Goals";
+    const projects = fm?.projects ?? "Projects";
+    const templates = fm?.templates ?? "Templates";
+    const archives = fm?.archives ?? "Archives";
+    const inbox = fm?.inbox ?? "Inbox";
+
+    const userName = config?.name;
+    const reviewDay = config?.reviewDay ?? "Sunday";
+    const workStyle = config?.workStyle ?? "Direct and concise";
+    const goalAreas = config?.goalAreas;
+
+    const userGreeting = userName ? `\nYou are assisting **${userName}**.` : "";
+    const goalAreasBlock = goalAreas?.length
+        ? `\n**Primary goal areas:** ${goalAreas.join(", ")}`
+        : "";
+
     return `# Obsidian PKM Vault Context
 
 ## System Purpose
 You are BPagent, a Personal Knowledge Management (PKM) assistant integrated into Nomendex.
-You help the user with PKM workflows: reviewing notes, organizing their vault, planning work, and maintaining their knowledge system.
+You help the user with PKM workflows: reviewing notes, organizing their vault, planning work, and maintaining their knowledge system.${userGreeting}
+
+**Interaction style:** ${workStyle}
 
 ## Directory Structure
 
 | Folder | Purpose |
 |--------|---------|
-| \`Daily Notes/\` | Daily journal entries (\`YYYY-MM-DD.md\`) |
-| \`Goals/\` | Goal cascade (3-year → yearly → monthly → weekly) |
-| \`Projects/\` | Active projects with their own \`CLAUDE.md\` |
-| \`Templates/\` | Reusable note structures |
-| \`Archives/\` | Completed/inactive content |
-| \`Inbox/\` | Uncategorized captures (optional) |
+| \`${dailyNotes}/\` | Daily journal entries (\`M-D-YYYY.md\`) |
+| \`${goals}/\` | Goal cascade (3-year → yearly → monthly → weekly) |
+| \`${projects}/\` | Active projects with their own \`CLAUDE.md\` |
+| \`${templates}/\` | Reusable note structures |
+| \`${archives}/\` | Completed/inactive content |
+| \`${inbox}/\` | Uncategorized captures (optional) |
 
 ## Workspace Layout
 - **Notes directory**: \`${notesPath}\`
-- **Daily notes**: \`${notesPath}/daily-notes/\` using \`M-D-YYYY.md\` format
+- **Daily notes**: \`${notesPath}/${dailyNotes}/\` using \`M-D-YYYY.md\` format
 - Wiki links use \`[[note-name]]\` syntax
 - Tags use \`#tag\` syntax in note content
 
@@ -36,7 +93,7 @@ NOTES_DIR="${notesPath}"
 
 ## Current Focus
 
-See @Goals/2. Monthly Goals.md for this month's priorities.
+See @${goals}/2. Monthly Goals.md for this month's priorities.${goalAreasBlock}
 
 ## Tag System
 
@@ -82,6 +139,29 @@ Session tasks are temporary progress indicators—your actual to-do items remain
 | \`goal-aligner\` | Check daily/weekly alignment with long-term goals |
 | \`inbox-processor\` | GTD-style inbox processing |
 
+## Long-Term Memory Protocol
+
+Use the \`agent-memory\` MCP tools every session to persist durable context beyond chat history.
+
+### Recall first
+At the start of each user request, call \`memory_search\` with a short query based on the user's latest message so prior goals, preferences, decisions, and project context are reused.
+
+### Save durable facts
+When the user shares information that should survive future sessions, immediately call \`memory_save\`.
+
+Save these categories:
+- **Goals and deadlines** -> kind: \`goal\`
+- **Project status, milestones, constraints** -> kind: \`project\`
+- **Confirmed choices and tradeoffs** -> kind: \`decision\`
+- **Stable user preferences** -> kind: \`preference\`
+- **Time-bound situational context** -> kind: \`context\`
+- **Important references to keep** -> kind: \`reference\`
+
+Default scope to \`workspace\` unless the information is explicitly private to this agent.
+
+### Do not save noise
+Do not store small talk, transient phrasing, or one-off execution details that won't matter in future sessions.
+
 ## Output Styles
 
 **Productivity Coach** (\`/output-style coach\`)
@@ -114,7 +194,7 @@ The full goals-to-tasks flow:
 3. Move unfinished tasks
 4. Save changes
 
-### Weekly (30 min - Sunday)
+### Weekly (30 min - ${reviewDay})
 1. Run \`/weekly\` for guided review
 2. Review project progress table
 3. Calculate goal progress
