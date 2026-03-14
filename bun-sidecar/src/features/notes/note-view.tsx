@@ -1589,7 +1589,7 @@ export function NotesView(props: NotesViewProps) {
                                 )}>
                                     <div
                                         ref={editorRef}
-                                        className="prose prose-sm sm:prose lg:prose-lg xl:prose-xl max-w-none focus:outline-none editor-content p-5"
+                                        className="prose prose-sm max-w-none focus:outline-none editor-content p-5"
                                         style={
                                             {
                                                 "--tw-prose-body": currentTheme.styles.contentPrimary,

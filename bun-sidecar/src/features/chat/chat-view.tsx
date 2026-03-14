@@ -3,11 +3,7 @@ import {
     Conversation,
     ConversationContent,
 } from "@/components/ai-elements/conversation";
-import {
-    Message,
-    MessageContent,
-    MessageResponse,
-} from "@/components/ai-elements/message";
+import { MessageResponse } from "@/components/ai-elements/message";
 import {
     ProseMirrorPromptInput,
     ProseMirrorPromptTextarea,
@@ -18,24 +14,43 @@ import {
 } from "@/components/prosemirror/ProseMirrorPromptInput";
 import type { Attachment } from "@/types/attachments";
 import { Button } from "@/components/ui/button";
-import { StopCircle, ListPlus, Bot, UserRound, ShieldAlert, PauseCircle, MessageSquare } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+    StopCircle,
+    ListPlus,
+    ShieldAlert,
+    PauseCircle,
+    MessageSquare,
+    ChevronDown,
+    ChevronRight,
+    FileText,
+    FilePlus,
+    Pencil,
+    FolderSearch,
+    FileSearch,
+    Terminal,
+    Globe,
+    Search,
+    Bot,
+    MessageCircle,
+    ListChecks,
+    FileCode,
+    Camera,
+    Monitor,
+    Clock,
+    LayoutGrid,
+    type LucideIcon,
+    Wrench,
+} from "lucide-react";
 import { Loader } from "@/components/ai-elements/loader";
 import {
-    Tool,
-    ToolContent,
-    ToolHeader,
     ToolInput,
     ToolOutput,
 } from "@/components/ai-elements/tool";
 import { RenderedUI, parseNoetectUIData } from "@/components/ai-elements/rendered-ui";
-import {
-    ChainOfThought,
-    ChainOfThoughtContent,
-    ChainOfThoughtHeader,
-    ChainOfThoughtStep,
-} from "@/components/ai-elements/chain-of-thought";
 import { reconstructMessages, type ChatMessage, type ContentBlock } from "./sessionUtils";
-import { useTheme } from "@/hooks/useTheme";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { toast } from "sonner";
 import { AgentSelector } from "@/features/agents/agent-selector";
@@ -52,6 +67,8 @@ type ToolCallState =
     | "output-available"
     | "output-error";
 
+type ToolBlock = Extract<ContentBlock, { type: "tool" }>;
+
 type PendingPermission = {
     permissionId: string;
     toolName: string;
@@ -64,8 +81,188 @@ export type ChatViewProps = {
     initialPrompt?: string;
 };
 
+const TOOL_TEXT: Record<string, { pending: string; done: string }> = {
+    Read: { pending: "Reading file", done: "Read file" },
+    Write: { pending: "Writing file", done: "Wrote file" },
+    Edit: { pending: "Editing file", done: "Edited file" },
+    Glob: { pending: "Searching files", done: "Searched files" },
+    Grep: { pending: "Searching code", done: "Searched code" },
+    Bash: { pending: "Running command", done: "Ran command" },
+    WebFetch: { pending: "Fetching URL", done: "Fetched URL" },
+    WebSearch: { pending: "Searching web", done: "Searched web" },
+    Task: { pending: "Running task", done: "Completed task" },
+    AskUserQuestion: { pending: "Asking question", done: "Got answer" },
+    TodoWrite: { pending: "Updating tasks", done: "Updated tasks" },
+    NotebookEdit: { pending: "Editing notebook", done: "Edited notebook" },
+    message: { pending: "Sending message", done: "Sent message" },
+    screenshot: { pending: "Taking screenshot", done: "Took screenshot" },
+    schedule_reminder: { pending: "Scheduling reminder", done: "Scheduled reminder" },
+    schedule_recurring: { pending: "Scheduling recurring", done: "Scheduled recurring" },
+    schedule_cron: { pending: "Scheduling cron", done: "Scheduled cron" },
+    list_reminders: { pending: "Listing reminders", done: "Listed reminders" },
+    cancel_reminder: { pending: "Cancelling reminder", done: "Cancelled reminder" },
+    browser: { pending: "Using browser", done: "Used browser" },
+    goals_view: { pending: "Viewing goals", done: "Viewed goals" },
+    goals_add: { pending: "Adding goal", done: "Added goal" },
+    goals_update: { pending: "Updating goal", done: "Updated goal" },
+    goals_propose: { pending: "Proposing goals", done: "Proposed goals" },
+    research_view: { pending: "Viewing research", done: "Viewed research" },
+    research_add: { pending: "Adding research", done: "Added research" },
+    research_update: { pending: "Updating research", done: "Updated research" },
+};
+
+const TOOL_ICONS: Record<string, LucideIcon> = {
+    Read: FileText,
+    Write: FilePlus,
+    Edit: Pencil,
+    Glob: FolderSearch,
+    Grep: FileSearch,
+    Bash: Terminal,
+    WebFetch: Globe,
+    WebSearch: Search,
+    Task: Bot,
+    AskUserQuestion: MessageCircle,
+    TodoWrite: ListChecks,
+    NotebookEdit: FileCode,
+    message: MessageSquare,
+    screenshot: Camera,
+    browser: Monitor,
+    schedule_reminder: Clock,
+    schedule_recurring: Clock,
+    schedule_cron: Clock,
+    list_reminders: Clock,
+    cancel_reminder: Clock,
+    goals_view: LayoutGrid,
+    goals_add: LayoutGrid,
+    goals_update: LayoutGrid,
+    goals_propose: LayoutGrid,
+    research_view: FileSearch,
+    research_add: FilePlus,
+    research_update: Pencil,
+};
+
+function asText(value: unknown): string {
+    if (typeof value === "string") return value;
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    return "";
+}
+
+function firstLine(value: string): string {
+    return value.split("\n")[0]?.trim() || "";
+}
+
+function toolInputDetail(input?: Record<string, unknown>): string {
+    if (!input) return "";
+
+    const command = firstLine(asText(input.command));
+    if (command) return command;
+
+    const filePath = asText(input.file_path) || asText(input.path);
+    if (filePath) return filePath;
+
+    const pattern = asText(input.pattern);
+    if (pattern) return pattern;
+
+    const url = asText(input.url);
+    if (url) return url;
+
+    const query = asText(input.query);
+    if (query) return query;
+
+    const description = asText(input.description);
+    if (description) return description;
+
+    return "";
+}
+
+function isToolPending(state: ToolCallState): boolean {
+    return state === "input-streaming" || state === "input-available";
+}
+
+function toolText(name: string, pending: boolean): string {
+    const text = TOOL_TEXT[name];
+    if (!text) return pending ? `Running ${name}` : `Ran ${name}`;
+    return pending ? text.pending : text.done;
+}
+
+function ToolUseItem({ block }: { block: ToolBlock }) {
+    const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+    const toolCall = block.toolCall;
+    const uiData = parseNoetectUIData(toolCall.output);
+
+    if (uiData) {
+        return (
+            <div className="my-1.5">
+                <RenderedUI
+                    html={uiData.html}
+                    title={uiData.title}
+                    height={uiData.height}
+                />
+            </div>
+        );
+    }
+
+    const hasOutput = toolCall.output !== undefined || !!toolCall.errorText;
+    const pending = isToolPending(toolCall.state) && !hasOutput;
+    const hasError = toolCall.state === "output-error";
+    const startCollapsed = toolCall.name === "Read" || toolCall.name === "Grep" || toolCall.name === "Glob";
+    const isOpen = manualOpen !== null ? manualOpen : (pending && !startCollapsed);
+    const detail = toolInputDetail(toolCall.input);
+    const label = toolText(toolCall.name, pending);
+    const Icon = TOOL_ICONS[toolCall.name] || Wrench;
+
+    return (
+        <div className="my-1.5 max-w-xl">
+            <Collapsible open={isOpen} onOpenChange={(open) => setManualOpen(open)}>
+                {!isOpen && (
+                    <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md border border-border/50 px-3 py-1.5 text-xs transition-colors hover:bg-secondary/50">
+                        <Icon className={cn("size-3.5 shrink-0", hasError ? "text-destructive" : pending ? "text-muted-foreground animate-pulse" : "text-muted-foreground")} />
+                        <span className="font-medium text-muted-foreground">{label}</span>
+                        <span className="flex-1 truncate text-left text-[11px] text-muted-foreground/70">{detail}</span>
+                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+                    </CollapsibleTrigger>
+                )}
+                <CollapsibleContent forceMount={isOpen ? true : undefined}>
+                    {isOpen && (
+                        <div className="overflow-hidden rounded-md border border-border/60 bg-card">
+                            <div className="flex items-center gap-2 border-b border-border/50 bg-secondary/30 px-3 py-1.5 text-xs">
+                                <Icon className={cn("size-3.5 shrink-0", hasError ? "text-destructive" : pending ? "text-muted-foreground animate-pulse" : "text-foreground")} />
+                                <span className={cn("font-medium", hasError ? "text-destructive" : "text-foreground")}>{label}</span>
+                                <span className="flex-1 truncate text-[11px] text-muted-foreground">{detail}</span>
+                                <Badge
+                                    variant={hasError ? "destructive" : pending ? "secondary" : "outline"}
+                                    className="h-4 rounded-full px-1.5 text-xs uppercase"
+                                >
+                                    {hasError ? "error" : pending ? "running" : "done"}
+                                </Badge>
+                                {!pending && (
+                                    <button
+                                        type="button"
+                                        className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-secondary"
+                                        onClick={() => setManualOpen(false)}
+                                        title="Collapse"
+                                    >
+                                        <ChevronDown className="size-3.5" />
+                                    </button>
+                                )}
+                            </div>
+                            <div className="bg-background">
+                                {toolCall.input && <ToolInput input={toolCall.input} />}
+                                {(toolCall.output !== undefined || toolCall.errorText) ? (
+                                    <ToolOutput output={toolCall.output ?? null} errorText={toolCall.errorText} />
+                                ) : (
+                                    <div className="px-3 py-2 text-[11px] text-muted-foreground">Waiting for result...</div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </CollapsibleContent>
+            </Collapsible>
+        </div>
+    );
+}
+
 export default function ChatView({ sessionId: initialSessionId, tabId, initialPrompt }: ChatViewProps) {
-    const { currentTheme } = useTheme();
     const { setTabName, updateTabProps, activeTab, setActiveTabId, chatInputEnterToSend } = useWorkspaceContext();
 
     // Capture the initial sessionId at mount time - don't react to prop changes
@@ -770,189 +967,120 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
         }
     }, [isLoading, messageQueue, queuePaused]);
 
-    const styles = currentTheme.styles;
     const sessionStatus = sessionId ? (sessionSaved ? "Saved session" : "Unsaved session") : "New session";
+    const showBootstrapLoader = isLoading && !(messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1].blocks.length > 0);
 
     return (
-        <div className="h-full flex flex-col" style={{ backgroundColor: styles.surfacePrimary }}>
-            <div
-                className="shrink-0 px-4 py-2.5 border-b"
-                style={{
-                    backgroundColor: styles.surfacePrimary,
-                    borderColor: styles.borderDefault,
-                }}
-            >
-                <div className="flex items-center gap-2 min-w-0">
-                    <MessageSquare className="size-3.5" style={{ color: styles.contentAccent }} />
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em] truncate" style={{ color: styles.contentPrimary }}>
-                        Chat
-                    </span>
-                    <span className="text-[10px] shrink-0" style={{ color: styles.contentTertiary }}>
+        <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
+            <div className="shrink-0 border-b border-border px-4 py-2.5">
+                <div className="mx-auto flex w-full max-w-3xl min-w-0 items-center gap-2">
+                    <MessageSquare className="size-3.5 text-primary" />
+                    <span className="truncate text-[11px] font-medium uppercase tracking-[0.14em]">Chat</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
                         {sessionStatus} • {isLoading ? "running" : "ready"}
                     </span>
                     {messageQueue.length > 0 && (
-                        <span className="text-[10px] shrink-0" style={{ color: styles.contentTertiary }}>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
                             queue {messageQueue.length}
                         </span>
                     )}
                 </div>
             </div>
 
-            <OverlayScrollbar scrollRef={scrollRef} className="flex-1">
+            <OverlayScrollbar scrollRef={scrollRef} className="min-h-0 flex-1">
                 {isLoadingHistory ? (
-                    <div className="flex h-full flex-col items-center justify-center">
+                    <div className="flex h-full min-h-0 flex-col items-center justify-center">
                         <Loader />
-                        <p className="mt-4 text-xs" style={{ color: styles.contentSecondary }}>Loading session...</p>
+                        <p className="mt-4 text-xs text-muted-foreground">Loading session...</p>
                     </div>
                 ) : (
-                    <Conversation>
-                        <ConversationContent className="max-w-3xl gap-3 px-4 pb-6 pt-3">
-                            {messages.length === 0 && !isLoading && (
-                                <div
-                                    className="mx-auto w-full rounded-lg border px-4 py-5 text-center"
-                                    style={{ borderColor: styles.borderDefault, backgroundColor: styles.surfacePrimary }}
-                                >
-                                    <p className="text-sm font-medium" style={{ color: styles.contentPrimary }}>
-                                        Start a new conversation
-                                    </p>
-                                    <p className="mt-1 text-xs" style={{ color: styles.contentSecondary }}>
-                                        Choose an agent, ask a task, and keep follow-up prompts in queue while it works.
-                                    </p>
-                                </div>
-                            )}
-
-                            {messages.map((message) => (
-                                <Message key={message.id} from={message.role}>
-                                    <div
-                                        className={message.role === "user"
-                                            ? "ml-auto w-fit max-w-[90%] rounded-lg border px-2.5 py-2"
-                                            : "w-full rounded-lg border px-2.5 py-2"
-                                        }
-                                        style={{
-                                            borderColor: styles.borderDefault,
-                                            backgroundColor: message.role === "user" ? styles.surfaceAccent : styles.surfaceSecondary,
-                                        }}
-                                    >
-                                        <div
-                                            className={message.role === "user"
-                                                ? "mb-1 flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-[0.08em]"
-                                                : "mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em]"
-                                            }
-                                            style={{ color: styles.contentSecondary }}
-                                        >
-                                            {message.role === "user" ? (
-                                                <>
-                                                    <span>You</span>
-                                                    <UserRound className="h-3.5 w-3.5" />
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Bot className="h-3.5 w-3.5" />
-                                                    <span>Agent</span>
-                                                </>
-                                            )}
-                                        </div>
-
-                                        <MessageContent className="min-w-0">
+                    <Conversation className="min-h-0">
+                        <ConversationContent className="max-w-3xl gap-2 px-4 pb-6 pt-3">
+                            {messages.map((message, messageIndex) => {
+                                if (message.role === "user") {
+                                    return (
+                                        <div key={message.id} className="space-y-1">
                                             {message.blocks.map((block) => {
-                                                if (block.type === "thinking") {
-                                                    return (
-                                                        <ChainOfThought key={block.id} defaultOpen={false} className="mb-2">
-                                                            <ChainOfThoughtHeader>Thinking</ChainOfThoughtHeader>
-                                                            <ChainOfThoughtContent>
-                                                                <div className="space-y-1 text-xs">
-                                                                    {block.content.split("\n\n").map((step, stepIdx) => (
-                                                                        <ChainOfThoughtStep key={stepIdx} label={step} status="complete" />
-                                                                    ))}
-                                                                </div>
-                                                            </ChainOfThoughtContent>
-                                                        </ChainOfThought>
-                                                    );
-                                                }
-
                                                 if (block.type === "image") {
                                                     return (
-                                                        <div key={block.id} className="mb-2">
-                                                            <img
-                                                                src={block.content}
-                                                                alt="Attached image"
-                                                                className="max-h-52 max-w-xs cursor-pointer rounded-lg object-cover"
-                                                                onClick={() => window.open(block.content, "_blank")}
-                                                            />
+                                                        <img
+                                                            key={block.id}
+                                                            src={block.content}
+                                                            alt="Attached image"
+                                                            className="max-h-56 max-w-xs cursor-pointer rounded-md border border-border/50 object-cover"
+                                                            onClick={() => window.open(block.content, "_blank")}
+                                                        />
+                                                    );
+                                                }
+                                                if (block.type === "text") {
+                                                    return (
+                                                        <div key={block.id} className="my-1 flex min-w-0 gap-2 rounded-md bg-secondary px-2 py-1.5 text-sm">
+                                                            <span className="shrink-0 font-semibold text-primary">{">"}</span>
+                                                            <span className="min-w-0 break-words whitespace-pre-wrap text-foreground">{block.content}</span>
                                                         </div>
                                                     );
                                                 }
-
-                                                if (block.type === "text") {
-                                                    return (
-                                                        <MessageResponse key={block.id} className="mb-2">
-                                                            {block.content}
-                                                        </MessageResponse>
-                                                    );
-                                                }
-
-                                                if (block.type === "tool") {
-                                                    const toolCall = block.toolCall;
-
-                                                    // Check if this is a render_ui tool with UI data
-                                                    const uiData = parseNoetectUIData(toolCall.output);
-                                                    if (uiData) {
-                                                        return (
-                                                            <div key={block.id} className="mb-2">
-                                                                <RenderedUI
-                                                                    html={uiData.html}
-                                                                    title={uiData.title}
-                                                                    height={uiData.height}
-                                                                />
-                                                            </div>
-                                                        );
-                                                    }
-
-                                                    return (
-                                                        <Tool key={block.id} defaultOpen={false} className="mb-2">
-                                                            <ToolHeader
-                                                                title={(toolCall.input?.description as string) || toolCall.name}
-                                                                type={`tool-${toolCall.name}` as `tool-${string}`}
-                                                                state={toolCall.state}
-                                                            />
-                                                            <ToolContent>
-                                                                {toolCall.input && <ToolInput input={toolCall.input} />}
-                                                                {(toolCall.output || toolCall.errorText) && (
-                                                                    <ToolOutput output={toolCall.output} errorText={toolCall.errorText} />
-                                                                )}
-                                                            </ToolContent>
-                                                        </Tool>
-                                                    );
-                                                }
-
                                                 return null;
                                             })}
-                                        </MessageContent>
-                                    </div>
-                                </Message>
-                            ))}
-
-                            {isLoading && (() => {
-                                const lastMessage = messages[messages.length - 1];
-                                const hasContent = lastMessage?.role === "assistant" && lastMessage.blocks.length > 0;
-                                if (hasContent) return null;
-                                return (
-                                    <Message from="assistant">
-                                        <div
-                                            className="w-full rounded-lg border px-2.5 py-2"
-                                            style={{ borderColor: styles.borderDefault, backgroundColor: styles.surfaceSecondary }}
-                                        >
-                                            <div className="mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentSecondary }}>
-                                                <Bot className="h-3.5 w-3.5" />
-                                                <span>Agent</span>
-                                            </div>
-                                            <MessageContent>
-                                                <Loader />
-                                            </MessageContent>
                                         </div>
-                                    </Message>
+                                    );
+                                }
+
+                                const isStreamingMessage = isLoading && messageIndex === messages.length - 1;
+                                const lastTextBlockId = [...message.blocks].reverse().find((b): b is Extract<ContentBlock, { type: "text" }> => b.type === "text")?.id;
+                                const lastThinkingBlockId = [...message.blocks].reverse().find((b): b is Extract<ContentBlock, { type: "thinking" }> => b.type === "thinking")?.id;
+
+                                return (
+                                    <div key={message.id} className="space-y-1.5">
+                                        {message.blocks.map((block) => {
+                                            if (block.type === "thinking") {
+                                                return (
+                                                    <div
+                                                        key={block.id}
+                                                        className="my-1 min-w-0 break-words border-l-2 border-border pl-2 text-xs italic text-muted-foreground"
+                                                    >
+                                                        {block.content}
+                                                        {isStreamingMessage && block.id === lastThinkingBlockId && <span className="streaming-cursor" />}
+                                                    </div>
+                                                );
+                                            }
+
+                                            if (block.type === "image") {
+                                                return (
+                                                    <img
+                                                        key={block.id}
+                                                        src={block.content}
+                                                        alt="Generated image"
+                                                        className="max-h-72 max-w-sm rounded-md border border-border/50 object-cover"
+                                                    />
+                                                );
+                                            }
+
+                                            if (block.type === "text") {
+                                                return (
+                                                    <div key={block.id} className="prose-chat py-1.5 text-sm">
+                                                        <MessageResponse>{block.content}</MessageResponse>
+                                                        {isStreamingMessage && block.id === lastTextBlockId && <span className="streaming-cursor" />}
+                                                    </div>
+                                                );
+                                            }
+
+                                            if (block.type === "tool") {
+                                                return <ToolUseItem key={block.id} block={block} />;
+                                            }
+
+                                            return null;
+                                        })}
+                                    </div>
                                 );
-                            })()}
+                            })}
+
+                            {showBootstrapLoader && (
+                                <div className="flex w-full items-center gap-2 py-1.5 text-xs text-muted-foreground">
+                                    <Bot className="size-3.5" />
+                                    <Loader />
+                                </div>
+                            )}
                         </ConversationContent>
                     </Conversation>
                 )}
@@ -961,47 +1089,43 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
             {/* Permission Request Banner */}
             {pendingPermission && (
                 <div className="mx-auto w-full max-w-3xl px-4 pb-2">
-                    <div
-                        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-2.5 py-2"
-                        style={{
-                            backgroundColor: styles.surfaceSecondary,
-                            borderColor: styles.borderDefault,
-                        }}
-                    >
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-2.5 py-2">
                         <div className="flex min-w-0 items-center gap-2">
-                            <ShieldAlert className="h-4 w-4 flex-shrink-0" style={{ color: styles.contentSecondary }} />
-                            <span className="text-sm" style={{ color: styles.contentSecondary }}>
-                                Allow <span className="font-mono" style={{ color: styles.contentPrimary }}>{pendingPermission.toolName}</span>?
+                            <ShieldAlert className="h-4 w-4 shrink-0 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">
+                                Allow <span className="font-mono text-foreground">{pendingPermission.toolName}</span>?
                             </span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                            <button
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => respondToPermission("deny")}
-                                className="rounded px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-80"
-                                style={{ color: styles.contentSecondary }}
                             >
                                 Deny
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => respondToPermission("allow")}
-                                className="rounded px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-80"
-                                style={{ color: styles.contentSecondary }}
                             >
                                 Allow
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
                                 onClick={() => respondToPermission("allow", { alwaysAllow: true })}
-                                className="rounded px-2.5 py-1 text-xs font-medium transition-opacity hover:opacity-90"
-                                style={{ backgroundColor: styles.contentPrimary, color: styles.surfacePrimary }}
                             >
                                 Always Allow
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </div>
             )}
 
-            <div className="mx-auto w-full max-w-3xl px-4 pb-4">
+            <div className="mx-auto w-full max-w-3xl px-4 pb-4 pt-1">
                 {/* Queued messages list */}
                 <QueuedMessagesList
                     messages={messageQueue}
@@ -1013,14 +1137,8 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
 
                 {/* Queue paused banner */}
                 {queuePaused && messageQueue.length > 0 && (
-                    <div
-                        className="mb-2 flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-xs"
-                        style={{
-                            backgroundColor: styles.surfaceSecondary,
-                            borderColor: styles.borderDefault,
-                        }}
-                    >
-                        <span className="flex items-center gap-1.5" style={{ color: styles.contentSecondary }}>
+                    <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-border bg-secondary/40 px-2.5 py-2 text-xs">
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
                             <PauseCircle className="h-3.5 w-3.5" />
                             Queue paused ({messageQueue.length} remaining)
                         </span>
@@ -1036,19 +1154,14 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                     </div>
                 )}
 
-                <div
-                    className="rounded-lg border p-2"
-                    style={{
-                        borderColor: styles.borderDefault,
-                        backgroundColor: styles.surfacePrimary,
-                    }}
-                >
+                <div className="rounded-2xl border border-border bg-card p-2 chat-input-area">
                     <ProseMirrorPromptInput onSubmit={handleSubmit} className="border-0 bg-transparent shadow-none">
                         <ProseMirrorPromptTextarea
                             ref={inputRef}
                             placeholder={isLoading ? "Type to queue next message..." : "Message..."}
                             disabled={!!pendingPermission}
                             enterToSend={chatInputEnterToSend}
+                            className="min-h-[64px] [&_.pm-chat-input]:text-[11px] [&>div.absolute]:text-[11px]"
                         />
                         <ProseMirrorPromptFooter className="justify-between">
                             <div className="flex items-center gap-1">
@@ -1058,6 +1171,11 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                     disabled={isLoading}
                                 />
                                 <ProseMirrorPromptAttach disabled={!!pendingPermission} />
+                                {messageQueue.length > 0 && (
+                                    <Badge variant="outline" className="h-5 px-2 text-[10px]">
+                                        queue {messageQueue.length}
+                                    </Badge>
+                                )}
                             </div>
                             <div className="flex items-center gap-1">
                                 {isLoading && (
@@ -1066,7 +1184,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                         onClick={handleCancel}
                                         variant="ghost"
                                         size="icon"
-                                        className="h-8 w-8 rounded-full p-0"
+                                        className="h-8 w-8 rounded-lg p-0"
                                         title="Stop"
                                     >
                                         <StopCircle className="h-4 w-4" />
@@ -1076,19 +1194,19 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                     <Button
                                         type="submit"
                                         size="icon"
-                                        className="h-8 w-8 rounded-full p-0"
+                                        className="h-8 w-8 rounded-lg p-0"
                                         disabled={!!pendingPermission}
                                         title="Queue message"
                                     >
                                         <ListPlus className="h-4 w-4" />
                                     </Button>
                                 ) : (
-                                    <ProseMirrorPromptSubmit disabled={!!pendingPermission} className="rounded-full" />
+                                    <ProseMirrorPromptSubmit disabled={!!pendingPermission} className="rounded-lg" />
                                 )}
                             </div>
                         </ProseMirrorPromptFooter>
                     </ProseMirrorPromptInput>
-                    <p className="px-2 pb-1 text-[11px]" style={{ color: styles.contentSecondary }}>
+                    <p className="px-2 pb-1 text-[11px] text-muted-foreground">
                         {chatInputEnterToSend ? "Enter sends, Shift+Enter adds a new line." : "Enter adds a new line."}
                     </p>
                 </div>
