@@ -12,7 +12,7 @@ import { secrets } from "@/lib/secrets";
 import { uiRendererServer } from "@/mcp-servers/ui-renderer";
 import { acquireFileLock, getActiveNoteFileNameForPath, releaseFileLockForToolUse } from "@/services/file-locks";
 import { buildBpagentSubagents } from "@/features/pkm-pack/subagents";
-import { buildBpagentSystemPrompt } from "@/features/pkm-pack/built-in-bpagent";
+import { buildBpagentSystemPrompt, readVaultConfig } from "@/features/pkm-pack/built-in-bpagent";
 import { buildMemoryPromptBlock } from "@/features/agent-memory/fx";
 import { buildAgentMemoryMcpServer } from "@/mcp-servers/agent-memory";
 
@@ -255,6 +255,40 @@ function getClaudeSessionsDir(): string {
     return `${process.env.HOME}/.claude/projects/${pathPart}`;
 }
 
+function getClaudeProjectsRoot(): string {
+    return `${process.env.HOME}/.claude/projects`;
+}
+
+async function findSessionFilePath(sessionId: string): Promise<string | null> {
+    // Preferred location for the active workspace
+    const preferred = join(getClaudeSessionsDir(), `${sessionId}.jsonl`);
+    if (existsSync(preferred)) return preferred;
+
+    // Fallback: search all project folders under ~/.claude/projects
+    const projectsRoot = getClaudeProjectsRoot();
+    if (!existsSync(projectsRoot)) return null;
+
+    const direct = join(projectsRoot, `${sessionId}.jsonl`);
+    if (existsSync(direct)) return direct;
+
+    try {
+        const { readdir } = await import("node:fs/promises");
+        const entries = await readdir(projectsRoot, { withFileTypes: true });
+        for (const entry of entries) {
+            if (!entry.isDirectory()) continue;
+            const candidate = join(projectsRoot, entry.name, `${sessionId}.jsonl`);
+            if (existsSync(candidate)) return candidate;
+        }
+    } catch (error) {
+        chatLogger.warn("Failed while searching for session history file", {
+            sessionId,
+            error: error instanceof Error ? error.message : String(error),
+        });
+    }
+
+    return null;
+}
+
 async function readJSONL<T>(filePath: string): Promise<T[]> {
     if (!existsSync(filePath)) {
         return [];
@@ -286,6 +320,84 @@ async function updateJSONL<T extends { id: string }>(
     );
     const content = updatedItems.map((item) => JSON.stringify(item)).join("\n") + "\n";
     await Bun.write(filePath, content);
+}
+
+function extractSessionIdFromSdkMessage(msg: SDKMessage): string | undefined {
+    const candidate = (msg as { session_id?: string; sessionId?: string }).session_id
+        || (msg as { session_id?: string; sessionId?: string }).sessionId;
+    return typeof candidate === "string" && candidate.length > 0 ? candidate : undefined;
+}
+
+function extractFirstUserText(messages: SDKMessage[]): string | undefined {
+    for (const msg of messages) {
+        if (msg.type !== "user") continue;
+
+        const raw = msg as {
+            isMeta?: boolean;
+            message?: { content?: unknown };
+            content?: unknown;
+        };
+        if (raw.isMeta) continue;
+
+        let text = "";
+        const messageContent = raw.message?.content;
+        if (typeof messageContent === "string") {
+            text = messageContent;
+        } else if (Array.isArray(messageContent)) {
+            text = messageContent
+                .filter((block): block is { type?: string; text?: string } => typeof block === "object" && block !== null)
+                .filter((block) => block.type === "text")
+                .map((block) => block.text || "")
+                .join("\n");
+        } else if (typeof raw.content === "string") {
+            text = raw.content;
+        }
+
+        const trimmed = text.trim();
+        if (!trimmed) continue;
+        if (trimmed.includes("<local-command-caveat>")) continue;
+        if (trimmed.includes("<command-name>")) continue;
+        return trimmed;
+    }
+    return undefined;
+}
+
+function sessionTitleFromText(text: string | undefined): string {
+    if (!text) return "Untitled Session";
+    const stripped = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (!stripped) return "Untitled Session";
+    return stripped.length > 60 ? `${stripped.slice(0, 60)}...` : stripped;
+}
+
+async function inferSessionMetadataFromHistory(params: {
+    sessionId: string;
+    sessionFile: string;
+}): Promise<SessionMetadata | null> {
+    const { sessionId, sessionFile } = params;
+    const history = await readJSONL<SDKMessage>(sessionFile);
+    if (history.length === 0) return null;
+
+    const { stat } = await import("node:fs/promises");
+    const fsStat = await stat(sessionFile);
+    const timestamps = history
+        .map((m) => {
+            const ts = (m as { timestamp?: string }).timestamp;
+            return typeof ts === "string" ? ts : undefined;
+        })
+        .filter((ts): ts is string => !!ts);
+
+    const createdAt = timestamps[0] || fsStat.birthtime.toISOString();
+    const updatedAt = timestamps[timestamps.length - 1] || fsStat.mtime.toISOString();
+    const messageCount = history.filter((m) => m.type === "user" || m.type === "assistant").length;
+    const title = sessionTitleFromText(extractFirstUserText(history));
+
+    return {
+        id: sessionId,
+        title,
+        createdAt,
+        updatedAt,
+        messageCount,
+    };
 }
 
 export const chatRoutes = {
@@ -371,6 +483,16 @@ export const chatRoutes = {
                     toolName: string,
                     input: Record<string, unknown>
                 ) => {
+                    // BPagent internal long-term memory tools are safe local operations.
+                    // Auto-allow to avoid blocking memory recall/save behind repeated prompts.
+                    if (agentConfig.id === "bpagent" && toolName.startsWith("mcp__agent-memory__")) {
+                        console.log(`[Permissions] Tool "${toolName}" auto-allowed for BPagent internal memory`);
+                        return {
+                            behavior: "allow" as const,
+                            updatedInput: input,
+                        };
+                    }
+
                     // Check if tool is already allowed for this agent
                     if (agentAllowedTools.includes(toolName)) {
                         console.log(`[Permissions] Tool "${toolName}" auto-allowed for agent ${agentConfig.id}`);
@@ -523,7 +645,8 @@ export const chatRoutes = {
                 if (agentConfig.id === "bpagent") {
                     // BPagent: use dedicated PKM system prompt with real notes path + context
                     const notesPath = getNotesPath();
-                    let bpagentPrompt = `${agentContext}\n\n${buildBpagentSystemPrompt(notesPath)}`;
+                    const vaultConfig = await readVaultConfig(notesPath);
+                    let bpagentPrompt = `${agentContext}\n\n${buildBpagentSystemPrompt(notesPath, vaultConfig)}`;
 
                     // Inject memory recall into system prompt (non-fatal on error)
                     try {
@@ -718,10 +841,18 @@ export const chatRoutes = {
                             messageCount++;
                             const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
 
+                            // SDK payloads may expose session ID as snake_case or camelCase.
+                            // Capture either form early so frontend can persist/load sessions reliably.
+                            const runtimeSessionId = extractSessionIdFromSdkMessage(msg);
+                            if (runtimeSessionId && !newSessionId) {
+                                newSessionId = runtimeSessionId;
+                                chatLogger.info("SDK message provided session ID", { sessionId: newSessionId });
+                            }
+
                             console.log(`[API] [${elapsed}s] Message #${messageCount}: ${msg.type}`);
 
                             if (msg.type === "system" && msg.subtype === "init") {
-                                newSessionId = msg.session_id;
+                                newSessionId = runtimeSessionId || newSessionId;
                                 chatLogger.info("SDK init message received", { sessionId: newSessionId });
 
                                 // Log MCP server connection status
@@ -1030,38 +1161,70 @@ export const chatRoutes = {
                     }
                 }
 
-                // Filter to only sessions with existing history files in this workspace
-                const validSessions: SessionMetadata[] = [];
-                const staleSessions: string[] = [];
+                const discoveredSessions: SessionMetadata[] = [];
 
-                for (const session of sessionsMap.values()) {
-                    const historyFile = join(claudeDir, `${session.id}.jsonl`);
-                    if (existsSync(historyFile)) {
-                        validSessions.push(session);
-                    } else {
-                        staleSessions.push(session.id);
-                        chatLogger.info("Session history not found, marking as stale", {
-                            sessionId: session.id,
-                            expectedPath: historyFile
-                        });
+                // Backfill metadata from existing Claude history files.
+                // This recovers sessions when metadata was never saved.
+                if (existsSync(claudeDir)) {
+                    const { readdir } = await import("node:fs/promises");
+                    const historyFiles = (await readdir(claudeDir))
+                        .filter((fileName) => fileName.endsWith(".jsonl"));
+
+                    for (const fileName of historyFiles) {
+                        const inferredId = fileName.replace(/\.jsonl$/, "");
+                        if (sessionsMap.has(inferredId)) continue;
+
+                        const historyFile = join(claudeDir, fileName);
+                        try {
+                            const inferred = await inferSessionMetadataFromHistory({
+                                sessionId: inferredId,
+                                sessionFile: historyFile,
+                            });
+                            if (!inferred) continue;
+                            sessionsMap.set(inferredId, inferred);
+                            discoveredSessions.push(inferred);
+                        } catch (inferError) {
+                            chatLogger.warn("Failed to infer session metadata from history", {
+                                sessionId: inferredId,
+                                error: inferError instanceof Error ? inferError.message : String(inferError),
+                            });
+                        }
                     }
                 }
 
-                // Clean up stale sessions from the metadata file (async, fire-and-forget)
-                if (staleSessions.length > 0) {
-                    chatLogger.info("Cleaning up stale sessions", { count: staleSessions.length });
-                    const cleanedSessions = allSessions.filter(s => !staleSessions.includes(s.id));
-                    const content = cleanedSessions.map(s => JSON.stringify(s)).join("\n") + (cleanedSessions.length > 0 ? "\n" : "");
-                    Bun.write(getSessionsFile(), content).catch(err => {
-                        chatLogger.error("Failed to clean up stale sessions", { error: err });
+                // Persist discovered sessions, but never prune metadata automatically.
+                // Automatic stale cleanup could incorrectly delete valid sessions.
+                if (discoveredSessions.length > 0) {
+                    chatLogger.info("Rebuilding session metadata file", {
+                        discoveredCount: discoveredSessions.length,
+                    });
+
+                    const rebuiltMap = new Map<string, SessionMetadata>();
+                    for (const session of allSessions) {
+                        const existing = rebuiltMap.get(session.id);
+                        if (!existing || new Date(session.updatedAt) > new Date(existing.updatedAt)) {
+                            rebuiltMap.set(session.id, session);
+                        }
+                    }
+                    for (const session of discoveredSessions) {
+                        if (!rebuiltMap.has(session.id)) {
+                            rebuiltMap.set(session.id, session);
+                        }
+                    }
+
+                    const rebuiltSessions = Array.from(rebuiltMap.values());
+                    const content = rebuiltSessions.map((s) => JSON.stringify(s)).join("\n") + (rebuiltSessions.length > 0 ? "\n" : "");
+                    Bun.write(getSessionsFile(), content).catch((err) => {
+                        chatLogger.error("Failed to rebuild chat session metadata file", { error: err });
                     });
                 }
 
-                validSessions.sort(
+                const resultSessions = Array.from(sessionsMap.values());
+                resultSessions.sort(
                     (a, b) =>
                         new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
                 );
-                return Response.json({ sessions: validSessions });
+                return Response.json({ sessions: resultSessions });
             } catch (error) {
                 console.error("[API] Error listing sessions:", error);
                 return Response.json(
@@ -1181,8 +1344,8 @@ export const chatRoutes = {
                     }
 
                     // Then search message content
-                    const sessionFile = join(getClaudeSessionsDir(), `${session.id}.jsonl`);
-                    if (!existsSync(sessionFile)) continue;
+                    const sessionFile = await findSessionFilePath(session.id);
+                    if (!sessionFile) continue;
 
                     try {
                         const messages = await readJSONL<SDKMessage>(sessionFile);
@@ -1249,17 +1412,17 @@ export const chatRoutes = {
                 // Session ID is at the end: /api/chat/sessions/history/{sessionId}
                 const sessionId = pathParts[pathParts.length - 1];
                 const claudeDir = getClaudeSessionsDir();
-                const sessionFile = join(claudeDir, `${sessionId}.jsonl`);
+                const sessionFile = await findSessionFilePath(sessionId);
 
                 chatLogger.info("Loading session history", {
                     sessionId,
                     claudeDir,
                     sessionFile,
                     dirExists: existsSync(claudeDir),
-                    fileExists: existsSync(sessionFile)
+                    fileExists: sessionFile ? existsSync(sessionFile) : false,
                 });
 
-                if (!existsSync(sessionFile)) {
+                if (!sessionFile || !existsSync(sessionFile)) {
                     chatLogger.warn("Session file not found", { sessionFile });
                     return Response.json(
                         { error: "Session not found", sessionFile },
