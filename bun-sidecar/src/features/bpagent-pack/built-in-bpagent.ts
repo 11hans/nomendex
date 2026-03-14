@@ -1,4 +1,5 @@
 import { z } from "zod";
+import path from "node:path";
 
 const VaultConfigSchema = z.object({
     name: z.string().optional(),
@@ -43,12 +44,18 @@ export async function readVaultConfig(notesPath: string): Promise<VaultConfig | 
  */
 export function buildBpagentSystemPrompt(notesPath: string, config: VaultConfig | null): string {
     const fm = config?.folderMapping;
-    const dailyNotes = fm?.dailyNotes ?? "Daily Notes";
+    const dailyNotes = fm?.dailyNotes ?? "daily-notes";
     const goals = fm?.goals ?? "Goals";
     const projects = fm?.projects ?? "Projects";
     const templates = fm?.templates ?? "Templates";
     const archives = fm?.archives ?? "Archives";
     const inbox = fm?.inbox ?? "Inbox";
+    const dailyNotesPath = path.join(notesPath, dailyNotes);
+    const goalsPath = path.join(notesPath, goals);
+    const projectsPath = path.join(notesPath, projects);
+    const templatesPath = path.join(notesPath, templates);
+    const archivesPath = path.join(notesPath, archives);
+    const inboxPath = path.join(notesPath, inbox);
 
     const userName = config?.name;
     const reviewDay = config?.reviewDay ?? "Sunday";
@@ -60,11 +67,11 @@ export function buildBpagentSystemPrompt(notesPath: string, config: VaultConfig 
         ? `\n**Primary goal areas:** ${goalAreas.join(", ")}`
         : "";
 
-    return `# Obsidian PKM Vault Context
+    return `# BPagent Workspace Context
 
 ## System Purpose
-You are BPagent, a Personal Knowledge Management (PKM) assistant integrated into Nomendex.
-You help the user with PKM workflows: reviewing notes, organizing their vault, planning work, and maintaining their knowledge system.${userGreeting}
+You are BPagent, a planning and execution assistant integrated into Nomendex.
+You help the user with structured reviews, goal tracking, projects, and daily execution workflows.${userGreeting}
 
 **Interaction style:** ${workStyle}
 
@@ -74,14 +81,20 @@ You help the user with PKM workflows: reviewing notes, organizing their vault, p
 |--------|---------|
 | \`${dailyNotes}/\` | Daily journal entries (\`M-D-YYYY.md\`) |
 | \`${goals}/\` | Goal cascade (3-year → yearly → monthly → weekly) |
-| \`${projects}/\` | Active projects with their own \`CLAUDE.md\` |
+| \`${projects}/\` | Canonical project notes (\`<ProjectName>.md\`) |
 | \`${templates}/\` | Reusable note structures |
 | \`${archives}/\` | Completed/inactive content |
 | \`${inbox}/\` | Uncategorized captures (optional) |
 
 ## Workspace Layout
-- **Notes directory**: \`${notesPath}\`
-- **Daily notes**: \`${notesPath}/${dailyNotes}/\` using \`M-D-YYYY.md\` format
+- **Vault root (notes directory)**: \`${notesPath}\`
+- **Daily notes**: \`${dailyNotesPath}/\` using \`M-D-YYYY.md\` format
+- **Goals**: \`${goalsPath}/\`
+- **Projects notes**: \`${projectsPath}/\`
+- **Templates**: \`${templatesPath}/\`
+- **Archives**: \`${archivesPath}/\`
+- **Inbox**: \`${inboxPath}/\`
+- **Projects registry**: \`.nomendex/projects.json\` in the workspace root
 - Wiki links use \`[[note-name]]\` syntax
 - Tags use \`#tag\` syntax in note content
 
@@ -91,9 +104,14 @@ When running shell commands that need the notes path, use the resolved path abov
 NOTES_DIR="${notesPath}"
 \`\`\`
 
+## Vault Path Rules
+- Treat \`${notesPath}\` as the only vault root for notes, goals, projects, templates, and inbox files.
+- Do not read those files from workspace root unless it is exactly the same path as \`${notesPath}\`.
+- Prefer absolute paths under \`${notesPath}\` to avoid mixing project files with vault files.
+
 ## Current Focus
 
-See @${goals}/2. Monthly Goals.md for this month's priorities.${goalAreasBlock}
+See @${goalsPath}/2. Monthly Goals.md for this month's priorities.${goalAreasBlock}
 
 ## Tag System
 
@@ -110,9 +128,9 @@ Skills are invoked with \`/skill-name\` or automatically when relevant.
 | \`daily\` | \`/daily\` | Create daily notes, morning/midday/evening routines |
 | \`weekly\` | \`/weekly\` | Run weekly review, reflect and plan |
 | \`monthly\` | \`/monthly\` | Monthly review, quarterly milestone check, next month planning |
-| \`pkm-project\` | \`/project\` | Create, track, and archive projects linked to goals |
+| \`project\` | \`/project\` | Create, track, and archive projects linked to goals |
 | \`review\` | \`/review\` | Smart router — auto-detects daily/weekly/monthly based on context |
-| \`adopt\` | \`/adopt\` | Scaffold PKM system onto an existing Obsidian vault |
+| \`adopt\` | \`/adopt\` | Scaffold BPagent structure onto an existing notes workspace |
 | \`goal-tracking\` | (auto) | Track progress across goal cascade with project awareness |
 | \`obsidian-vault-ops\` | (auto) | Read/write vault files, manage wiki-links |
 | \`check-links\` | (auto) | Find broken wiki-links in the vault |
@@ -176,7 +194,7 @@ The full goals-to-tasks flow:
 
 \`\`\`
 3-Year Vision  →  Yearly Goals  →  Projects  →  Monthly Goals  →  Weekly Review  →  Daily Tasks
-   /goal-tracking     /project        /project      /monthly          /weekly         /daily
+   /goal-tracking      /project       /project       /monthly          /weekly         /daily
 \`\`\`
 
 ## Daily Workflow

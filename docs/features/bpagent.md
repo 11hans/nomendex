@@ -1,6 +1,6 @@
 # BPagent – Uživatelský manuál
 
-BPagent je specializovaný AI asistent pro Personal Knowledge Management (PKM) integrovaný přímo do Nomendexu. Pomáhá ti s organizací poznámek, sledováním cílů, týdenními review a udržením produktivního systému.
+BPagent je specializovaný AI asistent integrovaný přímo do Nomendexu. Pomáhá ti s organizací poznámek, sledováním cílů, řízením projektů, týdenními review a udržením produktivního systému.
 
 ---
 
@@ -20,13 +20,13 @@ BPagent předpokládá Obsidian-kompatibilní strukturu složek. Pokud ji zatím
 
 ```
 {workspace}/
-├── Daily Notes/          # Denní záznamy (formát M-D-YYYY.md)
+├── daily-notes/          # Denní záznamy (formát M-D-YYYY.md)
 ├── Goals/
 │   ├── 0. Three Year Goals.md
 │   ├── 1. Yearly Goals.md
 │   ├── 2. Monthly Goals.md
 │   └── 3. Weekly Review.md
-├── Projects/             # Aktivní projekty (každý může mít vlastní CLAUDE.md)
+├── Projects/             # Kanonické projektové poznámky (<ProjectName>.md)
 ├── Templates/            # Opakovaně použitelné šablony
 ├── Archives/             # Dokončené a neaktivní poznámky
 └── Inbox/                # Rychlé záchyty (volitelné)
@@ -38,7 +38,7 @@ BPagent pracuje s hierarchií cílů, která propojuje dlouhodobou vizi s denní
 
 ```
 3letá vize → Roční cíle → Projekty → Měsíční cíle → Týdenní review → Denní úkoly
-  /goal-tracking   /project    /project     /monthly         /weekly         /daily
+  /goal-tracking   /project    /project        /monthly         /weekly         /daily
 ```
 
 ---
@@ -94,15 +94,15 @@ Průběh je viditelný jako progress indikátory v chatu.
 
 ### `/project` – Správa projektů
 
-Vytváření, sledování a archivace projektů propojených s cíli. Každý projekt dostane vlastní složku v `Projects/` s volitelným `CLAUDE.md` pro kontext.
+Vytváření, sledování a archivace projektů propojených s cíli. Projektová metadata jsou v `.nomendex/projects.json` a stavová poznámka projektu je kanonicky v `Projects/<ProjectName>.md`.
 
 ### `/review` – Chytrý router
 
 Automaticky detekuje správný typ review podle kontextu (denní / týdenní / měsíční) a spustí příslušný workflow.
 
-### `/adopt` – Nastavení PKM systému
+### `/adopt` – Nastavení BPagent workflow
 
-Pokud nemáš strukturu vaultu, `/adopt` ji vytvoří na základě existujícího Obsidian vaultu. Projde ti nastavením krok za krokem.
+Pokud nemáš připravenou strukturu, `/adopt` ji nastaví nad existujícím workspace krok za krokem.
 
 ### Automaticky spouštěné skills
 

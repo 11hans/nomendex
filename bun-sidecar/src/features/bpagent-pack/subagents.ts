@@ -1,4 +1,6 @@
 import type { AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
+import path from "node:path";
+import type { VaultConfig } from "./built-in-bpagent";
 
 /**
  * Build programmatic subagents for BPagent.
@@ -6,7 +8,18 @@ import type { AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
  *
  * Prompts sourced from BPagent-workspace/agents/*.md
  */
-export function buildBpagentSubagents(): Record<string, AgentDefinition> {
+export function buildBpagentSubagents(input?: {
+    notesPath: string;
+    config: VaultConfig | null;
+}): Record<string, AgentDefinition> {
+    const notesPath = input?.notesPath ?? ".";
+    const folderMapping = input?.config?.folderMapping;
+
+    const dailyNotesDir = path.join(notesPath, folderMapping?.dailyNotes ?? "daily-notes");
+    const goalsDir = path.join(notesPath, folderMapping?.goals ?? "Goals");
+    const projectsDir = path.join(notesPath, folderMapping?.projects ?? "Projects");
+    const inboxDir = path.join(notesPath, folderMapping?.inbox ?? "Inbox");
+
     return {
         "weekly-reviewer": {
             description:
@@ -38,12 +51,13 @@ You facilitate the weekly review process for a personal knowledge management sys
 
 ## Data Sources
 
-Always read these files:
-- \`Goals/0. Three Year Goals.md\` - Long-term vision
-- \`Goals/1. Yearly Goals.md\` - Annual objectives
-- \`Goals/2. Monthly Goals.md\` - Current month priorities
-- \`Goals/3. Weekly Review.md\` - Previous reviews
-- \`Daily Notes/*.md\` - Past 7 days of notes
+Treat \`${notesPath}\` as vault root. Always read these files:
+- \`${goalsDir}/0. Three Year Goals.md\` - Long-term vision
+- \`${goalsDir}/1. Yearly Goals.md\` - Annual objectives
+- \`${goalsDir}/2. Monthly Goals.md\` - Current month priorities
+- \`${goalsDir}/3. Weekly Review.md\` - Previous reviews
+- \`${dailyNotesDir}/*.md\` - Past 7 days of notes
+- Do not read goal/project context from workspace root unless it resolves to the same path.
 
 ## Output Format
 
@@ -122,6 +136,14 @@ Works well with:
             prompt: `# Goal Aligner Agent
 
 You analyze the alignment between daily activities and stated goals at all levels, helping users ensure their time investment matches their priorities.
+
+## Vault Paths
+
+- Vault root: \`${notesPath}\`
+- Goal files: \`${goalsDir}/\`
+- Daily notes: \`${dailyNotesDir}/\`
+- Project notes: \`${projectsDir}/\`
+- Use these paths as the source of truth for analysis context.
 
 ## Analysis Framework
 
@@ -232,10 +254,10 @@ You process inbox items using Getting Things Done (GTD) principles adapted for t
 
 ## Inbox Sources
 
-1. \`Inbox/\` folder (if present)
+1. \`${inboxDir}/\` folder (if present)
 2. Items tagged with \`#inbox\` in any file
 3. Quick capture notes without proper categorization
-4. Uncategorized notes in root directory
+4. Uncategorized notes in \`${notesPath}\`
 
 ## Processing Algorithm
 
@@ -272,7 +294,7 @@ Apply these tags:
 Route items appropriately:
 - Tasks -> Today's daily note or appropriate project
 - Reference material -> Relevant project or Resources area
-- Multi-step outcomes -> New folder in Projects/
+- Multi-step outcomes -> Create/update project via \`/project\` and keep context in \`${projectsDir}/<ProjectName>.md\`
 - Ideas -> Capture in appropriate area with links
 
 ## Processing Session
@@ -388,7 +410,7 @@ You are a specialized agent for organizing and maintaining an Obsidian vault. Yo
 ## Workflow
 
 1. Start by scanning the vault structure with Glob
-2. Read CLAUDE.md for vault conventions
+2. Read \`vault-config.json\` first (if present), then root \`AGENTS.md\` for workspace conventions
 3. Report findings before making changes
 4. Confirm reorganization plan with user
 5. Execute changes incrementally
@@ -429,7 +451,7 @@ Track proposed changes as tasks before execution:
 [Done] Analysis complete (4/4 checks)
 
 Proposed changes:
-- Task: Move 3 files to Projects/
+- Task: Move 3 files to ${projectsDir}/
 - Task: Fix 2 broken links
 - Task: Consolidate 5 duplicate tags
 

@@ -123,11 +123,11 @@ export const DEFAULT_AGENT: AgentConfig = {
     updatedAt: "2025-01-01T00:00:00.000Z",
 };
 
-// BPagent - built-in PKM agent
+// BPagent - built-in planning and project agent
 export const BPAGENT_AGENT: AgentConfig = {
     id: "bpagent",
     name: "BPagent",
-    description: "PKM workflows: review, planning, note organization, and vault-oriented work",
+    description: "Planning workflows: review, goals, projects, and note organization",
     systemPrompt: "", // Set at runtime from built-in-bpagent.ts
     model: "claude-sonnet-4-5-20250929", // Same as General Assistant in v1
     mcpServers: [],

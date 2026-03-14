@@ -1,7 +1,7 @@
 import { createServiceLogger } from "@/lib/logger";
 import { getSkillsPath, hasActiveWorkspace } from "@/storage/root-path";
 import { SkillMetadata, SkillMetadataSchema, SkillUpdateCheckResult, SkillUpdateInfo } from "./skills-types";
-import { mkdir, chmod } from "node:fs/promises";
+import { mkdir, chmod, readdir, stat } from "node:fs/promises";
 import path from "path";
 import yaml from "js-yaml";
 
@@ -21,7 +21,7 @@ const DEFAULT_SKILLS: DefaultSkill[] = [
     files: {
       "SKILL.md": `---
 name: todos
-description: Manages project todos via REST API. BEFORE using this skill, you must THINK: "Does the user mention a project? Does the user imply a specific column like Today?". Use when the user asks to create, view, update, or delete todos.
+description: "Manages project todos via REST API. BEFORE using this skill, you must THINK: 'Does the user mention a project? Does the user imply a specific column like Today?'. Use when the user asks to create, view, update, or delete todos."
 version: 6
 source: nomendex
 ---
@@ -302,7 +302,7 @@ For rendering interactive HTML interfaces in chat, use the **create-interface** 
     files: {
       "SKILL.md": `---
 name: projects
-description: Working with projects and custom Kanban boards. BEFORE using this skill, you must THINK: "Does the user assume the project already exists? Am I creating a duplicate because of case sensitivity?". Use when the user mentions a project name.
+description: "Working with projects and custom Kanban boards. BEFORE using this skill, you must THINK: 'Does the user assume the project already exists? Am I creating a duplicate because of case sensitivity?'. Use when the user mentions a project name."
 version: 4
 source: nomendex
 ---
@@ -841,14 +841,14 @@ esac
     files: {
       "SKILL.md": `---
 name: adopt
-description: Scaffold the PKM system onto an existing Obsidian vault. Scans your vault structure, maps folders interactively, and generates configuration.
+description: Scaffold the BPagent system onto an existing Obsidian vault. Scans your vault structure, maps folders interactively, and generates configuration.
 version: 2
 source: nomendex
 ---
 
 # Adopt Skill
 
-Bring Your Own Vault (BYOV) — set up the BPagent PKM system on an existing Obsidian vault.
+Bring Your Own Vault (BYOV) — set up the BPagent system on an existing Obsidian vault.
 
 ## Usage
 
@@ -858,7 +858,7 @@ Bring Your Own Vault (BYOV) — set up the BPagent PKM system on an existing Obs
 
 ## When to Use
 
-- You have an existing Obsidian vault and want to add the BPagent PKM system
+- You have an existing Obsidian vault and want to add the BPagent system
 - You want to keep your current folder structure
 
 ## Phase 1: Scan Vault Structure
@@ -973,7 +973,7 @@ It contains all personalization and folder mappings:
 
 Replace values with the user's actual answers from Phase 2 and 3.
 
-**IMPORTANT:** Do NOT create \`AGENTS.md\`, \`.Codex/\`, \`.claude/settings.json\`, \`.claude/rules/\`, \`.claude/hooks/\`, or \`Codex.local.md\`. BPagent does not use these files — it reads only \`vault-config.json\`.
+**IMPORTANT:** Do NOT create \`AGENTS.md\`, \`.claude/settings.json\`, \`.claude/rules/\`, or \`.claude/hooks/\`. BPagent does not use these files — it reads only \`vault-config.json\`.
 
 ## Phase 5: Scaffold Missing Pieces
 
@@ -1086,7 +1086,7 @@ Grep:
   -n: true
 \`\`\`
 
-This captures the link target (before any \`|\` alias). Exclude \`.Codex/\` and \`.obsidian/\` directories from results.
+This captures the link target (before any \`|\` alias). Exclude \`.claude/\` and \`.obsidian/\` directories from results.
 
 ### Step 2: Build unique target list
 
@@ -1115,7 +1115,7 @@ Group broken links by source file:
 \`\`\`markdown
 ## Broken Links Report
 
-### Daily Notes/2024-01-15.md
+### daily-notes/3-14-2026.md
 - [[Projet Alpha]] — no matching file found
 - [[Old Goal]] — no matching file found
 
@@ -1177,7 +1177,7 @@ Creates daily notes and provides structured workflows for morning planning, midd
 
 ## Usage
 
-Invoke with \`/daily\` or ask Codex to create today's note or help with daily routines.
+Invoke with \`/daily\` or ask BPagent to create today's note or help with daily routines.
 
 ### Create Today's Note
 \`\`\`
@@ -1202,8 +1202,8 @@ Or simply ask:
    - Handles date arithmetic (e.g., \`{{date-1}}\` for yesterday)
 
 3. **Automatic Organization**
-   - Places note in \`Daily Notes/\` folder
-   - Names file with today's date (YYYY-MM-DD.md)
+   - Places note in \`daily-notes/\` folder
+   - Names file with today's date (M-D-YYYY.md)
    - Preserves template structure
 
 ### Template Variables
@@ -1211,8 +1211,8 @@ Your daily template can use:
 - \`{{date}}\` - Today's date in default format
 - \`{{date:dddd}}\` - Day name (e.g., Monday)
 - \`{{date:MMMM DD, YYYY}}\` - Formatted date
-- \`{{date-1:YYYY-MM-DD}}\` - Yesterday's date
-- \`{{date+1:YYYY-MM-DD}}\` - Tomorrow's date
+- \`{{date-1:M-D-YYYY}}\` - Yesterday's date
+- \`{{date+1:M-D-YYYY}}\` - Tomorrow's date
 - \`{{time}}\` - Current time
 
 ## Morning Routine (5-10 minutes)
@@ -1221,13 +1221,13 @@ Your daily template can use:
 1. Create today's daily note (if not exists)
 2. Pull incomplete tasks from yesterday
 3. Read this week's ONE Big Thing from \`Goals/3. Weekly Review.md\`
-4. Surface active project next-actions from \`Projects/*/AGENTS.md\`
+4. Surface active project next-actions from \`Projects/*.md\`
 5. Review weekly goals for today's priority
 
 ### Cascade Context Surfacing
 Before interactive prompts, automatically surface:
 - **ONE Big Thing** from most recent weekly review
-- **Active project next-actions** from \`Projects/*/AGENTS.md\` (read "Next Actions" section)
+- **Active project next-actions** from \`Projects/*.md\` (read "Next Actions" section)
 - **Monthly priority** from \`Goals/2. Monthly Goals.md\`
 
 Display as a brief context block at the top of the morning routine:
@@ -1363,20 +1363,20 @@ Standard daily note template:
 ## Configuration
 
 Customize paths to match your vault:
-- Daily notes folder: \`Daily Notes/\`
+- Daily notes folder: \`daily-notes/\`
 - Template location: \`Templates/Daily Template.md\`
-- Date format: \`YYYY-MM-DD\`
+- Date format: \`M-D-YYYY\`
 
 ### Different Date Formats
-- \`YYYY-MM-DD\` - Standard ISO format (recommended)
+- \`M-D-YYYY\` - Nomendex default format (recommended)
 - \`MM-DD-YYYY\` - US format
 - \`DD-MM-YYYY\` - European format
-- \`YYYY-MM-DD-ddd\` - Include day abbreviation
+- \`M-D-YYYY-ddd\` - Include day abbreviation
 
 ### Folder Organization by Month
 Organize daily notes by month/year:
 \`\`\`
-Daily Notes/2024/01/2024-01-15.md
+daily-notes/2026/03/3-14-2026.md
 \`\`\`
 
 ## Task-Based Progress Tracking
@@ -1439,7 +1439,7 @@ TaskCreate:
 
 Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
 
-Task tools provide visibility into what's happening during longer operations. Tasks are session-scoped and don't persist between Codex sessions—your actual work items remain in your daily note markdown checkboxes.
+Task tools provide visibility into what's happening during longer operations. Tasks are session-scoped and don't persist between chat sessions—your actual work items remain in your daily note markdown checkboxes.
 
 ## Integration
 
@@ -1475,13 +1475,13 @@ Goals/0. Three Year Goals.md   <- Vision (Life areas)
     ↓
 Goals/1. Yearly Goals.md       <- Annual objectives
     ↓
-Projects/*/AGENTS.md           <- Active projects (bridge layer)
+Projects/*.md         <- Active projects (bridge layer)
     ↓
 Goals/2. Monthly Goals.md      <- Current month focus
     ↓
 Goals/3. Weekly Review.md      <- Weekly planning
     ↓
-Daily Notes/*.md               <- Daily tasks and actions
+daily-notes/*.md               <- Daily tasks and actions
 \`\`\`
 
 ## Goal File Formats
@@ -1563,7 +1563,7 @@ When adding tasks to daily notes:
 
 ### Project Integration
 When calculating goal progress, include project data:
-1. Scan \`Projects/*/AGENTS.md\` for all active projects
+1. Scan \`Projects/*.md\` for all active projects
 2. Match projects to goals via their "Goal Link" / "Supports" field
 3. Include project completion % in goal progress calculations
 4. Surface which projects support each goal
@@ -1707,7 +1707,7 @@ Or ask:
 1. Read all weekly reviews from the past month (\`Goals/3. Weekly Review.md\` or weekly review notes)
 2. Read daily notes from past 30 days (scan for patterns)
 3. Read current \`Goals/2. Monthly Goals.md\` for this month's targets
-4. Scan \`Projects/*/AGENTS.md\` for project status updates
+4. Scan \`Projects/*.md\` for project status updates
 
 **Extract:**
 - Wins from each week
@@ -1825,8 +1825,8 @@ Always read these files:
 - \`Goals/1. Yearly Goals.md\` - Quarterly milestones and annual objectives
 - \`Goals/2. Monthly Goals.md\` - Current month's plan (to review) and next month's (to write)
 - \`Goals/3. Weekly Review.md\` - Weekly reviews from past month
-- \`Daily Notes/*.md\` - Past 30 days of notes
-- \`Projects/*/AGENTS.md\` - All active project statuses
+- \`daily-notes/*.md\` - Past 30 days of notes
+- \`Projects/*.md\` - All active project statuses
 
 ## Task-Based Progress Tracking
 
@@ -1891,10 +1891,10 @@ Core operations for reading, writing, and managing files in an Obsidian vault.
 
 \`\`\`
 vault-root/
-├── AGENTS.md           # Main context (always read first)
-├── Daily Notes/        # YYYY-MM-DD.md format
+├── vault-config.json   # Optional folder mapping + personalization
+├── daily-notes/        # M-D-YYYY.md format
 ├── Goals/              # Goal cascade files
-├── Projects/           # Project folders with AGENTS.md
+├── Projects/           # Canonical project notes (*.md)
 ├── Templates/          # Reusable note structures
 └── Archives/           # Completed/inactive content
 \`\`\`
@@ -1902,8 +1902,9 @@ vault-root/
 ## File Operations
 
 ### Reading Notes
-- Use Glob to find files: \`*.md\`, \`Daily Notes/*.md\`
-- Read AGENTS.md first for vault context
+- Use Glob to find files: \`*.md\`, \`daily-notes/*.md\`
+- Read \`vault-config.json\` first if present (folder mapping + preferences)
+- Read project context from \`Projects/*.md\`
 - Check for wiki-links to related notes
 
 ### Creating Notes
@@ -1940,7 +1941,7 @@ status: active
 ## Template Variables
 
 When processing templates, replace:
-- \`{{date}}\` - Today's date (YYYY-MM-DD)
+- \`{{date}}\` - Today's date (M-D-YYYY)
 - \`{{date:format}}\` - Formatted date
 - \`{{date-1}}\` - Yesterday
 - \`{{date+1}}\` - Tomorrow
@@ -1949,11 +1950,11 @@ When processing templates, replace:
 ## Common Patterns
 
 ### Daily Note Creation
-1. Calculate today's date in YYYY-MM-DD format
-2. Check if \`Daily Notes/{date}.md\` exists
+1. Calculate today's date in M-D-YYYY format
+2. Check if \`daily-notes/{date}.md\` exists
 3. If not, read \`Templates/Daily Template.md\`
 4. Replace template variables
-5. Write to \`Daily Notes/{date}.md\`
+5. Write to \`daily-notes/{date}.md\`
 
 ### Finding Related Notes
 1. Extract key terms from current note
@@ -1967,7 +1968,7 @@ When processing templates, replace:
 
 ## Best Practices
 
-1. Always check AGENTS.md for vault-specific conventions
+1. Always check \`vault-config.json\` first for vault-specific conventions and folder mapping
 2. Preserve existing structure when editing
 3. Use relative paths for internal links
 4. Add frontmatter to new notes
@@ -1976,18 +1977,20 @@ When processing templates, replace:
     },
   },
   {
-    name: "pkm-project",
+    name: "project",
     files: {
       "SKILL.md": `---
-name: pkm-project
-description: Create, track, and archive projects linked to goals. The bridge between goals and daily tasks. Use for project creation, status dashboards, and archiving completed work.
-version: 1
+name: project
+description: Create, track, and archive projects linked to goals using Nomendex Projects API and canonical project markdown notes. Use for project lifecycle management, status dashboards, and project note synchronization.
+version: 2
 source: nomendex
 ---
 
 # Project Skill
 
-Create, track, and archive projects that bridge the gap between goals and daily tasks.
+Manage projects using a single source of truth:
+- Project entity and board config in \`.nomendex/projects.json\` via \`/api/projects/*\`
+- Canonical project note in \`Projects/<ProjectName>.md\` (auto-managed by backend)
 
 ## Usage
 
@@ -2002,16 +2005,18 @@ Create, track, and archive projects that bridge the gap between goals and daily 
 
 ### \`/project\` or \`/project new\`
 
-Creates a new project folder with a AGENTS.md context file, interactively linked to a goal.
+Creates a project entity and canonical project note.
 
 **Steps:**
 1. Read \`Goals/1. Yearly Goals.md\` to list available goals
 2. Ask user which goal this project supports (or "none" for standalone)
 3. Ask for project name
-4. Create \`Projects/<ProjectName>/AGENTS.md\` with structure below
-5. If linked to a goal, add \`[[Projects/<ProjectName>]]\` reference in the yearly goals file
+4. Call \`/api/projects/list\` and reuse existing project if name matches (case-insensitive)
+5. If not found, call \`/api/projects/create\` (send \`X-Nomendex-UI: true\`)
+6. Read created project via \`/api/projects/get-by-name\` and confirm \`projectNoteFile\`
+7. If linked to a goal, add \`[[Projects/<ProjectName>.md|<ProjectName>]]\` reference in yearly goals
 
-**Project AGENTS.md Template:**
+**Canonical Project Note Template (\`Projects/<ProjectName>.md\`):**
 \`\`\`markdown
 # Project: <Name>
 
@@ -2024,28 +2029,31 @@ Supports: [[1. Yearly Goals#<Goal Name>]]
 ## Status
 - **Phase:** Planning | Active | Review | Complete
 - **Progress:** 0%
-- **Started:** <date>
-- **Target:** <date>
 
-## Key Decisions
-- [Decision 1] - [Date] - [Rationale]
+## Milestones
+- [ ] <Milestone 1>
 
 ## Next Actions
-- [ ] [First concrete step]
-- [ ] [Second step]
+- [ ] <First concrete step>
+- [ ] <Second step>
 
-## Notes
+## Decisions
+- [Decision 1] - [Date] - [Rationale]
+
+## Log
 [Running log of updates, blockers, learnings]
 \`\`\`
 
 ### \`/project status\`
 
-Scans all \`Projects/*/AGENTS.md\` files and displays a dashboard.
+Builds a dashboard from Projects API plus canonical project notes.
 
 **Steps:**
-1. Glob for \`Projects/*/AGENTS.md\`
-2. Read each file, extract: name, status/phase, progress%, goal linkage, next action
-3. Display dashboard table
+1. Call \`/api/projects/list\` (include archived if user asks)
+2. For each project, read \`projectNoteFile\` from project config
+3. Load note content via \`/api/notes/get\`
+4. Extract phase/progress/goal/next-action from note sections
+5. Display dashboard table
 
 **Output Format:**
 \`\`\`markdown
@@ -2065,20 +2073,19 @@ Scans all \`Projects/*/AGENTS.md\` files and displays a dashboard.
 
 ### \`/project archive <name>\`
 
-Moves a completed project to the archives.
+Archives project via project API lifecycle.
 
 **Steps:**
-1. Verify \`Projects/<name>/\` exists
+1. Load project via \`/api/projects/get-by-name\`
 2. Confirm with user before archiving
-3. Update project AGENTS.md status to "Complete" and progress to 100%
-4. Move folder: \`mv Projects/<name> Archives/Projects/<name>\`
-5. Create \`Archives/Projects/\` directory if it doesn't exist
-6. Update any goal references to note completion
-7. Report what was archived
+3. Call \`/api/projects/update\` with \`updates: { archived: true }\`
+4. Backend auto-moves canonical note from \`Projects/\` to \`Archives/Projects/\`
+5. Update goal references to mark completion if needed
+6. Report archived location and summary
 
 ## Project Naming Conventions
 
-- Use PascalCase for folder names: \`Projects/LearnSpanish/\`
+- Use clear human-readable project names (canonical note path is normalized automatically)
 - Keep names concise but descriptive
 - Avoid special characters
 
@@ -2090,15 +2097,15 @@ Projects are the critical middle layer:
 Goals/1. Yearly Goals.md     <- "What I want to achieve"
     |
     v
-Projects/*/AGENTS.md         <- "How I'll achieve it" (THIS SKILL)
+Projects/<ProjectName>.md    <- "How I'll achieve it"
     |
     v
-Daily Notes/*.md             <- "What I'm doing today"
+daily-notes/*.md             <- "What I'm doing today"
 \`\`\`
 
 When creating tasks in daily notes, reference the project:
 \`\`\`markdown
-- [ ] Draft API spec — [[Projects/MyApp/AGENTS.md|MyApp]]
+- [ ] Draft API spec — [[Projects/MyApp.md|MyApp]]
 \`\`\`
 
 ## Task-Based Progress Tracking
@@ -2111,26 +2118,31 @@ TaskCreate:
   activeForm: "Reading yearly goals..."
 
 TaskCreate:
-  subject: "Create project structure"
-  description: "Create folder and AGENTS.md for new project"
-  activeForm: "Creating project structure..."
+  subject: "Create project entity"
+  description: "Create project in projects.json via /api/projects/create"
+  activeForm: "Creating project..."
 
 TaskCreate:
-  subject: "Link project to goal"
-  description: "Add project reference to yearly goals file"
-  activeForm: "Linking project to goal..."
+  subject: "Sync canonical note"
+  description: "Confirm projectNoteFile exists and contains lifecycle sections"
+  activeForm: "Syncing project note..."
 \`\`\`
 
 ### Status Dashboard Tasks
 \`\`\`
 TaskCreate:
-  subject: "Scan project files"
-  description: "Glob and read all Projects/*/AGENTS.md files"
-  activeForm: "Scanning project files..."
+  subject: "Load projects"
+  description: "Fetch project entities and note paths from /api/projects/list"
+  activeForm: "Loading projects..."
+
+TaskCreate:
+  subject: "Read canonical notes"
+  description: "Load project note sections from Projects/*.md"
+  activeForm: "Reading project notes..."
 
 TaskCreate:
   subject: "Generate dashboard"
-  description: "Compile status dashboard from project data"
+  description: "Compile status dashboard from API + project notes"
   activeForm: "Generating project dashboard..."
 \`\`\`
 
@@ -2317,7 +2329,7 @@ Grep:
   -C: 1
 \`\`\`
 
-Exclude hidden directories (\`.Codex/\`, \`.obsidian/\`) and templates:
+Exclude hidden directories (\`.claude/\`, \`.obsidian/\`) and templates:
 
 \`\`\`
 Grep:
@@ -2329,13 +2341,13 @@ Grep:
   -C: 1
 \`\`\`
 
-Filter out results from \`.Codex/\`, \`.obsidian/\`, and \`Templates/\` directories.
+Filter out results from \`.claude/\`, \`.obsidian/\`, and \`Templates/\` directories.
 
 ### Step 2: Group results by directory
 
 Organise matches into sections by their parent directory:
 
-- **Daily Notes/** — journal entries
+- **daily-notes/** — journal entries
 - **Goals/** — goal and vision documents
 - **Projects/** — project notes
 - **Archives/** — archived content
@@ -2349,7 +2361,7 @@ Format output as:
 \`\`\`markdown
 ## Search: "<term>"
 
-### Daily Notes/
+### daily-notes/
 - **2024-01-15.md** (line 23): ...matching context...
 - **2024-01-14.md** (line 8): ...matching context...
 
@@ -2401,7 +2413,7 @@ Facilitates your weekly review process by creating a review note and guiding ref
 
 ## Usage
 
-Invoke with \`/weekly\` or ask Codex to help with your weekly review.
+Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
 
 \`\`\`
 /weekly
@@ -2436,7 +2448,7 @@ Invoke with \`/weekly\` or ask Codex to help with your weekly review.
 - Check monthly goal progress
 - Adjust weekly priorities
 - Ensure alignment with yearly goals
-- Auto-scan \`Projects/*/AGENTS.md\` for current status
+- Auto-scan \`Projects/*.md\` for current status
 - Compile project progress table for the review note
 
 ### Step 3: Planning (10 minutes)
@@ -2480,7 +2492,7 @@ The skill guides you through:
 ## Weekly Review Note Format
 
 \`\`\`markdown
-# Weekly Review: YYYY-MM-DD
+# Weekly Review: M-D-YYYY
 
 ## Last Week's Wins
 1.
@@ -2603,7 +2615,7 @@ Reflect is blocked until Collect completes. Plan is blocked until Reflect comple
 
 Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
 
-Task tools are session-scoped and don't persist between Codex sessions—your actual weekly review content is saved in the review note.
+Task tools are session-scoped and don't persist between chat sessions—your actual weekly review content is saved in the review note.
 
 ## Agent Team Workflow (Optional)
 
@@ -2613,7 +2625,7 @@ For a faster, more thorough weekly review, use agent teams to parallelize the co
 Team Lead (coordinator)
 ├── collector agent — Read all daily notes, extract wins/challenges/tasks
 ├── goal-analyzer agent — Read goal files, calculate progress, find gaps
-└── project-scanner agent — Scan Projects/*/AGENTS.md, get status updates
+└── project-scanner agent — Scan Projects/*.md, get status updates
 \`\`\`
 
 ### How to Use
@@ -2627,7 +2639,7 @@ The team lead:
 1. Spawns three agents to work in parallel
 2. Collector reads daily notes and extracts highlights
 3. Goal-analyzer reads all goal files and calculates progress
-4. Project-scanner reads all project AGENTS.md files for status
+4. Project-scanner reads all canonical project notes (\`Projects/*.md\`) for status
 5. Team lead synthesizes findings into the weekly review note
 
 This makes the review faster (parallel collection) and more thorough (dedicated analysis per area).
@@ -2738,6 +2750,54 @@ async function getInstalledSkillSource(skillName: string): Promise<string | null
 }
 
 /**
+ * Decide if an existing skill directory should be treated as recoverable Nomendex-owned state.
+ * This prevents empty/broken directories from permanently blocking reinstallation, while still
+ * protecting user-owned directories with colliding names.
+ */
+async function isRecoverableNomendexSkillDirectory(skillName: string, skillDirPath: string): Promise<boolean> {
+  const skillMdPath = path.join(skillDirPath, "SKILL.md");
+  const skillMdFile = Bun.file(skillMdPath);
+
+  if (!(await skillMdFile.exists())) {
+    let entries: string[] = [];
+    try {
+      entries = await readdir(skillDirPath);
+    } catch {
+      logger.info(`Skipping ${skillName}: could not inspect existing directory`);
+      return false;
+    }
+
+    if (entries.length === 0) {
+      logger.warn(`Recovering ${skillName}: found empty skill directory without SKILL.md`);
+      return true;
+    }
+
+    logger.info(`Skipping ${skillName}: non-empty directory exists without SKILL.md`);
+    return false;
+  }
+
+  try {
+    const content = await skillMdFile.text();
+    const metadata = parseSkillFrontmatter(content);
+
+    if (metadata?.source === "nomendex") {
+      return true;
+    }
+
+    if (!metadata && content.includes("source: nomendex")) {
+      logger.warn(`Recovering ${skillName}: invalid frontmatter but source marker indicates Nomendex ownership`);
+      return true;
+    }
+  } catch {
+    logger.info(`Skipping ${skillName}: failed to read existing SKILL.md`);
+    return false;
+  }
+
+  logger.info(`Skipping ${skillName}: existing SKILL.md is not Nomendex-owned`);
+  return false;
+}
+
+/**
  * Get metadata for an embedded default skill
  */
 function getDefaultSkillMetadata(skillName: string): SkillMetadata | null {
@@ -2820,7 +2880,6 @@ async function checkForSkillUpdates(): Promise<SkillUpdateCheckResult> {
       // Skill directory might exist without a valid SKILL.md or version
       // If directory exists at all, check ownership before treating as "new"
       const skillDirPath = path.join(getSkillsPath(), skill.name);
-      const { stat } = await import("node:fs/promises");
       let dirExists = false;
       try {
         const s = await stat(skillDirPath);
@@ -2830,11 +2889,9 @@ async function checkForSkillUpdates(): Promise<SkillUpdateCheckResult> {
       }
 
       if (dirExists) {
-        // Directory exists — only treat as our skill if explicitly Nomendex-owned
-        const installedSource = await getInstalledSkillSource(skill.name);
-        if (installedSource !== "nomendex") {
-          // No source, broken frontmatter, or user-owned — don't touch
-          logger.info(`Skipping ${skill.name}: existing directory without nomendex ownership (source: ${installedSource ?? "none"})`);
+        // Directory exists — only recover when clearly Nomendex-owned or empty/broken from partial install
+        const isRecoverable = await isRecoverableNomendexSkillDirectory(skill.name, skillDirPath);
+        if (!isRecoverable) {
           continue;
         }
       }
