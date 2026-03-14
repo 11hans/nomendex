@@ -1,17 +1,37 @@
 import { createHash } from "crypto";
 import { load as parseYaml } from "js-yaml";
+import path from "node:path";
+import { stat } from "node:fs/promises";
 import { FileDatabase } from "@/storage/FileDatabase";
-import { getAgentMemoryPath } from "@/storage/root-path";
+import { getAgentMemoryPath, getNotesPath, getActiveWorkspacePath } from "@/storage/root-path";
 import { createServiceLogger } from "@/lib/logger";
 import { AgentMemoryRecordSchema, MemoryKindSchema, MemoryScopeSchema } from "./index";
 import type { AgentMemoryRecord, MemoryScope, MemoryKind } from "./index";
 import { DEFAULT_TTL_DAYS } from "./index";
+import { readVaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
 
 const logger = createServiceLogger("AGENT_MEMORY");
 
 let db: FileDatabase<AgentMemoryRecord> | null = null;
 let cleanupTimer: ReturnType<typeof setInterval> | null = null;
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+const VAULT_MEMORY_TEXT_LIMIT = 9_000;
+const DEFAULT_MAX_PROJECT_FILES = 120;
+const MAX_GOAL_FILES = 60;
+export const THE_VAULT_WORKSPACE_PATH = "/Users/honza/Library/Mobile Documents/iCloud~md~obsidian/Documents/TheVault";
+
+export class MemoryWorkspaceMismatchError extends Error {
+    code = "WRONG_WORKSPACE" as const;
+    expectedWorkspacePath: string;
+    activeWorkspacePath: string | null;
+
+    constructor(params: { expectedWorkspacePath: string; activeWorkspacePath: string | null }) {
+        super("Memory se načítá jen z TheVault. Přepni aktivní workspace na TheVault.");
+        this.name = "MemoryWorkspaceMismatchError";
+        this.expectedWorkspacePath = params.expectedWorkspacePath;
+        this.activeWorkspacePath = params.activeWorkspacePath;
+    }
+}
 
 // --- Helpers ---
 
@@ -110,6 +130,154 @@ function serializeMemoriesForPrompt(memories: AgentMemoryRecord[]): object[] {
 function computeFingerprint(title: string, text: string, kind: string, scope: string): string {
     const normalized = `${title.trim().toLowerCase()}|${text.trim().toLowerCase()}|${kind}|${scope}`;
     return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+}
+
+function toPosixPath(p: string): string {
+    return p.replace(/\\/g, "/");
+}
+
+function normalizeAbsolutePath(p: string): string {
+    const resolved = path.resolve(p);
+    return resolved.endsWith(path.sep) ? resolved.slice(0, -1) : resolved;
+}
+
+function truncateForStorage(text: string, maxChars: number): string {
+    if (text.length <= maxChars) return text;
+    return `${text.slice(0, maxChars - 3)}...`;
+}
+
+async function isDirectory(dirPath: string): Promise<boolean> {
+    try {
+        const s = await stat(dirPath);
+        return s.isDirectory();
+    } catch (error) {
+        const code = typeof error === "object" && error !== null && "code" in error
+            ? String((error as { code?: unknown }).code)
+            : "";
+        if (code === "EACCES" || code === "EPERM") {
+            throw error;
+        }
+        return false;
+    }
+}
+
+async function collectMarkdownFilesByMtime(params: {
+    absoluteDir: string;
+    relativeRoot: string;
+    limit: number;
+}): Promise<Array<{ absolutePath: string; relativePath: string; mtimeMs: number }>> {
+    const { absoluteDir, relativeRoot, limit } = params;
+    if (!(await isDirectory(absoluteDir))) return [];
+
+    const files: Array<{ absolutePath: string; relativePath: string; mtimeMs: number }> = [];
+    const glob = new Bun.Glob("**/*.md");
+
+    for await (const relativeInDir of glob.scan({ cwd: absoluteDir })) {
+        const normalizedInDir = toPosixPath(relativeInDir);
+        const absolutePath = path.join(absoluteDir, normalizedInDir);
+        try {
+            const st = await stat(absolutePath);
+            files.push({
+                absolutePath,
+                relativePath: toPosixPath(path.posix.join(toPosixPath(relativeRoot), normalizedInDir)),
+                mtimeMs: st.mtimeMs,
+            });
+        } catch {
+            // Skip files that fail stat (deleted during scan, permission issue, etc.).
+        }
+    }
+
+    files.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    return files.slice(0, limit);
+}
+
+type VaultMemoryCandidate = {
+    kind: MemoryKind;
+    title: string;
+    text: string;
+    tags: string[];
+    sourceRef: string;
+    importance: number;
+    confidence: number;
+    fingerprint: string;
+};
+
+async function buildVaultMemoryCandidates(params: {
+    notesPath: string;
+    maxProjectFiles: number;
+}): Promise<{ items: VaultMemoryCandidate[]; skipped: number }> {
+    const { notesPath, maxProjectFiles } = params;
+    const config = await readVaultConfig(notesPath);
+    const folderMapping = config?.folderMapping;
+
+    const goalsRoot = folderMapping?.goals ?? "Goals";
+    const projectsRoot = folderMapping?.projects ?? "Projects";
+
+    const goalFiles = await collectMarkdownFilesByMtime({
+        absoluteDir: path.join(notesPath, goalsRoot),
+        relativeRoot: goalsRoot,
+        limit: MAX_GOAL_FILES,
+    });
+    const projectFiles = await collectMarkdownFilesByMtime({
+        absoluteDir: path.join(notesPath, projectsRoot),
+        relativeRoot: projectsRoot,
+        limit: Math.max(1, maxProjectFiles),
+    });
+
+    const allFiles: Array<{ file: { absolutePath: string; relativePath: string }; kind: MemoryKind }> = [
+        ...goalFiles.map((file) => ({ file, kind: "goal" as const })),
+        ...projectFiles.map((file) => ({ file, kind: "project" as const })),
+    ];
+
+    const items: VaultMemoryCandidate[] = [];
+    let skipped = 0;
+
+    for (const entry of allFiles) {
+        try {
+            const raw = await Bun.file(entry.file.absolutePath).text();
+            const trimmed = raw.trim();
+            if (!trimmed) {
+                skipped++;
+                continue;
+            }
+
+            const safeText = truncateForStorage(trimmed, VAULT_MEMORY_TEXT_LIMIT);
+            const baseName = path.basename(entry.file.relativePath, ".md");
+            const titlePrefix = entry.kind === "goal" ? "Goal" : "Project";
+            const title = `${titlePrefix}: ${baseName}`;
+            const sourceRef = `vault:${toPosixPath(entry.file.relativePath)}`;
+
+            const tags = Array.from(
+                new Set([
+                    "vault",
+                    entry.kind === "goal" ? "goals" : "projects",
+                    ...toPosixPath(entry.file.relativePath)
+                        .split("/")
+                        .slice(0, -1)
+                        .map((segment) => segment.toLowerCase())
+                        .filter(Boolean),
+                ])
+            ).slice(0, 20);
+
+            const importance = entry.kind === "goal" ? 0.8 : 0.7;
+            const confidence = 0.95;
+
+            items.push({
+                kind: entry.kind,
+                title,
+                text: safeText,
+                tags,
+                sourceRef,
+                importance,
+                confidence,
+                fingerprint: computeFingerprint(title, safeText, entry.kind, "workspace"),
+            });
+        } catch {
+            skipped++;
+        }
+    }
+
+    return { items, skipped };
 }
 
 function tokenize(text: string): string[] {
@@ -396,6 +564,148 @@ export async function listRecentAgentMemory(input: {
         })
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         .slice(0, limit);
+}
+
+/**
+ * Synchronize memory records from vault files (Goals + Projects) so they are visible
+ * in Memory Studio / sidebar even before chat-generated memories exist.
+ */
+export async function syncAgentMemoryFromVault(input: {
+    agentId: string;
+    maxProjectFiles?: number;
+}): Promise<{
+    processed: number;
+    created: number;
+    updated: number;
+    unchanged: number;
+    archived: number;
+    skipped: number;
+}> {
+    const { agentId, maxProjectFiles = DEFAULT_MAX_PROJECT_FILES } = input;
+    const activeWorkspacePath = getActiveWorkspacePath();
+    const expectedWorkspacePath = THE_VAULT_WORKSPACE_PATH;
+
+    if (!activeWorkspacePath || normalizeAbsolutePath(activeWorkspacePath) !== normalizeAbsolutePath(expectedWorkspacePath)) {
+        throw new MemoryWorkspaceMismatchError({
+            expectedWorkspacePath,
+            activeWorkspacePath,
+        });
+    }
+
+    const notesPath = getNotesPath();
+    const now = new Date().toISOString();
+
+    let items: VaultMemoryCandidate[] = [];
+    let skipped = 0;
+    try {
+        const result = await buildVaultMemoryCandidates({
+            notesPath,
+            maxProjectFiles,
+        });
+        items = result.items;
+        skipped = result.skipped;
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+            `Nepodařilo se načíst TheVault z '${notesPath}'. Zkontroluj přístupová oprávnění a existenci Goals/Projects. Detail: ${message}`
+        );
+    }
+
+    const all = await loadAllNormalized();
+    const existingVault = all.filter(
+        (r) =>
+            r.agentId === agentId &&
+            r.sourceType === "system" &&
+            typeof r.sourceRef === "string" &&
+            r.sourceRef.startsWith("vault:")
+    );
+
+    const keyFor = (kind: MemoryKind, sourceRef: string) => `${kind}|${sourceRef}`;
+    const existingByKey = new Map(existingVault.map((record) => [keyFor(record.kind, record.sourceRef || ""), record]));
+    const candidateKeys = new Set(items.map((item) => keyFor(item.kind, item.sourceRef)));
+
+    let created = 0;
+    let updated = 0;
+    let unchanged = 0;
+    let archived = 0;
+
+    for (const item of items) {
+        const key = keyFor(item.kind, item.sourceRef);
+        const existing = existingByKey.get(key);
+
+        if (existing) {
+            const sameContent =
+                existing.fingerprint === item.fingerprint &&
+                existing.title === item.title &&
+                existing.text === item.text &&
+                !existing.archived;
+
+            if (sameContent) {
+                unchanged++;
+                continue;
+            }
+
+            await getDb().update(existing.id, {
+                scope: "workspace",
+                kind: item.kind,
+                title: item.title,
+                text: item.text,
+                tags: item.tags,
+                importance: item.importance,
+                confidence: item.confidence,
+                fingerprint: item.fingerprint,
+                sourceType: "system",
+                sourceRef: item.sourceRef,
+                archived: false,
+                updatedAt: now,
+                lastAccessedAt: now,
+            } as Partial<AgentMemoryRecord>);
+            updated++;
+            continue;
+        }
+
+        const id = `mem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const record: AgentMemoryRecord = {
+            id,
+            agentId,
+            scope: "workspace",
+            kind: item.kind,
+            title: item.title,
+            text: item.text,
+            tags: item.tags,
+            importance: item.importance,
+            confidence: item.confidence,
+            fingerprint: item.fingerprint,
+            sourceType: "system",
+            sourceRef: item.sourceRef,
+            createdAt: now,
+            updatedAt: now,
+            lastAccessedAt: now,
+        };
+        await getDb().create(record);
+        created++;
+    }
+
+    for (const record of existingVault) {
+        const key = keyFor(record.kind, record.sourceRef || "");
+        if (candidateKeys.has(key)) continue;
+        if (record.archived) continue;
+        await getDb().update(record.id, {
+            archived: true,
+            updatedAt: now,
+            lastAccessedAt: now,
+        } as Partial<AgentMemoryRecord>);
+        archived++;
+    }
+
+    return {
+        processed: items.length,
+        created,
+        updated,
+        unchanged,
+        archived,
+        skipped,
+    };
 }
 
 // --- Management API (Memory Studio) ---

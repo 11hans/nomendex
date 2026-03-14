@@ -8,6 +8,8 @@ import {
     getMemoryMarkdown,
     createMemoryTemplate,
     saveMemoryFromMarkdown,
+    syncAgentMemoryFromVault,
+    MemoryWorkspaceMismatchError,
 } from "@/features/agent-memory/fx";
 import { MemoryScopeSchema, MemoryKindSchema } from "@/features/agent-memory/index";
 
@@ -100,6 +102,11 @@ const ManageSaveMarkdownInputSchema = z.object({
 const ManageDeleteInputSchema = z.object({
     agentId: z.string(),
     memoryId: z.string(),
+});
+
+const ManageSyncVaultInputSchema = z.object({
+    agentId: z.string(),
+    maxProjectFiles: z.number().int().min(1).max(500).optional(),
 });
 
 export const agentMemoryRoutes = {
@@ -252,6 +259,34 @@ export const agentMemoryRoutes = {
                 const result = await deleteAgentMemory(body);
                 return Response.json({ deleted: result });
             } catch (error) {
+                const status = errorStatus(error);
+                return Response.json(
+                    { error: error instanceof Error ? error.message : String(error) },
+                    { status }
+                );
+            }
+        },
+    },
+
+    "/api/agent-memory/manage/sync-vault": {
+        async POST(req: Request) {
+            try {
+                const body = ManageSyncVaultInputSchema.parse(await req.json());
+                validateAgentId(body.agentId);
+                const result = await syncAgentMemoryFromVault(body);
+                return Response.json(result);
+            } catch (error) {
+                if (error instanceof MemoryWorkspaceMismatchError) {
+                    return Response.json(
+                        {
+                            code: error.code,
+                            expectedWorkspacePath: error.expectedWorkspacePath,
+                            activeWorkspacePath: error.activeWorkspacePath,
+                            error: error.message,
+                        },
+                        { status: 409 }
+                    );
+                }
                 const status = errorStatus(error);
                 return Response.json(
                     { error: error instanceof Error ? error.message : String(error) },

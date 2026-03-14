@@ -42,6 +42,16 @@ export const agentMemoryAPI = {
 
     deleteMemory: (args: { memoryId: string }) =>
         fetchAPI<{ deleted: boolean }>("delete", args),
+
+    syncVaultMemories: (args: { maxProjectFiles?: number } = {}) =>
+        fetchAPI<{
+            processed: number;
+            created: number;
+            updated: number;
+            unchanged: number;
+            archived: number;
+            skipped: number;
+        }>("sync-vault", args),
 };
 
 export function useAgentMemoryAPI() {

@@ -31,6 +31,7 @@ import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
 import type { AgentMemoryRecord, MemoryKind } from "@/features/agent-memory";
 import { notesPluginSerial } from "@/features/notes";
 
+const THE_VAULT_WORKSPACE_PATH = "/Users/honza/Library/Mobile Documents/iCloud~md~obsidian/Documents/TheVault";
 const ALL_KINDS: MemoryKind[] = ["preference", "goal", "project", "decision", "context", "reference"];
 const KIND_LABELS: Record<MemoryKind, string> = {
     preference: "Preference",
@@ -74,6 +75,10 @@ function snippet(text: string, maxLength = 120): string {
     return `${normalized.slice(0, maxLength - 1)}...`;
 }
 
+function normalizeWorkspacePath(p: string): string {
+    return p.replace(/\/+$/, "");
+}
+
 function MemoryJournalTabs({ styles }: { styles: Theme["styles"] }) {
     return (
         <TabsList
@@ -115,6 +120,8 @@ function MemoryTab({ tabId }: { tabId: string }) {
     const [kindFilter, setKindFilter] = useState<string>("all");
     const [listLoading, setListLoading] = useState(true);
     const [listError, setListError] = useState<string | null>(null);
+    const [showWorkspaceManagerCta, setShowWorkspaceManagerCta] = useState(false);
+    const [isTheVaultWorkspace, setIsTheVaultWorkspace] = useState<boolean>(false);
 
     // Editor state
     const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -128,6 +135,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
 
     const searchInputRef = useRef<HTMLInputElement>(null);
     const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const didInitialSyncRef = useRef(false);
 
     const isDirty = editorContent !== originalContent;
     const selectedMemory = selectedId ? memories.find((m) => m.id === selectedId) ?? null : null;
@@ -151,13 +159,79 @@ function MemoryTab({ tabId }: { tabId: string }) {
         }
     }, [api]);
 
-    // Initial load
+    const openWorkspaceManager = useCallback(() => {
+        window.dispatchEvent(new CustomEvent("workspace:openManager"));
+    }, []);
+
+    const verifyTheVaultWorkspace = useCallback(async (): Promise<boolean> => {
+        const response = await fetch("/api/workspaces/active");
+        if (!response.ok) {
+            throw new Error(`Failed to resolve active workspace (${response.status})`);
+        }
+
+        const payload = await response.json() as {
+            success?: boolean;
+            data?: { path?: string | null } | null;
+            message?: string;
+        };
+
+        if (!payload?.success) {
+            throw new Error(payload?.message || "Failed to resolve active workspace");
+        }
+
+        const activeWorkspacePath = payload.data?.path ?? null;
+        const isTarget =
+            typeof activeWorkspacePath === "string"
+            && normalizeWorkspacePath(activeWorkspacePath) === normalizeWorkspacePath(THE_VAULT_WORKSPACE_PATH);
+
+        setIsTheVaultWorkspace(isTarget);
+        setShowWorkspaceManagerCta(!isTarget);
+
+        if (!isTarget) {
+            const activeLabel = activeWorkspacePath ?? "není nastaven";
+            setListError(
+                `Memory se načítá jen z TheVault (${THE_VAULT_WORKSPACE_PATH}). Aktuální workspace: ${activeLabel}.`
+            );
+            setMemories([]);
+            setTotal(0);
+            setSelectedId(null);
+            setEditorContent("");
+            setOriginalContent("");
+            setIsNew(false);
+        }
+
+        return isTarget;
+    }, []);
+
+    // Initial load: sync vault-derived memories first, then load list.
     useEffect(() => {
-        loadMemories();
-    }, [loadMemories]);
+        if (didInitialSyncRef.current) return;
+        didInitialSyncRef.current = true;
+
+        void (async () => {
+            setListLoading(true);
+            setListError(null);
+            try {
+                const isTargetWorkspace = await verifyTheVaultWorkspace();
+                if (!isTargetWorkspace) return;
+                await api.syncVaultMemories();
+                await loadMemories();
+            } catch (err) {
+                setListError(err instanceof Error ? err.message : "Failed to load memories");
+                setMemories([]);
+                setTotal(0);
+            } finally {
+                setListLoading(false);
+            }
+        })();
+    }, [api, loadMemories, verifyTheVaultWorkspace]);
 
     // Search with debounce
     useEffect(() => {
+        if (!isTheVaultWorkspace) {
+            if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+            return;
+        }
         if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
         searchDebounceRef.current = setTimeout(() => {
             const kinds = kindFilter !== "all" ? [kindFilter as MemoryKind] : undefined;
@@ -166,7 +240,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
         return () => {
             if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
         };
-    }, [searchQuery, kindFilter, loadMemories]);
+    }, [searchQuery, kindFilter, loadMemories, isTheVaultWorkspace]);
 
     // Auto-focus search when tab active
     useEffect(() => {
@@ -310,6 +384,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                     size="sm"
                                     onClick={handleNew}
                                     className="h-7 rounded-md px-2 text-[11px] font-medium"
+                                    disabled={!isTheVaultWorkspace}
                                 >
                                     <Plus className="size-3 mr-1" />
                                     new
@@ -333,6 +408,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="h-8 pl-8 text-xs bg-transparent"
+                                disabled={!isTheVaultWorkspace}
                                 style={{
                                     borderColor: styles.borderDefault,
                                     color: styles.contentPrimary,
@@ -342,7 +418,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
 
                         {/* Kind filter */}
                         <div className="mt-1.5 flex items-center gap-1.5">
-                            <Select value={kindFilter} onValueChange={setKindFilter}>
+                            <Select value={kindFilter} onValueChange={setKindFilter} disabled={!isTheVaultWorkspace}>
                                 <SelectTrigger
                                     className="h-7 text-[11px] flex-1"
                                     style={{
@@ -378,8 +454,20 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                 loading...
                             </div>
                         ) : listError ? (
-                            <div className="py-4 text-center text-[10px]" style={{ color: styles.semanticDestructive }}>
-                                {listError}
+                            <div className="py-4 text-center">
+                                <div className="text-[10px]" style={{ color: styles.semanticDestructive }}>
+                                    {listError}
+                                </div>
+                                {showWorkspaceManagerCta && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="mt-2 h-7 px-2 text-[11px]"
+                                        onClick={openWorkspaceManager}
+                                    >
+                                        Open Workspace Manager
+                                    </Button>
+                                )}
                             </div>
                         ) : memories.length === 0 ? (
                             <div className="py-4 text-center text-[10px]" style={{ color: styles.contentTertiary }}>
