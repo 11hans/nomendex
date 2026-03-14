@@ -1,8 +1,9 @@
 import { createHash } from "crypto";
+import { load as parseYaml } from "js-yaml";
 import { FileDatabase } from "@/storage/FileDatabase";
 import { getAgentMemoryPath } from "@/storage/root-path";
 import { createServiceLogger } from "@/lib/logger";
-import { AgentMemoryRecordSchema } from "./index";
+import { AgentMemoryRecordSchema, MemoryKindSchema, MemoryScopeSchema } from "./index";
 import type { AgentMemoryRecord, MemoryScope, MemoryKind } from "./index";
 import { DEFAULT_TTL_DAYS } from "./index";
 
@@ -395,6 +396,261 @@ export async function listRecentAgentMemory(input: {
         })
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         .slice(0, limit);
+}
+
+// --- Management API (Memory Studio) ---
+
+/**
+ * List memories with optional search, kind filter, and pagination.
+ */
+export async function listManagedMemories(input: {
+    agentId: string;
+    search?: string;
+    kinds?: MemoryKind[];
+    limit?: number;
+    offset?: number;
+}): Promise<{ items: AgentMemoryRecord[]; total: number }> {
+    const { agentId, search, kinds, limit = 50, offset = 0 } = input;
+    const all = await loadAllNormalized();
+    const nowIso = new Date().toISOString();
+
+    let filtered = all.filter((r) => {
+        if (r.archived) return false;
+        if (r.expiresAt && r.expiresAt < nowIso) return false;
+        if (r.scope === "agent" && r.agentId !== agentId) return false;
+        return true;
+    });
+
+    // Kind filter
+    if (kinds && kinds.length > 0) {
+        const kindSet = new Set(kinds);
+        filtered = filtered.filter((r) => kindSet.has(r.kind));
+    }
+
+    // Search filter
+    if (search && search.trim()) {
+        const queryTokens = tokenize(search);
+        if (queryTokens.length > 0) {
+            filtered = filtered
+                .map((r) => ({ record: r, score: scoreRecord(r, queryTokens) }))
+                .filter((s) => s.score > 0.05)
+                .sort((a, b) => b.score - a.score)
+                .map((s) => s.record);
+        }
+    } else {
+        // Default sort: updatedAt desc
+        filtered.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    }
+
+    const total = filtered.length;
+    const items = filtered.slice(offset, offset + limit);
+    return { items, total };
+}
+
+/**
+ * Serialize a memory record to an editable markdown document.
+ * Frontmatter contains editable fields; body is the text content.
+ */
+export async function getMemoryMarkdown(input: {
+    agentId: string;
+    memoryId: string;
+}): Promise<{ markdown: string; record: AgentMemoryRecord } | null> {
+    const { agentId, memoryId } = input;
+    const raw = await getDb().findById(memoryId);
+    if (!raw) return null;
+    const record = normalizeRecord(raw as unknown as Record<string, unknown>);
+    if (!record) return null;
+    if (record.scope === "agent" && record.agentId !== agentId) return null;
+
+    const lines: string[] = ["---"];
+    lines.push(`kind: ${record.kind}`);
+    lines.push(`scope: ${record.scope}`);
+    lines.push(`title: ${yamlEscapeString(record.title)}`);
+    lines.push(`tags: [${record.tags.map((t) => `"${t.replace(/"/g, '\\"')}"`).join(", ")}]`);
+    lines.push(`importance: ${record.importance}`);
+    lines.push(`confidence: ${record.confidence}`);
+    if (record.expiresAt) lines.push(`expiresAt: ${record.expiresAt}`);
+    if (record.sourceType) lines.push(`sourceType: ${record.sourceType}`);
+    if (record.sourceRef) lines.push(`sourceRef: ${yamlEscapeString(record.sourceRef)}`);
+    lines.push("---");
+    lines.push("");
+    lines.push(record.text);
+
+    return { markdown: lines.join("\n"), record };
+}
+
+/**
+ * Generate a markdown template for creating a new memory.
+ */
+export function createMemoryTemplate(input: {
+    kind?: MemoryKind;
+}): string {
+    const kind = input.kind || "context";
+    const lines: string[] = ["---"];
+    lines.push(`kind: ${kind}`);
+    lines.push(`scope: workspace`);
+    lines.push(`title: ""`);
+    lines.push(`tags: []`);
+    lines.push(`importance: 0.5`);
+    lines.push(`confidence: 0.8`);
+    lines.push("---");
+    lines.push("");
+    lines.push("");
+    return lines.join("\n");
+}
+
+/**
+ * Parse a markdown document and save as a memory record.
+ * For existing records (memoryId provided), updates the record.
+ * For new records, creates one.
+ */
+export async function saveMemoryFromMarkdown(input: {
+    agentId: string;
+    memoryId?: string;
+    markdown: string;
+}): Promise<{ record: AgentMemoryRecord }> {
+    const { agentId, memoryId, markdown } = input;
+
+    // Parse frontmatter and body
+    const parsed = parseMemoryMarkdown(markdown);
+
+    // Validate parsed fields
+    const kind = MemoryKindSchema.parse(parsed.kind);
+    const scope = MemoryScopeSchema.parse(parsed.scope);
+    const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
+    if (!title || title.length === 0) throw new Error("Title is required");
+    if (title.length > 500) throw new Error("Title must be 500 characters or less");
+    const text = typeof parsed.body === "string" ? parsed.body.trim() : "";
+    if (text.length > 10_000) throw new Error("Text must be 10,000 characters or less");
+    const tags = Array.isArray(parsed.tags) ? parsed.tags.filter((t: unknown): t is string => typeof t === "string").slice(0, 20) : [];
+    const importance = typeof parsed.importance === "number" ? Math.max(0, Math.min(1, parsed.importance)) : 0.5;
+    const confidence = typeof parsed.confidence === "number" ? Math.max(0, Math.min(1, parsed.confidence)) : 0.8;
+    const VALID_SOURCE_TYPES = new Set(["chat", "note", "todo", "manual", "system"]);
+    const sourceType = (typeof parsed.sourceType === "string" && VALID_SOURCE_TYPES.has(parsed.sourceType))
+        ? parsed.sourceType as AgentMemoryRecord["sourceType"]
+        : undefined;
+    const sourceRef = typeof parsed.sourceRef === "string" ? parsed.sourceRef : undefined;
+    const expiresAt = typeof parsed.expiresAt === "string" ? parsed.expiresAt : undefined;
+
+    const now = new Date().toISOString();
+    const fingerprint = computeFingerprint(title, text, kind, scope);
+
+    if (memoryId) {
+        // Update existing
+        const raw = await getDb().findById(memoryId);
+        if (!raw) throw new Error(`Memory ${memoryId} not found`);
+        const existing = normalizeRecord(raw as unknown as Record<string, unknown>);
+        if (!existing) throw new Error(`Memory ${memoryId} is corrupt`);
+        if (existing.scope === "agent" && existing.agentId !== agentId) {
+            throw new Error("Not authorized to edit this memory");
+        }
+
+        const updated = await getDb().update(memoryId, {
+            kind,
+            scope,
+            title,
+            text,
+            tags,
+            importance,
+            confidence,
+            fingerprint,
+            sourceType,
+            sourceRef,
+            expiresAt,
+            updatedAt: now,
+            lastAccessedAt: now,
+        } as Partial<AgentMemoryRecord>);
+
+        logger.info("Updated memory from markdown", { id: memoryId });
+        return { record: updated || existing };
+    } else {
+        // Create new
+        const id = `mem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const effectiveTtl = DEFAULT_TTL_DAYS[kind];
+        const computedExpiresAt = expiresAt || (effectiveTtl
+            ? new Date(Date.now() + effectiveTtl * 24 * 60 * 60 * 1000).toISOString()
+            : undefined);
+
+        const record: AgentMemoryRecord = {
+            id,
+            agentId,
+            scope,
+            kind,
+            title,
+            text,
+            tags,
+            importance,
+            confidence,
+            fingerprint,
+            sourceType,
+            sourceRef,
+            createdAt: now,
+            updatedAt: now,
+            lastAccessedAt: now,
+            expiresAt: computedExpiresAt,
+        };
+
+        await getDb().create(record);
+        logger.info("Created memory from markdown", { id, kind, scope });
+        return { record };
+    }
+}
+
+// --- Markdown parsing helpers ---
+
+function yamlEscapeString(s: string): string {
+    if (/[:\n"'{}[\],&#*?|<>=!%@`]/.test(s) || s.startsWith(" ") || s.endsWith(" ")) {
+        return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    }
+    return s;
+}
+
+function parseMemoryMarkdown(markdown: string): Record<string, unknown> & { body: string } {
+    const fmMatch = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+    if (!fmMatch) {
+        throw new Error("Invalid markdown format: missing frontmatter delimiters (---)");
+    }
+
+    const frontmatterStr = fmMatch[1];
+    const body = fmMatch[2].trim();
+
+    let parsedFrontmatter: unknown;
+    try {
+        parsedFrontmatter = parseYaml(frontmatterStr) ?? {};
+    } catch {
+        throw new Error("Invalid frontmatter YAML");
+    }
+
+    if (!parsedFrontmatter || typeof parsedFrontmatter !== "object" || Array.isArray(parsedFrontmatter)) {
+        throw new Error("Invalid frontmatter YAML: expected key-value object");
+    }
+
+    const fm = parsedFrontmatter as Record<string, unknown>;
+    const result: Record<string, unknown> = { body };
+
+    if (typeof fm.kind === "string") result.kind = fm.kind.trim();
+    if (typeof fm.scope === "string") result.scope = fm.scope.trim();
+    if (typeof fm.title === "string") result.title = fm.title.trim();
+    if (typeof fm.sourceType === "string") result.sourceType = fm.sourceType.trim();
+    if (typeof fm.sourceRef === "string") result.sourceRef = fm.sourceRef.trim();
+    if (typeof fm.expiresAt === "string") result.expiresAt = fm.expiresAt.trim();
+
+    if (Array.isArray(fm.tags)) {
+        result.tags = fm.tags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.trim());
+    }
+
+    const parseNumericField = (value: unknown): number | undefined => {
+        if (typeof value === "number" && Number.isFinite(value)) return value;
+        if (typeof value === "string" && /^-?\d+(\.\d+)?$/.test(value.trim())) return parseFloat(value.trim());
+        return undefined;
+    };
+
+    const importance = parseNumericField(fm.importance);
+    const confidence = parseNumericField(fm.confidence);
+    if (importance !== undefined) result.importance = importance;
+    if (confidence !== undefined) result.confidence = confidence;
+
+    return result as Record<string, unknown> & { body: string };
 }
 
 export async function buildMemoryPromptBlock(input: {

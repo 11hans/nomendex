@@ -4,6 +4,10 @@ import {
     saveAgentMemory,
     deleteAgentMemory,
     listRecentAgentMemory,
+    listManagedMemories,
+    getMemoryMarkdown,
+    createMemoryTemplate,
+    saveMemoryFromMarkdown,
 } from "@/features/agent-memory/fx";
 import { MemoryScopeSchema, MemoryKindSchema } from "@/features/agent-memory/index";
 
@@ -67,6 +71,37 @@ const ListRecentInputSchema = z.object({
     limit: z.number().int().min(1).max(100).optional(),
 });
 
+// --- Management route schemas ---
+
+const ManageListInputSchema = z.object({
+    agentId: z.string(),
+    search: z.string().optional(),
+    kinds: z.array(MemoryKindSchema).optional(),
+    limit: z.number().int().min(1).max(200).optional(),
+    offset: z.number().int().min(0).optional(),
+});
+
+const ManageGetMarkdownInputSchema = z.object({
+    agentId: z.string(),
+    memoryId: z.string(),
+});
+
+const ManageCreateMarkdownInputSchema = z.object({
+    agentId: z.string(),
+    kind: MemoryKindSchema.optional(),
+});
+
+const ManageSaveMarkdownInputSchema = z.object({
+    agentId: z.string(),
+    memoryId: z.string().optional(),
+    markdown: z.string().max(15_000),
+});
+
+const ManageDeleteInputSchema = z.object({
+    agentId: z.string(),
+    memoryId: z.string(),
+});
+
 export const agentMemoryRoutes = {
     "/api/agent-memory/search": {
         async POST(req: Request) {
@@ -126,6 +161,96 @@ export const agentMemoryRoutes = {
                 validateAgentId(body.agentId);
                 const results = await listRecentAgentMemory(body);
                 return Response.json(results);
+            } catch (error) {
+                const status = errorStatus(error);
+                return Response.json(
+                    { error: error instanceof Error ? error.message : String(error) },
+                    { status }
+                );
+            }
+        },
+    },
+
+    // --- Management routes (Memory Studio) ---
+
+    "/api/agent-memory/manage/list": {
+        async POST(req: Request) {
+            try {
+                const body = ManageListInputSchema.parse(await req.json());
+                validateAgentId(body.agentId);
+                const result = await listManagedMemories(body);
+                return Response.json(result);
+            } catch (error) {
+                const status = errorStatus(error);
+                return Response.json(
+                    { error: error instanceof Error ? error.message : String(error) },
+                    { status }
+                );
+            }
+        },
+    },
+
+    "/api/agent-memory/manage/get-markdown": {
+        async POST(req: Request) {
+            try {
+                const body = ManageGetMarkdownInputSchema.parse(await req.json());
+                validateAgentId(body.agentId);
+                const result = await getMemoryMarkdown(body);
+                if (!result) {
+                    return Response.json({ error: "Memory not found" }, { status: 404 });
+                }
+                return Response.json(result);
+            } catch (error) {
+                const status = errorStatus(error);
+                return Response.json(
+                    { error: error instanceof Error ? error.message : String(error) },
+                    { status }
+                );
+            }
+        },
+    },
+
+    "/api/agent-memory/manage/create-markdown": {
+        async POST(req: Request) {
+            try {
+                const body = ManageCreateMarkdownInputSchema.parse(await req.json());
+                validateAgentId(body.agentId);
+                const markdown = createMemoryTemplate({ kind: body.kind });
+                return Response.json({ markdown });
+            } catch (error) {
+                const status = errorStatus(error);
+                return Response.json(
+                    { error: error instanceof Error ? error.message : String(error) },
+                    { status }
+                );
+            }
+        },
+    },
+
+    "/api/agent-memory/manage/save-markdown": {
+        async POST(req: Request) {
+            try {
+                const body = ManageSaveMarkdownInputSchema.parse(await req.json());
+                validateAgentId(body.agentId);
+                const result = await saveMemoryFromMarkdown(body);
+                return Response.json(result);
+            } catch (error) {
+                const status = errorStatus(error);
+                return Response.json(
+                    { error: error instanceof Error ? error.message : String(error) },
+                    { status }
+                );
+            }
+        },
+    },
+
+    "/api/agent-memory/manage/delete": {
+        async POST(req: Request) {
+            try {
+                const body = ManageDeleteInputSchema.parse(await req.json());
+                validateAgentId(body.agentId);
+                const result = await deleteAgentMemory(body);
+                return Response.json({ deleted: result });
             } catch (error) {
                 const status = errorStatus(error);
                 return Response.json(

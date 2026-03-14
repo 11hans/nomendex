@@ -4,7 +4,7 @@ import { FunctionsSchema, FunctionStubsSchema } from "./Functions";
 import type { FunctionStubs, FunctionsFromStubs } from "./Functions";
 import { CommandSchema } from "./Commands";
 
-export const PluginIconSchema = z.enum(["file", "workflow", "bot-message-square", "list-todo", "mic", "semicolon", "image", "hash"]);
+export const PluginIconSchema = z.enum(["file", "workflow", "bot-message-square", "list-todo", "mic", "semicolon", "image", "hash", "brain"]);
 
 export const PluginViewDefinitionSchema = z.object({
     id: z.string(),

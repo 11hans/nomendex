@@ -1,4 +1,4 @@
-import { File, Workflow, BotMessageSquare, ListTodo, Mic, Image, Hash } from "lucide-react";
+import { File, Workflow, BotMessageSquare, ListTodo, Mic, Image, Hash, Brain } from "lucide-react";
 import { SemicolonIcon } from "./SemicolonIcon";
 import { PluginIcon } from "@/types/Plugin";
 
@@ -20,6 +20,8 @@ export function getIcon(icon: PluginIcon) {
             return Image;
         case "hash":
             return Hash;
+        case "brain":
+            return Brain;
         default:
             throw new Error(`Unknown icon: ${icon}`);
     }
