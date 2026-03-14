@@ -11,8 +11,8 @@ import { createServiceLogger } from "@/lib/logger";
 import { secrets } from "@/lib/secrets";
 import { uiRendererServer } from "@/mcp-servers/ui-renderer";
 import { acquireFileLock, getActiveNoteFileNameForPath, releaseFileLockForToolUse } from "@/services/file-locks";
-import { buildBpagentSubagents } from "@/features/pkm-pack/subagents";
-import { buildBpagentSystemPrompt, readVaultConfig } from "@/features/pkm-pack/built-in-bpagent";
+import { buildBpagentSubagents } from "@/features/bpagent-pack/subagents";
+import { buildBpagentSystemPrompt, readVaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
 import { buildMemoryPromptBlock } from "@/features/agent-memory/fx";
 import { buildAgentMemoryMcpServer } from "@/mcp-servers/agent-memory";
 
@@ -643,10 +643,10 @@ export const chatRoutes = {
                 const agentContext = buildAgentContext(targetDir);
 
                 if (agentConfig.id === "bpagent") {
-                    // BPagent: use dedicated PKM system prompt with real notes path + context
+                    // BPagent: use dedicated system prompt with real notes path + context
                     const notesPath = getNotesPath();
                     const vaultConfig = await readVaultConfig(notesPath);
-                    let bpagentPrompt = `${agentContext}\n\n${buildBpagentSystemPrompt(notesPath, vaultConfig)}`;
+                    let bpagentPrompt = `${buildAgentContext(notesPath)}\n\n${buildBpagentSystemPrompt(notesPath, vaultConfig)}`;
 
                     // Inject memory recall into system prompt (non-fatal on error)
                     try {
@@ -673,9 +673,12 @@ export const chatRoutes = {
                         sessionId,
                     });
 
-                    // Inject programmatic PKM subagents
-                    sdkOptions.agents = buildBpagentSubagents();
-                    chatLogger.info("BPagent session: injected PKM subagents + memory", {
+                    // Inject programmatic BPagent subagents
+                    sdkOptions.agents = buildBpagentSubagents({
+                        notesPath,
+                        config: vaultConfig,
+                    });
+                    chatLogger.info("BPagent session: injected subagents + memory", {
                         subagents: Object.keys(sdkOptions.agents),
                     });
                 } else if (agentConfig.systemPrompt) {
