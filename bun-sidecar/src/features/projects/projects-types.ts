@@ -28,6 +28,9 @@ export const ProjectConfigSchema = z.object({
     id: z.string(),                    // "proj-abc123"
     name: z.string(),                  // "Nomendex"
     description: z.string().optional(),
+    color: z.string().optional(),
+    archived: z.boolean().optional(),
+    projectNoteFile: z.string().optional(), // Relative path from notes root (e.g. Projects/Nomendex.md)
     board: BoardConfigSchema.optional(),
     createdAt: z.string(),
     updatedAt: z.string(),
@@ -42,4 +45,3 @@ export const ProjectsFileSchema = z.object({
     projects: z.array(ProjectConfigSchema),
 });
 export type ProjectsFile = z.infer<typeof ProjectsFileSchema>;
-

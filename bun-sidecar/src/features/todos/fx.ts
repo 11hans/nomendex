@@ -285,12 +285,28 @@ async function getProjects() {
         const todos = await getDb().findAll();
         const activeTodos = todos.filter(t => !t.archived);
 
-        // Extract unique projects
+        // Extract unique projects from active todos
         const projectSet = new Set<string>();
         for (const todo of activeTodos) {
-            if (todo.project) {
-                projectSet.add(todo.project);
+            const projectName = todo.project?.trim();
+            if (projectName) {
+                projectSet.add(projectName);
             }
+        }
+
+        // Include projects from projects.json so newly created projects
+        // are visible in pickers even before any todo is assigned to them.
+        try {
+            const { listProjects } = await import("@/features/projects/fx");
+            const configuredProjects = await listProjects({ includeArchived: false });
+            for (const project of configuredProjects) {
+                const projectName = project.name?.trim();
+                if (projectName) {
+                    projectSet.add(projectName);
+                }
+            }
+        } catch (error) {
+            todosLogger.warn("Failed to load projects from projects service, falling back to todo-derived projects", { error });
         }
 
         const projects = Array.from(projectSet).sort();

@@ -21,6 +21,7 @@ export const ProjectConfigSchema = z.object({
     description: z.string().optional(),
     color: z.string().optional(),
     archived: z.boolean().optional(),
+    projectNoteFile: z.string().optional(), // Canonical project note path (relative to notes root)
     board: BoardConfigSchema.optional(), // Custom kanban board configuration
     createdAt: z.string(),
     updatedAt: z.string(),

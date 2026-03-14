@@ -14,7 +14,7 @@ There is an important duality in the system regarding what constitutes a "Projec
 2.  **Project as an Entity (ProjectConfig):**
     *   Enables advanced features (e.g., custom Kanban columns).
     *   Defined in `projects.json` at the workspace root.
-    *   Contains project metadata (name, description, ID) and board configuration.
+    *   Contains project metadata (name, description, ID), canonical project note path, and board configuration.
 
 ---
 
@@ -43,16 +43,17 @@ If a project is defined in `projects.json` and has `board.columns` set, the cust
 
 ## 2. Projects and Notes
 
-Notes are more loosely associated with projects than tasks are.
+Notes are associated with projects in two ways:
 
-*   **Association:** A note belongs to a project if its header (YAML frontmatter) contains the `project` field.
+*   **Canonical project note:** Each project has one lifecycle-managed markdown note (`projectNoteFile`) at `Projects/<ProjectName>.md` (or archived in `Archives/Projects/`).
+*   **Associated notes:** Any other note belongs to a project if its header (YAML frontmatter) contains the `project` field.
     ```yaml
     ---
     project: MyProject
     ---
     ```
 *   **Editing:** The project is assigned directly in the note editor (`ProjectInput` component).
-*   **Display:** In the project detail view (`ProjectDetailView`), all notes containing the matching project name in their frontmatter are automatically loaded.
+*   **Display:** In the project detail view (`ProjectDetailView`), notes containing the matching project name in frontmatter are loaded (including canonical project note).
 
 ## 3. Projects and Todos
 
@@ -104,6 +105,7 @@ interface ProjectConfig {
     description?: string;
     color?: string;
     archived?: boolean;
+    projectNoteFile?: string; // "Projects/Nomendex.md"
     board?: BoardConfig;  // Embedded board configuration
     createdAt: string;
     updatedAt: string;
@@ -134,6 +136,12 @@ Board configuration is part of the Project entity.
 *   **Save Board Config:** `POST /api/projects/board/save` `{ "projectId": "...", "board": BoardConfig }`
 *   **Delete Project:** `POST /api/projects/delete` `{ "projectId": "proj-123" }`
 
+Lifecycle sync is automatic:
+*   Create project -> create canonical `Projects/<ProjectName>.md`
+*   Rename project -> rename canonical note + sync frontmatter
+*   Archive project -> move canonical note to `Archives/Projects/`
+*   Delete project -> canonical note is archived (never hard-deleted)
+
 ### Default Columns for New Boards
 
 When a user creates a custom board, these columns are pre-configured:
@@ -149,7 +157,7 @@ When a user creates a custom board, these columns are pre-configured:
 
 | Entity | Data Storage | Link to Project |
 | :--- | :--- | :--- |
-| **Project Config** | `projects.json` | Definition of the project itself |
+| **Project Config** | `projects.json` | Definition of project, board, and canonical note path |
 | **Todo** | SQLite / JSON files | `project` field (string) |
 | **Note** | Markdown files | `project` frontmatter (string) |
 
