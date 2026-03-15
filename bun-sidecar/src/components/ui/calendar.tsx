@@ -15,6 +15,7 @@ function Calendar({
   showOutsideDays = true,
   captionLayout = "label",
   buttonVariant = "ghost",
+  weekStartsOn = 1,
   formatters,
   components,
   ...props
@@ -32,6 +33,7 @@ function Calendar({
         String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
         className
       )}
+      weekStartsOn={weekStartsOn}
       captionLayout={captionLayout}
       formatters={{
         formatMonthDropdown: (date) =>
