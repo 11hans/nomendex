@@ -390,7 +390,7 @@ class CalendarManager {
 
     // MARK: - Purge Orphaned Events
 
-    /// Removes ALL events from Nomendex calendars.
+    /// Removes ALL events from Nomendex calendars, preserving calendar colors.
     /// Called before a force sync to wipe the slate clean and recreate from scratch.
     private func purgeOrphanedEvents(taskData: [String: Any], webView: WKWebView?, callback: String?) {
         let nomendexCalendars = getNomendexCalendars()
@@ -400,7 +400,13 @@ class CalendarManager {
             return
         }
 
-        // Delete entire Nomendex calendars — this removes all events without needing read access.
+        // Save calendar colors before deletion so we can restore them after recreate
+        var savedColors: [String: CGColor] = [:]
+        for calendar in nomendexCalendars {
+            savedColors[calendar.title] = calendar.cgColor
+        }
+
+        // Delete entire Nomendex calendars — this removes all events cleanly.
         // The calendars will be recreated by upsertEvent -> getOrCreateCalendar.
         for calendar in nomendexCalendars {
             do {
@@ -410,12 +416,29 @@ class CalendarManager {
             }
         }
 
+        // Recreate calendars with their original colors
+        for (title, color) in savedColors {
+            // Extract project name from title (e.g. "Nomendex - MyProject" -> "MyProject")
+            let projectName: String? = title.hasPrefix("\(calendarPrefix) - ")
+                ? String(title.dropFirst("\(calendarPrefix) - ".count))
+                : nil
+
+            if let calendar = getOrCreateCalendar(projectName: projectName) {
+                calendar.cgColor = color
+                do {
+                    try eventStore.saveCalendar(calendar, commit: true)
+                } catch {
+                    log("Failed to restore color for calendar \(title): \(error)")
+                }
+            }
+        }
+
         // Clear caches
         eventIdentifierCache.removeAll()
         knownEventStates.removeAll()
         ignoredTaskIDs.removeAll()
 
-        log("Purged \(nomendexCalendars.count) Nomendex calendars")
+        log("Purged \(nomendexCalendars.count) Nomendex calendars (colors preserved)")
         sendResult(webView: webView, callback: callback, success: true, error: nil)
     }
 
