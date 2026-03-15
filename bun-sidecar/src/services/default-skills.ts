@@ -1167,7 +1167,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 1
+version: 2
 source: nomendex
 ---
 
@@ -1177,7 +1177,7 @@ Creates daily notes and provides structured workflows for morning planning, midd
 
 ## Usage
 
-Invoke with \`/daily\` or ask BPagent to create today's note or help with daily routines.
+Invoke with \`/daily\` or ask Codex to create today's note or help with daily routines.
 
 ### Create Today's Note
 \`\`\`
@@ -1202,8 +1202,8 @@ Or simply ask:
    - Handles date arithmetic (e.g., \`{{date-1}}\` for yesterday)
 
 3. **Automatic Organization**
-   - Places note in \`daily-notes/\` folder
-   - Names file with today's date (M-D-YYYY.md)
+   - Places note in \`Daily Notes/\` folder
+   - Names file with today's date (YYYY-MM-DD.md)
    - Preserves template structure
 
 ### Template Variables
@@ -1211,8 +1211,8 @@ Your daily template can use:
 - \`{{date}}\` - Today's date in default format
 - \`{{date:dddd}}\` - Day name (e.g., Monday)
 - \`{{date:MMMM DD, YYYY}}\` - Formatted date
-- \`{{date-1:M-D-YYYY}}\` - Yesterday's date
-- \`{{date+1:M-D-YYYY}}\` - Tomorrow's date
+- \`{{date-1:YYYY-MM-DD}}\` - Yesterday's date
+- \`{{date+1:YYYY-MM-DD}}\` - Tomorrow's date
 - \`{{time}}\` - Current time
 
 ## Morning Routine (5-10 minutes)
@@ -1220,12 +1220,14 @@ Your daily template can use:
 ### Automated Steps
 1. Create today's daily note (if not exists)
 2. Pull incomplete tasks from yesterday
-3. Read this week's ONE Big Thing from \`Goals/3. Weekly Review.md\`
-4. Surface active project next-actions from \`Projects/*.md\`
-5. Review weekly goals for today's priority
+3. Fetch today's todos from "Today" column via \`/todos\` skill
+4. Read this week's ONE Big Thing from \`Goals/3. Weekly Review.md\`
+5. Surface active project next-actions from \`Projects/*.md\`
+6. Review weekly goals for today's priority
 
 ### Cascade Context Surfacing
 Before interactive prompts, automatically surface:
+- **Today's todos** from "Today" column via \`/todos\` skill
 - **ONE Big Thing** from most recent weekly review
 - **Active project next-actions** from \`Projects/*.md\` (read "Next Actions" section)
 - **Monthly priority** from \`Goals/2. Monthly Goals.md\`
@@ -1233,6 +1235,11 @@ Before interactive prompts, automatically surface:
 Display as a brief context block at the top of the morning routine:
 \`\`\`markdown
 ### Today's Context
+- **Today's Todos (from Nomendex):**
+  - [ ] [ProjectA] Start audit (est: 2h)
+  - [ ] [Health] 30min run (est: 30min)
+  - [ ] [Work] Fix bug (est: 1h)
+  - **Total estimated:** 3.5h
 - **Week's ONE Big Thing:** [from weekly review]
 - **Active Projects:** [project names with first next-action each]
 - **Monthly Focus:** [from monthly goals]
@@ -1281,17 +1288,26 @@ When adding tasks to the daily note, recommend linking to goals/projects:
 
 ### Capture
 1. Mark completed tasks with [x]
-2. Add notes and learnings
-3. Log energy levels (1-10)
-4. Record gratitude items
+2. Review and update todos via \`/todos\` skill:
+   - Mark completed todos as done
+   - Move uncompleted "Today" todos (carry over to tomorrow or reschedule)
+   - Calculate today's completion rate
+3. Add notes and learnings
+4. Log energy levels (1-10)
+5. Record gratitude items
 
 ### Goal & Project Attention Summary
 Automatically generate an end-of-day summary showing which goals and projects received attention:
 \`\`\`markdown
 ### Today's Cascade Impact
+- **Todos completed:** 5/8 (62.5%)
+  - [Nomendex] 2/3 todos
+  - [Health] 1/1 todo
+  - [Work] 2/4 todos
 - **Goals touched:** [[Goal 1]] (2 tasks), [[Goal 3]] (1 task)
 - **Projects advanced:** [[ProjectA]] (3 tasks), [[ProjectB]] (1 task)
 - **Unlinked tasks:** 2 (consider linking to a goal or project)
+- **Insight:** Overcommitted on Work todos — reduce tomorrow
 \`\`\`
 
 ### Reflect
@@ -1363,20 +1379,20 @@ Standard daily note template:
 ## Configuration
 
 Customize paths to match your vault:
-- Daily notes folder: \`daily-notes/\`
+- Daily notes folder: \`Daily Notes/\`
 - Template location: \`Templates/Daily Template.md\`
-- Date format: \`M-D-YYYY\`
+- Date format: \`YYYY-MM-DD\`
 
 ### Different Date Formats
-- \`M-D-YYYY\` - Nomendex default format (recommended)
+- \`YYYY-MM-DD\` - Standard ISO format (recommended)
 - \`MM-DD-YYYY\` - US format
 - \`DD-MM-YYYY\` - European format
-- \`M-D-YYYY-ddd\` - Include day abbreviation
+- \`YYYY-MM-DD-ddd\` - Include day abbreviation
 
 ### Folder Organization by Month
 Organize daily notes by month/year:
 \`\`\`
-daily-notes/2026/03/3-14-2026.md
+Daily Notes/2024/01/2024-01-15.md
 \`\`\`
 
 ## Task-Based Progress Tracking
@@ -1392,6 +1408,11 @@ TaskCreate:
   subject: "Create daily note"
   description: "Create or open today's daily note from template"
   activeForm: "Creating daily note..."
+
+TaskCreate:
+  subject: "Fetch today's todos"
+  description: "Load todos from 'Today' column via /todos skill"
+  activeForm: "Fetching today's todos from Nomendex..."
 
 TaskCreate:
   subject: "Pull incomplete tasks"
@@ -1427,6 +1448,16 @@ TaskCreate:
   activeForm: "Updating task statuses..."
 
 TaskCreate:
+  subject: "Update todos"
+  description: "Mark completed todos, move uncompleted from Today column"
+  activeForm: "Updating todos via /todos skill..."
+
+TaskCreate:
+  subject: "Calculate completion rate"
+  description: "Calculate todo and task completion for the day"
+  activeForm: "Calculating completion rate..."
+
+TaskCreate:
   subject: "Generate reflection prompts"
   description: "Prompt for wins, challenges, learnings, gratitude"
   activeForm: "Generating reflection prompts..."
@@ -1439,11 +1470,12 @@ TaskCreate:
 
 Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
 
-Task tools provide visibility into what's happening during longer operations. Tasks are session-scoped and don't persist between chat sessions—your actual work items remain in your daily note markdown checkboxes.
+Task tools provide visibility into what's happening during longer operations. Tasks are session-scoped and don't persist between Codex sessions—your actual work items remain in your daily note markdown checkboxes.
 
 ## Integration
 
 Works with:
+- \`/todos\` - Fetch today's todos, update completion status
 - \`/push\` - Commit end-of-day changes
 - \`/weekly\` - Weekly planning uses daily notes
 - \`/monthly\` - Monthly goals inform daily focus
@@ -1460,7 +1492,7 @@ Works with:
       "SKILL.md": `---
 name: goal-tracking
 description: Track progress toward 3-year, yearly, monthly, and weekly goals. Calculate completion percentages, surface stalled goals, connect daily tasks to objectives. Use for goal reviews and progress tracking.
-version: 2
+version: 3
 source: nomendex
 ---
 
@@ -1475,13 +1507,13 @@ Goals/0. Three Year Goals.md   <- Vision (Life areas)
     ↓
 Goals/1. Yearly Goals.md       <- Annual objectives
     ↓
-Projects/*.md         <- Active projects (bridge layer)
+Projects/*/AGENTS.md           <- Active projects (bridge layer)
     ↓
 Goals/2. Monthly Goals.md      <- Current month focus
     ↓
 Goals/3. Weekly Review.md      <- Weekly planning
     ↓
-daily-notes/*.md               <- Daily tasks and actions
+Daily Notes/*.md               <- Daily tasks and actions
 \`\`\`
 
 ## Goal File Formats
@@ -1563,15 +1595,23 @@ When adding tasks to daily notes:
 
 ### Project Integration
 When calculating goal progress, include project data:
-1. Scan \`Projects/*.md\` for all active projects
+1. Read all project files \`Projects/*.md\` for active projects
 2. Match projects to goals via their "Goal Link" / "Supports" field
-3. Include project completion % in goal progress calculations
-4. Surface which projects support each goal
+3. Fetch todos for each project via \`/todos\` skill
+4. Include project completion % and todo completion rate in goal progress calculations
+5. Surface which projects support each goal
 
 ### Orphan Goal Detection
 Flag goals that have no active project supporting them:
 - A goal with 0 linked projects may need a project created (\`/project new\`)
 - A goal with only completed/archived projects may need a new initiative
+
+### Todo-Based Progress Signals
+Use todos to detect goal momentum:
+1. Goals with high todo completion (60%+) = strong momentum
+2. Goals with many blocked todos = need attention
+3. Goals with no todos at all = missing concrete actions
+4. Goals with overdue todos = falling behind
 
 ## Progress Report Format
 
@@ -1581,28 +1621,34 @@ Flag goals that have no active project supporting them:
 ### Overall: XX%
 
 ### By Goal
-| Goal | Progress | Projects | Last Activity | Status |
-|------|----------|----------|---------------|--------|
-| Goal 1 | 75% | [[ProjectA]] (80%), [[ProjectB]] (60%) | 2 days ago | On Track |
-| Goal 2 | 30% | (none) | 14 days ago | Stalled |
+| Goal | Progress | Projects | Todos | Last Activity | Status |
+|------|----------|----------|-------|---------------|--------|
+| Goal 1 | 75% | [[ProjectA]] (80%), [[ProjectB]] (60%) | 25/40 (62%) | 2 days ago | On Track |
+| Goal 2 | 30% | (none) | 0/0 (0%) | 14 days ago | Stalled |
 
 ### Project Status
-| Project | Goal | Progress | Phase |
-|---------|------|----------|-------|
-| [[ProjectA]] | Goal 1 | 80% | Active |
-| [[ProjectB]] | Goal 1 | 60% | Active |
+| Project | Goal | Progress | Todos | Phase |
+|---------|------|----------|-------|-------|
+| [[ProjectA]] | Goal 1 | 80% | 15/20 (75%) | Active |
+| [[ProjectB]] | Goal 1 | 60% | 10/20 (50%) | Active |
 
 ### Orphan Goals (no active project)
 - Goal 2 — Consider \`/project new\` to create a supporting project
 
+### Goals Needing Attention
+- **Goal 2:** No todos = missing concrete actions
+- **ProjectB:** 5 blocked todos = blockers need resolution
+
 ### This Week's Contributions
 - [Task] -> [[Goal 1]] via [[ProjectA]]
+- [Completed todo] -> [[Goal 1]] via [[ProjectA]]
 - [Task] -> [[Goal 2]]
 
 ### Recommended Focus
 1. [Stalled goal needs attention]
 2. [Nearly complete goal - finish it]
 3. [Orphan goal needs a project]
+4. [Goals with blocked todos need unblocking]
 \`\`\`
 
 ## Task-Based Progress Tracking
@@ -1635,13 +1681,18 @@ TaskCreate:
   activeForm: "Scanning recent daily notes..."
 
 TaskCreate:
+  subject: "Fetch todos by project"
+  description: "Load todos for all projects via /todos skill"
+  activeForm: "Fetching todos for goal-project mapping..."
+
+TaskCreate:
   subject: "Calculate completion percentages"
-  description: "Compute progress for each goal based on checkboxes and metrics"
+  description: "Compute progress for each goal based on checkboxes, metrics, and todos"
   activeForm: "Calculating completion percentages..."
 
 TaskCreate:
   subject: "Identify stalled goals"
-  description: "Flag goals with no progress in 14+ days"
+  description: "Flag goals with no progress in 14+ days or missing todos"
   activeForm: "Identifying stalled goals..."
 \`\`\`
 
@@ -1660,10 +1711,11 @@ Task tools are session-scoped and don't persist—your actual goal progress is t
 
 ## Integration Points
 
-- \`/weekly\` review: Full progress assessment with project rollup
+- \`/todos\`: Fetch todos by project for goal progress calculation
+- \`/weekly\` review: Full progress assessment with project and todo rollup
 - \`/daily\` planning: Surface relevant goals and project next-actions
 - \`/monthly\` review: Adjust goals as needed, check quarterly milestones
-- \`/project status\`: Project completion feeds goal calculations
+- \`/project status\`: Project completion and todo rates feed goal calculations
 - Quarterly review: Cascade from 3-year vision
 `,
     },
@@ -1674,7 +1726,7 @@ Task tools are session-scoped and don't persist—your actual goal progress is t
       "SKILL.md": `---
 name: monthly
 description: Monthly review and planning. Roll up weekly reviews, check quarterly milestones, set next month's focus. Use at end of month or start of new month.
-version: 1
+version: 2
 source: nomendex
 ---
 
@@ -1706,12 +1758,15 @@ Or ask:
 
 1. Read all weekly reviews from the past month (\`Goals/3. Weekly Review.md\` or weekly review notes)
 2. Read daily notes from past 30 days (scan for patterns)
-3. Read current \`Goals/2. Monthly Goals.md\` for this month's targets
-4. Scan \`Projects/*.md\` for project status updates
+3. Fetch todos data for past month via \`/todos\` skill
+4. Read current \`Goals/2. Monthly Goals.md\` for this month's targets
+5. Read project files \`Projects/*.md\` for project status updates
 
 **Extract:**
 - Wins from each week
 - Challenges and recurring blockers
+- Todo completion rates by project
+- Monthly todo patterns (total completed, overdue, blocked)
 - Goal progress percentages
 - Project milestones completed
 - Habits tracked (completion rates)
@@ -1764,6 +1819,19 @@ Or ask:
 - **Energy:** [When were you most productive?]
 - **Focus:** [What got the most attention?]
 - **Gaps:** [What was consistently avoided?]
+
+### Todo Metrics
+| Project | Completed | Total | Rate | Trend |
+|---------|-----------|-------|------|-------|
+| Nomendex | 45 | 60 | 75% | ↗️ +10% |
+| Health | 8 | 24 | 33% | ↘️ -5% |
+| Work | 30 | 40 | 75% | → stable |
+
+**Insights:**
+- Total todos completed: 83
+- Average completion rate: 61%
+- Best performing: Nomendex (improving scoping)
+- Needs attention: Health (overcommitting, break into smaller todos)
 
 ### Goal Progress
 | Goal | Start of Month | End of Month | Delta |
@@ -1825,8 +1893,8 @@ Always read these files:
 - \`Goals/1. Yearly Goals.md\` - Quarterly milestones and annual objectives
 - \`Goals/2. Monthly Goals.md\` - Current month's plan (to review) and next month's (to write)
 - \`Goals/3. Weekly Review.md\` - Weekly reviews from past month
-- \`daily-notes/*.md\` - Past 30 days of notes
-- \`Projects/*.md\` - All active project statuses
+- \`Daily Notes/*.md\` - Past 30 days of notes
+- \`Projects/*.md\` - All active project files with statuses
 
 ## Task-Based Progress Tracking
 
@@ -1834,17 +1902,22 @@ Always read these files:
 \`\`\`
 TaskCreate:
   subject: "Phase 1: Collect monthly data"
-  description: "Read weekly reviews, daily notes, and project files from past month"
+  description: "Read weekly reviews, daily notes, todos data, and project files from past month"
   activeForm: "Collecting monthly data..."
 
 TaskCreate:
+  subject: "Fetch monthly todos"
+  description: "Load all todos from past month via /todos skill for completion analysis"
+  activeForm: "Fetching monthly todo metrics..."
+
+TaskCreate:
   subject: "Phase 2: Reflect on month"
-  description: "Analyze patterns, check quarterly milestones, assess goal alignment"
+  description: "Analyze patterns, check quarterly milestones, assess goal alignment, review todo trends"
   activeForm: "Reflecting on monthly patterns..."
 
 TaskCreate:
   subject: "Phase 3: Plan next month"
-  description: "Set focus, define priorities, establish weekly milestones"
+  description: "Set focus, define priorities, establish weekly milestones, plan todo capacity"
   activeForm: "Planning next month..."
 
 TaskCreate:
@@ -1865,6 +1938,7 @@ Mark each task \`in_progress\` when starting, \`completed\` when done.
 ## Integration
 
 Works with:
+- \`/todos\` - Fetch monthly todo metrics for trend analysis
 - \`/weekly\` - Monthly review rolls up weekly reviews
 - \`/goal-tracking\` - Quarterly milestone progress
 - \`/project status\` - Project progress feeds monthly assessment
@@ -1982,7 +2056,7 @@ When processing templates, replace:
       "SKILL.md": `---
 name: project
 description: Create, track, and archive projects linked to goals using Nomendex Projects API and canonical project markdown notes. Use for project lifecycle management, status dashboards, and project note synchronization.
-version: 2
+version: 3
 source: nomendex
 ---
 
@@ -2029,9 +2103,18 @@ Supports: [[1. Yearly Goals#<Goal Name>]]
 ## Status
 - **Phase:** Planning | Active | Review | Complete
 - **Progress:** 0%
+- **Todo Completion:** 0/0 (0%)
 
 ## Milestones
 - [ ] <Milestone 1>
+
+## Active Todos
+(Fetched from Nomendex via /todos skill)
+- [ ] <Todo from Today column>
+- [ ] <Todo from This Week>
+
+## Blocked Todos
+- [ ] <Blocked todo> (blocked by: <reason>)
 
 ## Next Actions
 - [ ] <First concrete step>
@@ -2046,29 +2129,32 @@ Supports: [[1. Yearly Goals#<Goal Name>]]
 
 ### \`/project status\`
 
-Builds a dashboard from Projects API plus canonical project notes.
+Builds a dashboard from Projects API plus canonical project notes plus todos.
 
 **Steps:**
 1. Call \`/api/projects/list\` (include archived if user asks)
 2. For each project, read \`projectNoteFile\` from project config
 3. Load note content via \`/api/notes/get\`
 4. Extract phase/progress/goal/next-action from note sections
-5. Display dashboard table
+5. Fetch todos for each project via \`/todos\` skill
+6. Calculate todo completion rate per project
+7. Display dashboard table
 
 **Output Format:**
 \`\`\`markdown
 ## Project Dashboard
 
-| Project | Phase | Progress | Goal | Next Action |
-|---------|-------|----------|------|-------------|
-| ProjectA | Active | 60% | [[Goal 1]] | Review PR |
-| ProjectB | Planning | 10% | [[Goal 3]] | Draft spec |
+| Project | Phase | Progress | Todos | Goal | Next Action |
+|---------|-------|----------|-------|------|-------------|
+| ProjectA | Active | 60% | 12/20 (60%) | [[Goal 1]] | Review PR |
+| ProjectB | Planning | 10% | 0/5 (0%) | [[Goal 3]] | Draft spec |
 
 ### Summary
 - Active projects: N
 - Total progress (weighted): X%
 - Projects without goal link: [list]
 - Stalled projects (no update in 14+ days): [list]
+- Projects with blocked todos: [list]
 \`\`\`
 
 ### \`/project archive <name>\`
@@ -2141,8 +2227,13 @@ TaskCreate:
   activeForm: "Reading project notes..."
 
 TaskCreate:
+  subject: "Fetch project todos"
+  description: "Load todos for each project via /todos skill"
+  activeForm: "Fetching project todos..."
+
+TaskCreate:
   subject: "Generate dashboard"
-  description: "Compile status dashboard from API + project notes"
+  description: "Compile status dashboard from API + project notes + todos"
   activeForm: "Generating project dashboard..."
 \`\`\`
 
@@ -2151,6 +2242,7 @@ Mark each task \`in_progress\` when starting, \`completed\` when done.
 ## Integration
 
 Works with:
+- \`/todos\` - Fetch and display project todos, calculate completion rates
 - \`/daily\` - Surface project next-actions in morning routine
 - \`/weekly\` - Project status in weekly review
 - \`/goal-tracking\` - Project progress feeds goal calculations
@@ -2403,7 +2495,7 @@ If no matches are found:
       "SKILL.md": `---
 name: weekly
 description: Facilitate weekly review process with reflection, goal alignment, and planning. Create review notes, analyze past week, plan next week. Use on Sundays or whenever doing weekly planning.
-version: 1
+version: 2
 source: nomendex
 ---
 
@@ -2413,7 +2505,7 @@ Facilitates your weekly review process by creating a review note and guiding ref
 
 ## Usage
 
-Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
+Invoke with \`/weekly\` or ask Codex to help with your weekly review.
 
 \`\`\`
 /weekly
@@ -2428,6 +2520,7 @@ Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
 
 2. **Guides Review Process**
    - Reviews last week's accomplishments
+   - Analyzes todos completion and patterns via \`/todos\` skill
    - Identifies incomplete tasks
    - Plans upcoming week
    - Aligns with monthly goals
@@ -2435,24 +2528,30 @@ Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
 3. **Automates Housekeeping**
    - Archives old daily notes
    - Updates project statuses
-   - Cleans up completed tasks
+   - Cleans up completed and stale todos
 
 ## Review Process Steps
 
 ### Step 1: Reflection (10 minutes)
 - Review daily notes from past week
+- Fetch all todos via \`/todos\` skill (project, status, dueDate, priority)
+- Calculate todo completion rate by project
 - Identify wins and challenges
 - Capture lessons learned
 
 ### Step 2: Goal Alignment + Project Rollup (10 minutes)
 - Check monthly goal progress
+- Map completed todos to monthly goals
+- Identify overdue and blocked todos
 - Adjust weekly priorities
 - Ensure alignment with yearly goals
-- Auto-scan \`Projects/*.md\` for current status
+- Read project files \`Projects/*.md\` for current status
 - Compile project progress table for the review note
 
 ### Step 3: Planning (10 minutes)
 - Set ONE big thing for the week
+- Review and triage uncompleted todos (archive/delete/carry over)
+- Plan todo distribution for next week by day
 - Include project next-actions when planning week
 - Schedule important tasks
 - Block time for deep work
@@ -2479,20 +2578,24 @@ The skill guides you through:
 ## Weekly Review Checklist
 
 - [ ] Review all daily notes
+- [ ] Fetch and analyze todos via \`/todos\` skill
+- [ ] Calculate todo completion rates by project
+- [ ] Identify overdue and blocked todos
 - [ ] Process inbox items
 - [ ] Update project statuses
 - [ ] Check upcoming calendar
 - [ ] Review monthly goals
 - [ ] Plan next week's priorities
+- [ ] Plan todo distribution for next week
 - [ ] Block time for important work
 - [ ] Clean digital workspace
-- [ ] Archive completed items
+- [ ] Archive completed todos and items
 - [ ] Commit changes to Git
 
 ## Weekly Review Note Format
 
 \`\`\`markdown
-# Weekly Review: M-D-YYYY
+# Weekly Review: YYYY-MM-DD
 
 ## Last Week's Wins
 1.
@@ -2503,6 +2606,25 @@ The skill guides you through:
 - Challenge:
 - Lesson:
 
+## Todo Analysis
+### Completion by Project
+| Project | Completed | Total | Rate |
+|---------|-----------|-------|------|
+| [[ProjectA]] | 12 | 20 | 60% |
+| [[ProjectB]] | 0 | 5 | 0% |
+
+### Overdue Todos
+- [ ] [ProjectA] Fix critical bug (due: 3/10)
+- [ ] [ProjectB] Book appointment (due: 3/12)
+
+### Blocked Todos
+- [ ] [ProjectA] Deploy to prod (blocked by: payment gateway)
+
+### Today Column Patterns
+- Average "Today" todos: 8/day
+- Completion rate: 5/8 (62.5%)
+- **Insight:** Overcommitting by ~3 todos/day
+
 ## Goal Progress
 ### Monthly Goals
 - [ ] Goal 1 (XX%)
@@ -2510,6 +2632,7 @@ The skill guides you through:
 
 ### This Week's Contribution
 - [Task] -> [[Goal]]
+- [Completed todos mapped to goals]
 
 ## Project Progress
 | Project | Phase | Progress | Next Action |
@@ -2527,6 +2650,21 @@ The skill guides you through:
 - [ ]
 - [ ]
 
+### Todo Plan
+**Monday:**
+- [ ] [ProjectA] Start audit
+- [ ] [ProjectB] Morning routine
+
+**Tuesday:**
+- [ ] [ProjectA] Review UI bugs
+- [ ] [ProjectB] 30min run
+
+**Wednesday:**
+- [ ] [ProjectA] Deploy feature
+- [ ] [ProjectB] Meal prep
+
+(Continue for rest of week...)
+
 ### Project Next-Actions
 - [ ] [ProjectA] - [specific next step]
 - [ ] [ProjectB] - [specific next step]
@@ -2538,10 +2676,38 @@ The skill guides you through:
 - Thursday:
 - Friday:
 
+### Todo Housekeeping
+**Archive:**
+- [x] Old completed todos from 2+ weeks ago
+
+**Delete:**
+- [ ] Stale todos no longer relevant
+
+**Re-prioritize:**
+- [ ] Move X to high priority
+
 ## Notes
 \`\`\`
 
 ## Automation Features
+
+### Todo Analysis via \`/todos\` Skill
+Fetch and analyze todos from Nomendex API:
+- **Completion metrics**: Calculate completion rate by project
+- **Overdue detection**: Identify todos past their due date
+- **Blocker identification**: Surface todos marked as blocked
+- **Pattern analysis**: Track "Today" column usage and completion
+- **Goal mapping**: Connect completed todos to monthly goals
+
+Example usage in weekly review:
+\`\`\`
+Use /todos skill to:
+1. Fetch all todos from past week
+2. Group by project and status
+3. Calculate completion rates
+4. Identify overdue items
+5. Analyze daily "Today" column patterns
+\`\`\`
 
 ### Auto-Archive
 Suggest moving daily notes older than 30 days to Archives.
@@ -2589,18 +2755,18 @@ Create tasks at skill start:
 \`\`\`
 TaskCreate:
   subject: "Phase 1: Collect"
-  description: "Gather daily notes from past week, extract wins and challenges"
-  activeForm: "Collecting daily notes and extracting highlights..."
+  description: "Gather daily notes from past week, fetch todos data, extract wins and challenges"
+  activeForm: "Collecting daily notes, todos, and extracting highlights..."
 
 TaskCreate:
   subject: "Phase 2: Reflect"
-  description: "Calculate goal progress, analyze alignment gaps"
-  activeForm: "Calculating goal progress and alignment..."
+  description: "Calculate goal progress, analyze todo completion patterns, identify alignment gaps"
+  activeForm: "Calculating goal progress and analyzing todo patterns..."
 
 TaskCreate:
   subject: "Phase 3: Plan"
-  description: "Identify ONE Big Thing, plan daily focus areas for next week"
-  activeForm: "Planning next week's focus..."
+  description: "Identify ONE Big Thing, triage todos, plan daily focus areas for next week"
+  activeForm: "Planning next week's focus and todo distribution..."
 \`\`\`
 
 ### Dependencies
@@ -2615,7 +2781,7 @@ Reflect is blocked until Collect completes. Plan is blocked until Reflect comple
 
 Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
 
-Task tools are session-scoped and don't persist between chat sessions—your actual weekly review content is saved in the review note.
+Task tools are session-scoped and don't persist between Codex sessions—your actual weekly review content is saved in the review note.
 
 ## Agent Team Workflow (Optional)
 
@@ -2625,7 +2791,8 @@ For a faster, more thorough weekly review, use agent teams to parallelize the co
 Team Lead (coordinator)
 ├── collector agent — Read all daily notes, extract wins/challenges/tasks
 ├── goal-analyzer agent — Read goal files, calculate progress, find gaps
-└── project-scanner agent — Scan Projects/*.md, get status updates
+├── project-scanner agent — Read Projects/*.md files, get status updates
+└── todo-collector agent — Fetch todos via API, analyze completion, identify patterns
 \`\`\`
 
 ### How to Use
@@ -2636,11 +2803,16 @@ When invoking \`/weekly\`, you can request the team-based approach:
 \`\`\`
 
 The team lead:
-1. Spawns three agents to work in parallel
+1. Spawns four agents to work in parallel
 2. Collector reads daily notes and extracts highlights
 3. Goal-analyzer reads all goal files and calculates progress
-4. Project-scanner reads all canonical project notes (\`Projects/*.md\`) for status
-5. Team lead synthesizes findings into the weekly review note
+4. Project-scanner reads all project files (Projects/*.md) for status
+5. Todo-collector fetches todos via \`/todos\` skill and analyzes:
+   - Completion rates by project
+   - Overdue and blocked todos
+   - "Today" column patterns
+   - Mapping of completed todos to monthly goals
+6. Team lead synthesizes findings into the weekly review note
 
 This makes the review faster (parallel collection) and more thorough (dedicated analysis per area).
 
@@ -2657,6 +2829,7 @@ Request with: "Include a vault health check in my weekly review"
 
 Works with:
 - \`/daily\` - Reviews daily notes from the week
+- \`/todos\` - Fetches todos data for completion analysis and planning
 - \`/monthly\` - Weekly reviews feed monthly rollup
 - \`/project\` - Project status in review
 - \`/push\` - Commit after completing review
