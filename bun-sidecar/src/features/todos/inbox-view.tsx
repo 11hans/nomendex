@@ -5,6 +5,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { subscribe } from "@/lib/events";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { CreateTodoDialog } from "./CreateTodoDialog";
 import { TaskCardEditor } from "./TaskCardEditor";
 import { Todo } from "./todo-types";
@@ -27,13 +28,15 @@ import {
     Archive,
     ArchiveRestore,
     ChevronRight,
-    FileSearch,
+    Inbox,
+    ListTodo,
     Search,
 } from "lucide-react";
 
 type InboxFilter = "all" | "active" | "completed" | "archived";
 
 const INBOX_PROJECT = "Inbox";
+const ALL_TASKS = "__all__";
 
 function normalizeProjectName(project?: string): string {
     const normalized = project?.trim();
@@ -74,34 +77,63 @@ function formatRelativeDateLabel(dateString?: string): string {
     return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function DroppableGroup({
+function DroppableProjectItem({
     groupName,
-    children,
-    borderColor,
-    backgroundColor,
-    dropHighlightColor,
+    label,
+    isSelected,
+    count,
+    onClick,
+    contentPrimary,
+    contentTertiary,
+    surfaceAccent,
+    borderDefault,
+    isDragging,
 }: {
     groupName: string;
-    children: React.ReactNode;
-    borderColor: string;
-    backgroundColor: string;
-    dropHighlightColor: string;
+    label: string;
+    isSelected: boolean;
+    count: number;
+    onClick: () => void;
+    contentPrimary: string;
+    contentTertiary: string;
+    surfaceAccent: string;
+    borderDefault: string;
+    isDragging: boolean;
 }) {
     const { setNodeRef, isOver } = useDroppable({
         id: `project-group:${groupName}`,
     });
 
     return (
-        <div
+        <button
             ref={setNodeRef}
-            className="overflow-hidden rounded-lg border transition-colors"
+            onClick={onClick}
+            className="w-full px-3 py-1.5 flex items-center gap-2 text-left text-xs rounded-md transition-colors"
             style={{
-                borderColor: isOver ? dropHighlightColor : borderColor,
-                backgroundColor,
+                backgroundColor: isOver
+                    ? surfaceAccent
+                    : isSelected
+                        ? surfaceAccent
+                        : undefined,
+                color: isSelected ? contentPrimary : contentTertiary,
+                outline: isOver ? `2px solid ${surfaceAccent}` : undefined,
+                outlineOffset: isOver ? "-2px" : undefined,
+                borderBottom: isDragging ? `1px dashed ${borderDefault}` : undefined,
             }}
         >
-            {children}
-        </div>
+            <span className="truncate font-medium" style={{ color: isSelected ? contentPrimary : contentTertiary }}>
+                {label}
+            </span>
+            <span
+                className="ml-auto text-caption tabular-nums shrink-0 px-1.5 py-0.5 rounded-full"
+                style={{
+                    color: contentTertiary,
+                    backgroundColor: count > 0 ? surfaceAccent : undefined,
+                }}
+            >
+                {count}
+            </span>
+        </button>
     );
 }
 
@@ -151,20 +183,20 @@ function DraggableTodoRow({
                 className="flex-1 min-w-0 py-1.5 flex items-center gap-1.5 text-left"
             >
                 <span
-                    className={`size-2 rounded-full shrink-0 ${
+                    className={`size-2 rounded-full shrink-0 border ${
                         statusType === "active"
-                            ? "bg-primary"
+                            ? "border-primary"
                             : statusType === "completed"
-                                ? "bg-success"
-                                : "bg-text-muted/40"
+                                ? "border-success bg-success"
+                                : "border-text-muted/40"
                     }`}
                 />
 
                 <span className="truncate text-xs" style={{ color: contentPrimary }}>{todo.title}</span>
 
-                <span className="ml-auto flex items-center gap-2 text-caption shrink-0" style={{ color: contentTertiary }}>
-                    {leadTag && <span>#{leadTag}</span>}
-                    {dateLabel && <span>{dateLabel}</span>}
+                <span className="ml-auto flex items-center gap-2 shrink-0" style={{ color: contentTertiary }}>
+                    {leadTag && <span className="text-[10px]">#{leadTag}</span>}
+                    {dateLabel && <span className="text-[10px]">{dateLabel}</span>}
                     <ChevronRight className="size-3 opacity-60" />
                 </span>
             </button>
@@ -201,9 +233,7 @@ export function InboxListView() {
     const [searchQuery, setSearchQuery] = useState("");
     const [filter, setFilter] = useState<InboxFilter>("all");
     const [draggedTodoId, setDraggedTodoId] = useState<string | null>(null);
-    const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
-        [INBOX_PROJECT]: true,
-    });
+    const [selectedGroup, setSelectedGroup] = useState<string>(ALL_TASKS);
     const hasSetTabNameRef = useRef<boolean>(false);
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -565,6 +595,11 @@ export function InboxListView() {
     const filteredTodos = useMemo(() => {
         let filtered = todos;
 
+        // Group filter
+        if (selectedGroup !== ALL_TASKS) {
+            filtered = filtered.filter((todo) => getGroupName(todo) === selectedGroup);
+        }
+
         if (searchQuery.trim()) {
             filtered = filtered.filter((todo) =>
                 fuzzySearch(searchQuery, todo.title)
@@ -583,43 +618,62 @@ export function InboxListView() {
             const bTime = new Date(b.updatedAt).getTime();
             return bTime - aTime;
         });
-    }, [todos, searchQuery, filter]);
+    }, [todos, searchQuery, filter, selectedGroup]);
 
-    const groupedTodos = useMemo(() => {
-        const grouped = projectGroups.reduce<Record<string, Todo[]>>((acc, groupName) => {
-            acc[groupName] = [];
-            return acc;
-        }, {});
-
-        for (const todo of filteredTodos) {
+    // Counts per group (active tasks only, for sidebar badges)
+    const groupCounts = useMemo(() => {
+        const counts: Record<string, number> = { [ALL_TASKS]: 0 };
+        for (const todo of todos) {
+            if (todo.archived || todo.status === "done") continue;
+            counts[ALL_TASKS] = (counts[ALL_TASKS] || 0) + 1;
             const group = getGroupName(todo);
-            if (!grouped[group]) grouped[group] = [];
-            grouped[group].push(todo);
+            counts[group] = (counts[group] || 0) + 1;
         }
+        return counts;
+    }, [todos]);
 
-        return Object.entries(grouped).sort(([a], [b]) => compareGroupNames(a, b));
-    }, [filteredTodos, projectGroups]);
+    // Counts for filter buttons (scoped to current group selection)
+    const filterCounts = useMemo(() => {
+        let scoped = todos;
+        if (selectedGroup !== ALL_TASKS) {
+            scoped = scoped.filter((todo) => getGroupName(todo) === selectedGroup);
+        }
+        if (searchQuery.trim()) {
+            scoped = scoped.filter((todo) =>
+                fuzzySearch(searchQuery, todo.title)
+                || (todo.description ? fuzzySearch(searchQuery, todo.description) : false)
+                || (todo.project ? fuzzySearch(searchQuery, todo.project) : false)
+                || (todo.tags?.some((tag) => fuzzySearch(searchQuery, tag)) ?? false)
+            );
+        }
+        return {
+            all: scoped.length,
+            active: scoped.filter((todo) => getFilterForTodo(todo) === "active").length,
+            completed: scoped.filter((todo) => getFilterForTodo(todo) === "completed").length,
+            archived: scoped.filter((todo) => getFilterForTodo(todo) === "archived").length,
+        };
+    }, [todos, selectedGroup, searchQuery]);
 
-    useEffect(() => {
-        if (groupedTodos.length === 0) return;
+    // Non-inbox projects for sidebar listing
+    const sidebarProjects = useMemo(() =>
+        projectGroups.filter((g) => g !== INBOX_PROJECT),
+    [projectGroups]);
 
-        setExpandedGroups((prev) => {
-            const next = { ...prev };
-            for (const [groupName] of groupedTodos) {
-                if (next[groupName] === undefined) {
-                    next[groupName] = groupName === INBOX_PROJECT;
-                }
-            }
-            return next;
-        });
-    }, [groupedTodos]);
+    const selectedGroupLabel = selectedGroup === ALL_TASKS
+        ? "All Tasks"
+        : selectedGroup;
 
-    const counts = useMemo(() => ({
-        all: todos.length,
-        active: todos.filter((todo) => getFilterForTodo(todo) === "active").length,
-        completed: todos.filter((todo) => getFilterForTodo(todo) === "completed").length,
-        archived: todos.filter((todo) => getFilterForTodo(todo) === "archived").length,
-    }), [todos]);
+    const isProjectLocked = selectedGroup !== ALL_TASKS;
+
+    const handleOpenCreateDialog = useCallback((open: boolean) => {
+        if (open && isProjectLocked) {
+            setNewTodo((prev) => ({ ...prev, project: selectedGroup }));
+        }
+        setCreateDialogOpen(open);
+        if (!open) {
+            resetNewTodoDraft();
+        }
+    }, [isProjectLocked, selectedGroup, resetNewTodoDraft]);
 
     if (loading) {
         return (
@@ -629,146 +683,182 @@ export function InboxListView() {
         );
     }
 
+    const { styles } = currentTheme;
+
     return (
-        <div className="h-full min-h-0 overflow-y-auto" style={{ backgroundColor: currentTheme.styles.surfacePrimary, color: currentTheme.styles.contentPrimary }}>
-            <div className="mx-auto w-full max-w-[620px] px-3 pt-3 pb-6">
-                <div className="shrink-0 flex items-center gap-1.5">
-                    <FileSearch className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
-                    <span className="text-xs font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>Inbox</span>
-                    <span className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>{counts.all} items</span>
-
-                    <div className="ml-auto">
-                        <CreateTodoDialog
-                            open={createDialogOpen}
-                            onOpenChange={(open) => {
-                                setCreateDialogOpen(open);
-                                if (!open) {
-                                    resetNewTodoDraft();
-                                }
-                            }}
-                            newTodo={newTodo}
-                            onNewTodoChange={setNewTodo}
-                            onCreateTodo={createTodo}
-                            loading={loading}
-                            projectLocked={false}
-                            availableTags={availableTags}
-                            availableProjects={availableProjects}
-                            triggerLabel="+ new"
-                            hideTriggerIcon
-                            triggerVariant="default"
-                            triggerClassName="h-7 px-2 text-xs font-medium rounded-md"
-                        />
-                    </div>
-                </div>
-
-                <div className="shrink-0 mt-2.5 flex items-center gap-1.5">
-                    <div className="relative flex-1 min-w-0">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3" style={{ color: currentTheme.styles.contentTertiary }} />
-                        <Input
-                            placeholder="search inbox..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="h-8 pl-8 text-xs bg-transparent"
-                            style={{ borderColor: currentTheme.styles.borderDefault, color: currentTheme.styles.contentPrimary }}
-                        />
-                    </div>
-
-                    <div className="flex items-center gap-0.5">
-                        {(["all", "active", "completed", "archived"] as const).map((value) => (
-                            <button
-                                key={value}
-                                onClick={() => setFilter(value)}
-                                className={`h-7 rounded-md px-2 text-caption transition-colors`}
-                                style={filter === value ? {
-                                    backgroundColor: currentTheme.styles.surfaceAccent,
-                                    color: currentTheme.styles.contentPrimary,
-                                } : {
-                                    color: currentTheme.styles.contentTertiary,
-                                }}
-                            >
-                                {value}
-                                <span className="ml-1 opacity-70">{counts[value]}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="mt-2.5">
-                    {filteredTodos.length === 0 && (
-                        <div className="py-3 text-center text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
-                            no tasks match current filters
+        <div className="h-full flex flex-col" style={{ backgroundColor: styles.surfacePrimary, color: styles.contentPrimary }}>
+            <DndContext
+                sensors={sensors}
+                onDragStart={handleDragStart}
+                onDragCancel={handleDragCancel}
+                onDragEnd={handleDragEnd}
+            >
+                <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
+                    {/* Left Panel — Sidebar */}
+                    <ResizablePanel defaultSize={20} minSize={12} maxSize={35} className="flex flex-col min-h-0" style={{ backgroundColor: styles.surfaceSecondary }}>
+                        {/* Search */}
+                        <div className="shrink-0 p-2.5 pb-1.5">
+                            <div className="relative">
+                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3" style={{ color: styles.contentTertiary }} />
+                                <Input
+                                    placeholder="search tasks..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="h-8 pl-8 text-xs bg-transparent"
+                                    style={{ borderColor: styles.borderDefault, color: styles.contentPrimary }}
+                                />
+                            </div>
                         </div>
-                    )}
 
-                    <DndContext
-                        sensors={sensors}
-                        onDragStart={handleDragStart}
-                        onDragCancel={handleDragCancel}
-                        onDragEnd={handleDragEnd}
-                    >
-                        <div className="space-y-2 pb-2">
-                            {groupedTodos.map(([groupName, groupItems]) => {
-                                const expanded = expandedGroups[groupName] ?? true;
-                                const isInbox = groupName === INBOX_PROJECT;
+                        {/* Fixed items */}
+                        <div className="shrink-0 px-1.5 pb-1">
+                            <DroppableProjectItem
+                                groupName={ALL_TASKS}
+                                label="All Tasks"
+                                isSelected={selectedGroup === ALL_TASKS}
+                                count={groupCounts[ALL_TASKS] || 0}
+                                onClick={() => setSelectedGroup(ALL_TASKS)}
+                                contentPrimary={styles.contentPrimary}
+                                contentTertiary={styles.contentTertiary}
+                                surfaceAccent={styles.surfaceAccent}
+                                borderDefault={styles.borderDefault}
+                                isDragging={!!draggedTodoId}
+                            />
+                            <DroppableProjectItem
+                                groupName={INBOX_PROJECT}
+                                label="Inbox"
+                                isSelected={selectedGroup === INBOX_PROJECT}
+                                count={groupCounts[INBOX_PROJECT] || 0}
+                                onClick={() => setSelectedGroup(INBOX_PROJECT)}
+                                contentPrimary={styles.contentPrimary}
+                                contentTertiary={styles.contentTertiary}
+                                surfaceAccent={styles.surfaceAccent}
+                                borderDefault={styles.borderDefault}
+                                isDragging={!!draggedTodoId}
+                            />
+                        </div>
 
-                                return (
-                                    <DroppableGroup
-                                        key={groupName}
-                                        groupName={groupName}
-                                        borderColor={currentTheme.styles.borderDefault}
-                                        backgroundColor={currentTheme.styles.surfaceSecondary}
-                                        dropHighlightColor={currentTheme.styles.surfaceAccent}
-                                    >
+                        {/* Separator */}
+                        <div className="shrink-0 mx-2.5 mb-1" style={{ borderTop: `1px solid ${styles.borderDefault}` }} />
+
+                        {/* Projects list */}
+                        <div className="flex-1 overflow-y-auto px-1.5 pb-2">
+                            <div className="px-3 py-1 text-[10px] font-medium uppercase tracking-[0.12em]" style={{ color: styles.contentTertiary }}>
+                                Projects
+                            </div>
+                            {sidebarProjects.map((groupName) => (
+                                <DroppableProjectItem
+                                    key={groupName}
+                                    groupName={groupName}
+                                    label={groupName}
+                                    isSelected={selectedGroup === groupName}
+                                    count={groupCounts[groupName] || 0}
+                                    onClick={() => setSelectedGroup(groupName)}
+                                    contentPrimary={styles.contentPrimary}
+                                    contentTertiary={styles.contentTertiary}
+                                    surfaceAccent={styles.surfaceAccent}
+                                    borderDefault={styles.borderDefault}
+                                    isDragging={!!draggedTodoId}
+                                />
+                            ))}
+                            {sidebarProjects.length === 0 && (
+                                <div className="px-3 py-2 text-[10px]" style={{ color: styles.contentTertiary }}>
+                                    no projects yet
+                                </div>
+                            )}
+                        </div>
+                    </ResizablePanel>
+
+                    <ResizableHandle />
+
+                    {/* Right Panel — Detail */}
+                    <ResizablePanel className="flex flex-col min-w-0 min-h-0">
+                        {/* Header */}
+                        <div
+                            className="shrink-0 px-4 py-2.5 flex items-center gap-2"
+                            style={{ borderBottom: `1px solid ${styles.borderDefault}` }}
+                        >
+                            {selectedGroup === INBOX_PROJECT && <Inbox className="size-3.5" style={{ color: styles.contentTertiary }} />}
+                            {selectedGroup === ALL_TASKS && <ListTodo className="size-3.5" style={{ color: styles.contentTertiary }} />}
+                            <span className="text-xs font-medium uppercase tracking-[0.1em]" style={{ color: styles.contentPrimary }}>
+                                {selectedGroupLabel}
+                            </span>
+                            <span className="text-caption" style={{ color: styles.contentTertiary }}>
+                                {filterCounts.all} items
+                            </span>
+
+                            <div className="ml-auto flex items-center gap-1.5">
+                                <div className="flex items-center gap-0.5">
+                                    {(["all", "active", "completed", "archived"] as const).map((value) => (
                                         <button
-                                            onClick={() => {
-                                                setExpandedGroups((prev) => ({
-                                                    ...prev,
-                                                    [groupName]: !expanded,
-                                                }));
+                                            key={value}
+                                            onClick={() => setFilter(value)}
+                                            className="h-7 rounded-md px-2 text-caption transition-colors"
+                                            style={filter === value ? {
+                                                backgroundColor: styles.surfaceAccent,
+                                                color: styles.contentPrimary,
+                                            } : {
+                                                color: styles.contentTertiary,
                                             }}
-                                            className="w-full px-2.5 py-1.5 flex items-center gap-1.5 text-left text-caption transition-colors"
-                                            style={{ color: currentTheme.styles.contentTertiary }}
                                         >
-                                            <ChevronRight className={`size-3 transition-transform opacity-70 ${expanded ? "rotate-90" : ""}`} />
-                                            <span className="font-medium uppercase tracking-[0.08em]">{isInbox ? INBOX_PROJECT : groupName}</span>
-                                            <span className="opacity-70">{groupItems.length}</span>
+                                            {value}
+                                            <span className="ml-1 opacity-70">{filterCounts[value]}</span>
                                         </button>
+                                    ))}
+                                </div>
 
-                                        {expanded && (
-                                            <div>
-                                                {groupItems.length === 0 ? (
-                                                    <div
-                                                        className="border-t px-2.5 py-2 text-caption"
-                                                        style={{ borderColor: currentTheme.styles.borderDefault, color: currentTheme.styles.contentTertiary }}
-                                                    >
-                                                        {draggedTodoId ? "drop task here to move into this project" : "no tasks"}
-                                                    </div>
-                                                ) : (
-                                                    groupItems.map((todo) => (
-                                                        <DraggableTodoRow
-                                                            key={todo.id}
-                                                            todo={todo}
-                                                            selected={selectedTodoId === todo.id}
-                                                            borderColor={currentTheme.styles.borderDefault}
-                                                            selectedBackground={currentTheme.styles.surfaceAccent}
-                                                            contentPrimary={currentTheme.styles.contentPrimary}
-                                                            contentTertiary={currentTheme.styles.contentTertiary}
-                                                            onOpen={openTodoForEdit}
-                                                            onToggleArchive={(todoToArchive) => {
-                                                                void toggleArchiveWithToast(todoToArchive);
-                                                            }}
-                                                        />
-                                                    ))
-                                                )}
-                                            </div>
-                                        )}
-                                    </DroppableGroup>
-                                );
-                            })}
+                                <CreateTodoDialog
+                                    open={createDialogOpen}
+                                    onOpenChange={handleOpenCreateDialog}
+                                    newTodo={newTodo}
+                                    onNewTodoChange={setNewTodo}
+                                    onCreateTodo={createTodo}
+                                    loading={loading}
+                                    projectLocked={isProjectLocked}
+                                    availableTags={availableTags}
+                                    availableProjects={availableProjects}
+                                    triggerLabel="+ new"
+                                    hideTriggerIcon
+                                    triggerVariant="default"
+                                    triggerClassName="h-7 px-2 text-xs font-medium rounded-md"
+                                />
+                            </div>
                         </div>
-                    </DndContext>
-                </div>
-            </div>
+
+                        {/* Task list */}
+                        <div className="flex-1 overflow-y-auto min-h-0">
+                            {filteredTodos.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center gap-2">
+                                    <ListTodo className="size-10 opacity-20" style={{ color: styles.contentTertiary }} />
+                                    <span className="text-xs" style={{ color: styles.contentTertiary }}>
+                                        {searchQuery.trim() || filter !== "all"
+                                            ? "no tasks match current filters"
+                                            : "no tasks yet"}
+                                    </span>
+                                </div>
+                            ) : (
+                                <div>
+                                    {filteredTodos.map((todo) => (
+                                        <DraggableTodoRow
+                                            key={todo.id}
+                                            todo={todo}
+                                            selected={selectedTodoId === todo.id}
+                                            borderColor={styles.borderDefault}
+                                            selectedBackground={styles.surfaceAccent}
+                                            contentPrimary={styles.contentPrimary}
+                                            contentTertiary={styles.contentTertiary}
+                                            onOpen={openTodoForEdit}
+                                            onToggleArchive={(todoToArchive) => {
+                                                void toggleArchiveWithToast(todoToArchive);
+                                            }}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </ResizablePanel>
+                </ResizablePanelGroup>
+            </DndContext>
 
             <TaskCardEditor
                 todo={todoToEdit}

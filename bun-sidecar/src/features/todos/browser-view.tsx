@@ -46,7 +46,7 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
-export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoId }: { project?: string | null; selectedTodoId?: string | null } = {}) {
+export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoId, embedded }: { project?: string | null; selectedTodoId?: string | null; embedded?: boolean } = {}) {
     // Support both 'project' and 'filterProject' prop names for backward compatibility
     const filterProject = project;
     const { loading, setLoading } = usePlugin();
@@ -159,7 +159,9 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
 
 
     // Update the tab name based on the project - only once when component mounts
+    // Skip when embedded (parent manages tab name)
     useEffect(() => {
+        if (embedded) return;
         if (activeTab && activeTab.pluginInstance.plugin.id === "todos" && !hasSetTabNameRef.current) {
             let tabName = "Todos";
             if (filterProject && filterProject !== "") {
@@ -171,7 +173,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             setTabName(activeTab.id, tabName);
             hasSetTabNameRef.current = true;
         }
-    }, [activeTab, filterProject, setTabName]); // Dependencies are fine since we check hasSetTabNameRef
+    }, [activeTab, filterProject, setTabName, embedded]); // Dependencies are fine since we check hasSetTabNameRef
 
     // Update the project field when filterProject changes
     useEffect(() => {
@@ -1667,7 +1669,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     </div>
 
                     <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                        {isProjectScopedView && (
+                        {isProjectScopedView && !embedded && (
                             <Button
                                 variant="outline"
                                 size="sm"
