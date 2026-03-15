@@ -162,7 +162,7 @@ function DraggableTodoRow({
 
                 <span className="truncate text-xs" style={{ color: contentPrimary }}>{todo.title}</span>
 
-                <span className="ml-auto flex items-center gap-2 text-[10px] shrink-0" style={{ color: contentTertiary }}>
+                <span className="ml-auto flex items-center gap-2 text-caption shrink-0" style={{ color: contentTertiary }}>
                     {leadTag && <span>#{leadTag}</span>}
                     {dateLabel && <span>{dateLabel}</span>}
                     <ChevronRight className="size-3 opacity-60" />
@@ -634,8 +634,8 @@ export function InboxListView() {
             <div className="mx-auto w-full max-w-[620px] px-3 pt-3 pb-6">
                 <div className="shrink-0 flex items-center gap-1.5">
                     <FileSearch className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>Inbox</span>
-                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>{counts.all} items</span>
+                    <span className="text-xs font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>Inbox</span>
+                    <span className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>{counts.all} items</span>
 
                     <div className="ml-auto">
                         <CreateTodoDialog
@@ -656,7 +656,7 @@ export function InboxListView() {
                             triggerLabel="+ new"
                             hideTriggerIcon
                             triggerVariant="default"
-                            triggerClassName="h-7 px-2 text-[11px] font-medium rounded-md"
+                            triggerClassName="h-7 px-2 text-xs font-medium rounded-md"
                         />
                     </div>
                 </div>
@@ -678,7 +678,7 @@ export function InboxListView() {
                             <button
                                 key={value}
                                 onClick={() => setFilter(value)}
-                                className={`h-7 rounded-md px-2 text-[10px] transition-colors`}
+                                className={`h-7 rounded-md px-2 text-caption transition-colors`}
                                 style={filter === value ? {
                                     backgroundColor: currentTheme.styles.surfaceAccent,
                                     color: currentTheme.styles.contentPrimary,
@@ -695,7 +695,7 @@ export function InboxListView() {
 
                 <div className="mt-2.5">
                     {filteredTodos.length === 0 && (
-                        <div className="py-3 text-center text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                        <div className="py-3 text-center text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                             no tasks match current filters
                         </div>
                     )}
@@ -726,7 +726,7 @@ export function InboxListView() {
                                                     [groupName]: !expanded,
                                                 }));
                                             }}
-                                            className="w-full px-2.5 py-1.5 flex items-center gap-1.5 text-left text-[10px] transition-colors"
+                                            className="w-full px-2.5 py-1.5 flex items-center gap-1.5 text-left text-caption transition-colors"
                                             style={{ color: currentTheme.styles.contentTertiary }}
                                         >
                                             <ChevronRight className={`size-3 transition-transform opacity-70 ${expanded ? "rotate-90" : ""}`} />
@@ -738,7 +738,7 @@ export function InboxListView() {
                                             <div>
                                                 {groupItems.length === 0 ? (
                                                     <div
-                                                        className="border-t px-2.5 py-2 text-[10px]"
+                                                        className="border-t px-2.5 py-2 text-caption"
                                                         style={{ borderColor: currentTheme.styles.borderDefault, color: currentTheme.styles.contentTertiary }}
                                                     >
                                                         {draggedTodoId ? "drop task here to move into this project" : "no tasks"}

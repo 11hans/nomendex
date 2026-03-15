@@ -24,7 +24,7 @@ function Button({
   const { styles } = currentTheme;
   const Comp = asChild ? Slot : "button";
 
-  const baseClasses = "inline-flex items-center justify-center gap-2 whitespace-nowrap text-[11px] font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0 focus:outline focus:outline-2 focus:outline-offset-2";
+  const baseClasses = "inline-flex items-center justify-center gap-2 whitespace-nowrap text-xs font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0 focus:outline focus:outline-2 focus:outline-offset-2";
 
   const sizeClasses: Record<ButtonSize, string> = {
     default: "h-8 px-3 py-1.5 has-[>svg]:px-2.5",
@@ -98,7 +98,7 @@ function buttonVariants(options?: { variant?: ButtonVariant; size?: ButtonSize }
 
   // Return just the size classes for external use
   // The variant styling is handled by inline styles now
-  return `inline-flex items-center justify-center gap-2 whitespace-nowrap text-[11px] font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0 focus:outline focus:outline-2 focus:outline-offset-2 ${sizeClasses[size]}`;
+  return `inline-flex items-center justify-center gap-2 whitespace-nowrap text-xs font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0 focus:outline focus:outline-2 focus:outline-offset-2 ${sizeClasses[size]}`;
 }
 
 export { Button, buttonVariants };

@@ -59,7 +59,7 @@ export function CreateProjectDialog({
                 <Button
                     variant="default"
                     size="sm"
-                    className="projects-create-btn h-7 px-2 text-[11px] font-medium rounded-md"
+                    className="projects-create-btn h-7 px-2 text-xs font-medium rounded-md"
                 >
                     + new
                 </Button>
@@ -80,17 +80,17 @@ export function CreateProjectDialog({
                         borderBottom: `1px solid ${styles.borderDefault}`,
                     }}
                 >
-                    <span className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
+                    <span className="text-xs font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
                         Create Project
                     </span>
-                    <span className="text-[10px]" style={{ color: styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: styles.contentTertiary }}>
                         Enter to confirm
                     </span>
                 </div>
 
                 <div className="px-6 pt-5 pb-4 space-y-3">
                     <div className="space-y-2">
-                        <div className="text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                        <div className="text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
                             Name
                         </div>
                         <Input

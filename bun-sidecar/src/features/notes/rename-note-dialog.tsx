@@ -83,7 +83,7 @@ export function RenameNoteDialog({ noteFileName, onSuccess }: RenameNoteDialogPr
             </DialogHeader>
             <div className="space-y-2 py-1">
                 <div
-                    className="text-[10px] uppercase tracking-[0.08em]"
+                    className="text-caption uppercase tracking-[0.08em]"
                     style={{ color: currentTheme.styles.contentTertiary }}
                 >
                     New Name

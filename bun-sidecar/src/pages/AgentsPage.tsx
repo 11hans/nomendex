@@ -174,17 +174,17 @@ function AgentsContent() {
             <div className="mx-auto w-full max-w-[620px] px-3 pt-3 pb-6">
                 <div className="shrink-0 flex items-center gap-1.5">
                     <Bot className="size-3 text-muted-foreground" />
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]">Agents</span>
-                    <span className="text-[10px] text-muted-foreground">{agents.length} items</span>
-                    <span className="text-[10px] text-muted-foreground">{connectedServerCount} mcp</span>
-                    <span className="text-[10px] text-muted-foreground">{customModelCount} custom</span>
+                    <span className="text-xs font-medium uppercase tracking-[0.14em]">Agents</span>
+                    <span className="text-caption text-muted-foreground">{agents.length} items</span>
+                    <span className="text-caption text-muted-foreground">{connectedServerCount} mcp</span>
+                    <span className="text-caption text-muted-foreground">{customModelCount} custom</span>
 
                     <div className="ml-auto flex items-center gap-1">
-                        <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={() => navigate("/mcp-servers")}>
+                        <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => navigate("/mcp-servers")}>
                             <Server className="mr-1 h-4 w-4" />
                             MCP
                         </Button>
-                        <Button size="sm" className="h-7 px-2 text-[11px]" onClick={openCreatePage}>
+                        <Button size="sm" className="h-7 px-2 text-xs" onClick={openCreatePage}>
                             <Plus className="mr-1 h-4 w-4" />
                             New
                         </Button>
@@ -227,12 +227,12 @@ function AgentsContent() {
                                                 <CardTitle className="flex flex-wrap items-center gap-1.5 text-xs">
                                                     <span className="truncate">{agent.name}</span>
                                                     {agent.isDefault && (
-                                                        <Badge className="px-1 py-0 text-[10px]" variant="success">
+                                                        <Badge className="px-1 py-0 text-caption" variant="success">
                                                             Default
                                                         </Badge>
                                                     )}
                                                 </CardTitle>
-                                                <CardDescription className="line-clamp-2 text-[10px]">
+                                                <CardDescription className="line-clamp-2 text-caption">
                                                     {agent.description || "No description"}
                                                 </CardDescription>
                                             </div>
@@ -276,39 +276,39 @@ function AgentsContent() {
 
                                 <CardContent className="space-y-2 px-2.5 py-1.5 pt-0">
                                     <div className="flex flex-wrap gap-2">
-                                        <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px]">
+                                        <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-caption">
                                             <Cpu className="h-3 w-3" />
                                             {getModelDisplayName(agent.model)}
                                         </Badge>
-                                        <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px]">
+                                        <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-caption">
                                             <Layers3 className="h-3 w-3" />
                                             {agent.mcpServers.length} MCP {agent.mcpServers.length === 1 ? "server" : "servers"}
                                         </Badge>
                                         {isCustomModel && (
-                                            <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                                            <Badge variant="outline" className="px-1.5 py-0 text-caption">
                                                 Custom model
                                             </Badge>
                                         )}
                                         {defaultAgent?.id === agent.id && (
-                                            <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                                            <Badge variant="outline" className="px-1.5 py-0 text-caption">
                                                 Used by default in new chats
                                             </Badge>
                                         )}
                                     </div>
 
                                     <div className="rounded-lg border border-border bg-bg-secondary p-2">
-                                        <p className="mb-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+                                        <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
                                             System Prompt Preview
                                         </p>
-                                        <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">{trimmedPrompt}</p>
+                                        <p className="font-mono text-caption leading-relaxed text-muted-foreground">{trimmedPrompt}</p>
                                     </div>
 
                                     {agent.mcpServers.length > 0 ? (
                                         <div className="space-y-1">
-                                            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Enabled MCP Servers</p>
+                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">Enabled MCP Servers</p>
                                             <div className="flex flex-wrap gap-1.5">
                                                 {agent.mcpServers.map((serverId) => (
-                                                    <Badge key={`${agent.id}-${serverId}`} variant="secondary" className="px-1.5 py-0 text-[10px]">
+                                                    <Badge key={`${agent.id}-${serverId}`} variant="secondary" className="px-1.5 py-0 text-caption">
                                                         {serverNameMap.get(serverId) || serverId}
                                                     </Badge>
                                                 ))}
@@ -463,7 +463,7 @@ function AgentsContent() {
                                                                 className="flex cursor-pointer items-center gap-2 text-sm font-medium"
                                                             >
                                                                 {server.name}
-                                                                <Badge variant="secondary" className="px-1 py-0 text-[10px]">Built-in</Badge>
+                                                                <Badge variant="secondary" className="px-1 py-0 text-caption">Built-in</Badge>
                                                             </label>
                                                             <p className="text-xs text-muted-foreground">
                                                                 {server.description || "No description"}

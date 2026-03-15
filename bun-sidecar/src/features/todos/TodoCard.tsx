@@ -80,7 +80,7 @@ export function TodoCard({
                     <div className="flex items-center gap-1.5 shrink-0">
                         {todo.archived && (
                             <span
-                                className="text-[10px] px-1 rounded"
+                                className="text-caption px-1 rounded"
                                 style={{ color: currentTheme.styles.contentTertiary, backgroundColor: currentTheme.styles.surfaceSecondary }}
                             >
                                 Archived
@@ -99,7 +99,7 @@ export function TodoCard({
                     </div>
                 </div>
                 {!hideProject && todo.project && (
-                    <p className="text-[10px] truncate" style={{ color: currentTheme.styles.contentAccent }}>
+                    <p className="text-caption truncate" style={{ color: currentTheme.styles.contentAccent }}>
                         {todo.project}
                     </p>
                 )}
@@ -109,7 +109,7 @@ export function TodoCard({
                             <Badge
                                 key={tag}
                                 variant="outline"
-                                className="text-[10px] px-1 py-0 h-4"
+                                className="text-caption px-1 py-0 h-4"
                                 style={{ borderColor: currentTheme.styles.borderDefault, color: currentTheme.styles.contentSecondary }}
                             >
                                 {tag}
@@ -120,7 +120,7 @@ export function TodoCard({
             </CardHeader>
             {todo.description && (
                 <CardContent className="pt-0 px-3 pb-1">
-                    <p className="text-[11px] line-clamp-2 break-words [overflow-wrap:anywhere]" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <p className="text-xs line-clamp-2 break-words [overflow-wrap:anywhere]" style={{ color: currentTheme.styles.contentTertiary }}>
                         {todo.description}
                     </p>
                 </CardContent>
@@ -144,7 +144,7 @@ export function TodoCard({
                     ) : (
                         todo.dueDate ? (
                             <p
-                                className="text-[10px] flex items-center gap-1 truncate"
+                                className="text-caption flex items-center gap-1 truncate"
                                 style={{ color: isOverdue ? currentTheme.styles.semanticDestructive : currentTheme.styles.contentTertiary }}
                             >
                                 <CalendarDays className="size-3 shrink-0" />

@@ -427,13 +427,13 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                             <div className="flex items-center gap-2 min-w-0">
                                 <FileText size={15} style={{ color: currentTheme.styles.contentAccent }} />
                                 <h2
-                                    className="text-[11px] font-medium uppercase tracking-[0.14em] truncate"
+                                    className="text-xs font-medium uppercase tracking-[0.14em] truncate"
                                     style={{ color: currentTheme.styles.contentPrimary }}
                                 >
                                     Notes
                                 </h2>
                                 <span
-                                    className="text-[10px] shrink-0"
+                                    className="text-caption shrink-0"
                                     style={{ color: currentTheme.styles.contentTertiary }}
                                 >
                                     ({notes.length})

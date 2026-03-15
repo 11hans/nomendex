@@ -198,13 +198,13 @@ export function TodosView({ todoId, tabId }: { todoId: string; tabId: string }) 
                         </Button>
                         <CheckSquare size={16} style={{ color: currentTheme.styles.contentAccent }} />
                         <h2
-                            className="text-[11px] font-medium uppercase tracking-[0.14em] truncate"
+                            className="text-xs font-medium uppercase tracking-[0.14em] truncate"
                             style={{ color: currentTheme.styles.contentPrimary }}
                         >
                             Todo Detail
                         </h2>
                         <span
-                            className="text-[10px] px-2 py-0.5 rounded-full"
+                            className="text-caption px-2 py-0.5 rounded-full"
                             style={{
                                 backgroundColor: currentTheme.styles.surfaceTertiary,
                                 color: draft.status === "done" ? currentTheme.styles.semanticSuccess : currentTheme.styles.contentSecondary,
@@ -216,13 +216,13 @@ export function TodosView({ todoId, tabId }: { todoId: string; tabId: string }) 
                     <Button
                         onClick={handleSave}
                         disabled={saving || !hasChanges}
-                        className="h-7 px-2.5 text-[11px] font-medium rounded-md"
+                        className="h-7 px-2.5 text-xs font-medium rounded-md"
                     >
                         <Save size={13} className="mr-1.5" />
                         {saving ? "Saving..." : "Save"}
                     </Button>
                 </div>
-                <div className="mt-1.5 flex items-center gap-3 text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                <div className="mt-1.5 flex items-center gap-3 text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                     <span className="truncate">{todo.id}</span>
                     <span className="inline-flex items-center gap-1">
                         <Clock size={11} />
@@ -250,7 +250,7 @@ export function TodosView({ todoId, tabId }: { todoId: string; tabId: string }) 
                     }}
                 >
                     <div className="space-y-1">
-                        <Label className="text-[11px] uppercase tracking-[0.12em]" style={{ color: currentTheme.styles.contentSecondary }}>
+                        <Label className="text-xs uppercase tracking-[0.12em]" style={{ color: currentTheme.styles.contentSecondary }}>
                             Title
                         </Label>
                         <Input
@@ -267,7 +267,7 @@ export function TodosView({ todoId, tabId }: { todoId: string; tabId: string }) 
                     </div>
 
                     <div className="space-y-1">
-                        <Label className="text-[11px] uppercase tracking-[0.12em]" style={{ color: currentTheme.styles.contentSecondary }}>
+                        <Label className="text-xs uppercase tracking-[0.12em]" style={{ color: currentTheme.styles.contentSecondary }}>
                             Description
                         </Label>
                         <Textarea
@@ -293,7 +293,7 @@ export function TodosView({ todoId, tabId }: { todoId: string; tabId: string }) 
                 >
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div className="space-y-1">
-                            <Label className="text-[11px] uppercase tracking-[0.12em]" style={{ color: currentTheme.styles.contentSecondary }}>
+                            <Label className="text-xs uppercase tracking-[0.12em]" style={{ color: currentTheme.styles.contentSecondary }}>
                                 Status
                             </Label>
                             <Select
@@ -321,7 +321,7 @@ export function TodosView({ todoId, tabId }: { todoId: string; tabId: string }) 
                         </div>
 
                         <div className="space-y-1">
-                            <Label className="text-[11px] uppercase tracking-[0.12em]" style={{ color: currentTheme.styles.contentSecondary }}>
+                            <Label className="text-xs uppercase tracking-[0.12em]" style={{ color: currentTheme.styles.contentSecondary }}>
                                 Project
                             </Label>
                             <Input

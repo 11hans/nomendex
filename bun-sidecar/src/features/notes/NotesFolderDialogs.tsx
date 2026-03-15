@@ -65,17 +65,17 @@ export function CreateFolderDialog({
                         borderBottom: `1px solid ${currentTheme.styles.borderDefault}`,
                     }}
                 >
-                    <div className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: currentTheme.styles.contentPrimary }}>
+                    <div className="text-xs font-medium uppercase tracking-[0.08em]" style={{ color: currentTheme.styles.contentPrimary }}>
                         {parentName ? `New Folder in "${parentName}"` : "New Folder"}
                     </div>
-                    <div className="text-[10px] mt-1" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <div className="text-caption mt-1" style={{ color: currentTheme.styles.contentTertiary }}>
                         Enter to confirm
                     </div>
                 </div>
                 <div className="px-6 pt-5 pb-4 space-y-2">
                     <Label
                         htmlFor="folder-name"
-                        className="text-[10px] uppercase tracking-[0.08em]"
+                        className="text-caption uppercase tracking-[0.08em]"
                         style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         Folder Name
@@ -174,11 +174,11 @@ export function RenameFolderDialog({
                         borderBottom: `1px solid ${currentTheme.styles.borderDefault}`,
                     }}
                 >
-                    <DialogTitle className="text-[11px] uppercase tracking-[0.08em]" style={{ color: currentTheme.styles.contentPrimary }}>
+                    <DialogTitle className="text-xs uppercase tracking-[0.08em]" style={{ color: currentTheme.styles.contentPrimary }}>
                         Rename Folder
                     </DialogTitle>
                     {folder && (
-                        <DialogDescription className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                        <DialogDescription className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                             Current: {folder.path}
                         </DialogDescription>
                     )}
@@ -186,7 +186,7 @@ export function RenameFolderDialog({
                 <div className="px-6 pt-5 pb-4 space-y-2">
                     <Label
                         htmlFor="folder-name"
-                        className="text-[10px] uppercase tracking-[0.08em]"
+                        className="text-caption uppercase tracking-[0.08em]"
                         style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         Folder Name

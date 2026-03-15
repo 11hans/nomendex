@@ -90,14 +90,14 @@ function MemoryJournalTabs({ styles }: { styles: Theme["styles"] }) {
         >
             <TabsTrigger
                 value="memory"
-                className="h-full flex-1 rounded-md border border-transparent px-2 text-[11px] data-[state=active]:border-[var(--memory-tab-active-border)] data-[state=active]:bg-[var(--memory-tab-active-bg)] data-[state=active]:shadow-none"
+                className="h-full flex-1 rounded-md border border-transparent px-2 text-xs data-[state=active]:border-[var(--memory-tab-active-border)] data-[state=active]:bg-[var(--memory-tab-active-bg)] data-[state=active]:shadow-none"
             >
                 <Brain className="size-3 mr-1" />
                 Memory
             </TabsTrigger>
             <TabsTrigger
                 value="journal"
-                className="h-full flex-1 rounded-md border border-transparent px-2 text-[11px] data-[state=active]:border-[var(--memory-tab-active-border)] data-[state=active]:bg-[var(--memory-tab-active-bg)] data-[state=active]:shadow-none"
+                className="h-full flex-1 rounded-md border border-transparent px-2 text-xs data-[state=active]:border-[var(--memory-tab-active-border)] data-[state=active]:bg-[var(--memory-tab-active-bg)] data-[state=active]:shadow-none"
             >
                 <Calendar className="size-3 mr-1" />
                 Journal
@@ -370,12 +370,12 @@ function MemoryTab({ tabId }: { tabId: string }) {
                         <div className="flex items-center gap-1.5">
                             <Brain className="size-3" style={{ color: styles.contentTertiary }} />
                             <span
-                                className="text-[11px] font-medium uppercase tracking-[0.14em]"
+                                className="text-xs font-medium uppercase tracking-[0.14em]"
                                 style={{ color: styles.contentPrimary }}
                             >
                                 Memory
                             </span>
-                            <span className="text-[10px]" style={{ color: styles.contentTertiary }}>
+                            <span className="text-caption" style={{ color: styles.contentTertiary }}>
                                 {total} items
                             </span>
                             <div className="ml-auto">
@@ -383,7 +383,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                     variant="default"
                                     size="sm"
                                     onClick={handleNew}
-                                    className="h-7 rounded-md px-2 text-[11px] font-medium"
+                                    className="h-7 rounded-md px-2 text-xs font-medium"
                                     disabled={!isTheVaultWorkspace}
                                 >
                                     <Plus className="size-3 mr-1" />
@@ -391,7 +391,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                 </Button>
                             </div>
                         </div>
-                        <p className="mt-1 text-[10px]" style={{ color: styles.contentTertiary }}>
+                        <p className="mt-1 text-caption" style={{ color: styles.contentTertiary }}>
                             editable markdown memories with YAML frontmatter
                         </p>
 
@@ -420,7 +420,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                         <div className="mt-1.5 flex items-center gap-1.5">
                             <Select value={kindFilter} onValueChange={setKindFilter} disabled={!isTheVaultWorkspace}>
                                 <SelectTrigger
-                                    className="h-7 text-[11px] flex-1"
+                                    className="h-7 text-xs flex-1"
                                     style={{
                                         borderColor: styles.borderDefault,
                                         color: styles.contentPrimary,
@@ -436,7 +436,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                 </SelectContent>
                             </Select>
                             <span
-                                className="rounded px-1.5 py-0.5 text-[10px]"
+                                className="rounded px-1.5 py-0.5 text-caption"
                                 style={{
                                     backgroundColor: styles.surfaceSecondary,
                                     color: styles.contentTertiary,
@@ -450,19 +450,19 @@ function MemoryTab({ tabId }: { tabId: string }) {
                     {/* List */}
                     <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3">
                         {listLoading ? (
-                            <div className="py-4 text-center text-[10px]" style={{ color: styles.contentTertiary }}>
+                            <div className="py-4 text-center text-caption" style={{ color: styles.contentTertiary }}>
                                 loading...
                             </div>
                         ) : listError ? (
                             <div className="py-4 text-center">
-                                <div className="text-[10px]" style={{ color: styles.semanticDestructive }}>
+                                <div className="text-caption" style={{ color: styles.semanticDestructive }}>
                                     {listError}
                                 </div>
                                 {showWorkspaceManagerCta && (
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="mt-2 h-7 px-2 text-[11px]"
+                                        className="mt-2 h-7 px-2 text-xs"
                                         onClick={openWorkspaceManager}
                                     >
                                         Open Workspace Manager
@@ -470,7 +470,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                 )}
                             </div>
                         ) : memories.length === 0 ? (
-                            <div className="py-4 text-center text-[10px]" style={{ color: styles.contentTertiary }}>
+                            <div className="py-4 text-center text-caption" style={{ color: styles.contentTertiary }}>
                                 {searchQuery ? "no memories match" : "no memories yet"}
                             </div>
                         ) : (
@@ -490,7 +490,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                         >
                                             <div className="flex items-center gap-1.5">
                                                 <span
-                                                    className="shrink-0 rounded px-1.5 py-0.5 text-[9px] uppercase font-medium tracking-[0.08em]"
+                                                    className="shrink-0 rounded px-1.5 py-0.5 text-micro uppercase font-medium tracking-[0.08em]"
                                                     style={{
                                                         backgroundColor: styles.surfaceTertiary,
                                                         color: getKindTone(mem.kind, styles),
@@ -500,10 +500,10 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                                 </span>
                                                 <span className="text-xs font-medium truncate">{mem.title || "(untitled)"}</span>
                                             </div>
-                                            <p className="mt-1 text-[10px] line-clamp-2" style={{ color: styles.contentTertiary }}>
+                                            <p className="mt-1 text-caption line-clamp-2" style={{ color: styles.contentTertiary }}>
                                                 {snippet(mem.text)}
                                             </p>
-                                            <div className="mt-1.5 flex items-center gap-1.5 text-[9px]" style={{ color: styles.contentTertiary }}>
+                                            <div className="mt-1.5 flex items-center gap-1.5 text-micro" style={{ color: styles.contentTertiary }}>
                                                 <span>updated {formatListDate(mem.updatedAt)}</span>
                                                 {mem.tags.length > 0 ? (
                                                     <span className="truncate">{mem.tags.slice(0, 3).map((t) => `#${t}`).join(" ")}</span>
@@ -534,14 +534,14 @@ function MemoryTab({ tabId }: { tabId: string }) {
                             >
                                 <div className="flex items-center gap-1.5 min-w-0">
                                     <span
-                                        className="text-[11px] font-medium truncate"
+                                        className="text-xs font-medium truncate"
                                         style={{ color: styles.contentPrimary }}
                                     >
                                         {isNew ? "New memory draft" : (selectedMemory?.title || "Memory")}
                                     </span>
                                     {selectedMemory && !isNew && (
                                         <span
-                                            className="shrink-0 rounded px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em]"
+                                            className="shrink-0 rounded px-1.5 py-0.5 text-micro uppercase tracking-[0.08em]"
                                             style={{
                                                 backgroundColor: styles.surfaceTertiary,
                                                 color: getKindTone(selectedMemory.kind, styles),
@@ -553,7 +553,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                 </div>
                                 {isDirty && (
                                     <span
-                                        className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                                        className="text-caption font-medium px-1.5 py-0.5 rounded"
                                         style={{
                                             backgroundColor: styles.semanticPrimary,
                                             color: styles.semanticPrimaryForeground,
@@ -568,7 +568,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                             variant="ghost"
                                             size="sm"
                                             onClick={handleRevert}
-                                            className="h-7 px-2 text-[11px]"
+                                            className="h-7 px-2 text-xs"
                                             disabled={editorLoading}
                                         >
                                             <Undo2 className="size-3 mr-1" />
@@ -579,7 +579,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                         variant="default"
                                         size="sm"
                                         onClick={handleSave}
-                                        className="h-7 px-2 text-[11px]"
+                                        className="h-7 px-2 text-xs"
                                         disabled={!isDirty || editorLoading}
                                     >
                                         <Save className="size-3 mr-1" />
@@ -590,7 +590,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                             variant="ghost"
                                             size="sm"
                                             onClick={() => setShowDeleteDialog(true)}
-                                            className="h-7 px-2 text-[11px]"
+                                            className="h-7 px-2 text-xs"
                                             disabled={editorLoading}
                                         >
                                             <Trash2 className="size-3" style={{ color: styles.semanticDestructive }} />
@@ -601,7 +601,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
 
                             {editorError && (
                                 <div
-                                    className="shrink-0 px-3 py-1.5 text-[11px]"
+                                    className="shrink-0 px-3 py-1.5 text-xs"
                                     style={{
                                         backgroundColor: `${styles.semanticDestructive}15`,
                                         color: styles.semanticDestructive,
@@ -632,14 +632,14 @@ function MemoryTab({ tabId }: { tabId: string }) {
                             <span className="text-xs" style={{ color: styles.contentPrimary }}>
                                 Select a memory to edit, or start a new one.
                             </span>
-                            <span className="text-[11px]" style={{ color: styles.contentTertiary }}>
+                            <span className="text-xs" style={{ color: styles.contentTertiary }}>
                                 Every memory is saved as markdown with editable frontmatter.
                             </span>
                             <Button
                                 variant="default"
                                 size="sm"
                                 onClick={handleNew}
-                                className="h-7 rounded-md px-2 text-[11px] font-medium"
+                                className="h-7 rounded-md px-2 text-xs font-medium"
                             >
                                 <Plus className="size-3 mr-1" />
                                 new memory
@@ -702,7 +702,7 @@ function SimpleMarkdown({ content, styles: s }: { content: string; styles: Recor
     const html = markdownToHtml(content);
     return (
         <div
-            className="simple-md text-xs leading-relaxed [&_h1]:text-base [&_h1]:font-bold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-bold [&_h2]:mt-2.5 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-0.5 [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[11px] [&_code]:font-mono [&_pre]:my-2 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre_code]:p-0 [&_a]:underline [&_hr]:my-2 [&_hr]:border-current [&_hr]:opacity-20 [&_blockquote]:border-l-2 [&_blockquote]:pl-2 [&_blockquote]:my-1 [&_blockquote]:opacity-70"
+            className="simple-md text-xs leading-relaxed [&_h1]:text-title [&_h1]:font-bold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-bold [&_h2]:mt-2.5 [&_h2]:mb-1 [&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-0.5 [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:my-1 [&_li]:my-0.5 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_pre]:my-2 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre_code]:p-0 [&_a]:underline [&_hr]:my-2 [&_hr]:border-current [&_hr]:opacity-20 [&_blockquote]:border-l-2 [&_blockquote]:pl-2 [&_blockquote]:my-1 [&_blockquote]:opacity-70"
             style={{ color: s.contentPrimary }}
             dangerouslySetInnerHTML={{ __html: html }}
         />
@@ -943,12 +943,12 @@ function JournalTab({ tabId: _tabId }: { tabId: string }) {
                         <div className="flex items-center gap-1.5">
                             <Calendar className="size-3" style={{ color: styles.contentTertiary }} />
                             <span
-                                className="text-[11px] font-medium uppercase tracking-[0.14em]"
+                                className="text-xs font-medium uppercase tracking-[0.14em]"
                                 style={{ color: styles.contentPrimary }}
                             >
                                 Journal
                             </span>
-                            <span className="text-[10px]" style={{ color: styles.contentTertiary }}>
+                            <span className="text-caption" style={{ color: styles.contentTertiary }}>
                                 last 14 days
                             </span>
                         </div>
@@ -1014,7 +1014,7 @@ function JournalTab({ tabId: _tabId }: { tabId: string }) {
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => handleOpenInNotes(selectedEntry.fileName)}
-                                        className="h-7 px-2 text-[11px]"
+                                        className="h-7 px-2 text-xs"
                                     >
                                         <ExternalLink className="size-3 mr-1" />
                                         Open in Notes

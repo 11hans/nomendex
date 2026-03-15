@@ -189,7 +189,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                         variant="default"
                         size="sm"
                         onClick={() => setShowCreateDialog(true)}
-                        className="h-7 rounded-md px-2 text-[11px] font-medium"
+                        className="h-7 rounded-md px-2 text-xs font-medium"
                     >
                         + new
                     </Button>
@@ -234,7 +234,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                                 </div>
                                 <div className="ml-auto mr-8 flex items-center gap-1 shrink-0">
                                     <span
-                                        className="rounded-full px-1.5 py-0.5 text-[10px]"
+                                        className="rounded-full px-1.5 py-0.5 text-caption"
                                         style={{
                                             backgroundColor: currentTheme.styles.surfaceTertiary,
                                             color: currentTheme.styles.contentSecondary,
@@ -310,7 +310,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                             >
                                 {creating ? "Creating..." : "Create"}
                             </Button>
-                            <span className="text-[10px] text-muted-foreground mt-1">⌘ Enter</span>
+                            <span className="text-caption text-muted-foreground mt-1">⌘ Enter</span>
                         </div>
                     </DialogFooter>
                 </DialogContent>

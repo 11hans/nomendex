@@ -62,10 +62,10 @@ function SectionHeader({ title, count, icon: Icon, color }: SectionHeaderProps) 
     return (
         <div className="flex items-center gap-2 mb-2">
             <Icon size={14} style={{ color }} />
-            <h3 className="text-[11px] font-medium uppercase tracking-[0.12em]" style={{ color }}>
+            <h3 className="text-xs font-medium uppercase tracking-[0.12em]" style={{ color }}>
                 {title}
             </h3>
-            <span className="text-[10px]">({count})</span>
+            <span className="text-caption">({count})</span>
         </div>
     );
 }
@@ -293,7 +293,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                                     </div>
                                     {todo.description && (
                                         <div
-                                            className="text-[11px] truncate mt-0.5"
+                                            className="text-xs truncate mt-0.5"
                                             style={{ color: currentTheme.styles.contentTertiary }}
                                         >
                                             {todo.description}
@@ -301,7 +301,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                                     )}
                                 </div>
                                 <span
-                                    className="text-[10px] px-2 py-0.5 rounded-full shrink-0"
+                                    className="text-caption px-2 py-0.5 rounded-full shrink-0"
                                     style={{
                                         backgroundColor: currentTheme.styles.surfaceTertiary,
                                         color: todo.status === "done"
@@ -362,7 +362,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                         </Button>
                         <FolderKanban size={16} style={{ color: currentTheme.styles.contentAccent }} />
                         <h2
-                            className="text-[11px] font-medium uppercase tracking-[0.14em] shrink-0"
+                            className="text-xs font-medium uppercase tracking-[0.14em] shrink-0"
                             style={{ color: currentTheme.styles.contentPrimary }}
                         >
                             Project
@@ -379,14 +379,14 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                         variant="ghost"
                         size="sm"
                         onClick={handleOpenKanban}
-                        className="h-7 px-2.5 text-[11px] font-medium rounded-md shrink-0"
+                        className="h-7 px-2.5 text-xs font-medium rounded-md shrink-0"
                     >
                         <ExternalLink size={13} className="mr-1.5" />
                         Open Kanban
                     </Button>
                 </div>
 
-                <div className="mt-1.5 flex items-center gap-2 flex-wrap text-[10px]">
+                <div className="mt-1.5 flex items-center gap-2 flex-wrap text-caption">
                     <span
                         className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded"
                         style={{
@@ -483,7 +483,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                                                 </div>
                                                 {preview && (
                                                     <div
-                                                        className="text-[11px] truncate mt-1 pl-5"
+                                                        className="text-xs truncate mt-1 pl-5"
                                                         style={{ color: currentTheme.styles.contentTertiary }}
                                                     >
                                                         {preview}
@@ -499,7 +499,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                                         variant="ghost"
                                         size="sm"
                                         onClick={() => setShowAllNotes((prev) => !prev)}
-                                        className="mt-2 h-7 px-2 text-[11px]"
+                                        className="mt-2 h-7 px-2 text-xs"
                                         style={{ color: currentTheme.styles.contentAccent }}
                                     >
                                         {showAllNotes ? (

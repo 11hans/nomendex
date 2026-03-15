@@ -251,7 +251,7 @@ function TreeItem({
                         />
                     )}
                     <span
-                        className="flex-1 truncate text-[11px]"
+                        className="flex-1 truncate text-xs"
                         style={{
                             color: currentTheme.styles.contentPrimary,
                         }}
@@ -682,7 +682,7 @@ export function NotesFileTree({
             <OverlayScrollbar className="flex-1" reserveScrollbarSpace={false}>
                 {hasNoResults ? (
                     <div
-                        className="p-4 text-center text-[11px]"
+                        className="p-4 text-center text-xs"
                         style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         No notes match "{searchQuery}"
@@ -696,7 +696,7 @@ export function NotesFileTree({
                             className="h-8 w-8 mx-auto mb-2"
                             style={{ color: currentTheme.styles.contentTertiary }}
                         />
-                        <p className="text-[11px]">No notes yet</p>
+                        <p className="text-xs">No notes yet</p>
                     </div>
                 ) : (
                     <div

@@ -39,7 +39,7 @@ function CollapsibleSection({ title, count, defaultOpen = true, children }: Coll
                         style={{ color: currentTheme.styles.contentTertiary }}
                     />
                     <span
-                        className="text-[10px] uppercase tracking-wider font-medium"
+                        className="text-caption uppercase tracking-wider font-medium"
                         style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         {title}
@@ -47,7 +47,7 @@ function CollapsibleSection({ title, count, defaultOpen = true, children }: Coll
                 </div>
                 {count !== undefined && count > 0 && (
                     <span
-                        className="text-[10px] px-1.5 py-0.5 rounded-full"
+                        className="text-caption px-1.5 py-0.5 rounded-full"
                         style={{
                             backgroundColor: currentTheme.styles.surfaceMuted,
                             color: currentTheme.styles.contentSecondary,
@@ -145,14 +145,14 @@ export function BacklinksPanel({ noteFileName, onOpenNote, onCreateNote }: Backl
                                     <AlertCircle className="h-3 w-3 shrink-0" />
                                     <span className="truncate">{phantom.targetName}</span>
                                     <span
-                                        className="text-[9px] ml-auto"
+                                        className="text-micro ml-auto"
                                         style={{ color: currentTheme.styles.contentTertiary }}
                                     >
                                         create
                                     </span>
                                 </button>
                                 <div
-                                    className="text-[10px] pl-4 pb-1"
+                                    className="text-caption pl-4 pb-1"
                                     style={{ color: currentTheme.styles.contentTertiary }}
                                 >
                                     Referenced in: {phantom.referencedIn.map((f) => f.replace(/\.md$/, "").split("/").pop()).join(", ")}

@@ -354,21 +354,21 @@ export function ProjectBrowserView() {
             <div className="mx-auto w-full max-w-[620px] px-3 pt-3 pb-6">
                 <div className="shrink-0 flex items-center gap-1.5">
                     <FolderKanban className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>Projects</span>
-                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <span className="text-xs font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>Projects</span>
+                    <span className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                         {counts.all} items
                     </span>
-                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                         {totalTaskCount} tasks
                     </span>
-                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                         {totalOpenTasksCount} open
                     </span>
                     <div className="ml-auto">
                         <Button
                             variant="outline"
                             size="sm"
-                            className="h-7 px-2 text-[11px] font-medium rounded-md"
+                            className="h-7 px-2 text-xs font-medium rounded-md"
                             onClick={() => {
                                 if (activeTabId) {
                                     replaceTabWithNewView(activeTabId, todosPluginSerial, {
@@ -399,7 +399,7 @@ export function ProjectBrowserView() {
                             <button
                                 key={value}
                                 onClick={() => setFilter(value)}
-                                className="h-7 rounded-md px-2 text-[10px] transition-colors"
+                                className="h-7 rounded-md px-2 text-caption transition-colors"
                                 style={filter === value ? {
                                     backgroundColor: currentTheme.styles.surfaceAccent,
                                     color: currentTheme.styles.contentPrimary,
@@ -416,7 +416,7 @@ export function ProjectBrowserView() {
 
                 <div ref={listContainerRef} tabIndex={0} onKeyDown={handleKeyDown} className="mt-2.5 outline-none space-y-2 pb-2">
                     {filteredProjects.length === 0 && (
-                        <div className="py-3 text-center text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                        <div className="py-3 text-center text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                             no projects match current filters
                         </div>
                     )}
@@ -460,18 +460,18 @@ export function ProjectBrowserView() {
                                                     {project.name}
                                                 </span>
                                                 {project.isArchived && (
-                                                    <span className="text-[9px] uppercase tracking-[0.08em]" style={{ color: currentTheme.styles.semanticDestructive }}>
+                                                    <span className="text-micro uppercase tracking-[0.08em]" style={{ color: currentTheme.styles.semanticDestructive }}>
                                                         archived
                                                     </span>
                                                 )}
                                                 <ChevronRight className="ml-auto size-3 opacity-60 shrink-0" style={{ color: currentTheme.styles.contentTertiary }} />
                                             </div>
 
-                                            <div className="mt-0.5 text-[10px] truncate" style={{ color: currentTheme.styles.contentTertiary }}>
+                                            <div className="mt-0.5 text-caption truncate" style={{ color: currentTheme.styles.contentTertiary }}>
                                                 {description}
                                             </div>
 
-                                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                                            <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                                                 <span>{project.totalCount} tasks</span>
                                                 <span>{project.inProgressCount} in progress</span>
                                                 <span>{project.todoCount} todo</span>
@@ -485,7 +485,7 @@ export function ProjectBrowserView() {
                                                 )}
                                             </div>
 
-                                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                                            <div className="mt-1 flex flex-wrap items-center gap-2 text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                                                 <span>activity {lastActivityLabel}</span>
                                                 {!project.isNoProject && <span>updated {updatedLabel}</span>}
                                                 {!project.isNoProject && <span>created {createdLabel}</span>}

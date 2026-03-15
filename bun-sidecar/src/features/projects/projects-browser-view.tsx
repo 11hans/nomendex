@@ -237,7 +237,7 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
 
                                     <div className="ml-auto mr-12 flex items-center gap-1 shrink-0">
                                         <span
-                                            className="rounded-full px-1.5 py-0.5 text-[10px]"
+                                            className="rounded-full px-1.5 py-0.5 text-caption"
                                             style={{
                                                 backgroundColor: currentTheme.styles.surfaceTertiary,
                                                 color: currentTheme.styles.contentSecondary,
@@ -248,7 +248,7 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
                                         </span>
                                         {project.inProgressCount > 0 && (
                                             <span
-                                                className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]"
+                                                className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-caption"
                                                 style={{
                                                     backgroundColor: currentTheme.styles.surfaceTertiary,
                                                     color: currentTheme.styles.contentAccent,
@@ -261,7 +261,7 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
                                         )}
                                         {project.todoCount > 0 && (
                                             <span
-                                                className="rounded-full px-1.5 py-0.5 text-[10px]"
+                                                className="rounded-full px-1.5 py-0.5 text-caption"
                                                 style={{
                                                     backgroundColor: currentTheme.styles.surfaceTertiary,
                                                     color: currentTheme.styles.contentSecondary,
@@ -273,7 +273,7 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
                                         )}
                                         {project.doneCount > 0 && (
                                             <span
-                                                className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]"
+                                                className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-caption"
                                                 style={{
                                                     backgroundColor: currentTheme.styles.surfaceTertiary,
                                                     color: currentTheme.styles.semanticSuccess,
@@ -286,7 +286,7 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
                                         )}
                                         {project.notesCount > 0 && (
                                             <span
-                                                className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px]"
+                                                className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-caption"
                                                 style={{
                                                     backgroundColor: currentTheme.styles.surfaceTertiary,
                                                     color: currentTheme.styles.contentTertiary,

@@ -97,14 +97,14 @@ function McpServersContent() {
             <div className="mx-auto w-full max-w-[620px] px-3 pt-3 pb-6">
                 <div className="shrink-0 flex items-center gap-1.5">
                     <Server className="size-3 text-muted-foreground" />
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]">MCP Servers</span>
-                    <span className="text-[10px] text-muted-foreground">{servers.length} items</span>
+                    <span className="text-xs font-medium uppercase tracking-[0.14em]">MCP Servers</span>
+                    <span className="text-caption text-muted-foreground">{servers.length} items</span>
 
                     <div className="ml-auto flex items-center gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => navigate("/agents")} title="Back">
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" className="h-7 px-2 text-[11px]" onClick={() => navigate("/mcp-servers/new")}>
+                        <Button size="sm" className="h-7 px-2 text-xs" onClick={() => navigate("/mcp-servers/new")}>
                             <Plus className="mr-1 h-4 w-4" />
                             New
                         </Button>
@@ -120,7 +120,7 @@ function McpServersContent() {
                     )}
 
                     {servers.length === 0 ? (
-                        <div className="py-4 text-center text-[10px] text-muted-foreground">
+                        <div className="py-4 text-center text-caption text-muted-foreground">
                             no mcp servers configured yet
                         </div>
                     ) : (
@@ -136,13 +136,13 @@ function McpServersContent() {
                                                 <CardTitle className="flex items-center gap-1.5 text-xs">
                                                     <span className="truncate">{server.name}</span>
                                                     {server.isBuiltIn && (
-                                                        <Badge variant="secondary" className="px-1 py-0 text-[10px]">Built-in</Badge>
+                                                        <Badge variant="secondary" className="px-1 py-0 text-caption">Built-in</Badge>
                                                     )}
-                                                    <Badge variant="outline" className="px-1 py-0 text-[10px]">
+                                                    <Badge variant="outline" className="px-1 py-0 text-caption">
                                                         {getTransportType(server.transport).toUpperCase()}
                                                     </Badge>
                                                 </CardTitle>
-                                                <CardDescription className="text-[10px]">
+                                                <CardDescription className="text-caption">
                                                     {server.description || "No description"}
                                                 </CardDescription>
                                             </div>
@@ -172,12 +172,12 @@ function McpServersContent() {
                                     </div>
                                 </CardHeader>
                                 <CardContent className="px-2.5 py-1.5 pt-0">
-                                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                    <div className="flex items-center gap-1.5 text-caption text-muted-foreground">
                                         <ChevronRight className="size-3 opacity-70" />
                                         <span className="truncate font-mono">{getTransportLabel(server.transport)}</span>
                                     </div>
                                     {server.notes && (
-                                        <p className="mt-1 text-[10px] text-muted-foreground">
+                                        <p className="mt-1 text-caption text-muted-foreground">
                                             {server.notes}
                                         </p>
                                     )}

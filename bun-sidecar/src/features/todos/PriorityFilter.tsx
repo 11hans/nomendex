@@ -29,7 +29,7 @@ export function PriorityFilter({ selectedPriority, onPriorityChange }: PriorityF
                         {selectedOption.label}
                     </span>
                     <button
-                        className="text-[10px] uppercase tracking-wider opacity-40 hover:opacity-70 transition-opacity"
+                        className="text-caption uppercase tracking-wider opacity-40 hover:opacity-70 transition-opacity"
                         onClick={() => onPriorityChange(null)}
                         style={{ color: currentTheme.styles.contentTertiary }}
                     >
@@ -40,7 +40,7 @@ export function PriorityFilter({ selectedPriority, onPriorityChange }: PriorityF
             <Popover open={isOpen} onOpenChange={setIsOpen}>
                 <PopoverTrigger asChild>
                     <button
-                        className="text-[10px] uppercase tracking-wider opacity-40 hover:opacity-70 transition-opacity flex items-center gap-1"
+                        className="text-caption uppercase tracking-wider opacity-40 hover:opacity-70 transition-opacity flex items-center gap-1"
                         style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         <Flag className="h-2.5 w-2.5" />

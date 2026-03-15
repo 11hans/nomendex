@@ -1428,14 +1428,14 @@ export function NotesView(props: NotesViewProps) {
                                 <div className="flex items-center gap-1.5">
                                     <FileText className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
                                     <span
-                                        className="text-[11px] font-medium uppercase tracking-[0.14em]"
+                                        className="text-xs font-medium uppercase tracking-[0.14em]"
                                         style={{ color: currentTheme.styles.contentPrimary }}
                                     >
                                         Note
                                     </span>
                                     {isLocked && (
                                         <span
-                                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md"
+                                            className="inline-flex items-center gap-1 text-caption px-1.5 py-0.5 rounded-md"
                                             style={{
                                                 color: currentTheme.styles.contentTertiary,
                                                 backgroundColor: currentTheme.styles.surfaceSecondary,
@@ -1454,7 +1454,7 @@ export function NotesView(props: NotesViewProps) {
                                         {fileName}
                                     </h1>
                                     <p
-                                        className="text-[10px] truncate"
+                                        className="text-caption truncate"
                                         style={{ color: currentTheme.styles.contentTertiary }}
                                     >
                                         {folderPath.length > 0 ? folderPath.join(" / ") : "root"}
@@ -1504,7 +1504,7 @@ export function NotesView(props: NotesViewProps) {
                                             type="button"
                                             variant="ghost"
                                             size="sm"
-                                            className="h-6 px-2 text-[10px]"
+                                            className="h-6 px-2 text-caption"
                                             style={isRichTextMode ? {
                                                 backgroundColor: currentTheme.styles.surfaceAccent,
                                                 color: currentTheme.styles.contentPrimary,
@@ -1519,7 +1519,7 @@ export function NotesView(props: NotesViewProps) {
                                             type="button"
                                             variant="ghost"
                                             size="sm"
-                                            className="h-6 px-2 text-[10px]"
+                                            className="h-6 px-2 text-caption"
                                             style={!isRichTextMode ? {
                                                 backgroundColor: currentTheme.styles.surfaceAccent,
                                                 color: currentTheme.styles.contentPrimary,
@@ -1704,7 +1704,7 @@ export function NotesView(props: NotesViewProps) {
                                         >
                                             {isMinimapFocused && (
                                                 <div className="flex justify-end mb-1">
-                                                    <span className="text-[9px] px-1 py-0.5 rounded bg-accent" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                    <span className="text-micro px-1 py-0.5 rounded bg-accent" style={{ color: currentTheme.styles.contentSecondary }}>
                                                         ↑↓
                                                     </span>
                                                 </div>

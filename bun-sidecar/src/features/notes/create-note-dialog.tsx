@@ -87,7 +87,7 @@ export function CreateNoteDialog({ onSuccess }: CreateNoteDialogProps) {
             <div className="space-y-2 py-1">
                 <Label
                     htmlFor="name"
-                    className="text-[10px] uppercase tracking-[0.08em]"
+                    className="text-caption uppercase tracking-[0.08em]"
                     style={{ color: currentTheme.styles.contentTertiary }}
                 >
                     Note Name

@@ -8,27 +8,27 @@ function HelpContent() {
 
     return (
         <div
-            className="h-full min-h-0 overflow-y-auto [&_.text-sm]:text-xs [&_.text-base]:text-sm [&_.text-xs]:text-[11px]"
+            className="h-full min-h-0 overflow-y-auto [&_.text-sm]:text-xs [&_.text-base]:text-xs [&_.text-xs]:text-xs"
             style={{ backgroundColor: currentTheme.styles.surfacePrimary, color: currentTheme.styles.contentPrimary }}
         >
             <div className="mx-auto w-full max-w-[980px] space-y-2.5 px-3 pt-3 pb-6">
                 <div className="shrink-0 flex items-center gap-1.5 flex-wrap">
                     <Lightbulb className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>
+                    <span className="text-xs font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>
                         Help
                     </span>
-                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                         daily workflows
                     </span>
-                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                         keyboard-first
                     </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                    <Badge variant="secondary" className="text-[10px]">Todos</Badge>
-                    <Badge variant="secondary" className="text-[10px]">Notes</Badge>
-                    <Badge variant="secondary" className="text-[10px]">Sync</Badge>
-                    <Badge variant="secondary" className="text-[10px]">Shortcuts</Badge>
+                    <Badge variant="secondary" className="text-caption">Todos</Badge>
+                    <Badge variant="secondary" className="text-caption">Notes</Badge>
+                    <Badge variant="secondary" className="text-caption">Sync</Badge>
+                    <Badge variant="secondary" className="text-caption">Shortcuts</Badge>
                 </div>
 
                 <div className="space-y-4">
@@ -74,7 +74,7 @@ function HelpContent() {
                                 <ListTodo className="size-5" />
                                 Todos
                             </CardTitle>
-                            <CardDescription className="text-[11px]">
+                            <CardDescription className="text-xs">
                                 Task management with kanban boards, projects, statuses, and scheduling.
                             </CardDescription>
                         </CardHeader>
@@ -181,7 +181,7 @@ function HelpContent() {
                                     <FileText className="size-5" />
                                     Notes
                                 </CardTitle>
-                                <CardDescription className="text-[11px]">
+                                <CardDescription className="text-xs">
                                     Markdown notes with daily note workflows.
                                 </CardDescription>
                             </CardHeader>
@@ -204,7 +204,7 @@ function HelpContent() {
                                     <Keyboard className="size-5" />
                                     Essential Shortcuts
                                 </CardTitle>
-                                <CardDescription className="text-[11px]">
+                                <CardDescription className="text-xs">
                                     Core actions that speed up daily usage.
                                 </CardDescription>
                             </CardHeader>

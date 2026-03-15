@@ -262,7 +262,7 @@ function ToolUseItem({ block }: { block: ToolBlock }) {
                     <CollapsibleTrigger className="flex w-full items-center gap-2 rounded-md border border-border/50 px-3 py-1.5 text-xs transition-colors hover:bg-secondary/50">
                         <Icon className={cn("size-3.5 shrink-0", hasError ? "text-destructive" : pending ? "text-muted-foreground animate-pulse" : "text-muted-foreground")} />
                         <span className="font-medium text-muted-foreground">{label}</span>
-                        <span className="flex-1 truncate text-left text-[11px] text-muted-foreground/70">{detail}</span>
+                        <span className="flex-1 truncate text-left text-xs text-muted-foreground/70">{detail}</span>
                         <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                     </CollapsibleTrigger>
                 )}
@@ -272,7 +272,7 @@ function ToolUseItem({ block }: { block: ToolBlock }) {
                             <div className="flex items-center gap-2 border-b border-border/50 bg-secondary/30 px-3 py-1.5 text-xs">
                                 <Icon className={cn("size-3.5 shrink-0", hasError ? "text-destructive" : pending ? "text-muted-foreground animate-pulse" : "text-foreground")} />
                                 <span className={cn("font-medium", hasError ? "text-destructive" : "text-foreground")}>{label}</span>
-                                <span className="flex-1 truncate text-[11px] text-muted-foreground">{detail}</span>
+                                <span className="flex-1 truncate text-xs text-muted-foreground">{detail}</span>
                                 <Badge
                                     variant={hasError ? "destructive" : pending ? "secondary" : "outline"}
                                     className="h-4 rounded-full px-1.5 text-xs uppercase"
@@ -295,7 +295,7 @@ function ToolUseItem({ block }: { block: ToolBlock }) {
                                 {(toolCall.output !== undefined || toolCall.errorText) ? (
                                     <ToolOutput output={toolCall.output ?? null} errorText={toolCall.errorText} />
                                 ) : (
-                                    <div className="px-3 py-2 text-[11px] text-muted-foreground">Waiting for result...</div>
+                                    <div className="px-3 py-2 text-xs text-muted-foreground">Waiting for result...</div>
                                 )}
                             </div>
                         </div>
@@ -1038,12 +1038,12 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
             <div className="shrink-0 border-b border-border px-4 py-2.5">
                 <div className="mx-auto flex w-full max-w-3xl min-w-0 items-center gap-2">
                     <MessageSquare className="size-3.5 text-primary" />
-                    <span className="truncate text-[11px] font-medium uppercase tracking-[0.14em]">Chat</span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                    <span className="truncate text-xs font-medium uppercase tracking-[0.14em]">Chat</span>
+                    <span className="shrink-0 text-caption text-muted-foreground">
                         {sessionStatus} • {isLoading ? "running" : "ready"}
                     </span>
                     {messageQueue.length > 0 && (
-                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                        <span className="shrink-0 text-caption text-muted-foreground">
                             queue {messageQueue.length}
                         </span>
                     )}
@@ -1224,7 +1224,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                             placeholder={isLoading ? "Type to queue next message..." : "Message..."}
                             disabled={!!pendingPermission}
                             enterToSend={chatInputEnterToSend}
-                            className="min-h-[64px] [&_.pm-chat-input]:text-[11px] [&>div.absolute]:text-[11px]"
+                            className="min-h-[64px] [&_.pm-chat-input]:text-xs [&>div.absolute]:text-xs"
                         />
                         <ProseMirrorPromptFooter className="justify-between">
                             <div className="flex items-center gap-1">
@@ -1235,7 +1235,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                 />
                                 <ProseMirrorPromptAttach disabled={!!pendingPermission} />
                                 {messageQueue.length > 0 && (
-                                    <Badge variant="outline" className="h-5 px-2 text-[10px]">
+                                    <Badge variant="outline" className="h-5 px-2 text-caption">
                                         queue {messageQueue.length}
                                     </Badge>
                                 )}
@@ -1269,7 +1269,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                             </div>
                         </ProseMirrorPromptFooter>
                     </ProseMirrorPromptInput>
-                    <p className="px-2 pb-1 text-[11px] text-muted-foreground">
+                    <p className="px-2 pb-1 text-xs text-muted-foreground">
                         {chatInputEnterToSend ? "Enter sends, Shift+Enter adds a new line." : "Enter adds a new line."}
                     </p>
                 </div>

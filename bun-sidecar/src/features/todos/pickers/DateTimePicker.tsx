@@ -286,7 +286,7 @@ export function DateTimePicker({ dueDate, startDate, onChange, compact }: DateTi
                 <PopoverTrigger asChild>
                     <button
                         type="button"
-                        className={`flex items-center gap-1 ${compact ? 'px-0 py-0 text-[10px]' : 'px-2 py-1 text-sm'} rounded font-medium transition-colors hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-offset-1`}
+                        className={`flex items-center gap-1 ${compact ? 'px-0 py-0 text-caption' : 'px-2 py-1 text-sm'} rounded font-medium transition-colors hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-offset-1`}
                         style={{ color: getDateColor() }}
                     >
                         <CalendarDays className={compact ? "size-3 shrink-0" : "size-4 shrink-0"} />

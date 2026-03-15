@@ -36,7 +36,7 @@ function NavItem({
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
     return (
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground px-2.5 pt-3 pb-1">
+        <div className="text-caption uppercase tracking-wider text-muted-foreground px-2.5 pt-3 pb-1">
             {children}
         </div>
     );
@@ -154,7 +154,7 @@ export function WorkspaceSidebar() {
                     onClick={() => handleNavigate("/help")}
                 />
                 <div className="px-2.5 pt-2">
-                    <span className="text-[9px] text-muted-foreground">v{appVersion}</span>
+                    <span className="text-micro text-muted-foreground">v{appVersion}</span>
                 </div>
             </div>
         </div>

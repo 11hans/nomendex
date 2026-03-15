@@ -230,8 +230,8 @@ export function BoardSettingsDialog({
                         borderBottom: `1px solid ${styles.borderDefault}`,
                     }}
                 >
-                    <DialogTitle className="text-[11px] uppercase tracking-[0.08em] font-medium">Board Settings</DialogTitle>
-                    <DialogDescription className="text-[10px]">
+                    <DialogTitle className="text-xs uppercase tracking-[0.08em] font-medium">Board Settings</DialogTitle>
+                    <DialogDescription className="text-caption">
                         Configure custom columns for your Kanban board and drag to reorder.
                     </DialogDescription>
                 </DialogHeader>

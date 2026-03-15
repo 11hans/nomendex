@@ -70,10 +70,10 @@ export function DeleteProjectDialog({
                         borderBottom: `1px solid ${styles.borderDefault}`,
                     }}
                 >
-                    <span className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
+                    <span className="text-xs font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
                         Delete Project
                     </span>
-                    <span className="text-[10px]" style={{ color: styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: styles.contentTertiary }}>
                         Permanent action
                     </span>
                 </div>

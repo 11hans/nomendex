@@ -99,7 +99,7 @@ export function ProjectList({
                             <span className="flex flex-col min-w-0">
                                 <span className={cn("truncate", isCompact ? "text-sm" : "font-medium")}>{project.name}</span>
                                 <span
-                                    className="text-[11px] leading-tight"
+                                    className="text-xs leading-tight"
                                     style={{ color: currentTheme.styles.contentTertiary }}
                                 >
                                     {description}
@@ -160,7 +160,7 @@ export function ProjectList({
                                         title="In progress"
                                     >
                                         <Clock size={12} />
-                                        <span className="text-[11px]">In progress</span>
+                                        <span className="text-xs">In progress</span>
                                         <span className="tabular-nums">{project.inProgressCount}</span>
                                     </span>
                                 )}
@@ -170,7 +170,7 @@ export function ProjectList({
                                         style={{ backgroundColor: currentTheme.styles.surfaceSecondary, color: currentTheme.styles.contentSecondary }}
                                         title="To do"
                                     >
-                                        <span className="text-[11px]">Todo</span>
+                                        <span className="text-xs">Todo</span>
                                         <span className="tabular-nums">{project.todoCount}</span>
                                     </span>
                                 )}
@@ -181,13 +181,13 @@ export function ProjectList({
                                         title="Done"
                                     >
                                         <CheckCircle2 size={12} />
-                                        <span className="text-[11px]">Done</span>
+                                        <span className="text-xs">Done</span>
                                         <span className="tabular-nums">{project.doneCount}</span>
                                     </span>
                                 )}
                                 {project.inProgressCount === 0 && project.todoCount === 0 && project.doneCount === 0 && (
                                     <span
-                                        className="text-[11px] px-1.5"
+                                        className="text-xs px-1.5"
                                         style={{ color: currentTheme.styles.contentAccent }}
                                     >
                                         No status

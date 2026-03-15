@@ -76,7 +76,7 @@ function CloseAllTabsDialog({
                     <Button variant="outline" onClick={handleConfirm}>
                         Close all
                     </Button>
-                    <span className="text-[10px] text-muted-foreground mt-1">⌘ Enter</span>
+                    <span className="text-caption text-muted-foreground mt-1">⌘ Enter</span>
                 </div>
             </DialogFooter>
         </>
@@ -259,15 +259,15 @@ function TagManagementDialog({
 
                 {/* Hints */}
                 <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
-                    <span><kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">Tab</kbd> autocomplete</span>
-                    <span><kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">Enter</kbd> add tag</span>
+                    <span><kbd className="px-1 py-0.5 rounded bg-muted text-caption">Tab</kbd> autocomplete</span>
+                    <span><kbd className="px-1 py-0.5 rounded bg-muted text-caption">Enter</kbd> add tag</span>
                 </div>
             </div>
             <DialogFooter>
                 <Button variant="ghost" onClick={closeDialog}>Cancel</Button>
                 <div className="flex flex-col items-center">
                     <Button onClick={handleSave}>Save Tags</Button>
-                    <span className="text-[10px] text-muted-foreground mt-1">⌘ Enter</span>
+                    <span className="text-caption text-muted-foreground mt-1">⌘ Enter</span>
                 </div>
             </DialogFooter>
         </>

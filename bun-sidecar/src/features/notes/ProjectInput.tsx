@@ -119,7 +119,7 @@ export function ProjectInput({ project, onProjectChange }: ProjectInputProps) {
                     </span>
                 ) : (
                     <button
-                        className="text-[10px] uppercase tracking-wider opacity-40 hover:opacity-70 transition-opacity flex items-center gap-1"
+                        className="text-caption uppercase tracking-wider opacity-40 hover:opacity-70 transition-opacity flex items-center gap-1"
                         onClick={() => setIsOpen(true)}
                         style={{
                             color: currentTheme.styles.contentTertiary,
@@ -251,13 +251,13 @@ export function ProjectInput({ project, onProjectChange }: ProjectInputProps) {
                             style={{ color: currentTheme.styles.contentTertiary }}
                         >
                             <span>
-                                <kbd className="px-1 py-0.5 rounded text-[10px]" style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}>Tab</kbd> autocomplete
+                                <kbd className="px-1 py-0.5 rounded text-caption" style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}>Tab</kbd> autocomplete
                             </span>
                             <span>
-                                <kbd className="px-1 py-0.5 rounded text-[10px]" style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}>Enter</kbd> select
+                                <kbd className="px-1 py-0.5 rounded text-caption" style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}>Enter</kbd> select
                             </span>
                             <span>
-                                <kbd className="px-1 py-0.5 rounded text-[10px]" style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}>Esc</kbd> cancel
+                                <kbd className="px-1 py-0.5 rounded text-caption" style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}>Esc</kbd> cancel
                             </span>
                         </div>
                     </div>

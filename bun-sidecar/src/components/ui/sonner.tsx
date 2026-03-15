@@ -15,8 +15,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
           content: "flex-1 min-w-0",
           title: "text-xs font-medium truncate",
           description: "hidden",
-          actionButton: "shrink-0 text-[11px] font-medium px-2 py-1 rounded",
-          cancelButton: "shrink-0 text-[11px] font-medium px-2 py-1 rounded opacity-70 hover:opacity-100",
+          actionButton: "shrink-0 text-xs font-medium px-2 py-1 rounded",
+          cancelButton: "shrink-0 text-xs font-medium px-2 py-1 rounded opacity-70 hover:opacity-100",
         },
         style: {
           backgroundColor: styles.surfaceSecondary,

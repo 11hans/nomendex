@@ -263,9 +263,9 @@ export function CommandMenu() {
             <div className="border-b px-3 py-2" data-slot="command-toolbar">
                 <div className="flex items-center gap-1.5">
                     <Command className="size-3 text-muted-foreground" />
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]">Command Palette</span>
-                    <span className="text-[10px] text-muted-foreground">{commandGroups.reduce((acc, g) => acc + g.commands.length, 0)} commands</span>
-                    <span className="ml-auto text-[10px] text-muted-foreground">Cmd/Ctrl + K</span>
+                    <span className="text-xs font-medium uppercase tracking-[0.14em]">Command Palette</span>
+                    <span className="text-caption text-muted-foreground">{commandGroups.reduce((acc, g) => acc + g.commands.length, 0)} commands</span>
+                    <span className="ml-auto text-caption text-muted-foreground">Cmd/Ctrl + K</span>
                 </div>
             </div>
 
@@ -298,7 +298,7 @@ export function CommandMenu() {
                                         <IconComponent className="mt-0.5 h-3.5 w-3.5" />
                                         <div className="flex min-w-0 flex-col">
                                             <span className="truncate text-xs font-medium">{command.name}</span>
-                                            <span className="truncate text-[10px] text-muted-foreground">{command.description}</span>
+                                            <span className="truncate text-caption text-muted-foreground">{command.description}</span>
                                         </div>
                                     </CommandItem>
                                 );

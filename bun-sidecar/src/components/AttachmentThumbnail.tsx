@@ -66,7 +66,7 @@ export function AttachmentThumbnail({ attachment, onRemove, size = "md" }: Attac
                     <div className="w-full h-full flex flex-col items-center justify-center p-1">
                         <File className={iconSize} style={{ color: styles.contentSecondary }} />
                         <span
-                            className="text-[9px] truncate w-full text-center mt-0.5"
+                            className="text-micro truncate w-full text-center mt-0.5"
                             style={{ color: styles.contentTertiary }}
                         >
                             {displayName.split(".").pop()?.toUpperCase()}
@@ -93,10 +93,10 @@ export function AttachmentThumbnail({ attachment, onRemove, size = "md" }: Attac
                             background: `linear-gradient(to top, ${styles.surfacePrimary}dd, transparent)`,
                         }}
                     >
-                        <p className="text-[9px] truncate" style={{ color: styles.contentPrimary }}>
+                        <p className="text-micro truncate" style={{ color: styles.contentPrimary }}>
                             {displayName}
                         </p>
-                        <p className="text-[9px]" style={{ color: styles.contentTertiary }}>
+                        <p className="text-micro" style={{ color: styles.contentTertiary }}>
                             {formatFileSize(attachment.size)}
                         </p>
                     </div>

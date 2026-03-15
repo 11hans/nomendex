@@ -357,7 +357,7 @@ export function SearchNotesDialog({ onSuccess }: SearchNotesDialogProps) {
                     {!isLoadingPreview && previewNote && (
                         <div className="p-4">
                             <div
-                                className="font-semibold text-base mb-1"
+                                className="font-semibold text-title mb-1"
                                 style={{ color: styles.contentPrimary }}
                             >
                                 {highlightMatches(previewNote.fileName.replace(/\.md$/, ""))}

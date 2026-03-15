@@ -269,7 +269,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                         {tagName}
                     </h1>
                     <span
-                        className="tag-detail-meta text-[10px] px-2 py-0.5 rounded-full"
+                        className="tag-detail-meta text-caption px-2 py-0.5 rounded-full"
                         style={{
                             backgroundColor: currentTheme.styles.surfaceTertiary,
                             color: currentTheme.styles.contentSecondary
@@ -298,7 +298,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                         {noteFiles.length > 0 && (
                             <div>
                                 <div
-                                    className="flex items-center gap-2 mb-2 text-[11px] font-normal"
+                                    className="flex items-center gap-2 mb-2 text-xs font-normal"
                                     style={{ color: currentTheme.styles.contentSecondary }}
                                 >
                                     <FileText size={14} />
@@ -327,7 +327,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                                                     size={16}
                                                     style={{ color: currentTheme.styles.contentTertiary }}
                                                 />
-                                                <span className="text-[11px] font-normal">{file.displayName}</span>
+                                                <span className="text-xs font-normal">{file.displayName}</span>
                                             </button>
                                         );
                                     })}
@@ -339,7 +339,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                         {todoFiles.length > 0 && (
                             <div>
                                 <div
-                                    className="flex items-center gap-2 mb-2 text-[11px] font-normal"
+                                    className="flex items-center gap-2 mb-2 text-xs font-normal"
                                     style={{ color: currentTheme.styles.contentSecondary }}
                                 >
                                     <CheckSquare size={14} />
@@ -368,7 +368,7 @@ export function TagDetailView({ tabId, tagName }: { tabId: string } & TagDetailV
                                                     size={16}
                                                     style={{ color: currentTheme.styles.contentTertiary }}
                                                 />
-                                                <span className="text-[11px] font-normal">{file.title || file.displayName}</span>
+                                                <span className="text-xs font-normal">{file.title || file.displayName}</span>
                                             </button>
                                         );
                                     })}

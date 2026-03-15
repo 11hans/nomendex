@@ -221,13 +221,13 @@ export default function UploadsBrowserView() {
             <div className="mx-auto w-full max-w-[1240px] px-3 pt-3 pb-6">
                 <div className="shrink-0 flex items-center gap-1.5">
                     <ImageIcon className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>
+                    <span className="text-xs font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>
                         Media Library
                     </span>
-                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                         {uploads.length} files
                     </span>
-                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                         {formatFileSize(totalBytes)} total
                     </span>
 
@@ -244,13 +244,13 @@ export default function UploadsBrowserView() {
                             variant="outline"
                             size="sm"
                             onClick={() => fetchUploads()}
-                            className="h-7 px-2 text-[11px] rounded-md"
+                            className="h-7 px-2 text-xs rounded-md"
                         >
                             refresh
                         </Button>
                         <Button
                             onClick={() => fileInputRef.current?.click()}
-                            className="h-7 px-2 text-[11px] font-medium rounded-md"
+                            className="h-7 px-2 text-xs font-medium rounded-md"
                             disabled={uploading}
                         >
                             <Upload className="size-3 mr-1.5" />
@@ -281,7 +281,7 @@ export default function UploadsBrowserView() {
                             <button
                                 key={item.id}
                                 onClick={() => setSortMode(item.id)}
-                                className="h-7 rounded-md px-2 text-[10px] transition-colors"
+                                className="h-7 rounded-md px-2 text-caption transition-colors"
                                 style={sortMode === item.id ? {
                                     backgroundColor: currentTheme.styles.surfaceAccent,
                                     color: currentTheme.styles.contentPrimary,
@@ -363,10 +363,10 @@ export default function UploadsBrowserView() {
                                                     background: `linear-gradient(to top, ${currentTheme.styles.surfacePrimary}dd, transparent)`,
                                                 }}
                                             >
-                                                <p className="text-[10px] truncate" style={{ color: currentTheme.styles.contentPrimary }}>
+                                                <p className="text-caption truncate" style={{ color: currentTheme.styles.contentPrimary }}>
                                                     {upload.originalName || upload.filename}
                                                 </p>
-                                                <p className="text-[9px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                                                <p className="text-micro" style={{ color: currentTheme.styles.contentTertiary }}>
                                                     {formatFileSize(upload.size)}
                                                 </p>
                                             </div>
@@ -441,7 +441,7 @@ export default function UploadsBrowserView() {
                                                 <p className="text-xs truncate" style={{ color: currentTheme.styles.contentPrimary }}>
                                                     {upload.originalName || upload.filename}
                                                 </p>
-                                                <p className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                                                <p className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                                                     {formatFileSize(upload.size)} · {formatDate(upload.createdAt)} · {upload.mimeType}
                                                 </p>
                                             </div>

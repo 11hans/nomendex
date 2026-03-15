@@ -115,24 +115,24 @@ export function CreateTodoDialog({
                         borderBottom: `1px solid ${styles.borderDefault}`,
                     }}
                 >
-                    <span className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
+                    <span className="text-xs font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
                         Create Task
                     </span>
-                    <span className="text-[10px]" style={{ color: styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: styles.contentTertiary }}>
                         Cmd+Enter to save
                     </span>
                 </div>
 
                 <div className="px-6 pt-5 pb-4 space-y-4">
                     <div>
-                        <div className="mb-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                        <div className="mb-1 text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
                             Title
                         </div>
                         <Input
                             value={newTodo.title}
                             onChange={(e) => onNewTodoChange({ ...newTodo, title: e.target.value })}
                             placeholder="Task title"
-                            className="h-10 text-base font-semibold border rounded-md px-3 focus-visible:ring-0 placeholder:font-normal"
+                            className="h-10 text-title font-semibold border rounded-md px-3 focus-visible:ring-0 placeholder:font-normal"
                             style={{
                                 color: styles.contentPrimary,
                                 backgroundColor: styles.surfaceSecondary,
@@ -144,7 +144,7 @@ export function CreateTodoDialog({
                     </div>
 
                     <div>
-                        <div className="mb-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                        <div className="mb-1 text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
                             Description
                         </div>
                         <Textarea
@@ -164,7 +164,7 @@ export function CreateTodoDialog({
 
                     {(newTodo.attachments && newTodo.attachments.length > 0) && (
                         <div className="pt-1">
-                            <div className="mb-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                            <div className="mb-1 text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
                                 Attachments
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
@@ -182,7 +182,7 @@ export function CreateTodoDialog({
 
                     {newTodo.tags.length > 0 && (
                         <div className="pt-1">
-                            <div className="mb-1 text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                            <div className="mb-1 text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
                                 Tags
                             </div>
                             <div className="flex flex-wrap items-center gap-2">

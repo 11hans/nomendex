@@ -61,7 +61,7 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
   };
 
   return (
-    <Badge className="gap-1 rounded-full px-2 py-0.5 text-[10px] font-normal" variant="secondary">
+    <Badge className="gap-1 rounded-full px-2 py-0.5 text-caption font-normal" variant="secondary">
       {icons[status]}
       {labels[status]}
     </Badge>
@@ -117,7 +117,7 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
   return (
     <div className={cn("space-y-1 overflow-hidden px-3 py-2", className)} {...props}>
       <h4
-        className="font-medium text-[10px] uppercase tracking-wide"
+        className="font-medium text-caption uppercase tracking-wide"
         style={{ color: currentTheme.styles.contentSecondary }}
       >
         Parameters
@@ -172,7 +172,7 @@ export const ToolOutput = ({
   return (
     <div className={cn("space-y-1 px-3 py-2", className)} {...props}>
       <h4
-        className="font-medium text-[10px] uppercase tracking-wide"
+        className="font-medium text-caption uppercase tracking-wide"
         style={{ color: currentTheme.styles.contentSecondary }}
       >
         {errorText ? "Error" : "Result"}

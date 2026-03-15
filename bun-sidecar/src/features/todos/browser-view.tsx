@@ -1575,7 +1575,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     style={{ color: currentTheme.styles.contentSecondary }}
                 >
                     {icon}
-                    <h3 className="text-[11px] font-medium uppercase tracking-[0.08em]">{title}</h3>
+                    <h3 className="text-xs font-medium uppercase tracking-[0.08em]">{title}</h3>
                     <Badge variant="secondary" className="text-xs">
                         {safeColumnTodos.length}
                     </Badge>
@@ -1633,14 +1633,14 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
                             <FileSearch className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
-                            <span className="text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentSecondary }}>
+                            <span className="text-xs font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentSecondary }}>
                                 {isProjectScopedView ? "Project Board" : "Todos Board"}
                             </span>
                         </div>
                         <div className="mt-1 flex items-center gap-2 min-w-0">
                             {isProjectScopedView && (
                                 <span
-                                    className="text-[9px] px-1.5 py-0.5 rounded uppercase tracking-[0.08em] shrink-0"
+                                    className="text-micro px-1.5 py-0.5 rounded uppercase tracking-[0.08em] shrink-0"
                                     style={{ color: currentTheme.styles.contentSecondary, backgroundColor: currentTheme.styles.surfaceSecondary }}
                                 >
                                     project
@@ -1654,7 +1654,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                             {headerStats.map((item) => (
                                 <span
                                     key={item.key}
-                                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium"
+                                    className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-caption font-medium"
                                     style={{ backgroundColor: currentTheme.styles.surfaceSecondary, color: currentTheme.styles.contentSecondary }}
                                 >
                                     <span className="tabular-nums" style={{ color: currentTheme.styles.contentPrimary }}>
@@ -1672,7 +1672,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                 variant="outline"
                                 size="sm"
                                 onClick={goBackToProjects}
-                                className="h-7 px-2 text-[11px] rounded-md"
+                                className="h-7 px-2 text-xs rounded-md"
                             >
                                 <ArrowLeft className="h-3.5 w-3.5 mr-1" />
                                 back
@@ -1696,7 +1696,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                             triggerLabel="+ new"
                             hideTriggerIcon
                             triggerVariant="default"
-                            triggerClassName="h-7 px-2 text-[11px] font-medium rounded-md"
+                            triggerClassName="h-7 px-2 text-xs font-medium rounded-md"
                         />
                     </div>
                 </div>

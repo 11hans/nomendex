@@ -95,10 +95,10 @@ export function RenameProjectDialog({
                         borderBottom: `1px solid ${styles.borderDefault}`,
                     }}
                 >
-                    <span className="text-[11px] font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
+                    <span className="text-xs font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
                         Rename Project
                     </span>
-                    <span className="text-[10px]" style={{ color: styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: styles.contentTertiary }}>
                         Enter to confirm
                     </span>
                 </div>
@@ -128,7 +128,7 @@ export function RenameProjectDialog({
                     </div>
 
                     <div className="space-y-2">
-                        <div className="text-[10px] uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                        <div className="text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
                             New name
                         </div>
                         <Input

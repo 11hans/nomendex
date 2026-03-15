@@ -113,7 +113,7 @@ export function ImageViewer({ open, onOpenChange, src, alt, filename }: ImageVie
                         <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
                                 <ImageIcon className="size-3" style={{ color: styles.contentTertiary }} />
-                                <span className="text-[10px] uppercase tracking-[0.1em]" style={{ color: styles.contentTertiary }}>
+                                <span className="text-caption uppercase tracking-[0.1em]" style={{ color: styles.contentTertiary }}>
                                     Image Preview
                                 </span>
                             </div>
@@ -129,7 +129,7 @@ export function ImageViewer({ open, onOpenChange, src, alt, filename }: ImageVie
                                 <ZoomOut className="size-4" />
                             </Button>
                             <span
-                                className="text-[11px] min-w-[52px] text-center tabular-nums"
+                                className="text-xs min-w-[52px] text-center tabular-nums"
                                 style={{ color: styles.contentSecondary }}
                                 title="Current zoom"
                             >

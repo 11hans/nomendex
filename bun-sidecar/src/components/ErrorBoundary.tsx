@@ -102,7 +102,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                                     <summary className="cursor-pointer text-muted-foreground hover:text-foreground mb-2">
                                         View stack trace
                                     </summary>
-                                    <pre className="rounded-md bg-muted p-4 overflow-auto max-h-64 text-[10px] font-mono">
+                                    <pre className="rounded-md bg-muted p-4 overflow-auto max-h-64 text-caption font-mono">
                                         {error.stack}
                                     </pre>
                                 </details>

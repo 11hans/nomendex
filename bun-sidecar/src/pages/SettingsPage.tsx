@@ -130,10 +130,10 @@ function StorageSettings() {
                                 Changing notes location requires a page reload. Your existing notes will not be moved automatically.
                             </p>
                             <div className="flex gap-2">
-                                <Button size="sm" className="h-7 px-2 text-[11px]" onClick={applyChange}>
+                                <Button size="sm" className="h-7 px-2 text-xs" onClick={applyChange}>
                                     Apply & Reload
                                 </Button>
-                                <Button size="sm" className="h-7 px-2 text-[11px]" variant="ghost" onClick={cancelChange}>
+                                <Button size="sm" className="h-7 px-2 text-xs" variant="ghost" onClick={cancelChange}>
                                     Cancel
                                 </Button>
                             </div>
@@ -188,14 +188,14 @@ function StorageSettings() {
                                 onClick={handleSaveHiddenFiles}
                                 disabled={savingHiddenFiles}
                                 size="sm"
-                                className="h-7 px-2 text-[11px]"
+                                className="h-7 px-2 text-xs"
                             >
                                 {savingHiddenFiles ? "Saving..." : "Save"}
                             </Button>
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-7 px-2 text-[11px]"
+                                className="h-7 px-2 text-xs"
                                 onClick={() => setPendingHiddenFiles(null)}
                             >
                                 Cancel
@@ -530,28 +530,28 @@ function SettingsContent() {
 
     return (
         <div
-            className="h-full min-h-0 overflow-y-auto [&_.text-base]:text-[11px] [&_.text-sm]:text-[10px] [&_.text-xs]:text-[10px] [&_.md\\:text-sm]:md:text-[10px] [&_[data-slot=card]]:rounded-lg [&_[data-slot=card]]:shadow-none [&_[data-slot=card-header]]:!p-3 [&_[data-slot=card-header]]:!pb-2 [&_[data-slot=card-content]]:!p-3 [&_[data-slot=card-content]]:!pt-0 [&_[data-slot=card-footer]]:!p-3 [&_[data-slot=card-footer]]:!pt-0 [&_[data-slot=card-title]]:text-[11px] [&_[data-slot=card-description]]:text-[10px] [&_[data-slot=tabs-trigger]]:text-[10px] [&_[data-slot=button]]:text-[10px] [&_[data-slot=input]]:text-[10px] [&_[data-slot=select-trigger]]:text-[10px] [&_[data-slot=select-item]]:text-[10px] [&_[data-slot=table]]:text-[10px] [&_[data-slot=table-head]]:h-8 [&_[data-slot=table-cell]]:py-1.5 [&_h3]:text-xs [&_h4]:text-xs [&_label]:text-[10px] [&_th]:text-[10px] [&_td]:text-[10px]"
+            className="h-full min-h-0 overflow-y-auto [&_.text-base]:text-xs [&_.text-sm]:text-caption [&_.text-xs]:text-caption [&_.md\\:text-sm]:md:text-caption [&_[data-slot=card]]:rounded-lg [&_[data-slot=card]]:shadow-none [&_[data-slot=card-header]]:!p-3 [&_[data-slot=card-header]]:!pb-2 [&_[data-slot=card-content]]:!p-3 [&_[data-slot=card-content]]:!pt-0 [&_[data-slot=card-footer]]:!p-3 [&_[data-slot=card-footer]]:!pt-0 [&_[data-slot=card-title]]:text-xs [&_[data-slot=card-description]]:text-caption [&_[data-slot=tabs-trigger]]:text-caption [&_[data-slot=button]]:text-caption [&_[data-slot=input]]:text-caption [&_[data-slot=select-trigger]]:text-caption [&_[data-slot=select-item]]:text-caption [&_[data-slot=table]]:text-caption [&_[data-slot=table-head]]:h-8 [&_[data-slot=table-cell]]:py-1.5 [&_h3]:text-xs [&_h4]:text-xs [&_label]:text-caption [&_th]:text-caption [&_td]:text-caption"
             style={{ backgroundColor: currentTheme.styles.surfacePrimary, color: currentTheme.styles.contentPrimary }}
         >
             <div className="mx-auto w-full max-w-[980px] px-3 pt-3 pb-6 space-y-2.5">
                 <div className="shrink-0 flex items-center gap-1.5 flex-wrap">
                     <Info className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>
+                    <span className="text-xs font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentPrimary }}>
                         Settings
                     </span>
-                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                         {shortcuts.length} shortcuts
                     </span>
-                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                         {customShortcutCount} custom
                     </span>
-                    <span className="text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                    <span className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
                         {configuredSecretsCount}/{totalSecretCount || 0} keys
                     </span>
                 </div>
 
                 <Tabs defaultValue="keyboard" className="space-y-3">
-                    <TabsList className="h-auto flex-wrap justify-start rounded-xl border border-border bg-bg-secondary p-1 [&_[data-slot=tabs-trigger]]:h-7 [&_[data-slot=tabs-trigger]]:text-[10px]">
+                    <TabsList className="h-auto flex-wrap justify-start rounded-xl border border-border bg-bg-secondary p-1 [&_[data-slot=tabs-trigger]]:h-7 [&_[data-slot=tabs-trigger]]:text-caption">
                         <TabsTrigger value="keyboard">Keyboard Shortcuts</TabsTrigger>
                         <TabsTrigger value="preferences">Preferences</TabsTrigger>
                         <TabsTrigger value="theme">Theme</TabsTrigger>
@@ -571,7 +571,7 @@ function SettingsContent() {
                                     <Button
                                         variant="outline"
                                         size="sm"
-                                        className="h-7 px-2 text-[10px]"
+                                        className="h-7 px-2 text-caption"
                                         onClick={resetAllShortcuts}
                                     >
                                         <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
@@ -588,15 +588,15 @@ function SettingsContent() {
                                     }, {} as Record<string, typeof shortcuts>)
                                 ).map(([category, categoryShortcuts]) => (
                                     <div key={category} className="space-y-2">
-                                        <h3 className="font-medium text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+                                        <h3 className="font-medium text-caption uppercase tracking-[0.08em] text-muted-foreground">
                                             {categoryLabels[category as keyof typeof categoryLabels] || category}
                                         </h3>
-                                        <Table className="[&_[data-slot=table-row]]:h-9 [&_[data-slot=table-head]]:h-7 [&_[data-slot=table-head]]:py-1 [&_[data-slot=table-cell]]:py-1 [&_kbd]:h-4 [&_kbd]:px-1 [&_kbd]:text-[9px]">
+                                        <Table className="[&_[data-slot=table-row]]:h-9 [&_[data-slot=table-head]]:h-7 [&_[data-slot=table-head]]:py-1 [&_[data-slot=table-cell]]:py-1 [&_kbd]:h-4 [&_kbd]:px-1 [&_kbd]:text-micro">
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead className="w-[40%] text-[10px] uppercase tracking-[0.08em]">Action</TableHead>
-                                                    <TableHead className="w-[30%] text-[10px] uppercase tracking-[0.08em]">Shortcut</TableHead>
-                                                    <TableHead className="w-[30%] text-[10px] uppercase tracking-[0.08em]">Actions</TableHead>
+                                                    <TableHead className="w-[40%] text-caption uppercase tracking-[0.08em]">Action</TableHead>
+                                                    <TableHead className="w-[30%] text-caption uppercase tracking-[0.08em]">Shortcut</TableHead>
+                                                    <TableHead className="w-[30%] text-caption uppercase tracking-[0.08em]">Actions</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
@@ -610,8 +610,8 @@ function SettingsContent() {
                                                         <TableRow key={shortcut.id}>
                                                             <TableCell>
                                                                 <div className="space-y-1">
-                                                                    <div className="font-medium text-[11px]">{shortcut.name}</div>
-                                                                    <div className="text-[10px] text-muted-foreground">
+                                                                    <div className="font-medium text-xs">{shortcut.name}</div>
+                                                                    <div className="text-caption text-muted-foreground">
                                                                         {shortcut.description}
                                                                     </div>
                                                                 </div>
@@ -620,18 +620,18 @@ function SettingsContent() {
                                                                 <div className="flex items-center gap-1.5">
                                                                     {isEditing ? (
                                                                         <div className="flex items-center gap-1.5">
-                                                                            <span className="text-[10px] text-muted-foreground">
+                                                                            <span className="text-caption text-muted-foreground">
                                                                                 Press keys...
                                                                             </span>
                                                                             {recordingKeys.length > 0 && (
-                                                                                <KeyboardIndicator keys={recordingKeys} className="[&_kbd]:h-4 [&_kbd]:px-1 [&_kbd]:text-[9px]" />
+                                                                                <KeyboardIndicator keys={recordingKeys} className="[&_kbd]:h-4 [&_kbd]:px-1 [&_kbd]:text-micro" />
                                                                             )}
                                                                         </div>
                                                                     ) : (
                                                                         <>
-                                                                            <KeyboardIndicator keys={currentKeys} className="[&_kbd]:h-4 [&_kbd]:px-1 [&_kbd]:text-[9px]" />
+                                                                            <KeyboardIndicator keys={currentKeys} className="[&_kbd]:h-4 [&_kbd]:px-1 [&_kbd]:text-micro" />
                                                                             {isCustom && (
-                                                                                <Badge variant="secondary" className="h-5 px-1.5 text-[9px]">
+                                                                                <Badge variant="secondary" className="h-5 px-1.5 text-micro">
                                                                                     Custom
                                                                                 </Badge>
                                                                             )}
@@ -642,14 +642,14 @@ function SettingsContent() {
                                                             <TableCell>
                                                                 <div className="flex items-center gap-1.5">
                                                                     {isDocOnly ? (
-                                                                        <span className="text-[10px] text-muted-foreground">
+                                                                        <span className="text-caption text-muted-foreground">
                                                                             Editor shortcut
                                                                         </span>
                                                                     ) : isEditing ? (
                                                                         <Button
                                                                             variant="ghost"
                                                                             size="sm"
-                                                                            className="h-6 px-1.5 text-[10px]"
+                                                                            className="h-6 px-1.5 text-caption"
                                                                             onClick={() => {
                                                                                 setEditingShortcut(null);
                                                                                 setRecordingKeys([]);
@@ -662,7 +662,7 @@ function SettingsContent() {
                                                                             <Button
                                                                                 variant="ghost"
                                                                                 size="sm"
-                                                                                className="h-6 px-1.5 text-[10px]"
+                                                                                className="h-6 px-1.5 text-caption"
                                                                                 onClick={() => setEditingShortcut(shortcut.id)}
                                                                             >
                                                                                 Edit
@@ -671,7 +671,7 @@ function SettingsContent() {
                                                                                 <Button
                                                                                     variant="ghost"
                                                                                     size="sm"
-                                                                                    className="h-6 px-1.5 text-[10px]"
+                                                                                    className="h-6 px-1.5 text-caption"
                                                                                     onClick={() => resetShortcut(shortcut.id)}
                                                                                 >
                                                                                     Reset
@@ -701,7 +701,7 @@ function SettingsContent() {
                             <CardContent className="space-y-4">
                                 <div className="flex items-center justify-between">
                                     <div className="space-y-0.5">
-                                        <Label className="text-[10px]">
+                                        <Label className="text-caption">
                                             Send message with
                                         </Label>
                                         <p className="text-sm text-muted-foreground">
@@ -717,7 +717,7 @@ function SettingsContent() {
                                                 setPendingEnterToSend(newValue);
                                             }}
                                         >
-                                            <SelectTrigger className="w-[170px] h-8 text-[10px]">
+                                            <SelectTrigger className="w-[170px] h-8 text-caption">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -1063,7 +1063,7 @@ function SettingsContent() {
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                className="h-7 px-2 text-[11px]"
+                                                className="h-7 px-2 text-xs"
                                                 onClick={() => setIsAddingCustom(true)}
                                             >
                                                 <Plus className="mr-2 h-4 w-4" />
@@ -1139,14 +1139,14 @@ function SettingsContent() {
                                                         onClick={handleAddCustomSecret}
                                                         disabled={savingSecret}
                                                         size="sm"
-                                                        className="h-7 px-2 text-[11px]"
+                                                        className="h-7 px-2 text-xs"
                                                     >
                                                         {savingSecret ? "Saving..." : "Add Key"}
                                                     </Button>
                                                     <Button
                                                         variant="ghost"
                                                         size="sm"
-                                                        className="h-7 px-2 text-[11px]"
+                                                        className="h-7 px-2 text-xs"
                                                         onClick={() => {
                                                             setIsAddingCustom(false);
                                                             setNewSecretKey("");
@@ -1305,7 +1305,7 @@ function SettingsContent() {
                                             disabled={checkingForUpdates}
                                             variant="outline"
                                             size="sm"
-                                            className="h-7 px-2 text-[11px]"
+                                            className="h-7 px-2 text-xs"
                                         >
                                             <RefreshCw className={`mr-2 h-4 w-4 ${checkingForUpdates ? "animate-spin" : ""}`} />
                                             Check for Updates

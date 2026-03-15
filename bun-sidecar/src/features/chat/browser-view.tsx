@@ -323,13 +323,13 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                             <div className="flex items-center gap-2 min-w-0">
                                 <MessageCircle size={15} style={{ color: styles.contentAccent }} />
                                 <h2
-                                    className="text-[11px] font-medium uppercase tracking-[0.14em] truncate"
+                                    className="text-xs font-medium uppercase tracking-[0.14em] truncate"
                                     style={{ color: styles.contentPrimary }}
                                 >
                                     Chats
                                 </h2>
                                 <span
-                                    className="text-[10px] shrink-0"
+                                    className="text-caption shrink-0"
                                     style={{ color: styles.contentTertiary }}
                                 >
                                     ({visibleSessions})
@@ -393,7 +393,7 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                             <div className="space-y-2">
                                                 <MessageCircle className="h-12 w-12 mx-auto" style={{ color: styles.contentTertiary }} />
                                                 <p className="text-xs">No chats yet</p>
-                                                <Button size="sm" className="h-7 px-2 text-[11px]" onClick={handleNewChat}>
+                                                <Button size="sm" className="h-7 px-2 text-xs" onClick={handleNewChat}>
                                                     <Plus className="h-4 w-4 mr-1" /> Start a chat
                                                 </Button>
                                             </div>
@@ -433,14 +433,14 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                                         <ChevronRight className="ml-auto size-3 opacity-60 shrink-0" style={{ color: styles.contentTertiary }} />
                                                     </div>
                                                     <div
-                                                        className="mt-0.5 text-[10px] truncate"
+                                                        className="mt-0.5 text-caption truncate"
                                                         style={{ color: styles.contentTertiary }}
                                                     >
                                                         {formatRelativeTime(session.updatedAt)} • {session.messageCount} messages
                                                     </div>
                                                     {session.matchSnippet && (
                                                         <div
-                                                            className="mt-1 text-[10px] line-clamp-1"
+                                                            className="mt-1 text-caption line-clamp-1"
                                                             style={{ color: styles.contentSecondary }}
                                                         >
                                                             {session.matchSnippet.before}
@@ -494,13 +494,13 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                     <div className="flex items-center gap-2 min-w-0">
                                         <MessageCircle size={15} style={{ color: styles.contentAccent }} />
                                         <h2
-                                            className="text-[11px] font-medium uppercase tracking-[0.14em] truncate"
+                                            className="text-xs font-medium uppercase tracking-[0.14em] truncate"
                                             style={{ color: styles.contentPrimary }}
                                         >
                                             Preview
                                         </h2>
                                         <span
-                                            className="text-[10px] shrink-0"
+                                            className="text-caption shrink-0"
                                             style={{ color: styles.contentTertiary }}
                                         >
                                             ({selectedSession.messageCount})
@@ -541,8 +541,8 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                                 >
                                                     <div
                                                         className={message.role === "user"
-                                                            ? "mb-1 flex items-center justify-end gap-1.5 text-[10px] uppercase tracking-[0.08em]"
-                                                            : "mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.08em]"
+                                                            ? "mb-1 flex items-center justify-end gap-1.5 text-caption uppercase tracking-[0.08em]"
+                                                            : "mb-1 flex items-center gap-1.5 text-caption uppercase tracking-[0.08em]"
                                                         }
                                                         style={{ color: styles.contentSecondary }}
                                                     >
@@ -624,7 +624,7 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                 <p className="text-xs" style={{ color: styles.contentSecondary }}>
                                     No chats yet
                                 </p>
-                                <Button className="h-7 px-2 text-[11px]" onClick={handleNewChat}>
+                                <Button className="h-7 px-2 text-xs" onClick={handleNewChat}>
                                     <Plus className="h-4 w-4 mr-1" /> Start a chat
                                 </Button>
                             </div>

@@ -85,13 +85,13 @@ export function BrowserViewShell({
                 <div className="shrink-0 flex items-center gap-1.5">
                     {headerIcon}
                     <span
-                        className="text-[11px] font-medium uppercase tracking-[0.14em]"
+                        className="text-xs font-medium uppercase tracking-[0.14em]"
                         style={{ color: styles.contentPrimary }}
                     >
                         {title}
                     </span>
                     <span
-                        className="text-[10px]"
+                        className="text-caption"
                         style={{ color: styles.contentTertiary }}
                     >
                         {itemCount} items
@@ -124,7 +124,7 @@ export function BrowserViewShell({
                 <div className="mt-2.5">
                     {empty ? (
                         <div
-                            className="py-3 text-center text-[10px]"
+                            className="py-3 text-center text-caption"
                             style={{ color: styles.contentTertiary }}
                         >
                             {emptyLabel}

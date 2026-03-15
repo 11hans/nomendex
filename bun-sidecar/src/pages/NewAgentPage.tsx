@@ -103,8 +103,8 @@ function NewAgentContent() {
             <div className="mx-auto w-full max-w-[620px] px-3 pt-3 pb-6">
                 <div className="shrink-0 flex items-center gap-1.5">
                     <Sparkles className="size-3 text-muted-foreground" />
-                    <span className="text-[11px] font-medium uppercase tracking-[0.14em]">New Agent</span>
-                    <span className="text-[10px] text-muted-foreground">{useCustomModel ? "custom model" : "predefined model"}</span>
+                    <span className="text-xs font-medium uppercase tracking-[0.14em]">New Agent</span>
+                    <span className="text-caption text-muted-foreground">{useCustomModel ? "custom model" : "predefined model"}</span>
 
                     <div className="ml-auto flex items-center gap-1">
                         <Button
@@ -116,10 +116,10 @@ function NewAgentContent() {
                         >
                             <ArrowLeft className="h-4 w-4" />
                         </Button>
-                        <Button variant="outline" size="sm" className="h-7 px-2 text-[11px]" onClick={() => navigate("/agents")}>
+                        <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => navigate("/agents")}>
                             Cancel
                         </Button>
-                        <Button size="sm" className="h-7 px-2 text-[11px]" onClick={handleSave} disabled={!formName.trim() || isSaving}>
+                        <Button size="sm" className="h-7 px-2 text-xs" onClick={handleSave} disabled={!formName.trim() || isSaving}>
                             {isSaving ? "Creating..." : "Create"}
                         </Button>
                     </div>
@@ -284,7 +284,7 @@ function NewAgentContent() {
                                                                     className="flex cursor-pointer items-center gap-2 text-sm font-medium"
                                                                 >
                                                                     {server.name}
-                                                                    <Badge variant="secondary" className="px-1 py-0 text-[10px]">Built-in</Badge>
+                                                                    <Badge variant="secondary" className="px-1 py-0 text-caption">Built-in</Badge>
                                                                 </label>
                                                                 <p className="text-xs text-muted-foreground">
                                                                     {server.description || "No description"}
