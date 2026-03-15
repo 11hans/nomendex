@@ -179,6 +179,50 @@ function isToolPending(state: ToolCallState): boolean {
     return state === "input-streaming" || state === "input-available";
 }
 
+type StreamBlockOrder = {
+    turn: number;
+    index: number;
+};
+
+function parseStreamBlockOrder(blockId: string, assistantMessageId: string): StreamBlockOrder | null {
+    const prefix = `${assistantMessageId}-t`;
+    if (!blockId.startsWith(prefix)) return null;
+
+    const rest = blockId.slice(prefix.length);
+    const [turnPart, indexPart] = rest.split("-");
+    const turn = Number(turnPart);
+    const index = Number(indexPart);
+
+    if (!Number.isInteger(turn) || !Number.isInteger(index)) return null;
+    return { turn, index };
+}
+
+function insertBlockByStreamOrder(
+    blocks: ContentBlock[],
+    assistantMessageId: string,
+    newBlock: ContentBlock,
+    turn: number,
+    index: number
+): ContentBlock[] {
+    let insertAt = blocks.length;
+
+    for (let i = 0; i < blocks.length; i++) {
+        const existingOrder = parseStreamBlockOrder(blocks[i].id, assistantMessageId);
+        if (!existingOrder) continue;
+
+        const isAfterNewBlock =
+            existingOrder.turn > turn ||
+            (existingOrder.turn === turn && existingOrder.index > index);
+
+        if (isAfterNewBlock) {
+            insertAt = i;
+            break;
+        }
+    }
+
+    return [...blocks.slice(0, insertAt), newBlock, ...blocks.slice(insertAt)];
+}
+
 function toolText(name: string, pending: boolean): string {
     const text = TOOL_TEXT[name];
     if (!text) return pending ? `Running ${name}` : `Ran ${name}`;
@@ -629,7 +673,16 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                             prev.map((m) => {
                                                 if (m.id !== assistantMessageId) return m;
                                                 if (m.blocks.some((b) => b.id === blockId)) return m;
-                                                return { ...m, blocks: [...m.blocks, { type: "text", content: "", id: blockId }] };
+                                                return {
+                                                    ...m,
+                                                    blocks: insertBlockByStreamOrder(
+                                                        m.blocks,
+                                                        assistantMessageId,
+                                                        { type: "text", content: "", id: blockId },
+                                                        currentTurn,
+                                                        streamIndex
+                                                    ),
+                                                };
                                             })
                                         );
                                     } else if (blockType === "thinking") {
@@ -637,7 +690,16 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                             prev.map((m) => {
                                                 if (m.id !== assistantMessageId) return m;
                                                 if (m.blocks.some((b) => b.id === blockId)) return m;
-                                                return { ...m, blocks: [{ type: "thinking", content: "", id: blockId }, ...m.blocks] };
+                                                return {
+                                                    ...m,
+                                                    blocks: insertBlockByStreamOrder(
+                                                        m.blocks,
+                                                        assistantMessageId,
+                                                        { type: "thinking", content: "", id: blockId },
+                                                        currentTurn,
+                                                        streamIndex
+                                                    ),
+                                                };
                                             })
                                         );
                                     } else if (blockType === "tool_use" && event.content_block.id) {
@@ -747,6 +809,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                             });
 
                                             if (thinking && !hasExistingThinking) {
+                                                updatedBlocks = updatedBlocks.filter((b) => !(b.type === "thinking" && b.content.length === 0));
                                                 newBlocks.push({ type: "thinking", content: thinking, id: `thinking-${Date.now()}` });
                                             }
 
@@ -1037,7 +1100,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                                 return (
                                                     <div
                                                         key={block.id}
-                                                        className="my-1 min-w-0 break-words border-l-2 border-border pl-2 text-xs italic text-muted-foreground"
+                                                        className="my-1 min-w-0 break-words whitespace-pre-wrap border-l-2 border-border pl-2 text-xs italic text-muted-foreground"
                                                     >
                                                         {block.content}
                                                         {isStreamingMessage && block.id === lastThinkingBlockId && <span className="streaming-cursor" />}
