@@ -257,7 +257,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             setLoading(true);
             try {
                 // Always load only active (non-archived) todos for the browser view
-                const todosData = await todosAPI.getTodos({ project: filterProject ?? undefined });
+                const todosData = await todosAPI.getTodos(filterProject != null ? { project: filterProject } : {});
 
                 // The getTodos API should already filter out archived items, but let's be explicit
                 const activeTodos = todosData.filter(t => !t.archived);

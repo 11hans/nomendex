@@ -46,7 +46,7 @@ function getDb(): FileDatabase<Todo> {
 }
 
 async function getTodos(input: { project?: string }) {
-    todosLogger.info(`Getting todos${input.project !== undefined ? ` for project: ${input.project || 'No Project'}` : ''}`);
+    todosLogger.info(`Getting todos${input.project != null ? ` for project: ${input.project || 'No Project'}` : ''}`);
 
     try {
         const todos = await getDb().findAll();
@@ -54,7 +54,7 @@ async function getTodos(input: { project?: string }) {
         let activeTodos = todos.filter(t => !t.archived);
 
         // Filter by project if specified
-        if (input.project !== undefined) {
+        if (input.project != null) {
             if (input.project === "") {
                 // Empty string means "no project" - filter for todos without a project (exclude items with any project)
                 activeTodos = activeTodos.filter(t => !t.project || t.project.trim() === "");
@@ -385,7 +385,7 @@ async function unarchiveTodo(input: { todoId: string }) {
 }
 
 async function getArchivedTodos(input: { project?: string }) {
-    todosLogger.info(`Getting archived todos${input.project !== undefined ? ` for project: ${input.project || 'No Project'}` : ''}`);
+    todosLogger.info(`Getting archived todos${input.project != null ? ` for project: ${input.project || 'No Project'}` : ''}`);
 
     try {
         const todos = await getDb().findAll();
@@ -395,7 +395,7 @@ async function getArchivedTodos(input: { project?: string }) {
         console.log("Archived todos before project filter:", archivedTodos.length, archivedTodos.map(t => ({ id: t.id, title: t.title, project: t.project, archived: t.archived })));
 
         // Filter by project if specified
-        if (input.project !== undefined) {
+        if (input.project != null) {
             console.log("Filtering by project:", input.project);
             if (input.project === "") {
                 // Empty string means "no project" - filter for todos without a project
