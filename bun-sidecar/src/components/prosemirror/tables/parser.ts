@@ -158,6 +158,9 @@ const tableTokens = {
         }),
     },
 
+    // Strikethrough (markdown-it default preset includes it, ignore since schema has no mark for it)
+    s: { ignore: true },
+
     // Wiki link token
     wiki_link: {
         node: "wiki_link",
