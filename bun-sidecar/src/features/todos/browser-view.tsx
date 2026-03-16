@@ -74,7 +74,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const projectPreferencesKey = filterProject === null || filterProject === undefined ? "__all__" : filterProject === "" ? "__none__" : filterProject;
     const projectPrefs = getProjectPreferences(projectPreferencesKey);
     const showLaterColumn = !projectPrefs.hideLaterColumn;
-    const sortByDate = projectPrefs.sortByDate ?? false;
+    const sortByDate = projectPrefs.sortByDate ?? true;
     const [newTodo, setNewTodo] = useState<{
         title: string;
         description: string;
@@ -1773,6 +1773,15 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                             selectedPriority={selectedPriority}
                             onPriorityChange={setSelectedPriority}
                         />
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2"
+                            onClick={toggleSortByDate}
+                            title={sortByDate ? "Sort: By Due Date" : "Sort: Manual Order"}
+                        >
+                            {sortByDate ? <SortAsc className="w-4 h-4" /> : <ArrowUpDown className="w-4 h-4" />}
+                        </Button>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" size="sm" className="h-7 px-2">
@@ -1805,10 +1814,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                     {showLaterColumn ? "Hide Later Column" : "Show Later Column"}
                                 </DropdownMenuItem>
 
-                                <DropdownMenuItem onClick={toggleSortByDate}>
-                                    {sortByDate ? <SortAsc className="w-4 h-4 mr-2" /> : <ArrowUpDown className="w-4 h-4 mr-2" />}
-                                    {sortByDate ? "Sort: By Due Date" : "Sort: Manual Order"}
-                                </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>
