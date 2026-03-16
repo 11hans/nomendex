@@ -8,10 +8,35 @@ import { parseLocalDateString } from "@/features/notes/date-utils";
 import { DateTimePicker } from "./pickers";
 import { useTheme } from "@/hooks/useTheme";
 
+function parseChecklistLines(description: string) {
+    return description.split('\n')
+        .map((line, index) => {
+            const match = line.match(/^-\s*\[([ xX])\]\s*(.*)$/);
+            if (!match) return null;
+            return { index, checked: match[1] !== ' ', text: match[2] };
+        })
+        .filter((item): item is NonNullable<typeof item> => item !== null);
+}
+
+function toggleChecklistItem(description: string, lineIndex: number): string {
+    const lines = description.split('\n');
+    const line = lines[lineIndex];
+    if (line.includes('- [ ]')) {
+        lines[lineIndex] = line.replace('- [ ]', '- [x]');
+    } else if (/- \[[xX]\]/.test(line)) {
+        lines[lineIndex] = line.replace(/- \[[xX]\]/, '- [ ]');
+    }
+    return lines.join('\n');
+}
+
+function hasChecklistItems(description?: string): boolean {
+    return !!description && /^-\s*\[[ xX]\]/m.test(description);
+}
+
 /**
  * TodoCard is a standalone display component for a single todo item.
  * Currently used in various parts of the app for displaying tasks in a card format.
- * 
+ *
  * Note: The Inbox view (inbox-view.tsx) currently uses its own inline implementation
  * of a todo item for custom styling, so changes here might not reflect there.
  */
@@ -25,6 +50,7 @@ export function TodoCard({
     onToggleDone,
     hideStatusIcon,
     onDateChange,
+    onChecklistToggle,
 }: {
     todo: Todo;
     selected?: boolean;
@@ -35,6 +61,7 @@ export function TodoCard({
     onToggleDone?: (todo: Todo) => void;
     hideStatusIcon?: boolean;
     onDateChange?: (todo: Todo, dates: { dueDate?: string; startDate?: string }) => void;
+    onChecklistToggle?: (todo: Todo, newDescription: string) => void;
 }) {
     const { currentTheme } = useTheme();
 
@@ -120,9 +147,54 @@ export function TodoCard({
             </CardHeader>
             {todo.description && (
                 <CardContent className="pt-0 px-3 pb-1">
-                    <p className="text-xs line-clamp-2 break-words [overflow-wrap:anywhere]" style={{ color: currentTheme.styles.contentTertiary }}>
-                        {todo.description}
-                    </p>
+                    {hasChecklistItems(todo.description) ? (() => {
+                        const checklistItems = parseChecklistLines(todo.description!);
+                        const nonChecklistText = todo.description!.split('\n')
+                            .filter((_, i) => !checklistItems.some(item => item.index === i))
+                            .join('\n').trim();
+                        const checkedCount = checklistItems.filter(i => i.checked).length;
+                        return (
+                            <div className="space-y-1">
+                                {nonChecklistText && (
+                                    <p className="text-xs line-clamp-2 break-words [overflow-wrap:anywhere]" style={{ color: currentTheme.styles.contentTertiary }}>
+                                        {nonChecklistText}
+                                    </p>
+                                )}
+                                <div className="space-y-0.5">
+                                    {checklistItems.map((item) => (
+                                        <div key={item.index} className="flex items-center gap-1.5">
+                                            <Checkbox
+                                                checked={item.checked}
+                                                onCheckedChange={() => {
+                                                    if (onChecklistToggle && todo.description) {
+                                                        onChecklistToggle(todo, toggleChecklistItem(todo.description, item.index));
+                                                    }
+                                                }}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="size-3.5"
+                                            />
+                                            <span
+                                                className="text-xs truncate"
+                                                style={{
+                                                    color: item.checked ? currentTheme.styles.contentTertiary : currentTheme.styles.contentPrimary,
+                                                    textDecoration: item.checked ? 'line-through' : 'none',
+                                                }}
+                                            >
+                                                {item.text}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
+                                    {checkedCount}/{checklistItems.length}
+                                </p>
+                            </div>
+                        );
+                    })() : (
+                        <p className="text-xs line-clamp-2 break-words [overflow-wrap:anywhere]" style={{ color: currentTheme.styles.contentTertiary }}>
+                            {todo.description}
+                        </p>
+                    )}
                 </CardContent>
             )}
             <div className="px-3 pb-2 flex items-center justify-between gap-2">

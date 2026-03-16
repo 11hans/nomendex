@@ -391,6 +391,21 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         }
     }, [todosAPI, loadTodos]);
 
+    const handleChecklistToggle = useCallback(async (todo: Todo, newDescription: string) => {
+        // Optimistic update
+        setTodos(prev => prev.map(t => t.id === todo.id ? { ...t, description: newDescription } : t));
+
+        try {
+            await todosAPI.updateTodo({
+                todoId: todo.id,
+                updates: { description: newDescription },
+            });
+        } catch (error) {
+            console.error("Failed to update checklist:", error);
+            await loadTodos(); // Revert on error
+        }
+    }, [todosAPI, loadTodos]);
+
     const openArchivedView = () => {
         openTab({
             pluginMeta: { id: "todos", name: "Todos", icon: "list-todo" },
@@ -1535,6 +1550,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                         onToggleDone={toggleDoneWithToast}
                         hideProject={hideProject}
                         onDateChange={handleInlineDateChange}
+                        onChecklistToggle={handleChecklistToggle}
                     />
                 </div>
             </div>

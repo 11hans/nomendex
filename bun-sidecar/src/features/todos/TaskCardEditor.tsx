@@ -1,10 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Save, X, Trash2 } from "lucide-react";
+import { Save, X, Trash2, ListChecks } from "lucide-react";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { useTheme } from "@/hooks/useTheme";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
@@ -37,6 +37,7 @@ interface TaskCardEditorProps {
 export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, saving, availableTags, availableProjects }: TaskCardEditorProps) {
     const [editedTodo, setEditedTodo] = useState<Todo | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
+    const descriptionRef = useRef<HTMLTextAreaElement>(null);
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
 
@@ -84,6 +85,31 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
             ...editedTodo,
             attachments: (editedTodo.attachments || []).filter(a => a.id !== attachmentId),
         });
+    };
+
+    const insertChecklistItem = () => {
+        if (!editedTodo) return;
+        const textarea = descriptionRef.current;
+        const currentDesc = editedTodo.description || "";
+        const insertion = "- [ ] ";
+
+        if (textarea) {
+            const pos = textarea.selectionStart;
+            const before = currentDesc.slice(0, pos);
+            const after = currentDesc.slice(pos);
+            const needsNewline = before.length > 0 && !before.endsWith('\n');
+            const newDesc = before + (needsNewline ? '\n' : '') + insertion + after;
+            setEditedTodo({ ...editedTodo, description: newDesc });
+            // Focus and set cursor after the insertion
+            const cursorPos = before.length + (needsNewline ? 1 : 0) + insertion.length;
+            requestAnimationFrame(() => {
+                textarea.focus();
+                textarea.setSelectionRange(cursorPos, cursorPos);
+            });
+        } else {
+            const needsNewline = currentDesc.length > 0 && !currentDesc.endsWith('\n');
+            setEditedTodo({ ...editedTodo, description: currentDesc + (needsNewline ? '\n' : '') + insertion });
+        }
     };
 
     if (!editedTodo) {
@@ -140,6 +166,7 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
                             Description
                         </div>
                         <Textarea
+                            ref={descriptionRef}
                             value={editedTodo.description || ""}
                             onChange={(e) => setEditedTodo({ ...editedTodo, description: e.target.value })}
                             placeholder="Add description..."
@@ -240,6 +267,29 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
                             attachments={editedTodo.attachments || []}
                             onChange={(attachments) => setEditedTodo({ ...editedTodo, attachments })}
                         />
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2"
+                                    onClick={insertChecklistItem}
+                                    style={{ color: styles.contentSecondary }}
+                                >
+                                    <ListChecks className="size-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent
+                                className="z-[100]"
+                                style={{
+                                    backgroundColor: styles.surfaceTertiary,
+                                    color: styles.contentPrimary,
+                                    border: `1px solid ${styles.borderDefault}`,
+                                }}
+                            >
+                                Add checklist item
+                            </TooltipContent>
+                        </Tooltip>
                     </div>
 
                     <div className="flex items-center gap-2 ml-auto">
