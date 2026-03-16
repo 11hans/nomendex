@@ -66,6 +66,22 @@ interface ProjectConfig {
 customColumnId?: string;  // ID from ProjectConfig.board.columns
 ```
 
+### View Preferences (Per Project Scope)
+
+Kanban rendering also depends on project-scoped workspace preferences.
+
+```typescript
+interface ProjectPreferences {
+    hideLaterColumn: boolean;
+    sortByDate: boolean; // default true when preference is missing
+}
+```
+
+Preference keying:
+- all projects board: `__all__`
+- no-project board: `__none__`
+- specific project: project name
+
 ## Storage
 
 | File | Purpose |
@@ -83,6 +99,17 @@ Features:
 - Add/remove/rename columns
 - Set auto-status per column
 - Drag to reorder
+
+### Toolbar Sorting Toggle
+
+The board toolbar includes a dedicated sort toggle button:
+- `SortAsc` icon when sorting by due date
+- `ArrowUpDown` icon for manual order mode
+
+Behavior:
+- default mode is **sort by due date** (`sortByDate ?? true`)
+- tasks with due dates are ordered by nearest due date first
+- tasks without due date fall back to manual `order`
 
 ## API Endpoints
 
@@ -149,6 +176,12 @@ bun-sidecar/src/features/projects/
 ├── index.ts                 # Plugin definition
 ├── project-detail-view.tsx  # Kanban UI with custom column support
 └── CreateProjectDialog.tsx  # Project creation UI
+
+bun-sidecar/src/features/todos/
+└── browser-view.tsx         # sortByDate toggle + grouped sorting behavior
+
+bun-sidecar/src/types/
+└── Workspace.ts             # ProjectPreferences.sortByDate
 ```
 
 ## Default Columns

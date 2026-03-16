@@ -20,7 +20,7 @@ BPagent předpokládá Obsidian-kompatibilní strukturu složek. Pokud ji zatím
 
 ```
 {workspace}/
-├── daily-notes/          # Denní záznamy (formát M-D-YYYY.md)
+├── [daily notes folder]  # Denní záznamy (detekovaný název složky + formát data)
 ├── Goals/
 │   ├── 0. Three Year Goals.md
 │   ├── 1. Yearly Goals.md
@@ -63,8 +63,11 @@ Skills se spouštějí příkazem `/název` v chatu s BPagentem, nebo je agent p
 
 Vytvoří nebo aktualizuje dnešní denní záznam.
 
+**Důležité:** Agent nejdřív detekuje reálnou vault konvenci (složku, případné vnoření, formát názvu souboru), až potom čte nebo zakládá denní poznámku.
+
 **Ranní rutina (5 min):**
-- Shrnutí kontextu z cílů a projektů
+- Todo-first workset (nejdřív živé TODO položky)
+- Teprve pak strategický kontext z cílů a projektů
 - Identifikace jednoho hlavního zaměření dne
 - Přehled nedokončených úkolů z předchozího dne
 - Nastavení časových bloků
@@ -114,6 +117,42 @@ Tyto skills BPagent volá sám bez explicitního příkazu:
 | `obsidian-vault-ops` | Čtení a zápis souborů vaultu, wiki-linky |
 | `check-links` | Hledání rozbitých wiki-linků |
 | `search` | Fulltextové vyhledávání v obsahu vaultu |
+| `todos` | Primární čtení/zápis TODO workflow (daily/weekly/monthly) |
+
+---
+
+## Konvence denních poznámek
+
+BPagent už nepředpokládá fixní `daily-notes/` ani fixní formát data.
+
+Postup:
+1. Přečte `vault-config.json` (pokud existuje)
+2. Prohlédne existující daily-notes soubory
+3. Znovu použije stejný pattern (např. `M-D-YYYY`, `YYYY-MM-DD`, flat vs `YYYY/MM/`)
+4. Pokud konvence neexistuje, explicitně to řekne a požádá o potvrzení
+
+Tím se zabrání duplikovaným strukturám typu `daily-notes/` vs `Daily Notes/`.
+
+## „Today“ workset (todo-first)
+
+Pro dotazy typu „show today“, „co mám dnes dělat“, „schedule“, „calendar for today“:
+
+1. overdue TODO
+2. TODO splatné dnes
+3. started/in-progress TODO (včetně `startDate`)
+4. Today/Now custom sloupce po načtení reálné board konfigurace
+5. focused project TODO (pokud uživatel jmenuje projekt)
+6. ostatní kandidáti
+
+Výstup má být po bucket sekcích, ne jako jeden smíšený seznam.
+
+## Read-only default pro plánování
+
+U plánovacích dotazů je default:
+- nejdřív číst, shrnout a navrhnout plán
+- změny (create/update TODO nebo zápis do poznámky) až po jasném potvrzení nebo explicitním požadavku
+
+To snižuje nechtěné mutace během brainstormingu.
 
 ---
 
@@ -261,5 +300,5 @@ V tomto módu agent:
 
 ### Klíčové konvence
 - Wiki-linky: `[[název poznámky]]`
-- Denní záznamy: `M-D-YYYY.md` (např. `3-11-2026.md`)
+- Denní záznamy: detekovaný vault pattern (např. `3-11-2026.md` nebo `2026-03-11.md`)
 - Cíle jsou v souborech `Goals/0-3.*.md`

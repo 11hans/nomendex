@@ -122,6 +122,8 @@ The Agents UI shows an explicit source for each agent's effective prompt:
   - BPagent template from `built-in-bpagent.ts`
   - Optional memory recall block
 
+For detailed memory architecture and Memory Studio behavior, see [agent-memory.md](./agent-memory.md).
+
 ## Permissions System
 
 Each agent maintains its own list of allowed tools. When a user clicks "Always Allow" for a tool permission request, that tool is persisted to the agent's `allowedTools` array.

@@ -118,11 +118,30 @@ interface ProjectConfig {
 customColumnId?: string;  // Column ID from BoardConfig.columns
 ```
 
+#### Workspace Project Preferences (view behavior)
+```typescript
+interface ProjectPreferences {
+    hideLaterColumn: boolean;
+    sortByDate: boolean; // defaults to true when missing
+}
+```
+
+These preferences live in workspace state and are keyed per view scope:
+- `__all__` for cross-project board
+- `__none__` for no-project tasks
+- project name for project-specific board
+
 ### "Before and After" Logic
 Difference in understanding task positioning:
 
 *   **Legacy Mode:** `status` determines the column (todo → "To Do").
 *   **Custom Mode:** `customColumnId` determines the column, `status` represents only the lifecycle state (done/not done).
+*   **Sorting Preference:** Independent of mode, cards can be sorted by due date (`sortByDate`) or by manual order.
+
+Due-date sorting behavior:
+- default is enabled for new/unspecified preference state
+- items with due date are ordered first (ascending date)
+- items without due date remain at bottom ordered by `order`
 
 ### API Endpoints
 

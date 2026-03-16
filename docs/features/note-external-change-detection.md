@@ -8,6 +8,8 @@ When a note is open in a tab, it stays live in memory. If an external agent (or 
 
 We use file modification time (`mtime`) to detect external changes when a tab becomes active.
 
+In parallel, note tabs now flush pending draft saves when switching away/unmounting, so tab lifecycle changes do not lose unsaved buffered edits.
+
 ## Architecture
 
 ### Data Flow
@@ -169,9 +171,38 @@ The `saveNote` function in `fx.ts` returns the new mtime after writing:
 async function saveNote(args: { fileName: string; content: string }) {
     // ... write file ...
     const mtime = await getStorage().getFileMtime(args.fileName);
-    return { fileName, content, frontMatter, mtime: mtime ?? undefined };
+return { fileName, content, frontMatter, mtime: mtime ?? undefined };
 }
 ```
+
+#### 7. Draft Flush on Tab Switch / Unmount
+
+Location: `src/features/notes/note-view.tsx`
+
+When the note tab transitions from active to inactive, pending debounced save is flushed immediately.
+
+```typescript
+useEffect(() => {
+    const isActive = activeTab?.id === tabId;
+    if (wasActiveRef.current && !isActive) {
+        void flushPendingDraft();
+    }
+    wasActiveRef.current = isActive;
+}, [activeTab?.id, tabId, flushPendingDraft]);
+```
+
+This prevents losing recent edits during fast tab switching.
+
+Unmount path also calls `flushPendingDraft()` to persist latest editor state.
+
+#### 8. Tab Visibility Model (Hidden vs Mounted)
+
+Tabs infrastructure now hides inactive tab content via CSS (`data-[state=inactive]:hidden`) and selectively force-mounts specific views (chat/todos).
+
+For notes:
+- note editor still relies on activation transitions for external change checks
+- mtime check runs only on inactive -> active transition
+- draft flush ensures consistency when note view is switched away/unmounted
 
 ## Conflict Resolution
 
@@ -196,6 +227,7 @@ When external changes are detected AND there are NO unsaved local edits:
 |----------|----------|
 | File deleted externally | Returns `null` mtime, check skipped |
 | Tab inactive | No checks performed |
+| Switch away with pending debounce save | Draft is flushed immediately |
 | Same mtime | No action taken |
 | User saves while toast visible | `lastSavedContentRef` updates, next check may show no conflict |
 | Initial mount | Skipped via `prevActiveTabIdRef` transition check |

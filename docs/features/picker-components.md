@@ -12,9 +12,9 @@ Previously, `TaskCardEditor` contained inline implementations of status, priorit
 |-----------|------|-------------|
 | `StatusPicker` | ○ | Popover with 4 status options, keyboard navigation (↑↓ Enter Esc) |
 | `PriorityPicker` | 🚩 | Flag icon with color-coded popover, 4 levels |
-| `ProjectPicker` | 📁 | Searchable list of existing projects + create new |
+| `ProjectPicker` | 📁 | Select from existing projects (no inline create/search) |
 | `TagsPicker` | 🏷️ | Input to add tags + suggestion chips from existing tags |
-| `DateTimePicker` | 📅 | Calendar popover with optional time inputs for start/due/range |
+| `DateTimePicker` | 📅 | Range calendar + quick presets + shorthand time parsing |
 | `AttachmentPicker` | 📎 | File input trigger with upload handling |
 
 ### Interfaces
@@ -70,6 +70,7 @@ The most complex picker, handling multiple date/time scenarios:
 
 | Feature | Description |
 |---------|-------------|
+| Quick presets | `Today`, `Tomorrow`, `Next week` shortcuts |
 | Calendar | Day selection via `Calendar` component |
 | Text input | Type date in natural format (parsed by `parseDateFromInput`) |
 | Due time | Optional `<input type="time">` for deadline hour |
@@ -77,6 +78,15 @@ The most complex picker, handling multiple date/time scenarios:
 | Time range | "Add end time" button to create `startDate → dueDate` range |
 | Clear | Remove individual times or clear all dates |
 | Compact mode | Smaller trigger button for inline use on `TodoCard` |
+| Due-date color | trigger color changes for overdue/today/normal |
+
+### Time Shorthand Parsing
+
+`DateTimePicker` accepts shorthand time inputs and normalizes them:
+- `9` -> `09:00`
+- `930` -> `09:30`
+- `1000` -> `10:00`
+- `10:30` -> `10:30`
 
 ### Compact Mode (Inline Date Editing)
 
@@ -84,12 +94,19 @@ When `compact={true}`, the picker renders a compact date pill directly on the `T
 
 ## Keyboard Navigation
 
-`StatusPicker` and `ProjectPicker` support full keyboard navigation:
+`StatusPicker` provides keyboard navigation:
 
 - **↑↓** — move highlight between options
 - **Enter / Space** — select highlighted option
 - **Escape** — close popover, return focus to trigger
 - Focus is managed via `useRef` to ensure proper return after selection
+
+`ProjectPicker` is intentionally simplified to click-select from existing projects (no inline free-text create flow in picker UI).
+
+## Calendar Week Start
+
+The shared `Calendar` UI now accepts `weekStartsOn` (default `1`, Monday-first).  
+Pickers using this component can align week start behavior with locale or workspace conventions.
 
 ## File Structure
 
@@ -98,9 +115,9 @@ bun-sidecar/src/features/todos/pickers/
 ├── index.ts               # Barrel exports for all pickers
 ├── StatusPicker.tsx        # Status selection with keyboard nav
 ├── PriorityPicker.tsx      # Priority flag with colored options
-├── ProjectPicker.tsx       # Searchable project list + create
+├── ProjectPicker.tsx       # Existing-project selector (no inline create/search)
 ├── TagsPicker.tsx           # Tag input with suggestion chips
-├── DateTimePicker.tsx       # Calendar + time inputs + range
+├── DateTimePicker.tsx       # Calendar + presets + shorthand time parsing + range
 └── AttachmentPicker.tsx     # File upload trigger
 
 Consumers:

@@ -1,89 +1,92 @@
 # Inbox
 
-A lightweight list view for quick task capture without a specific project.
+Inbox is now a **master-detail task workspace** instead of a single flat capture list.
 
 ## Overview
 
-The Inbox provides a simple, distraction-free list to dump ideas and tasks before organizing them into projects. It is the default landing view and has a dedicated icon in the Activity Bar sidebar.
+The Inbox feature is still built on regular todos (`project: "Inbox"` for inbox-native tasks), but the UI evolved into a two-panel workflow:
+- left panel: groups/projects navigation
+- right panel: filtered task list + quick actions
 
-Under the hood, Inbox tasks are regular todos with `project: "Inbox"`. The "Inbox" project entity is auto-created on first launch so that agents and APIs can reference it immediately.
+This allows both quick capture and lightweight triage across Inbox + project tasks in one place.
 
-## Key Features
+## Layout
 
-| Feature | Description |
-|---------|-------------|
-| **List view** | Flat task list (not a Kanban board) — optimized for quick capture |
-| **Search** | Fuzzy search across task titles and descriptions |
-| **Filters** | Tag filter pills and priority filter, same as the Kanban toolbar |
-| **Quick create** | Create dialog with project locked to "Inbox" |
-| **Delete + Undo** | Toast notification with undo action |
-| **Archive + Undo** | Same pattern as delete |
+### Sidebar (Master)
+
+Left panel includes:
+- `All Tasks` group
+- `Inbox` group
+- dynamic project groups
+
+Group badges show counts of active (non-done, non-archived) tasks.
+
+### Detail Panel
+
+Right panel includes:
+- selected group title + item count
+- status filters: `all | active | completed | archived`
+- task list sorted by `updatedAt` (newest first)
+- inline create button (`+ new`)
+
+## Search and Filtering
+
+Filtering is group-scoped and supports:
+- title
+- description
+- project
+- tags
+
+Status filter counts are recomputed in scope of current group + search query.
+
+## Drag and Drop Between Groups
+
+Inbox supports drag-and-drop reassignment of task project:
+- draggable rows in detail panel
+- droppable groups in sidebar
+- dropping onto group updates task project target
+
+Normalization rules:
+- empty/missing project => `Inbox`
+- "inbox" casing normalized to `Inbox`
+
+## Create Dialog Behavior
+
+Create flow is context-aware:
+- in `All Tasks`: project is editable
+- in `Inbox` or specific project group: project is locked to selected group
+
+When dialog closes, draft resets.
+
+## Data Model
+
+No new todo schema fields were introduced for this refactor.
+
+Inbox behavior still relies on project naming conventions:
+- canonical inbox project: `Inbox`
+- missing project fallback: `Inbox`
 
 ## Auto-Initialization
 
-On startup, the app ensures the "Inbox" project entity exists in `projects.json`. This is handled by the project migration step in `onStartup.ts`:
+On startup, app ensures Inbox project entity exists in project storage so APIs/agents can reference it.
 
-```
-onStartup()
-  → migrateProjects()
-    → ensures "Inbox" ProjectConfig exists in projects.json
-```
+## Key Behaviors Added in Master-Detail Refactor
 
-If the user has never used projects before, the Inbox project is pre-seeded so tasks created from the Inbox view have a valid project reference.
-
-## Activity Bar
-
-The Inbox has a dedicated icon (`Inbox` from Lucide) in the Activity Bar, positioned above all other plugin icons. Clicking it opens the Inbox view directly without going through the Todos plugin default view.
-
-```typescript
-openTab({
-    pluginMeta: todosPlugin,
-    view: "inbox",
-    props: { project: "Inbox" }
-})
-```
-
-## Data
-
-Inbox tasks are standard todos with `project: "Inbox"`:
-
-```yaml
----
-title: "Quick idea"
-project: "Inbox"
-status: "todo"
----
-```
-
-Tasks with an empty or missing project are automatically assigned to "Inbox" when saved from the Inbox view:
-
-```typescript
-project: updatedTodo.project === "" ? "Inbox" : updatedTodo.project
-```
-
-## View Registration
-
-The Inbox is registered as a view of the Todos plugin:
-
-```typescript
-// features/todos/index.ts
-inbox: {
-    id: "inbox",
-    name: "Inbox",
-    component: InboxListView,
-}
-```
+- Resizable horizontal panel split
+- Group-first triage workflow
+- Group-aware counters and filters
+- DnD project reassignment from inbox context
+- Consistent edit/create dialogs shared with todo system
 
 ## File Structure
 
-```
+```text
 bun-sidecar/src/features/todos/
-├── inbox-view.tsx           # InboxListView component (new)
-├── index.ts                 # View registration
-
-bun-sidecar/src/features/projects/
-├── projects-migration.ts    # Auto-creates Inbox project on startup (new)
+├── inbox-view.tsx             # master-detail inbox implementation
+├── TaskCardEditor.tsx         # shared editor
+├── CreateTodoDialog.tsx       # shared create dialog
+└── browser-view.tsx           # todo board counterpart
 
 bun-sidecar/src/components/
-└── WorkspaceSidebar.tsx      # Inbox icon in Activity Bar
+└── WorkspaceSidebar.tsx       # Inbox entry point in views nav
 ```

@@ -277,11 +277,38 @@ Main chat interface component:
 Features:
 - Message list with auto-scroll
 - Streaming text/thinking display
+- Ordered insertion of streaming content blocks (stable turn/index order)
 - Tool call visualization (collapsible)
 - Image attachments in messages
 - Agent selector dropdown
 - Cancel button during streaming
 - Permission request banner
+- Tab-aware focus and scroll restoration behavior
+
+### Streaming Block Ordering
+
+When assistant output streams in partial blocks, chat now inserts blocks by parsed stream order instead of naive append/prepend.
+
+Ordering inputs:
+- assistant message ID
+- turn number
+- stream index
+
+This prevents visual jumps where thinking/text/tool blocks appear in the wrong order when events arrive asynchronously.
+
+### Thinking Block Rendering
+
+Thinking blocks use `whitespace-pre-wrap`, so newlines and structured formatting are preserved while streaming and after completion.
+
+### Tab Lifecycle Behavior
+
+Chat view is now tab-activation aware:
+- autofocus and initial prompt hydration run only when the chat tab is active
+- first-open sessions without saved scroll position auto-scroll to bottom after history render
+- MutationObserver is used to keep bottom lock during initial DOM growth window
+
+Related helper:
+- `hasSavedScrollPosition(tabId)` from `useTabScrollPersistence`
 
 ### Chat Browser
 

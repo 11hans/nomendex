@@ -62,6 +62,11 @@ Force sync performs a **delete-and-recreate** cycle:
 1. Sends a `purge` action to Swift which deletes all Nomendex calendars (e.g. "Nomendex Tasks", "Nomendex - ProjectName")
 2. Upserts each task with a `startDate` or `dueDate` — this recreates the calendars and events from scratch
 
+Color behavior during purge/recreate:
+- Before delete, Swift stores each Nomendex calendar color (`cgColor`)
+- After recreation, the original color is restored per calendar title
+- This preserves user visual grouping after force sync
+
 This approach avoids the need to read existing events (which requires full calendar access — write-only access can create events but cannot query them with `events(matching:)`).
 
 ## Calendar Event Behavior
@@ -69,6 +74,7 @@ This approach avoids the need to read existing events (which requires full calen
 | Feature | Details |
 |---------|---------|
 | Calendar name | **Nomendex Tasks** or **Nomendex - ProjectName** (auto-created on first sync) |
+| Project-specific calendars | Tasks can be routed into per-project Nomendex calendars |
 | Event lookup | Cached `eventIdentifier` first, then `nomendex://task/{id}` URL fallback |
 | All-day events | Created when task has date only (no time) |
 | Timed events | Created when task has date + time |
@@ -174,7 +180,7 @@ class CalendarManager {
 | `getOrCreateCalendar(projectName:)` | Finds or creates a Nomendex calendar |
 | `upsertEvent(taskData:webView:callback:)` | Creates or updates a calendar event |
 | `deleteEvent(taskData:webView:callback:)` | Removes event by task ID lookup |
-| `purgeOrphanedEvents(taskData:webView:callback:)` | Deletes all Nomendex calendars (force sync) |
+| `purgeOrphanedEvents(taskData:webView:callback:)` | Deletes and recreates all Nomendex calendars (force sync) while preserving calendar colors |
 | `findEvent(taskId:)` | Looks up event by cached identifier or `nomendex://task/{id}` URL |
 | `detectChanges()` | Compares calendar state to snapshot, sends changes to JS |
 
@@ -193,6 +199,10 @@ Only `evaluateJavaScript` and `sendResult` dispatch to `.main` (required by WKWe
 - Populated at startup from `snapshotCurrentEvents`
 - Updated after each `eventStore.save()`
 - Cleared on purge
+
+During purge:
+- calendar colors are captured before delete
+- matching recreated calendars receive original `cgColor`
 
 ## Permissions
 
