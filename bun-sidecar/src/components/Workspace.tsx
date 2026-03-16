@@ -26,6 +26,15 @@ export function Workspace() {
         return getLock(noteFileName);
     };
 
+    const shouldForceMount = (tab: WorkspaceTab) => {
+        const pluginId = tab.pluginInstance.plugin.id;
+        const viewId = tab.pluginInstance.viewId || "default";
+
+        if (pluginId === "chat" && viewId === "chat") return true;
+        if (pluginId === "todos" && (viewId === "default" || viewId === "projects" || viewId === "inbox")) return true;
+        return false;
+    };
+
     const handleTabDragStart = (e: React.DragEvent, _tab: WorkspaceTab, index: number) => {
         setDraggedTabIndex(index);
         e.dataTransfer.setData("text/plain", String(index));
@@ -265,6 +274,7 @@ export function Workspace() {
                             <TabsContent
                                 key={tab.id}
                                 value={tab.id}
+                                forceMount={shouldForceMount(tab) ? true : undefined}
                                 className="flex-1 min-h-0 h-full"
                             >
                                 <View pluginInstance={tab.pluginInstance} viewPosition="main" tabId={tab.id} />

@@ -125,6 +125,23 @@ export function NotesView(props: NotesViewProps) {
     const { currentTheme } = useTheme();
     const { isLocked: isFileLocked } = useFileLocks();
     const isLocked = isFileLocked(noteFileName);
+    const notesAPI = useNotesAPI();
+    const contentRef = useRef(content);
+    const noteFileNameRef = useRef(noteFileName);
+    const notesAPIRef = useRef(notesAPI);
+    const wasActiveRef = useRef(false);
+
+    useEffect(() => {
+        contentRef.current = content;
+    }, [content]);
+
+    useEffect(() => {
+        noteFileNameRef.current = noteFileName;
+    }, [noteFileName]);
+
+    useEffect(() => {
+        notesAPIRef.current = notesAPI;
+    }, [notesAPI]);
 
     useEffect(() => {
         const view = viewRef.current;
@@ -221,9 +238,6 @@ export function NotesView(props: NotesViewProps) {
             }
         });
     }, []);
-
-    // Memoize API instance to prevent infinite rerenders
-    const notesAPI = useNotesAPI();
 
     // Parse headings from markdown content
     const parseHeadings = useCallback((markdown: string): Heading[] => {
@@ -457,6 +471,7 @@ export function NotesView(props: NotesViewProps) {
             }
 
             saveTimeoutRef.current = setTimeout(async () => {
+                saveTimeoutRef.current = null;
                 if (contentToSave === lastSavedContentRef.current) {
                     setSaveState("saved");
                     return;
@@ -479,6 +494,36 @@ export function NotesView(props: NotesViewProps) {
         },
         [notesAPI, noteFileName]
     );
+
+    const getCurrentEditorContent = useCallback(() => {
+        if (viewRef.current) {
+            return tableMarkdownSerializer.serialize(viewRef.current.state.doc);
+        }
+        return contentRef.current;
+    }, []);
+
+    const flushPendingDraft = useCallback(async () => {
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+            saveTimeoutRef.current = null;
+        }
+
+        const contentToSave = getCurrentEditorContent();
+        if (contentToSave === lastSavedContentRef.current) return;
+
+        try {
+            const savedNote = await notesAPIRef.current.saveNote({
+                fileName: noteFileNameRef.current,
+                content: contentToSave,
+            });
+            lastSavedContentRef.current = contentToSave;
+            if (savedNote?.mtime) {
+                lastKnownMtimeRef.current = savedNote.mtime;
+            }
+        } catch (error) {
+            console.error("Failed to flush note draft on tab switch/unmount:", error);
+        }
+    }, [getCurrentEditorContent]);
 
     // Handle tag updates
     const handleTagsChange = useCallback(
@@ -1120,14 +1165,21 @@ export function NotesView(props: NotesViewProps) {
         };
     }, [isRichTextMode, note]);
 
-    // Clean up timeout on unmount
+    // Flush pending draft when switching away from this tab
+    useEffect(() => {
+        const isActive = activeTab?.id === tabId;
+        if (wasActiveRef.current && !isActive) {
+            void flushPendingDraft();
+        }
+        wasActiveRef.current = isActive;
+    }, [activeTab?.id, tabId, flushPendingDraft]);
+
+    // Flush pending draft on unmount
     useEffect(() => {
         return () => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-            }
+            void flushPendingDraft();
         };
-    }, []);
+    }, [flushPendingDraft]);
 
     // Focus editor when tab becomes active (for tab switching)
     useEffect(() => {

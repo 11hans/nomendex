@@ -356,18 +356,18 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
 
     // Auto-focus input when tab becomes active or on initial load
     useEffect(() => {
-        if (!isLoadingHistory) {
+        if (!isLoadingHistory && activeTab?.id === tabId) {
             // Small delay to ensure ProseMirror editor is initialized
             const timer = setTimeout(() => {
                 inputRef.current?.focus();
             }, 100);
             return () => clearTimeout(timer);
         }
-    }, [isLoadingHistory]);
+    }, [isLoadingHistory, activeTab?.id, tabId]);
 
     // Set initial prompt if provided (for pre-populated chats)
     useEffect(() => {
-        if (initialPrompt && !isLoadingHistory && !initialSessionId) {
+        if (initialPrompt && !isLoadingHistory && !initialSessionId && activeTab?.id === tabId) {
             // Small delay to ensure ProseMirror editor is initialized
             const timer = setTimeout(() => {
                 inputRef.current?.setContent(initialPrompt);
@@ -375,7 +375,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
             }, 150);
             return () => clearTimeout(timer);
         }
-    }, [initialPrompt, isLoadingHistory, initialSessionId]);
+    }, [initialPrompt, isLoadingHistory, initialSessionId, activeTab?.id, tabId]);
 
     // Re-focus when switching tabs
     useEffect(() => {

@@ -3962,6 +3962,11 @@
       transition-duration: 300ms;
     }
   }
+  .data-\[state\=inactive\]\:hidden {
+    &[data-state="inactive"] {
+      display: none;
+    }
+  }
   .data-\[state\=on\]\:bg-accent {
     &[data-state="on"] {
       background-color: var(--color-accent);

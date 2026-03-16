@@ -51,6 +51,15 @@ export function Pane({
         return getLock(noteFileName);
     };
 
+    const shouldForceMount = (tab: WorkspaceTab) => {
+        const pluginId = tab.pluginInstance.plugin.id;
+        const viewId = tab.pluginInstance.viewId || "default";
+
+        if (pluginId === "chat" && viewId === "chat") return true;
+        if (pluginId === "todos" && (viewId === "default" || viewId === "projects" || viewId === "inbox")) return true;
+        return false;
+    };
+
     // Use external drag state if provided, otherwise use local state
     const isDraggingFromThisPane = externalDragState
         ? externalDragState.isDragging && externalDragState.sourcePaneId === pane.id
@@ -339,7 +348,12 @@ export function Pane({
                     onDrop={handlePaneDrop}
                 >
                     {pane.tabs.map((tab) => (
-                        <TabsContent key={tab.id} value={tab.id} className="flex-1 min-h-0 h-full">
+                        <TabsContent
+                            key={tab.id}
+                            value={tab.id}
+                            forceMount={shouldForceMount(tab) ? true : undefined}
+                            className="flex-1 min-h-0 h-full"
+                        >
                             <View pluginInstance={tab.pluginInstance} viewPosition="main" tabId={tab.id} />
                         </TabsContent>
                     ))}
