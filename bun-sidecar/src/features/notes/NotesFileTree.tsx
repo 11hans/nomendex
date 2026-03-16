@@ -22,7 +22,7 @@ import {
 import { OverlayScrollbar } from "@/components/OverlayScrollbar";
 import { useTheme } from "@/hooks/useTheme";
 import { NoteFolder, Note } from "./index";
-import { cn } from "@/lib/utils";
+
 
 interface NotesFileTreeProps {
     folders: NoteFolder[];

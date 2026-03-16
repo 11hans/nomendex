@@ -70,6 +70,7 @@ async function moveFileSafe(sourceAbsolutePath: string, targetAbsolutePath: stri
 function normalizeProjectFileBase(projectName: string): string {
     const sanitized = projectName
         .normalize("NFKC")
+        // eslint-disable-next-line no-control-regex
         .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
         .replace(/\s+/g, " ")
         .trim()

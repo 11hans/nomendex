@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { TodosBrowserView } from "./browser-view";
 import {
-    FolderKanban,
     Inbox,
     ListTodo,
     Search,
