@@ -15,8 +15,7 @@ import {
 } from "@/components/ui/select";
 import { useAgentsAPI } from "@/hooks/useAgentsAPI";
 import { useMcpServersAPI } from "@/hooks/useMcpServersAPI";
-import { PREDEFINED_MODELS, MODEL_DISPLAY_NAMES } from "@/features/agents/index";
-import type { PredefinedModel } from "@/features/agents/index";
+import { PREDEFINED_MODELS, buildAgentModelCatalog, getModelDisplayName } from "@/features/agents/index";
 import type { UserMcpServer } from "@/features/mcp-servers/mcp-server-types";
 import { ArrowLeft, Sparkles, Cpu, Layers3 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -38,13 +37,15 @@ function NewAgentContent() {
     const [formName, setFormName] = useState("");
     const [formDescription, setFormDescription] = useState("");
     const [formSystemPrompt, setFormSystemPrompt] = useState("");
-    const [formModel, setFormModel] = useState<string>("claude-sonnet-4-5-20250929");
+    const [formModel, setFormModel] = useState<string>("claude-sonnet-4-5");
+    const [availableModels, setAvailableModels] = useState<string[]>(buildAgentModelCatalog([]));
     const [formMcpServers, setFormMcpServers] = useState<string[]>([]);
     const [useCustomModel, setUseCustomModel] = useState(false);
 
     // Load all MCP servers on mount
     useEffect(() => {
         loadMcpServers();
+        loadModels();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
@@ -57,6 +58,20 @@ function NewAgentContent() {
             console.error("Failed to load MCP servers:", error);
         } finally {
             setIsLoading(false);
+        }
+    }
+
+    async function loadModels() {
+        try {
+            const response = await api.listModels();
+            const catalog = buildAgentModelCatalog(response.models);
+            setAvailableModels(catalog);
+            if (!useCustomModel && !catalog.includes(formModel) && catalog[0]) {
+                setFormModel(catalog[0]);
+            }
+        } catch (error) {
+            console.error("Failed to load models, using fallback list:", error);
+            setAvailableModels(buildAgentModelCatalog([]));
         }
     }
 
@@ -170,7 +185,7 @@ function NewAgentContent() {
                                             if (!useCustomModel) {
                                                 setUseCustomModel(true);
                                             } else {
-                                                setFormModel(PREDEFINED_MODELS[0]);
+                                                setFormModel(availableModels[0] || PREDEFINED_MODELS[0]);
                                                 setUseCustomModel(false);
                                             }
                                         }}
@@ -184,7 +199,7 @@ function NewAgentContent() {
                                         id="model"
                                         value={formModel}
                                         onChange={(e) => setFormModel(e.target.value)}
-                                        placeholder="e.g., claude-opus-4-5-20251101"
+                                        placeholder="e.g., claude-opus-4-6"
                                     />
                                 ) : (
                                     <Select value={formModel} onValueChange={(value) => setFormModel(value)}>
@@ -192,9 +207,9 @@ function NewAgentContent() {
                                             <SelectValue />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {PREDEFINED_MODELS.map((model) => (
+                                            {availableModels.map((model) => (
                                                 <SelectItem key={model} value={model}>
-                                                    {MODEL_DISPLAY_NAMES[model as PredefinedModel]}
+                                                    {getModelDisplayName(model)}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -204,7 +219,7 @@ function NewAgentContent() {
                                 <div className="flex flex-wrap gap-1.5">
                                     <Badge variant="secondary" className="gap-1 rounded-full px-2 py-0">
                                         <Cpu className="h-3 w-3" />
-                                        {useCustomModel ? formModel || "Custom" : MODEL_DISPLAY_NAMES[formModel as PredefinedModel]}
+                                        {useCustomModel ? formModel || "Custom" : getModelDisplayName(formModel)}
                                     </Badge>
                                     <Badge variant="secondary" className="gap-1 rounded-full px-2 py-0">
                                         <Layers3 className="h-3 w-3" />

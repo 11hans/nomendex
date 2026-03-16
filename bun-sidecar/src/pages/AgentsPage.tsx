@@ -24,8 +24,14 @@ import {
 import { useAgentsAPI } from "@/hooks/useAgentsAPI";
 import { useMcpServersAPI } from "@/hooks/useMcpServersAPI";
 import type { AgentConfig } from "@/features/agents/index";
-import { PREDEFINED_MODELS, MODEL_DISPLAY_NAMES, getModelDisplayName } from "@/features/agents/index";
-import type { PredefinedModel } from "@/features/agents/index";
+import {
+    PREDEFINED_MODELS,
+    buildAgentModelCatalog,
+    getModelDisplayName,
+    getAgentEffectivePromptInfo,
+    isBuiltInAgentId,
+    type AgentEffectivePromptSource,
+} from "@/features/agents/index";
 import type { UserMcpServer } from "@/features/mcp-servers/mcp-server-types";
 import { Plus, Pencil, Trash2, Copy, Bot, Server, Cpu, Layers3 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -34,11 +40,18 @@ interface CombinedMcpServer extends UserMcpServer {
     isBuiltIn?: boolean;
 }
 
+const PROMPT_SOURCE_LABELS: Record<AgentEffectivePromptSource, string> = {
+    custom: "custom",
+    default_with_context: "default_with_context",
+    bpagent_runtime: "bpagent_runtime",
+};
+
 function AgentsContent() {
     const navigate = useNavigate();
     const api = useAgentsAPI();
     const mcpServersAPI = useMcpServersAPI();
     const [agents, setAgents] = useState<AgentConfig[]>([]);
+    const [availableModels, setAvailableModels] = useState<string[]>(buildAgentModelCatalog([]));
     const [allMcpServers, setAllMcpServers] = useState<CombinedMcpServer[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -51,9 +64,10 @@ function AgentsContent() {
     const [formName, setFormName] = useState("");
     const [formDescription, setFormDescription] = useState("");
     const [formSystemPrompt, setFormSystemPrompt] = useState("");
-    const [formModel, setFormModel] = useState<string>("claude-sonnet-4-5-20250929");
+    const [formModel, setFormModel] = useState<string>("claude-sonnet-4-5");
     const [formMcpServers, setFormMcpServers] = useState<string[]>([]);
     const [useCustomModel, setUseCustomModel] = useState(false);
+    const [updatingBuiltInModelId, setUpdatingBuiltInModelId] = useState<string | null>(null);
 
     // Separate built-in and user-defined servers
     const builtInServers = allMcpServers.filter((s) => s.isBuiltIn);
@@ -63,6 +77,7 @@ function AgentsContent() {
         () => new Map(allMcpServers.map((server) => [server.id, server.name])),
         [allMcpServers]
     );
+    const modelCatalog = useMemo(() => buildAgentModelCatalog(availableModels), [availableModels]);
 
     const defaultAgent = useMemo(() => agents.find((agent) => agent.isDefault), [agents]);
 
@@ -72,8 +87,8 @@ function AgentsContent() {
     );
 
     const customModelCount = useMemo(
-        () => agents.filter((agent) => !(PREDEFINED_MODELS as readonly string[]).includes(agent.model)).length,
-        [agents]
+        () => agents.filter((agent) => !modelCatalog.includes(agent.model)).length,
+        [agents, modelCatalog]
     );
 
     // Load agents and MCP servers on mount
@@ -85,12 +100,21 @@ function AgentsContent() {
     async function loadData() {
         setIsLoading(true);
         try {
-            const [agentsList, mcpResponse] = await Promise.all([
+            const [agentsList, mcpResponse, modelsResponse] = await Promise.all([
                 api.listAgents(),
                 mcpServersAPI.getAllServers(),
+                api.listModels().catch((error) => {
+                    console.error("Failed to load models, using fallback list:", error);
+                    return null;
+                }),
             ]);
             setAgents(agentsList);
             setAllMcpServers(mcpResponse.servers);
+            if (modelsResponse?.models?.length) {
+                setAvailableModels(buildAgentModelCatalog(modelsResponse.models));
+            } else {
+                setAvailableModels(buildAgentModelCatalog([]));
+            }
         } catch (error) {
             console.error("Failed to load agents:", error);
         } finally {
@@ -103,6 +127,11 @@ function AgentsContent() {
     }
 
     function openEditDialog(agent: AgentConfig) {
+        if (isBuiltInAgentId(agent.id)) {
+            console.warn(`Cannot edit built-in agent: ${agent.id}`);
+            return;
+        }
+
         setEditingAgent(agent);
         setFormName(agent.name);
         setFormDescription(agent.description || "");
@@ -110,15 +139,23 @@ function AgentsContent() {
         setFormModel(agent.model);
         setFormMcpServers([...agent.mcpServers]);
         // Check if the model is a predefined one or custom
-        const isPredefined = (PREDEFINED_MODELS as readonly string[]).includes(agent.model);
+        const isPredefined = modelCatalog.includes(agent.model);
         setUseCustomModel(!isPredefined);
         setIsDialogOpen(true);
     }
 
     async function handleSave() {
+        if (!editingAgent) return;
+        if (isBuiltInAgentId(editingAgent.id)) {
+            console.warn(`Blocked save for built-in agent: ${editingAgent.id}`);
+            setIsDialogOpen(false);
+            setEditingAgent(null);
+            return;
+        }
+
         try {
             await api.updateAgent({
-                agentId: editingAgent!.id,
+                agentId: editingAgent.id,
                 updates: {
                     name: formName,
                     description: formDescription || undefined,
@@ -135,6 +172,11 @@ function AgentsContent() {
     }
 
     async function handleDelete(agent: AgentConfig) {
+        if (isBuiltInAgentId(agent.id)) {
+            console.warn(`Cannot delete built-in agent: ${agent.id}`);
+            return;
+        }
+
         try {
             await api.deleteAgent({ agentId: agent.id });
             setDeleteConfirmAgent(null);
@@ -150,6 +192,26 @@ function AgentsContent() {
             await loadData();
         } catch (error) {
             console.error("Failed to duplicate agent:", error);
+        }
+    }
+
+    async function handleBuiltInModelChange(agent: AgentConfig, nextModel: string) {
+        if (!isBuiltInAgentId(agent.id)) return;
+        if (agent.model === nextModel) return;
+
+        setUpdatingBuiltInModelId(agent.id);
+        try {
+            await api.updateAgent({
+                agentId: agent.id,
+                updates: {
+                    model: nextModel,
+                },
+            });
+            await loadData();
+        } catch (error) {
+            console.error(`Failed to update built-in model for ${agent.id}:`, error);
+        } finally {
+            setUpdatingBuiltInModelId(null);
         }
     }
 
@@ -210,10 +272,14 @@ function AgentsContent() {
                     )}
 
                     {agents.map((agent) => {
-                        const isCustomModel = !(PREDEFINED_MODELS as readonly string[]).includes(agent.model);
-                        const trimmedPrompt = agent.systemPrompt.length > 200
-                            ? agent.systemPrompt.slice(0, 200) + "..."
-                            : agent.systemPrompt || "(uses default system prompt)";
+                        const isBuiltIn = isBuiltInAgentId(agent.id);
+                        const isCustomModel = !modelCatalog.includes(agent.model);
+                        const promptInfo = getAgentEffectivePromptInfo(agent);
+                        const modelOptions = modelCatalog.includes(agent.model)
+                            ? [...modelCatalog]
+                            : [...modelCatalog, agent.model];
+                        const canSwitchBuiltInModel = agent.id === "bpagent";
+                        const isBuiltInModelUpdating = updatingBuiltInModelId === agent.id;
 
                         return (
                             <Card key={agent.id} className="overflow-hidden rounded-lg border">
@@ -229,6 +295,11 @@ function AgentsContent() {
                                                     {agent.isDefault && (
                                                         <Badge className="px-1 py-0 text-caption" variant="success">
                                                             Default
+                                                        </Badge>
+                                                    )}
+                                                    {isBuiltIn && (
+                                                        <Badge className="px-1 py-0 text-caption" variant="secondary">
+                                                            Built-in
                                                         </Badge>
                                                     )}
                                                 </CardTitle>
@@ -248,7 +319,7 @@ function AgentsContent() {
                                             >
                                                 <Copy className="h-3.5 w-3.5" />
                                             </Button>
-                                            {!agent.isDefault && (
+                                            {!isBuiltIn && (
                                                 <>
                                                     <Button
                                                         variant="ghost"
@@ -300,8 +371,34 @@ function AgentsContent() {
                                         <p className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">
                                             System Prompt Preview
                                         </p>
-                                        <p className="font-mono text-caption leading-relaxed text-muted-foreground">{trimmedPrompt}</p>
+                                        <p className="text-caption leading-relaxed text-muted-foreground">
+                                            Source: <span className="font-mono">{PROMPT_SOURCE_LABELS[promptInfo.source]}</span>
+                                        </p>
+                                        <p className="text-caption leading-relaxed text-muted-foreground">{promptInfo.summary}</p>
+                                        <p className="font-mono text-caption leading-relaxed text-muted-foreground">{promptInfo.previewText}</p>
                                     </div>
+
+                                    {canSwitchBuiltInModel && (
+                                        <div className="space-y-1 rounded-lg border border-border bg-bg-secondary p-2">
+                                            <p className="text-xs uppercase tracking-wide text-muted-foreground">BPagent Model</p>
+                                            <Select
+                                                value={agent.model}
+                                                onValueChange={(value) => handleBuiltInModelChange(agent, value)}
+                                                disabled={isBuiltInModelUpdating}
+                                            >
+                                                <SelectTrigger className="h-8 text-xs">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {modelOptions.map((model) => (
+                                                        <SelectItem key={`${agent.id}-model-${model}`} value={model}>
+                                                            {getModelDisplayName(model)}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    )}
 
                                     {agent.mcpServers.length > 0 ? (
                                         <div className="space-y-1">
@@ -367,7 +464,7 @@ function AgentsContent() {
                                         if (!useCustomModel) {
                                             setUseCustomModel(true);
                                         } else {
-                                            setFormModel(PREDEFINED_MODELS[0]);
+                                            setFormModel(modelCatalog[0] || PREDEFINED_MODELS[0]);
                                             setUseCustomModel(false);
                                         }
                                     }}
@@ -380,7 +477,7 @@ function AgentsContent() {
                                     id="model"
                                     value={formModel}
                                     onChange={(e) => setFormModel(e.target.value)}
-                                    placeholder="e.g., claude-opus-4-5-20251101"
+                                    placeholder="e.g., claude-opus-4-6"
                                 />
                             ) : (
                                 <Select value={formModel} onValueChange={(value) => setFormModel(value)}>
@@ -388,9 +485,9 @@ function AgentsContent() {
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {PREDEFINED_MODELS.map((model) => (
+                                        {modelCatalog.map((model) => (
                                             <SelectItem key={model} value={model}>
-                                                {MODEL_DISPLAY_NAMES[model as PredefinedModel]}
+                                                {getModelDisplayName(model)}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>

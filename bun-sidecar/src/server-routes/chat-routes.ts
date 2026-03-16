@@ -4,7 +4,7 @@ import { appendFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { getRootPath, getNomendexPath, getUploadsPath, getNotesPath } from "@/storage/root-path";
 import { getAgent, getPreferences, savePreferences, addAllowedTool, getAgentAllowedTools } from "@/features/agents/fx";
-import { DEFAULT_AGENT, MCP_REGISTRY } from "@/features/agents/index";
+import { DEFAULT_AGENT, MCP_REGISTRY, getAgentEffectivePromptSource } from "@/features/agents/index";
 import { listUserMcpServers, expandEnvVars } from "@/features/mcp-servers/fx";
 import type { AgentConfig } from "@/features/agents/index";
 import { createServiceLogger } from "@/lib/logger";
@@ -691,10 +691,17 @@ export const chatRoutes = {
 
                 // Log MCP server names (can't stringify SDK servers due to cyclic refs)
                 const mcpServerNames = Object.keys(mcpServers);
+                const promptSource = getAgentEffectivePromptSource(agentConfig);
+                const promptLogText = promptSource === "custom"
+                    ? "(custom + context)"
+                    : promptSource === "bpagent_runtime"
+                        ? "(bpagent runtime-composed)"
+                        : "(default Claude prompt + context)";
                 console.log("[API] SDK options:", {
                     ...sdkOptions,
                     resume: sessionId || "(new session)",
-                    systemPrompt: agentConfig.systemPrompt ? "(custom + context)" : "(context only)",
+                    systemPrompt: promptLogText,
+                    systemPromptSource: promptSource,
                     mcpServers: mcpServerNames,
                     pathToClaudeCodeExecutable: claudeCliPath,
                 });

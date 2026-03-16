@@ -19,6 +19,13 @@ interface UpdateAgentInput {
     };
 }
 
+interface AgentModelsResponse {
+    models: string[];
+    source: "anthropic" | "fallback";
+    hasAnthropicApiKey: boolean;
+    error?: string;
+}
+
 async function fetchAPI<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const response = await fetch(`/api/agents/${endpoint}`, {
         headers: { "Content-Type": "application/json" },
@@ -56,6 +63,8 @@ export const agentsAPI = {
             method: "POST",
             body: JSON.stringify(preferences),
         }),
+
+    listModels: () => fetchAPI<AgentModelsResponse>("models", { method: "GET" }),
 
     getMcpRegistry: () =>
         fetch("/api/mcp-registry", { method: "GET" }).then((r) => r.json()) as Promise<McpServerDefinition[]>,

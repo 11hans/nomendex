@@ -6,7 +6,7 @@ This feature allows users to create and manage multiple AI agent configurations,
 
 Agents are reusable configurations that define how Claude behaves in chat sessions. Each agent can have:
 - **Custom system prompt** - Instructions that guide Claude's behavior
-- **Model selection** - Choose between Sonnet, Opus, or Haiku
+- **Model selection** - Model catalog from Anthropic API (with local fallback list)
 - **MCP servers** - Enable specific MCP integrations (e.g., Linear)
 
 ## Storage
@@ -20,7 +20,7 @@ Agent configurations are stored in `{workspace}/agents/`:
 └── _preferences.json                # Stores last used agent ID
 ```
 
-The default agent ("General Assistant") is not stored on disk - it's defined in code.
+Built-in agents ("General Assistant" and "BPagent") are not stored on disk - they are defined in code.
 
 ### Agent Config Schema
 
@@ -39,21 +39,27 @@ type AgentConfig = {
 }
 
 type AgentModel =
-    | "claude-sonnet-4-5-20250929"
-    | "claude-opus-4-20250514"
+    | "claude-sonnet-4-6"
+    | "claude-sonnet-4-5"
+    | "claude-opus-4-6"
+    | "claude-opus-4-1"
+    | "claude-haiku-4-5"
     | "claude-3-5-haiku-20241022";
 ```
+
+Note: legacy dated model IDs are normalized to canonical IDs in the picker to avoid duplicate entries.
 
 ### Preferences
 
 ```typescript
 type AgentPreferences = {
-    lastUsedAgentId: string;              // Defaults to "default"
-    defaultAgentAllowedTools?: string[];  // Allowed tools for the default agent
+    lastUsedAgentId: string;                               // Defaults to "default"
+    builtInAgentAllowedTools?: Record<string, string[]>;  // Allowed tools for built-in agents
+    builtInAgentModels?: Record<string, string>;          // Model overrides for built-in agents
 }
 ```
 
-Note: The default agent's allowed tools are stored in preferences since the default agent itself is not persisted to disk.
+Note: Built-in agents' allowed tools are stored in preferences since built-in agents are not persisted to disk.
 
 ## MCP Server Registry
 
@@ -78,22 +84,43 @@ export const MCP_REGISTRY: McpServerDefinition[] = [
 ];
 ```
 
-## Default Agent
+## Built-in Agents
 
-Ships with the app and cannot be deleted:
+Built-in agents ship with the app. They cannot be edited or deleted (duplicate-only in UI).
 
 ```typescript
 {
     id: "default",
     name: "General Assistant",
     description: "A general-purpose coding assistant",
-    systemPrompt: "",  // Empty = uses Claude Code SDK default
-    model: "claude-sonnet-4-5-20250929",
+    systemPrompt: "",  // Uses Claude Code default prompt + runtime <agent-context>
+    model: "claude-sonnet-4-5",
     mcpServers: [],
     allowedTools: [],
     isDefault: true,
 }
+
+{
+    id: "bpagent",
+    name: "BPagent",
+    description: "Planning workflows: review, goals, projects, and note organization",
+    systemPrompt: "",  // Runtime-composed by backend
+    model: "claude-opus-4-6",  // Default model (can be changed from Agents page)
+    mcpServers: [],
+    allowedTools: [],
+}
 ```
+
+## Effective Prompt Source
+
+The Agents UI shows an explicit source for each agent's effective prompt:
+
+- `custom`: Uses the custom `systemPrompt` saved on the agent profile
+- `default_with_context`: Uses Claude Code default prompt plus runtime `<agent-context>` (date + workspace folder)
+- `bpagent_runtime`: Runtime-composed BPagent prompt:
+  - `<agent-context>` using notes path
+  - BPagent template from `built-in-bpagent.ts`
+  - Optional memory recall block
 
 ## Permissions System
 
@@ -106,13 +133,13 @@ Each agent maintains its own list of allowed tools. When a user clicks "Always A
 3. **User Prompt**: If not auto-allowed, the user sees a permission prompt (Allow / Deny / Always Allow)
 4. **Persistence**: If "Always Allow" is clicked:
    - For custom agents: Tool is added to `allowedTools` in the agent's JSON file
-   - For default agent: Tool is added to `defaultAgentAllowedTools` in `_preferences.json`
+   - For built-in agents: Tool is added to `builtInAgentAllowedTools[agentId]` in `_preferences.json`
 5. **Session Cache**: Allowed tools are also cached in memory for the current session to avoid re-reading from disk
 
 ### Storage
 
 - **Custom agents**: `{workspace}/agents/{agent-id}.json` → `allowedTools` array
-- **Default agent**: `{workspace}/agents/_preferences.json` → `defaultAgentAllowedTools` array
+- **Built-in agents**: `{workspace}/agents/_preferences.json` → `builtInAgentAllowedTools` and `builtInAgentModels`
 
 ### Example Permission Flow
 
@@ -162,8 +189,9 @@ type SessionMetadata = {
 | `/api/agents/get` | POST | Get single agent by ID |
 | `/api/agents/create` | POST | Create new agent |
 | `/api/agents/update` | POST | Update existing agent |
-| `/api/agents/delete` | POST | Delete agent (not default) |
+| `/api/agents/delete` | POST | Delete agent (not built-in) |
 | `/api/agents/duplicate` | POST | Clone an agent |
+| `/api/agents/models` | GET | List available model IDs (Anthropic API + fallback) |
 
 ### Preferences
 
@@ -183,7 +211,10 @@ type SessionMetadata = {
 ### Agents Page (`/agents`)
 
 Full settings page for managing agents:
-- List all agents with actions (edit, delete, duplicate)
+- List all agents with prompt source preview and actions
+- Built-in agents: duplicate only
+- User agents: edit, delete, duplicate
+- BPagent: inline model switcher (saved as built-in model override)
 - Create new agents via dialog
 - Configure name, description, model, system prompt, MCP servers
 
@@ -205,8 +236,15 @@ When sending a message, the chat route:
 
 2. Loads agent config and applies:
    - `model` - Which Claude model to use
-   - `systemPrompt` - Custom instructions (empty = SDK default)
+   - `systemPrompt` behavior:
+     - Custom agents with prompt: `<agent-context> + custom prompt`
+     - General Assistant: Claude Code default prompt + `<agent-context>`
+     - BPagent: runtime-composed BPagent prompt (context + BP template + optional memory block)
    - `mcpServers` - Builds MCP config from registry
+
+Model catalog behavior:
+- If `ANTHROPIC_API_KEY` is available, `/api/agents/models` fetches `/v1/models` from Anthropic and merges with fallback curated IDs.
+- If key is missing or request fails, UI uses the local fallback model list from `features/agents/index.ts`.
 
 3. Updates `lastUsedAgentId` preference
 

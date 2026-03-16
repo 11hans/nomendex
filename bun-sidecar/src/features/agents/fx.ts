@@ -54,6 +54,7 @@ async function getPreferences(): Promise<AgentPreferences> {
                     builtInAgentAllowedTools: {
                         default: legacy.defaultAgentAllowedTools || [],
                     },
+                    builtInAgentModels: {},
                 };
                 agentsLogger.info("Migrating legacy defaultAgentAllowedTools to builtInAgentAllowedTools");
                 await savePreferences(migrated);
@@ -74,6 +75,15 @@ async function getPreferences(): Promise<AgentPreferences> {
     }
 }
 
+function applyBuiltInAgentModelOverride(agent: AgentConfig, preferences: AgentPreferences): AgentConfig {
+    const modelOverride = preferences.builtInAgentModels[agent.id];
+    if (!modelOverride) return agent;
+    return {
+        ...agent,
+        model: modelOverride,
+    };
+}
+
 // Save preferences
 async function savePreferences(preferences: AgentPreferences): Promise<void> {
     try {
@@ -90,11 +100,10 @@ async function getAgent(input: { agentId: string }): Promise<AgentConfig | null>
     agentsLogger.info(`Getting agent: ${input.agentId}`);
 
     // Return built-in agents if requested
-    if (input.agentId === "default") {
-        return DEFAULT_AGENT;
-    }
-    if (input.agentId === "bpagent") {
-        return BPAGENT_AGENT;
+    if (isBuiltInAgentId(input.agentId)) {
+        const preferences = await getPreferences();
+        const builtIn = input.agentId === "bpagent" ? BPAGENT_AGENT : DEFAULT_AGENT;
+        return applyBuiltInAgentModelOverride(builtIn, preferences);
     }
 
     try {
@@ -130,7 +139,11 @@ async function listAgents(): Promise<AgentConfig[]> {
 
     try {
         await ensureAgentsDir();
-        const agents: AgentConfig[] = [DEFAULT_AGENT, BPAGENT_AGENT];
+        const preferences = await getPreferences();
+        const agents: AgentConfig[] = [
+            applyBuiltInAgentModelOverride(DEFAULT_AGENT, preferences),
+            applyBuiltInAgentModelOverride(BPAGENT_AGENT, preferences),
+        ];
 
         // Read all JSON files in agents directory except _preferences.json
         const { readdir } = await import("node:fs/promises");
@@ -225,10 +238,28 @@ async function updateAgent(input: {
 }): Promise<AgentConfig | null> {
     agentsLogger.info(`Updating agent: ${input.agentId}`);
 
-    // Cannot update built-in agents
+    // Built-in agents only support model override updates.
     if (isBuiltInAgentId(input.agentId)) {
-        agentsLogger.warn(`Cannot update built-in agent: ${input.agentId}`);
-        return input.agentId === "bpagent" ? BPAGENT_AGENT : DEFAULT_AGENT;
+        const unsupportedField = Object.entries(input.updates).some(
+            ([key, value]) => key !== "model" && value !== undefined
+        );
+        if (unsupportedField || !input.updates.model) {
+            agentsLogger.warn(`Unsupported built-in update payload for ${input.agentId}`);
+            return getAgent({ agentId: input.agentId });
+        }
+
+        const prefs = await getPreferences();
+        await savePreferences({
+            ...prefs,
+            builtInAgentModels: {
+                ...prefs.builtInAgentModels,
+                [input.agentId]: input.updates.model,
+            },
+        });
+        agentsLogger.info(`Updated built-in model override for ${input.agentId}`, {
+            model: input.updates.model,
+        });
+        return getAgent({ agentId: input.agentId });
     }
 
     try {
