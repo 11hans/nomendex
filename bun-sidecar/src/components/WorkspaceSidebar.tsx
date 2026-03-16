@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Settings, GitBranch, Bot, HelpCircle, Inbox } from "lucide-react";
+import { Settings, GitBranch, Bot, HelpCircle, Inbox, Loader2, RefreshCw } from "lucide-react";
 import { Separator } from "./ui/separator";
 import { baseRegistry } from "@/registry/registry";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
@@ -7,6 +7,7 @@ import { useRouting } from "@/hooks/useRouting";
 import { PluginIcon } from "@/types/Plugin";
 import { getIcon } from "./PluginViewIcons";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { useGHSync } from "@/contexts/GHSyncContext";
 
 function NavItem({
     icon: Icon,
@@ -45,6 +46,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export function WorkspaceSidebar() {
     const plugins = Object.values(baseRegistry);
     const { openTab, activeTab } = useWorkspaceContext();
+    const { sync, status: syncStatus, isReady } = useGHSync();
     const { navigate, currentPath } = useRouting();
     const [appVersion, setAppVersion] = useState("...");
 
@@ -66,6 +68,10 @@ export function WorkspaceSidebar() {
         navigate(path);
     };
 
+    const handleQuickSync = () => {
+        void sync();
+    };
+
     const handleOpenInbox = () => {
         if (currentPath !== "/") {
             navigate("/");
@@ -80,6 +86,12 @@ export function WorkspaceSidebar() {
     const activePluginId = activeTab?.pluginInstance?.plugin?.id ?? null;
     const activeViewId = activeTab?.pluginInstance?.viewId ?? null;
     const isWorkspaceView = currentPath === "/";
+    const quickSyncDisabled = syncStatus.syncing || syncStatus.hasMergeConflict;
+    const quickSyncTitle = syncStatus.syncing
+        ? "Syncing..."
+        : syncStatus.hasMergeConflict
+            ? "Resolve conflicts in Sync"
+            : "Sync now";
 
     return (
         <div className="flex flex-col h-full min-h-0">
@@ -134,12 +146,36 @@ export function WorkspaceSidebar() {
             {/* Footer */}
             <Separator className="shrink-0" />
             <div className="shrink-0 p-2">
-                <NavItem
-                    icon={GitBranch}
-                    label="Sync"
-                    isActive={currentPath === "/sync"}
-                    onClick={() => handleNavigate("/sync")}
-                />
+                <div className="flex items-center gap-1">
+                    <div className="flex-1 min-w-0">
+                        <NavItem
+                            icon={GitBranch}
+                            label="Sync"
+                            isActive={currentPath === "/sync"}
+                            onClick={() => handleNavigate("/sync")}
+                        />
+                    </div>
+                    {isReady && (
+                        <button
+                            type="button"
+                            onClick={handleQuickSync}
+                            disabled={quickSyncDisabled}
+                            title={quickSyncTitle}
+                            aria-label={quickSyncTitle}
+                            className={`h-7 w-7 shrink-0 rounded-md border border-transparent transition-colors ${
+                                quickSyncDisabled
+                                    ? "cursor-not-allowed text-muted-foreground/60"
+                                    : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
+                            }`}
+                        >
+                            {syncStatus.syncing ? (
+                                <Loader2 className="mx-auto size-3.5 animate-spin" />
+                            ) : (
+                                <RefreshCw className="mx-auto size-3.5" />
+                            )}
+                        </button>
+                    )}
+                </div>
                 <NavItem
                     icon={Settings}
                     label="Settings"
