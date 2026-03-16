@@ -207,22 +207,6 @@ export function CommandMenu() {
         layoutMode,
     ]);
 
-    const customFilter = React.useCallback((value: string, search: string) => {
-        const valueLower = value.toLowerCase();
-        const searchLower = search.toLowerCase();
-
-        if (valueLower === searchLower) return 1;
-        if (valueLower.startsWith(searchLower)) return 0.9;
-        if (valueLower.includes(searchLower)) return 0.5;
-
-        const words = valueLower.split(/\s+/);
-        for (const word of words) {
-            if (word.startsWith(searchLower)) return 0.8;
-        }
-
-        return 0;
-    }, []);
-
     const commandGroups = React.useMemo(() => {
         return Object.entries(featureCommands)
             .map(([featureId, commands]) => {

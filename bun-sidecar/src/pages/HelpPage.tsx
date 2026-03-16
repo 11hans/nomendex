@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
-import { CalendarDays, Tag, Clock, FileText, ListTodo, Keyboard, GitBranch, Lightbulb } from "lucide-react";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "../components/ui/accordion";
+import { CalendarDays, Tag, Clock, FileText, ListTodo, Keyboard, GitBranch, Lightbulb, Command, Bot } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 
 function HelpContent() {
@@ -227,6 +228,193 @@ function HelpContent() {
                             </CardContent>
                         </Card>
                     </div>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-sm">
+                                <Command className="size-5" />
+                                Command Palette Reference
+                            </CardTitle>
+                            <CardDescription className="text-xs">
+                                All commands available via <code className="px-1 py-0.5 rounded bg-surface-elevated">Cmd+K</code>. Some commands only appear when a specific view is active.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <Accordion type="multiple" className="w-full">
+                                <AccordionItem value="general">
+                                    <AccordionTrigger>General <Badge variant="secondary" className="ml-auto text-caption">8</Badge></AccordionTrigger>
+                                    <AccordionContent>
+                                        <div className="rounded-lg p-4 bg-surface-elevated">
+                                            <div className="grid grid-cols-[1fr_2fr] gap-x-6 gap-y-1.5 text-sm">
+                                                <code>Manage Workspaces</code>
+                                                <span className="text-muted-foreground">Open the workspace manager</span>
+                                                <code>Open Settings</code>
+                                                <span className="text-muted-foreground">Open the settings page</span>
+                                                <code>Close All Tabs</code>
+                                                <span className="text-muted-foreground">Close all open tabs</span>
+                                                <code>Toggle Split View</code>
+                                                <span className="text-muted-foreground">Switch between single and split pane layout</span>
+                                                <code>Tags</code>
+                                                <span className="text-muted-foreground">Manage tags for the current note <span className="opacity-60">*</span></span>
+                                                <code>Reveal Logs in Finder</code>
+                                                <span className="text-muted-foreground">Show the log file in Finder</span>
+                                                <code>Reset Logs</code>
+                                                <span className="text-muted-foreground">Clear all log entries</span>
+                                                <code>dev: Trigger Error</code>
+                                                <span className="text-muted-foreground">Throw an error to test the error boundary</span>
+                                            </div>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+
+                                <AccordionItem value="todos">
+                                    <AccordionTrigger>Todos <Badge variant="secondary" className="ml-auto text-caption">5</Badge></AccordionTrigger>
+                                    <AccordionContent>
+                                        <div className="rounded-lg p-4 bg-surface-elevated">
+                                            <div className="grid grid-cols-[1fr_2fr] gap-x-6 gap-y-1.5 text-sm">
+                                                <code>Open Todos</code>
+                                                <span className="text-muted-foreground">Open the todos default view (projects)</span>
+                                                <code>Open All Todos</code>
+                                                <span className="text-muted-foreground">Open the todos browser view</span>
+                                                <code>Open Projects View</code>
+                                                <span className="text-muted-foreground">Open the todos projects view</span>
+                                                <code>Create New Todo</code>
+                                                <span className="text-muted-foreground">Create a new todo item</span>
+                                                <code>Force Sync All to Calendar</code>
+                                                <span className="text-muted-foreground">Sync all todos with dates to Apple Calendar</span>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground mt-3 opacity-70">
+                                                Additional per-project commands (<code>Open Todos: &lt;project&gt;</code>) are generated dynamically.
+                                            </p>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+
+                                <AccordionItem value="notes">
+                                    <AccordionTrigger>Notes <Badge variant="secondary" className="ml-auto text-caption">16</Badge></AccordionTrigger>
+                                    <AccordionContent>
+                                        <div className="rounded-lg p-4 bg-surface-elevated">
+                                            <div className="grid grid-cols-[1fr_2fr] gap-x-6 gap-y-1.5 text-sm">
+                                                <code>Search Notes</code>
+                                                <span className="text-muted-foreground">Search across all notes (Cmd+Shift+F)</span>
+                                                <code>Create New Note</code>
+                                                <span className="text-muted-foreground">Create a new note with custom name</span>
+                                                <code>Open Today&apos;s Daily Note</code>
+                                                <span className="text-muted-foreground">Create if missing and open in editor</span>
+                                                <code>Open Yesterday&apos;s Daily Note</code>
+                                                <span className="text-muted-foreground">Create if missing and open in editor</span>
+                                                <code>Open Tomorrow&apos;s Daily Note</code>
+                                                <span className="text-muted-foreground">Create if missing and open in editor</span>
+                                                <code>Open Daily Note...</code>
+                                                <span className="text-muted-foreground">Pick a date to open or create a daily note</span>
+                                                <code>Notes</code>
+                                                <span className="text-muted-foreground">Open the notes browser</span>
+                                                <code>Rebuild Tags Index</code>
+                                                <span className="text-muted-foreground">Clear cache and reparse all tags</span>
+                                            </div>
+                                            <div className="mt-3 pt-3 border-t border-border/50">
+                                                <p className="text-xs text-muted-foreground mb-2 opacity-70">Only visible when a note is open in editor <span className="opacity-60">*</span></p>
+                                                <div className="grid grid-cols-[1fr_2fr] gap-x-6 gap-y-1.5 text-sm">
+                                                    <code>Save Current Note</code>
+                                                    <span className="text-muted-foreground">Save the current note (Cmd+S)</span>
+                                                    <code>Delete Current Note</code>
+                                                    <span className="text-muted-foreground">Delete the currently open note</span>
+                                                    <code>Rename Current Note</code>
+                                                    <span className="text-muted-foreground">Rename the currently open note</span>
+                                                    <code>Move Note to Folder</code>
+                                                    <span className="text-muted-foreground">Move the current note to a different folder</span>
+                                                    <code>Copy Markdown</code>
+                                                    <span className="text-muted-foreground">Copy the note content as markdown</span>
+                                                    <code>Reveal in Finder</code>
+                                                    <span className="text-muted-foreground">Show the current note in Finder</span>
+                                                    <code>Run Spellcheck</code>
+                                                    <span className="text-muted-foreground">Check spelling and highlight misspelled words</span>
+                                                    <code>Clear Spellcheck</code>
+                                                    <span className="text-muted-foreground">Remove all spellcheck highlighting</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+
+                                <AccordionItem value="chat">
+                                    <AccordionTrigger>Chat <Badge variant="secondary" className="ml-auto text-caption">2</Badge></AccordionTrigger>
+                                    <AccordionContent>
+                                        <div className="rounded-lg p-4 bg-surface-elevated">
+                                            <div className="grid grid-cols-[1fr_2fr] gap-x-6 gap-y-1.5 text-sm">
+                                                <code>Chats</code>
+                                                <span className="text-muted-foreground">Open the chat browser</span>
+                                                <code>New Chat</code>
+                                                <span className="text-muted-foreground">Start a new chat conversation</span>
+                                            </div>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </Accordion>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-sm">
+                                <Bot className="size-5" />
+                                Chat Skills (BPagent)
+                            </CardTitle>
+                            <CardDescription className="text-xs">
+                                Slash commands available in chat when using the BPagent agent. Type <code className="px-1 py-0.5 rounded bg-surface-elevated">/skill-name</code> in the chat input to invoke.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <Accordion type="multiple" className="w-full">
+                                <AccordionItem value="user-invoked">
+                                    <AccordionTrigger>User-Invoked Skills <Badge variant="secondary" className="ml-auto text-caption">8</Badge></AccordionTrigger>
+                                    <AccordionContent>
+                                        <div className="rounded-lg p-4 bg-surface-elevated">
+                                            <div className="grid grid-cols-[1fr_2fr] gap-x-6 gap-y-1.5 text-sm">
+                                                <code>/daily</code>
+                                                <span className="text-muted-foreground">Create daily notes, morning/midday/evening routines</span>
+                                                <code>/weekly</code>
+                                                <span className="text-muted-foreground">Weekly review — reflect, align with goals, plan next week</span>
+                                                <code>/monthly</code>
+                                                <span className="text-muted-foreground">Monthly review — roll up weeks, check quarterly milestones, plan next month</span>
+                                                <code>/project</code>
+                                                <span className="text-muted-foreground">Create, track, and archive projects linked to goals</span>
+                                                <code>/review</code>
+                                                <span className="text-muted-foreground">Smart router — auto-detects daily/weekly/monthly based on context</span>
+                                                <code>/adopt</code>
+                                                <span className="text-muted-foreground">Scaffold BPagent structure onto an existing notes workspace</span>
+                                                <code>/check-links</code>
+                                                <span className="text-muted-foreground">Find broken wiki-links in the vault</span>
+                                                <code>/search &lt;term&gt;</code>
+                                                <span className="text-muted-foreground">Search vault content by keyword</span>
+                                            </div>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+
+                                <AccordionItem value="auto-skills">
+                                    <AccordionTrigger>Auto Skills <Badge variant="secondary" className="ml-auto text-caption">4</Badge></AccordionTrigger>
+                                    <AccordionContent>
+                                        <div className="rounded-lg p-4 bg-surface-elevated">
+                                            <p className="text-xs text-muted-foreground mb-3 opacity-70">
+                                                These skills are invoked automatically by the system or other skills — not directly by the user.
+                                            </p>
+                                            <div className="grid grid-cols-[1fr_2fr] gap-x-6 gap-y-1.5 text-sm">
+                                                <code>goal-tracking</code>
+                                                <span className="text-muted-foreground">Track progress across goal cascade, calculate completion, surface stalled goals</span>
+                                                <code>obsidian-vault-ops</code>
+                                                <span className="text-muted-foreground">Read/write vault files, manage wiki-links, process markdown with YAML frontmatter</span>
+                                                <code>todos</code>
+                                                <span className="text-muted-foreground">Manage project todos via REST API — create, view, update, delete with Kanban support</span>
+                                                <code>daily-notes</code>
+                                                <span className="text-muted-foreground">Manage daily notes using vault-config folder mapping and naming convention</span>
+                                            </div>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </Accordion>
+                        </CardContent>
+                    </Card>
                 </div>
             </div>
         </div>
