@@ -98,3 +98,11 @@ export function useTabScrollPersistence(tabId: string) {
 export function clearTabScrollPosition(tabId: string) {
     scrollPositions.delete(tabId);
 }
+
+/**
+ * Check whether a saved scroll position exists for a tab.
+ * Used by callers that want to "default to bottom" only on first visit.
+ */
+export function hasSavedScrollPosition(tabId: string): boolean {
+    return scrollPositions.has(tabId);
+}

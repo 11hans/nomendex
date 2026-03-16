@@ -57,7 +57,7 @@ import { AgentSelector } from "@/features/agents/agent-selector";
 import { agentsAPI } from "@/hooks/useAgentsAPI";
 import { QueuedMessagesList } from "./QueuedMessagesList";
 import type { QueuedMessage } from "./index";
-import { useTabScrollPersistence } from "@/hooks/useTabScrollPersistence";
+import { useTabScrollPersistence, hasSavedScrollPosition } from "@/hooks/useTabScrollPersistence";
 import { OverlayScrollbar } from "@/components/OverlayScrollbar";
 import { removeFileLock, upsertFileLock } from "@/hooks/useFileLocks";
 
@@ -385,6 +385,28 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
             });
         }
     }, [activeTab?.id, tabId, isLoadingHistory]);
+
+    // Scroll to bottom after history loads if this tab has no saved scroll position.
+    // Uses MutationObserver because the scroll container's own dimensions don't change
+    // (it's h-full in a flexbox) — only scrollHeight grows as message DOM nodes render.
+    useEffect(() => {
+        if (!isLoadingHistory && messages.length > 0 && !hasSavedScrollPosition(tabId)) {
+            const el = scrollRef.current;
+            if (!el) return;
+
+            const scrollToBottom = () => { el.scrollTop = el.scrollHeight; };
+            scrollToBottom();
+
+            const observer = new MutationObserver(scrollToBottom);
+            observer.observe(el, { childList: true, subtree: true });
+
+            const timeout = setTimeout(() => observer.disconnect(), 1000);
+            return () => {
+                clearTimeout(timeout);
+                observer.disconnect();
+            };
+        }
+    }, [isLoadingHistory]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Update tab name based on first message
     useEffect(() => {
