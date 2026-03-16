@@ -22,7 +22,7 @@ const DEFAULT_SKILLS: DefaultSkill[] = [
       "SKILL.md": `---
 name: todos
 description: "Manages project todos via REST API. BEFORE using this skill, you must THINK: 'Does the user mention a project? Does the user imply a specific column like Today?'. Use when the user asks to create, view, update, or delete todos."
-version: 6
+version: 7
 source: nomendex
 ---
 
@@ -153,9 +153,44 @@ curl -s -X POST "http://localhost:$PORT/api/todos/list" \\
   -d '{"project": "work"}'
 \`\`\`
 
+## Read Workflow: Today / Scheduled / Calendar Queries
+
+Use this workflow for read-only requests such as:
+- "show today"
+- "what is scheduled today"
+- "calendar for today"
+- "what should I work on today"
+
+### Read-Only Rules
+- Treat these requests as **read-only** unless the user explicitly asks you to create, update, archive, or reorder a todo.
+- If the user is brainstorming, reviewing bugs, or planning work, do NOT silently create todos. Ask whether they want the items captured first.
+- Never read internal cache artifacts such as \`.claude/projects/.../tool-results\`. Use live API calls and workspace files only.
+
+### Today Workset Order
+When answering a "today" or "schedule" query without an explicit external calendar integration, build the workset in this order:
+
+1. **Overdue** - todos with \`dueDate\` before today
+2. **Due Today** - todos with \`dueDate\` today
+3. **Started / In Progress** - todos with \`startDate\` today or earlier, plus \`in_progress\` items not already shown
+4. **Today / Now Columns** - open todos in real Today-style custom columns after loading the project board config
+5. **Focused Project** - if the user names a project, show that project's remaining open todos prominently
+6. **Other Candidates** - remaining open todos worth considering
+
+Present these as labeled buckets. Do NOT merge dated todos, Today-column todos, and \`in_progress\` into one ambiguous list.
+
+### Calendar / Schedule Interpretation
+- If the user says "calendar" or "schedule" and does not name an external calendar source, interpret that as dated todos (\`dueDate\`, \`startDate\`) first.
+- Only talk about an external calendar if the user explicitly points to one.
+
+### Today Column Detection
+- Never guess a custom column ID like \`col-today\`.
+- For each relevant project, call \`/api/projects/get-by-name\` and inspect the real board config.
+- Match actual Today-style titles such as "Today", "Now", "Dnes", "Dnes aktivni", or the user's named column.
+- Only then filter todos by the corresponding \`customColumnId\`.
+
 ## Mandatory Execution Protocol
 
-Follow this checklist exactly for every request:
+Follow this checklist exactly for mutating requests:
 
 1.  **Context Analysis**:
     *   **Project Extraction**: Identify project name (e.g. "Nomendex dev").
@@ -178,6 +213,8 @@ Follow this checklist exactly for every request:
 *   ❌ **DO NOT use raw input as title**: Clean it first! "Add task X to project Y" -> Title: "X".
 *   ❌ **DO NOT guess IDs**: Never use \`col-today\`. Look it up!
 *   ❌ **DO NOT create with customColumnId**: API ignores it. Create then Update.
+*   ❌ **DO NOT treat planning as capture**: If the user is only describing bugs, ideas, or options during planning, ask whether they want them saved as todos.
+*   ❌ **DO NOT use cached tool output**: Never inspect \`.claude/projects/.../tool-results\` instead of calling the live API.
 
 ## Golden Example (Few-Shot)
 
@@ -220,6 +257,7 @@ If the project doesn't exist, tell the user: "Please open the 'Projects' view fr
 ## How Claude Should Use This Skill
 
 Always start by getting the server port, then use the appropriate endpoint.
+Use this skill for both read and write todo workflows. Do not improvise a separate ad-hoc shell workflow outside the skill.
 
 ## Custom Kanban Columns
 
@@ -653,8 +691,8 @@ Set a fixed \`height\` parameter to disable auto-resize.
     files: {
       "SKILL.md": `---
 name: daily-notes
-description: Manages daily notes stored in the daily-notes/ subfolder with M-D-YYYY format (e.g., 1-1-2026.md). Use when the user asks to view recent notes, create daily notes, read today's notes, summarize the week, or references dates.
-version: 3
+description: Manages daily notes using vault-config folder mapping and the vault's existing naming convention. Use when the user asks to view recent notes, create daily notes, read today's notes, summarize the week, or references dates.
+version: 4
 source: nomendex
 ---
 
@@ -662,12 +700,15 @@ source: nomendex
 
 ## Overview
 
-This skill manages daily notes stored in the \`daily-notes/\` subfolder within the workspace's notes directory using the \`M-D-YYYY.md\` format (e.g., \`1-1-2026.md\`, \`12-31-2025.md\`).
+This skill manages daily notes in the mapped daily-notes folder within the workspace's notes directory.
+It must detect the real folder, nesting, and filename pattern from \`vault-config.json\` and existing notes before reading or creating anything.
 
-## Date Format
+## Detection Rules
 
-- **Format**: \`M-D-YYYY.md\` (no leading zeros)
-- **Examples**: \`1-1-2026.md\`, \`12-31-2025.md\`, \`3-5-2026.md\`
+1. Read \`vault-config.json\` first and use \`folderMapping.dailyNotes\` if present
+2. Inspect existing daily-note filenames to detect the active pattern
+3. Reuse existing folder nesting (flat vs year/month) exactly
+4. If no daily-note convention exists yet, ask before creating the first note
 
 ## Getting the Notes Directory
 
@@ -675,7 +716,7 @@ This skill manages daily notes stored in the \`daily-notes/\` subfolder within t
 NOTES_DIR=$(curl -s http://localhost:1234/api/workspace/paths | jq -r '.data.notes')
 \`\`\`
 
-Daily notes are stored at \`$NOTES_DIR/daily-notes/\`.
+Daily notes are stored at the detected folder under \`$NOTES_DIR\`.
 
 ## CLI Usage
 
@@ -688,12 +729,14 @@ NOTES_DIR=/path/to/workspace/notes .claude/skills/daily-notes/daily-note.sh <com
 | Command | Description |
 |---------|-------------|
 | \`get-today\` | Get or create today's daily note |
-| \`get-note [M-D-YYYY]\` | Get a specific date's note |
+| \`get-note [date]\` | Get a specific date's note using the vault's existing format |
 | \`get-last-x [Ndays]\` | Get notes from the last N days |
 
 ## How Claude Should Use This Skill
 
-**Important**: Always set \`NOTES_DIR\` to the workspace's notes path before running the script. The script automatically handles the \`daily-notes/\` subfolder.
+**Important**: Always set \`NOTES_DIR\` to the workspace's notes path before running the script. The script detects the daily-notes folder and naming convention from \`vault-config.json\` and existing notes.
+
+If the script falls back to a default because the vault has no established convention yet, treat that as a prompt to confirm with the user before creating the first note.
 
 ### When User Asks About Recent Work
 \`\`\`
@@ -712,24 +755,104 @@ User: "Add this to my daily note: Completed feature X"
 ## Best Practices
 
 1. **Always set NOTES_DIR** - Don't rely on the default path
-2. **Handle missing notes gracefully** - Not every day has a note
-3. **Preserve existing content** - Use Edit tool, not Write when modifying
+2. **Detect before creating** - Never assume \`daily-notes/\` or a fixed date pattern
+3. **Handle missing notes gracefully** - Not every day has a note
+4. **Preserve existing content** - Use Edit tool, not Write when modifying
 `,
       "daily-note.sh": `#!/bin/bash
 
 # Daily Notes CLI
-# Manages daily notes in daily-notes/ subfolder with M-D-YYYY format (e.g., daily-notes/1-1-2026.md)
+# Detects the real daily-notes folder and filename pattern from vault-config.json and existing notes.
 
 NOTES_DIR="\${NOTES_DIR:-$HOME/.mcpclient/notes}"
-DAILY_DIR="$NOTES_DIR/daily-notes"
-mkdir -p "$DAILY_DIR"
+
+read_configured_daily_dir() {
+    local config_file="$NOTES_DIR/vault-config.json"
+    if [[ -f "$config_file" ]] && command -v jq >/dev/null 2>&1; then
+        local mapped_dir
+        mapped_dir=$(jq -r '.folderMapping.dailyNotes // empty' "$config_file" 2>/dev/null)
+        if [[ -n "$mapped_dir" ]]; then
+            echo "$NOTES_DIR/$mapped_dir"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+detect_daily_dir() {
+    local configured_dir
+    configured_dir=$(read_configured_daily_dir)
+    if [[ -n "$configured_dir" ]]; then
+        echo "$configured_dir"
+        return
+    fi
+
+    if [[ -d "$NOTES_DIR/daily-notes" ]]; then
+        echo "$NOTES_DIR/daily-notes"
+        return
+    fi
+
+    if [[ -d "$NOTES_DIR/Daily Notes" ]]; then
+        echo "$NOTES_DIR/Daily Notes"
+        return
+    fi
+
+    local best_dir=""
+    local best_count=0
+    while IFS= read -r dir; do
+        local count
+        count=$(find "$dir" -type f -name "*.md" 2>/dev/null | sed 's#.*/##' | grep -E '(^[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}\\.md$|^[0-9]{4}-[0-9]{2}-[0-9]{2}\\.md$)' | wc -l | tr -d ' ')
+        if [[ "$count" =~ ^[0-9]+$ ]] && (( count > best_count )); then
+            best_count=$count
+            best_dir="$dir"
+        fi
+    done < <(find "$NOTES_DIR" -mindepth 1 -maxdepth 2 -type d ! -path "*/.git*" ! -path "*/.obsidian*" ! -path "*/.claude*" 2>/dev/null)
+
+    if [[ -n "$best_dir" ]]; then
+        echo "$best_dir"
+    else
+        echo "$NOTES_DIR/daily-notes"
+    fi
+}
+
+detect_date_format() {
+    local samples
+    samples=$(find "$DAILY_DIR" -type f -name "*.md" 2>/dev/null | sed 's#.*/##' | grep -E '(^[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}\\.md$|^[0-9]{4}-[0-9]{2}-[0-9]{2}\\.md$)' | head -20)
+    if echo "$samples" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}\\.md$'; then
+        echo "iso"
+    else
+        echo "mdy"
+    fi
+}
+
+detect_nesting_mode() {
+    local sample_path
+    sample_path=$(find "$DAILY_DIR" -mindepth 3 -maxdepth 3 -type f -name "*.md" 2>/dev/null | head -n 1)
+    local relative_path="\${sample_path#$DAILY_DIR/}"
+    if [[ "$relative_path" =~ ^[0-9]{4}/[0-9]{2}/.+\\.md$ ]]; then
+        echo "year_month"
+    else
+        echo "flat"
+    fi
+}
+
+DAILY_DIR=$(detect_daily_dir)
+DATE_FORMAT=$(detect_date_format)
+NESTING_MODE=$(detect_nesting_mode)
 
 format_date() {
     local date_str="$1"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        date -j -f "%Y-%m-%d" "$date_str" "+%-m-%-d-%Y" 2>/dev/null
+    local fmt
+    if [[ "$DATE_FORMAT" == "iso" ]]; then
+        fmt="+%Y-%m-%d"
     else
-        date -d "$date_str" "+%-m-%-d-%Y" 2>/dev/null
+        fmt="+%-m-%-d-%Y"
+    fi
+
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        date -j -f "%Y-%m-%d" "$date_str" "$fmt" 2>/dev/null
+    else
+        date -d "$date_str" "$fmt" 2>/dev/null
     fi
 }
 
@@ -743,7 +866,49 @@ get_date_n_days_ago() {
 }
 
 get_today() {
-    date "+%-m-%-d-%Y"
+    if [[ "$DATE_FORMAT" == "iso" ]]; then
+        date "+%Y-%m-%d"
+    else
+        date "+%-m-%-d-%Y"
+    fi
+}
+
+normalize_input_date() {
+    local date_input="$1"
+    if [[ "$date_input" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+        format_date "$date_input"
+    elif [[ "$date_input" =~ ^[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}$ ]] && [[ "$DATE_FORMAT" == "iso" ]]; then
+        local month day year
+        IFS='-' read -r month day year <<< "$date_input"
+        printf "%04d-%02d-%02d\n" "$year" "$month" "$day"
+    else
+        echo "$date_input"
+    fi
+}
+
+build_note_path() {
+    local note_date="$1"
+    local date_iso="$2"
+    local existing_path
+    existing_path=$(find "$DAILY_DIR" -type f -name "$note_date.md" 2>/dev/null | head -n 1)
+    if [[ -n "$existing_path" ]]; then
+        echo "$existing_path"
+        return
+    fi
+
+    if [[ "$NESTING_MODE" == "year_month" ]]; then
+        local year month
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            year=$(date -j -f "%Y-%m-%d" "$date_iso" "+%Y")
+            month=$(date -j -f "%Y-%m-%d" "$date_iso" "+%m")
+        else
+            year=$(date -d "$date_iso" "+%Y")
+            month=$(date -d "$date_iso" "+%m")
+        fi
+        echo "$DAILY_DIR/$year/$month/$note_date.md"
+    else
+        echo "$DAILY_DIR/$note_date.md"
+    fi
 }
 
 display_note() {
@@ -770,7 +935,10 @@ display_note() {
 
 cmd_get_today() {
     local TODAY=$(get_today)
-    local NOTE_PATH="$DAILY_DIR/\${TODAY}.md"
+    local TODAY_ISO=$(date "+%Y-%m-%d")
+    local NOTE_PATH
+    NOTE_PATH=$(build_note_path "$TODAY" "$TODAY_ISO")
+    mkdir -p "$(dirname "$NOTE_PATH")"
 
     if [[ ! -f "$NOTE_PATH" ]]; then
         touch "$NOTE_PATH"
@@ -788,7 +956,10 @@ cmd_get_note() {
         echo "Error: Date required" >&2
         exit 1
     fi
-    local NOTE_FILE="$DAILY_DIR/\${date_input}.md"
+    local normalized_date
+    normalized_date=$(normalize_input_date "$date_input")
+    local NOTE_FILE
+    NOTE_FILE=$(build_note_path "$normalized_date" "$(date "+%Y-%m-%d")")
     if display_note "$NOTE_FILE" "$date_input" "false"; then
         exit 0
     else
@@ -811,7 +982,8 @@ cmd_get_last_x() {
         local DATE_ISO=$(get_date_n_days_ago "$i")
         local DATE_FORMATTED=$(format_date "$DATE_ISO")
         if [[ -n "$DATE_FORMATTED" ]]; then
-            local NOTE_FILE="$DAILY_DIR/\${DATE_FORMATTED}.md"
+            local NOTE_FILE
+            NOTE_FILE=$(build_note_path "$DATE_FORMATTED" "$DATE_ISO")
             if display_note "$NOTE_FILE" "$DATE_FORMATTED"; then
                 FOUND_NOTES=$((FOUND_NOTES + 1))
             fi
@@ -829,7 +1001,7 @@ case "$COMMAND" in
     *)
         echo "Daily Notes CLI"
         echo "Usage: $0 <command> [arguments]"
-        echo "Commands: get-today, get-note [M-D-YYYY], get-last-x [Ndays]"
+        echo "Commands: get-today, get-note [date], get-last-x [Ndays]"
         exit 1
         ;;
 esac
@@ -1167,7 +1339,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 2
+version: 3
 source: nomendex
 ---
 
@@ -1191,10 +1363,17 @@ Or simply ask:
 
 ## Daily Note Creation
 
+### Detection Rules
+1. **Read \`vault-config.json\` first** if present and use the mapped daily notes folder
+2. **Inspect existing daily-note files** to detect the real folder, nesting, and filename format
+3. **Inspect the daily template** only after checking real notes
+4. **Reuse the detected convention exactly** - never create a parallel folder or alternate date format
+5. **If no convention exists yet**, say so explicitly and ask before choosing one
+
 ### What Happens
-1. **Checks if today's note exists**
-   - If yes: Opens the existing note
-   - If no: Creates new note from template
+1. **Detects today's real daily-note path**
+   - If today's note exists: opens the existing note
+   - If today's note is missing: proposes creation using the detected convention
 
 2. **Template Processing**
    - Replaces \`{{date}}\` with today's date
@@ -1202,9 +1381,9 @@ Or simply ask:
    - Handles date arithmetic (e.g., \`{{date-1}}\` for yesterday)
 
 3. **Automatic Organization**
-   - Places note in \`Daily Notes/\` folder
-   - Names file with today's date (YYYY-MM-DD.md)
-   - Preserves template structure
+   - Uses the mapped or detected daily-notes folder
+   - Reuses the vault's existing filename pattern
+   - Preserves template structure without creating a second convention
 
 ### Template Variables
 Your daily template can use:
@@ -1217,32 +1396,57 @@ Your daily template can use:
 
 ## Morning Routine (5-10 minutes)
 
-### Automated Steps
-1. Create today's daily note (if not exists)
-2. Pull incomplete tasks from yesterday
-3. Fetch today's todos from "Today" column via \`/todos\` skill
-4. Read this week's ONE Big Thing from \`Goals/3. Weekly Review.md\`
-5. Surface active project next-actions from \`Projects/*.md\`
-6. Review weekly goals for today's priority
+Morning planning is **read-only by default**. Summarize and propose a plan first. Only create or update notes and todos after explicit confirmation or a clear instruction to do so.
 
-### Cascade Context Surfacing
+### Today Workset Algorithm
+Build today's workset via \`/todos\` using these buckets:
+
+1. **Overdue** - todos with \`dueDate\` before today
+2. **Due Today** - todos with \`dueDate\` today
+3. **Started / In Progress** - todos with \`startDate\` today or earlier, plus \`in_progress\` items not already shown
+4. **Focused Project** - if the user says "today I want to focus mainly on Nomendex" (or another project), load that project's open todos before unrelated candidates
+5. **Other Candidates** - Today/Now custom-column todos after loading real board config, then remaining open todos
+
+Rules:
+- Treat "calendar" or "schedule" as dated todos unless the user explicitly points to an external calendar integration.
+- Never guess a Today column ID like \`col-today\`; load the project board config first.
+- If weekly or monthly goal files are template stubs, say so explicitly and do not invent live context from them.
+- Use project-note **Next Actions** only as a fallback when live todos do not provide enough operational detail.
+
+### Automated Steps
+1. Detect today's real daily-note path and open it only if it already exists or the user explicitly asked to create/open it
+2. Pull incomplete tasks from yesterday's real daily note if one exists
+3. Build today's todo workset using the bucket order above
+4. If the user names a focus project, surface that project's open todos before unrelated work
+5. Read weekly/monthly goal files as strategic context only
+6. Ask focus questions and propose a plan before editing anything
+
+### Context Surfacing
 Before interactive prompts, automatically surface:
-- **Today's todos** from "Today" column via \`/todos\` skill
-- **ONE Big Thing** from most recent weekly review
-- **Active project next-actions** from \`Projects/*.md\` (read "Next Actions" section)
-- **Monthly priority** from \`Goals/2. Monthly Goals.md\`
+- **Overdue** todos
+- **Due Today** todos
+- **Started / In Progress** todos
+- **Focused Project** open todos if the user named a project
+- **Other Candidates** from Today/Now columns or remaining open work
+- **Strategic Context** from weekly/monthly goals only when those files contain real content
 
 Display as a brief context block at the top of the morning routine:
 \`\`\`markdown
 ### Today's Context
-- **Today's Todos (from Nomendex):**
-  - [ ] [ProjectA] Start audit (est: 2h)
-  - [ ] [Health] 30min run (est: 30min)
-  - [ ] [Work] Fix bug (est: 1h)
-  - **Total estimated:** 3.5h
-- **Week's ONE Big Thing:** [from weekly review]
-- **Active Projects:** [project names with first next-action each]
-- **Monthly Focus:** [from monthly goals]
+- **Overdue:**
+  - [ ] [ProjectA] Fix bug from yesterday
+- **Due Today:**
+  - [ ] [Ops] Send meter reading (due today)
+- **Started / In Progress:**
+  - [ ] [Work] Draft reply to Tomas
+- **Focused Project - Nomendex:**
+  - [ ] Observe BPagent and note UI bugs
+  - [ ] Fix kanban sorting placement
+- **Other Candidates:**
+  - [ ] [Health] 30min run
+- **Strategic Context:**
+  - Monthly focus: Nomendex audit + Q2 planning
+  - Weekly review: template stub, no live ONE Big Thing yet
 \`\`\`
 
 ### Interactive Prompts
@@ -1258,8 +1462,8 @@ When adding tasks to the daily note, recommend linking to goals/projects:
 \`\`\`
 
 ### Morning Checklist
-- [ ] Daily note created
-- [ ] Cascade context reviewed (ONE Big Thing, projects, monthly focus)
+- [ ] Daily note path detected
+- [ ] Today workset reviewed (overdue, due today, started, focused project, other candidates)
 - [ ] Yesterday's incomplete tasks reviewed
 - [ ] ONE priority identified
 - [ ] Time blocks set
@@ -1290,7 +1494,7 @@ When adding tasks to the daily note, recommend linking to goals/projects:
 1. Mark completed tasks with [x]
 2. Review and update todos via \`/todos\` skill:
    - Mark completed todos as done
-   - Move uncompleted "Today" todos (carry over to tomorrow or reschedule)
+   - Move or reschedule uncompleted items from today's workset
    - Calculate today's completion rate
 3. Add notes and learnings
 4. Log energy levels (1-10)
@@ -1378,22 +1582,17 @@ Standard daily note template:
 
 ## Configuration
 
-Customize paths to match your vault:
-- Daily notes folder: \`Daily Notes/\`
-- Template location: \`Templates/Daily Template.md\`
-- Date format: \`YYYY-MM-DD\`
+Detect these from the real vault instead of assuming them:
+- Daily notes folder from \`vault-config.json\` or existing notes
+- Template location from the mapped templates folder
+- Filename pattern from existing daily notes
+- Folder nesting from existing notes (flat or year/month)
 
-### Different Date Formats
-- \`YYYY-MM-DD\` - Standard ISO format (recommended)
-- \`MM-DD-YYYY\` - US format
-- \`DD-MM-YYYY\` - European format
-- \`YYYY-MM-DD-ddd\` - Include day abbreviation
-
-### Folder Organization by Month
-Organize daily notes by month/year:
-\`\`\`
-Daily Notes/2024/01/2024-01-15.md
-\`\`\`
+### Common Filename Patterns
+- \`M-D-YYYY\`
+- \`YYYY-MM-DD\`
+- Nested patterns such as \`daily-notes/2026/03/2026-03-16.md\`
+- Reuse the user's existing convention exactly
 
 ## Task-Based Progress Tracking
 
@@ -1405,14 +1604,14 @@ Create tasks at skill start:
 
 \`\`\`
 TaskCreate:
-  subject: "Create daily note"
-  description: "Create or open today's daily note from template"
-  activeForm: "Creating daily note..."
+  subject: "Inspect today's daily note"
+  description: "Detect the real daily-note path and open it if it already exists"
+  activeForm: "Inspecting today's daily note..."
 
 TaskCreate:
   subject: "Fetch today's todos"
-  description: "Load todos from 'Today' column via /todos skill"
-  activeForm: "Fetching today's todos from Nomendex..."
+  description: "Build overdue, due-today, started, focused-project, and other-candidate buckets via /todos"
+  activeForm: "Building today's todo workset..."
 
 TaskCreate:
   subject: "Pull incomplete tasks"
@@ -1421,8 +1620,8 @@ TaskCreate:
 
 TaskCreate:
   subject: "Surface relevant goals"
-  description: "Review weekly/monthly goals for today's priority"
-  activeForm: "Surfacing relevant goals..."
+  description: "Read weekly/monthly goals as strategic context only when they contain real content"
+  activeForm: "Checking strategic goal context..."
 
 TaskCreate:
   subject: "Set time blocks"
@@ -1449,7 +1648,7 @@ TaskCreate:
 
 TaskCreate:
   subject: "Update todos"
-  description: "Mark completed todos, move uncompleted from Today column"
+  description: "Mark completed todos and reschedule unfinished items from today's workset"
   activeForm: "Updating todos via /todos skill..."
 
 TaskCreate:
@@ -1479,7 +1678,7 @@ Works with:
 - \`/push\` - Commit end-of-day changes
 - \`/weekly\` - Weekly planning uses daily notes
 - \`/monthly\` - Monthly goals inform daily focus
-- \`/project\` - Surface project next-actions in morning
+- \`/project\` - Use project-note next-actions only as fallback when live todos are insufficient
 - \`/onboard\` - Load context before planning
 - Goal tracking skill - Align daily tasks to goals
 - Productivity Coach - Accountability for daily routines
@@ -1492,7 +1691,7 @@ Works with:
       "SKILL.md": `---
 name: goal-tracking
 description: Track progress toward 3-year, yearly, monthly, and weekly goals. Calculate completion percentages, surface stalled goals, connect daily tasks to objectives. Use for goal reviews and progress tracking.
-version: 3
+version: 4
 source: nomendex
 ---
 
@@ -1507,14 +1706,24 @@ Goals/0. Three Year Goals.md   <- Vision (Life areas)
     ↓
 Goals/1. Yearly Goals.md       <- Annual objectives
     ↓
-Projects/*/AGENTS.md           <- Active projects (bridge layer)
+Projects/*.md                  <- Active projects (bridge layer)
     ↓
 Goals/2. Monthly Goals.md      <- Current month focus
     ↓
 Goals/3. Weekly Review.md      <- Weekly planning
     ↓
-Daily Notes/*.md               <- Daily tasks and actions
+[daily notes folder]/*.md      <- Daily tasks and actions
 \`\`\`
+
+## Goal-to-Todo Bridge
+
+Goals do **not** map directly to todos by default.
+Use this bridge order:
+1. Goal -> linked project via "Goal Link" / "Supports"
+2. Project -> todos via the project's open todos
+3. Explicit goal references in notes only when they already exist in the text
+
+Do NOT infer a direct todo-to-goal mapping from title similarity alone.
 
 ## Goal File Formats
 
@@ -1598,7 +1807,7 @@ When calculating goal progress, include project data:
 1. Read all project files \`Projects/*.md\` for active projects
 2. Match projects to goals via their "Goal Link" / "Supports" field
 3. Fetch todos for each project via \`/todos\` skill
-4. Include project completion % and todo completion rate in goal progress calculations
+4. Include project completion % and todo completion rate in goal progress calculations through the project bridge
 5. Surface which projects support each goal
 
 ### Orphan Goal Detection
@@ -1607,11 +1816,11 @@ Flag goals that have no active project supporting them:
 - A goal with only completed/archived projects may need a new initiative
 
 ### Todo-Based Progress Signals
-Use todos to detect goal momentum:
-1. Goals with high todo completion (60%+) = strong momentum
-2. Goals with many blocked todos = need attention
-3. Goals with no todos at all = missing concrete actions
-4. Goals with overdue todos = falling behind
+Use linked-project todos to detect goal momentum:
+1. Goals with high linked-project todo completion (60%+) = strong momentum
+2. Goals with many blocked linked-project todos = need attention
+3. Goals whose linked projects have no open todos = missing concrete actions
+4. Goals with overdue linked-project todos = falling behind
 
 ## Progress Report Format
 
@@ -1636,12 +1845,12 @@ Use todos to detect goal momentum:
 - Goal 2 — Consider \`/project new\` to create a supporting project
 
 ### Goals Needing Attention
-- **Goal 2:** No todos = missing concrete actions
+- **Goal 2:** Linked projects have no open todos = missing concrete actions
 - **ProjectB:** 5 blocked todos = blockers need resolution
 
 ### This Week's Contributions
 - [Task] -> [[Goal 1]] via [[ProjectA]]
-- [Completed todo] -> [[Goal 1]] via [[ProjectA]]
+- [Completed todo via linked project] -> [[Goal 1]] via [[ProjectA]]
 - [Task] -> [[Goal 2]]
 
 ### Recommended Focus
@@ -1726,7 +1935,7 @@ Task tools are session-scoped and don't persist—your actual goal progress is t
       "SKILL.md": `---
 name: monthly
 description: Monthly review and planning. Roll up weekly reviews, check quarterly milestones, set next month's focus. Use at end of month or start of new month.
-version: 2
+version: 3
 source: nomendex
 ---
 
@@ -1893,7 +2102,7 @@ Always read these files:
 - \`Goals/1. Yearly Goals.md\` - Quarterly milestones and annual objectives
 - \`Goals/2. Monthly Goals.md\` - Current month's plan (to review) and next month's (to write)
 - \`Goals/3. Weekly Review.md\` - Weekly reviews from past month
-- \`Daily Notes/*.md\` - Past 30 days of notes
+- \`[daily notes folder]/*.md\` - Past 30 days of notes
 - \`Projects/*.md\` - All active project files with statuses
 
 ## Task-Based Progress Tracking
@@ -1953,7 +2162,7 @@ Works with:
       "SKILL.md": `---
 name: obsidian-vault-ops
 description: Read and write Obsidian vault files, manage wiki-links, process markdown with YAML frontmatter. Use when working with vault file operations, creating notes, or managing links.
-version: 2
+version: 3
 source: nomendex
 ---
 
@@ -1966,7 +2175,7 @@ Core operations for reading, writing, and managing files in an Obsidian vault.
 \`\`\`
 vault-root/
 ├── vault-config.json   # Optional folder mapping + personalization
-├── daily-notes/        # M-D-YYYY.md format
+├── [daily notes folder]  # Detect real folder name, nesting, and filename pattern
 ├── Goals/              # Goal cascade files
 ├── Projects/           # Canonical project notes (*.md)
 ├── Templates/          # Reusable note structures
@@ -1976,7 +2185,7 @@ vault-root/
 ## File Operations
 
 ### Reading Notes
-- Use Glob to find files: \`*.md\`, \`daily-notes/*.md\`
+- Use Glob to find files: \`*.md\` plus the detected daily-notes folder
 - Read \`vault-config.json\` first if present (folder mapping + preferences)
 - Read project context from \`Projects/*.md\`
 - Check for wiki-links to related notes
@@ -2015,7 +2224,7 @@ status: active
 ## Template Variables
 
 When processing templates, replace:
-- \`{{date}}\` - Today's date (M-D-YYYY)
+- \`{{date}}\` - Today's date using the vault's existing convention
 - \`{{date:format}}\` - Formatted date
 - \`{{date-1}}\` - Yesterday
 - \`{{date+1}}\` - Tomorrow
@@ -2024,11 +2233,12 @@ When processing templates, replace:
 ## Common Patterns
 
 ### Daily Note Creation
-1. Calculate today's date in M-D-YYYY format
-2. Check if \`daily-notes/{date}.md\` exists
-3. If not, read \`Templates/Daily Template.md\`
-4. Replace template variables
-5. Write to \`daily-notes/{date}.md\`
+1. Read \`vault-config.json\` first if present
+2. Detect the daily-notes folder, nesting, and filename pattern from existing notes
+3. Check if today's detected note path exists
+4. If not, read the appropriate daily template
+5. Replace template variables without changing the vault's existing naming convention
+6. Write to the detected daily-note path rather than a hardcoded folder
 
 ### Finding Related Notes
 1. Extract key terms from current note
@@ -2047,6 +2257,7 @@ When processing templates, replace:
 3. Use relative paths for internal links
 4. Add frontmatter to new notes
 5. Link to relevant goals when creating tasks
+6. Never assume \`daily-notes/\`, \`Daily Notes/\`, \`M-D-YYYY\`, or \`YYYY-MM-DD\`; detect first
 `,
     },
   },
@@ -2056,7 +2267,7 @@ When processing templates, replace:
       "SKILL.md": `---
 name: project
 description: Create, track, and archive projects linked to goals using Nomendex Projects API and canonical project markdown notes. Use for project lifecycle management, status dashboards, and project note synchronization.
-version: 3
+version: 4
 source: nomendex
 ---
 
@@ -2065,6 +2276,12 @@ source: nomendex
 Manage projects using a single source of truth:
 - Project entity and board config in \`.nomendex/projects.json\` via \`/api/projects/*\`
 - Canonical project note in \`Projects/<ProjectName>.md\` (auto-managed by backend)
+
+Projects are the bridge between strategic goals and operational todos:
+\`goal -> project -> todos\`
+
+For day planning, live open todos are the primary operational source.
+Use the project note's **Next Actions** section only as fallback context when the todo list is missing or underspecified.
 
 ## Usage
 
@@ -2110,8 +2327,8 @@ Supports: [[1. Yearly Goals#<Goal Name>]]
 
 ## Active Todos
 (Fetched from Nomendex via /todos skill)
-- [ ] <Todo from Today column>
-- [ ] <Todo from This Week>
+- [ ] <Highest-priority open todo>
+- [ ] <Due or in-progress todo>
 
 ## Blocked Todos
 - [ ] <Blocked todo> (blocked by: <reason>)
@@ -2186,7 +2403,7 @@ Goals/1. Yearly Goals.md     <- "What I want to achieve"
 Projects/<ProjectName>.md    <- "How I'll achieve it"
     |
     v
-daily-notes/*.md             <- "What I'm doing today"
+[daily notes folder]/*.md    <- "What I'm doing today"
 \`\`\`
 
 When creating tasks in daily notes, reference the project:
@@ -2243,7 +2460,7 @@ Mark each task \`in_progress\` when starting, \`completed\` when done.
 
 Works with:
 - \`/todos\` - Fetch and display project todos, calculate completion rates
-- \`/daily\` - Surface project next-actions in morning routine
+- \`/daily\` - Use live project todos first; surface project next-actions only as fallback
 - \`/weekly\` - Project status in weekly review
 - \`/goal-tracking\` - Project progress feeds goal calculations
 - \`/onboard\` - Discover and load project context
@@ -2495,7 +2712,7 @@ If no matches are found:
       "SKILL.md": `---
 name: weekly
 description: Facilitate weekly review process with reflection, goal alignment, and planning. Create review notes, analyze past week, plan next week. Use on Sundays or whenever doing weekly planning.
-version: 2
+version: 3
 source: nomendex
 ---
 
@@ -2541,7 +2758,7 @@ Invoke with \`/weekly\` or ask Codex to help with your weekly review.
 
 ### Step 2: Goal Alignment + Project Rollup (10 minutes)
 - Check monthly goal progress
-- Map completed todos to monthly goals
+- Map project progress and explicitly linked tasks to monthly goals
 - Identify overdue and blocked todos
 - Adjust weekly priorities
 - Ensure alignment with yearly goals
@@ -2583,7 +2800,7 @@ The skill guides you through:
 - [ ] Identify overdue and blocked todos
 - [ ] Process inbox items
 - [ ] Update project statuses
-- [ ] Check upcoming calendar
+- [ ] Check upcoming dated todos (and external calendar only if explicitly available)
 - [ ] Review monthly goals
 - [ ] Plan next week's priorities
 - [ ] Plan todo distribution for next week
@@ -2632,7 +2849,7 @@ The skill guides you through:
 
 ### This Week's Contribution
 - [Task] -> [[Goal]]
-- [Completed todos mapped to goals]
+- [Completed todos via linked projects or explicit goal references]
 
 ## Project Progress
 | Project | Phase | Progress | Next Action |
