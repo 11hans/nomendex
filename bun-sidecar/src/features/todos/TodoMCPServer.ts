@@ -79,6 +79,8 @@ function buildTodosHtml(todos: Todo[], project?: string): string {
         .map((todo) => {
             const projectLabel = todo.project?.trim() ? escapeHtml(todo.project) : "No project";
             const description = todo.description?.trim() ? escapeHtml(todo.description) : "";
+            const scheduledStart = todo.scheduledStart?.trim() ? escapeHtml(todo.scheduledStart) : "";
+            const scheduledEnd = todo.scheduledEnd?.trim() ? escapeHtml(todo.scheduledEnd) : "";
             const dueDate = todo.dueDate?.trim() ? escapeHtml(todo.dueDate) : "";
             const priority = todo.priority && todo.priority !== "none" ? escapeHtml(todo.priority) : "";
             const updatedAt = todo.updatedAt ? new Date(todo.updatedAt).toLocaleString() : "";
@@ -101,7 +103,8 @@ function buildTodosHtml(todos: Todo[], project?: string): string {
   <td style="padding:10px 8px;vertical-align:top;">
     <div style="display:flex;flex-direction:column;gap:2px;">
       ${priority ? `<span class="text-secondary" style="font-size:12px;">Priority: ${priority}</span>` : ""}
-      ${dueDate ? `<span class="text-secondary" style="font-size:12px;">Due: ${dueDate}</span>` : ""}
+      ${scheduledStart ? `<span class="text-secondary" style="font-size:12px;">Schedule: ${scheduledStart}${scheduledEnd ? ` → ${scheduledEnd}` : ""}</span>` : ""}
+      ${dueDate ? `<span class="text-secondary" style="font-size:12px;">Deadline: ${dueDate}</span>` : ""}
       ${updatedAt ? `<span class="text-muted" style="font-size:11px;">Updated: ${escapeHtml(updatedAt)}</span>` : ""}
     </div>
   </td>
@@ -181,7 +184,7 @@ server.registerTool(
     "list_todos",
     {
         title: "List Todos",
-        description: "List all todos, optionally filtered by project",
+        description: "List all todos, optionally filtered by project. Returns a UI card plus structured JSON data for machine reading.",
         inputSchema: {
             project: z.string().optional(),
         },
@@ -193,11 +196,38 @@ server.registerTool(
             ? activeTodos.filter(t => t.project === input.project)
             : activeTodos;
 
-        return renderUI({
-            html: buildTodosHtml(filteredTodos, input.project),
-            title: "Todos",
-            height: 420,
-        });
+        const structuredData = {
+            total: filteredTodos.length,
+            todos: filteredTodos.map(t => ({
+                id: t.id,
+                title: t.title,
+                status: t.status,
+                project: t.project ?? null,
+                scheduledStart: t.scheduledStart ?? null,
+                scheduledEnd: t.scheduledEnd ?? null,
+                dueDate: t.dueDate ?? null,
+                duration: t.duration ?? null,
+                priority: t.priority ?? null,
+            })),
+        };
+
+        return {
+            content: [
+                {
+                    type: "text" as const,
+                    text: JSON.stringify({
+                        __noetect_ui: true,
+                        html: buildTodosHtml(filteredTodos, input.project),
+                        title: "Todos",
+                        height: 420,
+                    }),
+                },
+                {
+                    type: "text" as const,
+                    text: JSON.stringify(structuredData, null, 2),
+                },
+            ],
+        };
     }
 );
 
@@ -229,7 +259,14 @@ server.registerTool(
     "update_todo",
     {
         title: "Update Todo",
-        description: "Update a todo item. IMPORTANT: If updating project, the project must already exist. Use list_projects first.",
+        description: `Update a todo item. IMPORTANT: If updating project, the project must already exist. Use list_projects first.
+
+Date field semantics:
+- scheduledStart / scheduledEnd — calendar plan (when the task is scheduled to happen). Pass null to clear.
+- dueDate — deadline only (drives overdue logic). Pass null to clear.
+- duration — minutes; auto-derived from scheduledStart+scheduledEnd when both have a time component.
+
+Format for all date fields: YYYY-MM-DD (all-day) or YYYY-MM-DDTHH:mm (with time).`,
         inputSchema: {
             todoId: z.string(),
             updates: z.object({
@@ -237,6 +274,10 @@ server.registerTool(
                 description: z.string().optional(),
                 status: z.enum(["todo", "in_progress", "done", "later"]).optional(),
                 project: z.string().optional(),
+                scheduledStart: z.string().nullable().optional(),
+                scheduledEnd: z.string().nullable().optional(),
+                dueDate: z.string().nullable().optional(),
+                duration: z.number().nullable().optional(),
             }),
         },
     },
@@ -255,11 +296,22 @@ server.registerTool(
     "create_todo",
     {
         title: "Create Todo",
-        description: "Create a new todo item. IMPORTANT: The project must already exist. Use list_projects first to see available projects.",
+        description: `Create a new todo item. IMPORTANT: The project must already exist. Use list_projects first to see available projects.
+
+Date field semantics:
+- scheduledStart / scheduledEnd — calendar plan (when the task is scheduled to happen).
+- dueDate — deadline only (drives overdue logic). Independent from schedule.
+- duration — minutes; auto-derived from scheduledStart+scheduledEnd when both have a time component.
+
+Format for all date fields: YYYY-MM-DD (all-day) or YYYY-MM-DDTHH:mm (with time).`,
         inputSchema: {
             title: z.string(),
             description: z.string().optional(),
             project: z.string().optional(),
+            scheduledStart: z.string().nullable().optional(),
+            scheduledEnd: z.string().nullable().optional(),
+            dueDate: z.string().nullable().optional(),
+            duration: z.number().optional(),
         },
     },
     async (input) => {
