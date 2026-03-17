@@ -42,6 +42,11 @@
 	--color-foreground: oklch(0.20 0.01 270);
 	--color-muted-foreground: oklch(0.42 0.01 270);
 	--color-primary-foreground: oklch(1 0 0);
+	--color-popover: var(--popover-bg);
+	--color-popover-foreground: var(--popover-fg);
+	--color-accent-foreground: var(--accent-fg);
+	--color-background: var(--bg);
+	--color-input: var(--border);
 }
 /* TLDraw Agent Styles */
 
@@ -50,6 +55,9 @@
 :root {
 	--sidebar: oklch(0.99 0.002 270 / 0.75);
 	--bg: oklch(0.98 0.002 270);
+	--popover-bg: oklch(0.97 0.003 270);
+	--popover-fg: oklch(0.20 0.01 270);
+	--accent-fg: oklch(0.20 0.01 270);
 	--bg-secondary: oklch(0.95 0.004 270);
 	--bg-card: oklch(0.99 0.002 270 / 0.9);
 	--border: oklch(0.78 0.012 270 / 0.55);
@@ -72,6 +80,9 @@
 
 .dark {
 	--sidebar: oklch(0.16 0.005 270 / 0.75);
+	--popover-bg: oklch(0.18 0.005 270);
+	--popover-fg: oklch(0.92 0 0);
+	--accent-fg: oklch(0.92 0 0);
 	--color-card: oklch(0.16 0.005 270 / 0.75);
 	--color-secondary: oklch(0.22 0.008 270 / 0.6);
 	--color-foreground: oklch(0.92 0 0);
