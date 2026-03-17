@@ -1,21 +1,21 @@
 # Nomendex — User Playbook
 
-Nomendex is a native macOS desktop app for managing **notes**, **tasks**, and **AI conversations** — all in one unified workspace. Your data lives locally on disk in a folder you choose, giving you full ownership and portability.
+Nomendex is a native macOS desktop app for managing **notes**, **tasks**, **AI conversations**, and **agent workflows** — all in one unified workspace. Your workspace lives in a folder you choose on disk, so the files remain portable and inspectable.
 
 ---
 
 ## Quick Start
 
 1. **Launch the app** — on first run you'll be prompted to choose a workspace folder
-2. **Explore the Activity Bar** — click icons on the left to switch between Inbox, Notes, Todos, Chat, and Settings
-3. **Use tabs** — open multiple items side by side, just like a browser
+2. **Explore the sidebar** — switch between workspace views such as Inbox, Notes, Todos, Projects, Memory, Agents, Chat, Sync, Settings, and Help
+3. **Use tabs** — keep multiple notes, tasks, and views open at once
 4. **Press `⌘K`** — open the command palette for quick actions
 
 ---
 
 ## Workspaces
 
-A workspace is a folder on your Mac that contains all your data — notes, tasks, agents, and uploads. You can create and switch between multiple workspaces for different projects or contexts (e.g. *Work* vs *Personal*).
+A workspace is a folder on your Mac that contains your notes, tasks, project data, uploads, and local app state. You can create and switch between multiple workspaces for different projects or contexts (e.g. *Work* vs *Personal*).
 
 - **Add workspace** — choose any folder on your Mac
 - **Switch** — use the workspace switcher in the sidebar footer
@@ -24,12 +24,18 @@ A workspace is a folder on your Mac that contains all your data — notes, tasks
 **What's inside a workspace:**
 ```
 my-workspace/
-├── notes/        ← Markdown notes
-├── todos/        ← Task files
-├── uploads/      ← Images & attachments
-├── agents/       ← AI agent configurations
-└── workspace.json ← UI state & preferences
+├── todos/                 ← Task files
+├── uploads/               ← Images & attachments
+├── agents/                ← Saved agent configurations
+├── notes/                 ← Optional notes folder
+├── .nomendex/
+│   ├── workspace.json     ← UI state & workspace preferences
+│   ├── secrets.json       ← Local API keys / sync secrets
+│   └── agent-memory/      ← BPagent long-term memory data
+└── ...                    ← Notes may also live directly in the workspace root
 ```
+
+> **Note:** Nomendex supports two note-storage styles: a dedicated `notes/` folder, or the workspace root itself (useful for Obsidian-style vaults).
 
 ---
 
@@ -46,7 +52,7 @@ A full-featured Markdown note editor with support for rich content.
 | **Wiki links** | Link notes together with `[[double brackets]]` |
 | **Backlinks** | See which notes link to the current note (sidebar panel) |
 | **Phantom links** | Discover links to notes that don't exist yet — create them with one click |
-| **File browser** | Navigate your notes folder with a tree-style browser |
+| **File browser** | Navigate your notes tree with a tree-style browser |
 | **Auto-save** | Changes are saved automatically as you type |
 | **External change detection** | If another app modifies a note, Nomendex detects it and offers to reload |
 | **Project tagging** | Assign notes to a project via YAML frontmatter |
@@ -62,17 +68,18 @@ When editing a note, the right sidebar shows:
 
 ## ✅ Tasks (Todos)
 
-A task management system with Kanban boards, projects, priorities, and scheduling.
+A task management system with Kanban boards, projects, scheduling, and inline markdown checklists.
 
 ### Creating Tasks
 
 Create tasks with a title, description, and optional metadata:
-- **Project** — organize tasks by project
+- **Project** — assign the task to an existing project
 - **Priority** — 🔴 High, 🟡 Medium, 🔵 Low, or None
 - **Due date & time** — set a deadline
-- **Start date & time** — set when work begins
+- **Scheduled start/end** — place the work on your calendar or time buckets
 - **Attachments** — add images to tasks
 - **Tags** — flexible categorization
+- **Checklist items** — use markdown rows like `- [ ] Follow up`
 
 ### Kanban Board
 
@@ -85,20 +92,23 @@ Tasks are displayed on a Kanban board. Two modes are available:
 - Example: *Backlog → This Week → Today → Done*
 - Each column can optionally auto-set a task status when items are dragged to it
 - Setup via project dropdown → "Board Settings"
+- Each project board can switch between **scheduled-date sorting** and **manual order**
 
 ### Task Display
 
 Task cards show:
 - Title with colored left border (priority indicator)
-- Due date and time range (e.g. `Feb 16 14:00–15:00`)
+- Checkbox + strike-through when completed
 - Project name, tags
-- ✅ prefix when completed
+- Description preview or checklist preview with progress
+- Scheduled date/time label and overdue state when relevant
 
 ### Filtering
 
+- Search by **title** or **description**
 - Filter by **tag** using the toolbar pills
 - Filter by **priority** using the priority filter
-- Tasks show/hide based on active filters
+- Tasks update live based on the active search/filter state
 
 ### Completion Tracking
 
@@ -108,34 +118,31 @@ When a task is marked as done, the exact completion time is automatically record
 
 ## 📥 Inbox
 
-A lightweight list view for quickly capturing tasks without assigning them to a specific project.
+Inbox is a **task triage workspace** rather than a flat capture list.
 
-- **Quick capture** — create tasks fast, organize later
-- **Flat list** — no Kanban columns, just a simple scrollable list
-- **Search** — fuzzy search across task titles and descriptions
-- **Filters** — same tag and priority filters as the Kanban board
-- **Dedicated icon** — the Inbox has its own icon in the Activity Bar
-
-Tasks created in the Inbox are assigned to the `"Inbox"` project automatically. You can later move them to a different project by editing the task.
+- **Left panel groups** — `All Tasks`, `Inbox`, and your projects
+- **Right panel detail view** — search, status filters, item counts, and `+ new`
+- **Status filters** — switch between `all`, `active`, `completed`, and `archived`
+- **Quick capture** — tasks created from Inbox default to the `"Inbox"` project
+- **Drag and drop** — move a task onto another group to reassign its project
+- **Context-aware create dialog** — when you create from a specific group, the project is preselected and locked
 
 ---
 
-## 🗓️ Apple Calendar Integration
+## 🗓️ Apple Calendar & Reminders
 
-Tasks with dates are automatically synced to **Apple Calendar** via the native EventKit framework.
+Tasks can sync to **Apple Calendar** and **Apple Reminders** through the native EventKit integration.
 
-| Behavior | Details |
-|----------|---------|
-| Calendar name | **Nomendex Tasks** (auto-created) |
-| All-day events | When task has date only (no time) |
-| Timed events | When task has date + time |
-| Time range | `scheduledStart` → event start, `scheduledEnd` → event end (deadline `dueDate` is kept separate) |
-| High priority | 🔴 Alarm 15 minutes before |
-| Medium priority | 🟡 Alarm 30 minutes before |
-| Done tasks | Prefixed with ✅ in calendar |
-| Sync triggers | Task save, drag-and-drop, delete |
+| Integration | Details |
+|-------------|---------|
+| Apple Calendar | Scheduled tasks sync into **Nomendex Tasks**; project tasks can use project-specific calendars like **Nomendex - ProjectName** |
+| Apple Reminders | High- and medium-priority tasks with a schedule or deadline sync into the **Nomendex Tasks** reminders list |
+| All-day vs timed | Date-only tasks become all-day items; tasks with times become timed events/reminders |
+| Done tasks | Prefixed with ✅ in Calendar and Reminders |
+| Sync triggers | Task save, drag-and-drop, delete, and manual **Force Sync All to Calendar** from the command palette |
+| Force sync behavior | Rebuilds Nomendex calendars from task data and preserves existing calendar colors |
 
-> **Note:** macOS will ask for calendar permission on first sync. You can manage this in **System Settings → Privacy & Security → Calendars**.
+> **Note:** macOS will ask for Calendar and Reminders permission on first sync. You can manage this in **System Settings → Privacy & Security → Calendars / Reminders**.
 
 ---
 
@@ -181,19 +188,47 @@ Agents are reusable configurations that customize Claude's behavior in chat sess
 
 - **Name & description** — identify the agent's purpose
 - **System prompt** — custom instructions that guide Claude's behavior
-- **Model** — choose between Sonnet, Opus, or Haiku
+- **Model** — choose the Claude model used by that agent
 - **MCP servers** — enable external tool integrations (e.g. Linear)
 - **Allowed tools** — pre-approve specific tools
 
-### Built-in Agent
+### Built-in Agents
 
-The **General Assistant** ships by default and cannot be deleted. It uses Claude Sonnet with no custom system prompt.
+- **General Assistant** — the default general-purpose assistant
+- **BPagent** — a planning-focused agent for goals, projects, reviews, and note organization
+
+BPagent uses a runtime-composed prompt and can reuse long-term memory between sessions.
 
 ### Managing Agents
 
-- Create, edit, duplicate, or delete agents from the **Agents settings page**
+- Create, edit, duplicate, or delete agents from the **Agents page**
 - Switch agents mid-conversation using the **agent selector** in the chat footer
 - Each session remembers which agent was used
+
+---
+
+## 🧠 Memory
+
+The **Memory** view is a user-facing browser for BPagent's long-term memory.
+
+- **Search and filter** saved memories
+- **Open and edit** a memory as markdown
+- **Create manual memory entries** for goals, decisions, or preferences
+- **Delete or sync** memories when using a compatible BPagent workspace
+
+Memory can be scoped to a single agent or shared across the workspace, which makes it useful for durable context that should survive beyond one chat session.
+
+---
+
+## 🔄 Git Sync
+
+Nomendex can sync the active workspace with a Git remote.
+
+- **Sync page** — checks Git installation, repository setup, remote config, and auth readiness
+- **Auth modes** — use local Git credentials or a GitHub PAT stored in **Settings → API Keys**
+- **Auto-sync** — supports interval-based sync and sync-on-change
+- **Quick Sync** — the sidebar shows a one-click sync button when the workspace is ready
+- **Merge conflict flow** — sync pauses until conflicts are resolved from the Sync UI
 
 ---
 
@@ -223,16 +258,18 @@ Projects are the main way to organize related tasks and notes together.
 
 ### How Projects Work
 
-- **Assign to tasks** — set the `project` field when creating or editing a task
+- **Create projects** — use the **Projects** view to create named project entities
+- **Assign to tasks** — choose an existing project when creating or editing a task
 - **Assign to notes** — add `project: MyProject` in the note's YAML frontmatter
 - **Project detail view** — see all tasks and notes belonging to a project in one place
 - **Custom Kanban boards** — each project can have its own column configuration
+- **Per-project sort mode** — switch between scheduled-date ordering and manual order
 
-### Creating vs. Using Projects
+### Managing Projects
 
-Projects can be used in two ways:
-1. **Lightweight** — just type a project name on a task. No setup needed.
-2. **Full setup** — create a project entity to unlock custom Kanban columns and board settings.
+- Create, rename, archive, or delete projects from the **Projects** view
+- Each project gets a canonical project note, which helps keep project context in one place
+- Renaming a project updates linked tasks and project notes
 
 ---
 
@@ -246,6 +283,8 @@ Projects can be used in two ways:
 | `⇧Tab` | Navigate to previous focusable element |
 | `⌃Tab` | Switch to next tab |
 | `⌃⇧Tab` | Switch to previous tab |
+
+> **Tip:** Chat send behavior can be switched to `Enter` in **Settings → Preferences**.
 
 ### In Tables
 
@@ -262,17 +301,20 @@ Projects can be used in two ways:
 
 ## ⚙️ Settings
 
-Access settings from the gear icon at the bottom of the Activity Bar:
+Access settings from the gear icon at the bottom of the sidebar:
 
+- **Keyboard Shortcuts** — view and customize app shortcuts
+- **Preferences** — chat-input behavior and other user preferences
 - **Theme** — customize the app's appearance
-- **Agents** — create and manage AI agent configurations
-- **MCP Clients** — view connected MCP server integrations
+- **API Keys** — store Claude, GitHub, and other secrets locally
+- **Storage** — workspace and local storage information
+- **About** — app metadata and version information
 
 ---
 
 ## Data & Privacy
 
-- **100% local** — all data is stored on your Mac in the workspace folder you choose
-- **No cloud sync** — your notes and tasks never leave your machine
+- **Local-first** — notes, tasks, uploads, agent configs, and workspace state are stored on your Mac
+- **Optional external integrations** — AI chats, MCP servers, Git sync, Calendar, and Reminders can send selected data outside the app when you use them
 - **Portable** — move or back up your workspace folder using any tool (Git, Dropbox, Time Machine, etc.)
-- **Open format** — notes are plain Markdown, tasks use Markdown with YAML frontmatter
+- **Open format** — notes are plain Markdown, tasks use Markdown with YAML frontmatter, and workspace metadata is JSON
