@@ -43,7 +43,7 @@ export class FileDatabase<T extends DatabaseRecord> {
                     return `${key}: null`;
                 } else if (typeof value === "string") {
                     // Always quote empty strings or strings with special characters
-                    if (value === "" || value.includes(":") || value.includes("\n") || value.includes("#")) {
+                    if (value === "" || value.includes(":") || value.includes("\n") || value.includes("#") || /^\d/.test(value)) {
                         return `${key}: "${value.replace(/"/g, '\\"')}"`;
                     }
                     return `${key}: ${value}`;

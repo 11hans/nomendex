@@ -243,6 +243,7 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
                     duration: updatedTodo.duration,
                     attachments: updatedTodo.attachments,
                     customColumnId: updatedTodo.customColumnId,
+                    calendarReminderPreset: updatedTodo.calendarReminderPreset,
                 },
             });
             setEditDialogOpen(false);

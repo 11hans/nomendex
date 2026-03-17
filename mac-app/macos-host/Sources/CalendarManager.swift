@@ -351,6 +351,13 @@ class CalendarManager {
             return
         }
 
+        // Add reminder alarms based on preset (only for timed events)
+        let reminderPreset = taskData["calendarReminderPreset"] as? String ?? "none"
+        if reminderPreset == "30-15" && !isAllDay {
+            event.addAlarm(EKAlarm(relativeOffset: -1800)) // 30 min before
+            event.addAlarm(EKAlarm(relativeOffset: -900))  // 15 min before
+        }
+
         // Store task ID in event URL for lookup
         event.url = URL(string: "nomendex://task/\(taskId)")
 

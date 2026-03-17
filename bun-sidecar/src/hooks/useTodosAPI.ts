@@ -15,6 +15,7 @@ interface CreateTodoInput {
     duration?: number;
     attachments?: Attachment[];
     customColumnId?: string;
+    calendarReminderPreset?: "30-15" | "none";
 }
 
 interface UpdateTodoInput {
@@ -33,6 +34,7 @@ interface UpdateTodoInput {
         duration?: number | null;
         attachments?: Attachment[];
         customColumnId?: string;
+        calendarReminderPreset?: "30-15" | "none";
     };
 }
 

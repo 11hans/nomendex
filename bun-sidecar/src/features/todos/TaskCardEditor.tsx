@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Save, X, Trash2, ListChecks } from "lucide-react";
+import { Save, X, Trash2, ListChecks, Bell } from "lucide-react";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { useTheme } from "@/hooks/useTheme";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
@@ -26,6 +26,7 @@ interface TaskCardEditorProps {
     onOpenChange: (open: boolean) => void;
     onSave: (todo: Todo) => void;
     onDelete?: (todo: Todo) => void;
+    onToggleCalendarReminder?: (todo: Todo) => void;
     saving: boolean;
     availableTags: string[];
     availableProjects: string[];
@@ -35,7 +36,7 @@ interface TaskCardEditorProps {
  * TaskCardEditor is the primary popup/dialog component for editing todo details.
  * It is triggered when a user clicks on a todo in the Kanban board or Inbox view.
  */
-export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, saving, availableTags, availableProjects }: TaskCardEditorProps) {
+export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onToggleCalendarReminder, saving, availableTags, availableProjects }: TaskCardEditorProps) {
     const [editedTodo, setEditedTodo] = useState<Todo | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -301,6 +302,47 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
                                 Add checklist item
                             </TooltipContent>
                         </Tooltip>
+                        {onToggleCalendarReminder && (() => {
+                            const hasTimed = editedTodo.scheduledStart?.includes("T") || editedTodo.scheduledEnd?.includes("T");
+                            const isActive = editedTodo.calendarReminderPreset === "30-15";
+                            return (
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 px-2 rounded-md"
+                                            disabled={!hasTimed}
+                                            onClick={() => onToggleCalendarReminder({
+                                                ...editedTodo,
+                                                calendarReminderPreset: isActive ? "none" : "30-15",
+                                            })}
+                                            style={{
+                                                color: isActive ? "#fff" : styles.contentSecondary,
+                                                backgroundColor: isActive ? "#3b82f6" : "transparent",
+                                                opacity: hasTimed ? 1 : 0.4,
+                                            }}
+                                        >
+                                            <Bell className="size-4" />
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent
+                                        className="z-[100]"
+                                        style={{
+                                            backgroundColor: styles.surfaceTertiary,
+                                            color: styles.contentPrimary,
+                                            border: `1px solid ${styles.borderDefault}`,
+                                        }}
+                                    >
+                                        {!hasTimed
+                                            ? "Set a time to enable reminders"
+                                            : isActive
+                                                ? "Remove 30/15 min reminders"
+                                                : "Add 30 + 15 min reminders"}
+                                    </TooltipContent>
+                                </Tooltip>
+                            );
+                        })()}
                     </div>
 
                     <div className="flex items-center gap-2 ml-auto">

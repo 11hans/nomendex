@@ -385,6 +385,7 @@ async function createTodo(input: {
     duration?: number;
     attachments?: Attachment[];
     customColumnId?: string;
+    calendarReminderPreset?: "30-15" | "none";
 }) {
     todosLogger.info(`Creating new todo: ${input.title}`);
 
@@ -454,6 +455,7 @@ async function createTodo(input: {
             duration,
             attachments: input.attachments,
             customColumnId: input.customColumnId,
+            calendarReminderPreset: input.calendarReminderPreset,
         };
 
         const created = await getDb().create(newTodo);
@@ -484,6 +486,7 @@ async function updateTodo(input: {
         duration?: number | null;
         attachments?: Attachment[];
         customColumnId?: string;
+        calendarReminderPreset?: "30-15" | "none";
     };
 }) {
     todosLogger.info(`Updating todo: ${input.todoId}`);

@@ -371,6 +371,7 @@ export function InboxListView() {
                     priority: updatedTodo.priority,
                     duration: updatedTodo.duration,
                     attachments: updatedTodo.attachments,
+                    calendarReminderPreset: updatedTodo.calendarReminderPreset,
                 },
             });
             setEditDialogOpen(false);
@@ -384,6 +385,23 @@ export function InboxListView() {
             toast.error("Failed to save changes");
         } finally {
             setEditSaving(false);
+        }
+    };
+
+    const handleToggleCalendarReminder = async (todo: Todo) => {
+        try {
+            const updated = await todosAPI.updateTodo({
+                todoId: todo.id,
+                updates: { calendarReminderPreset: todo.calendarReminderPreset },
+            });
+            if (updated) {
+                setTodoToEdit(updated);
+                await loadTodos();
+                syncTaskToCalendar(updated).catch(() => { });
+                toast.success(todo.calendarReminderPreset === "30-15" ? "Reminders set (30 + 15 min)" : "Reminders removed");
+            }
+        } catch {
+            toast.error("Failed to update reminders");
         }
     };
 
@@ -879,6 +897,7 @@ export function InboxListView() {
                 }}
                 onSave={handleSaveTodo}
                 onDelete={deleteTodoWithToast}
+                onToggleCalendarReminder={handleToggleCalendarReminder}
                 saving={editSaving}
                 availableTags={availableTags}
                 availableProjects={availableProjects}

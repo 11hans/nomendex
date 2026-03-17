@@ -24,6 +24,7 @@ export const TodoSchema = z.object({
     completedAt: z.string().optional(),
     duration: z.number().optional(),
     attachments: z.array(AttachmentSchema).optional(),
+    calendarReminderPreset: z.enum(["30-15", "none"]).optional(),
 });
 
 export type Todo = z.infer<typeof TodoSchema>;

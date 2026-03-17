@@ -1,4 +1,4 @@
-import { Settings, Trash2, Archive, ArchiveRestore, Copy, CalendarDays } from "lucide-react";
+import { Settings, Trash2, Archive, ArchiveRestore, Copy, CalendarDays, Bell } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Todo, PRIORITY_CONFIG } from "./todo-types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -278,6 +278,9 @@ export function TodoCard({
                         )
                     )}
                 </div>
+                {todo.calendarReminderPreset === "30-15" && (
+                    <Bell className="size-3 shrink-0" style={{ color: "#3b82f6" }} />
+                )}
                 {/* Actions - show when selected */}
                 <div className={`shrink-0 flex items-center gap-0.5 transition-opacity duration-150 ${selected ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100'}`}>
                     <button

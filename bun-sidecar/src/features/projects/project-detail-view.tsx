@@ -207,6 +207,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                         duration: updatedTodo.duration,
                         attachments: updatedTodo.attachments,
                         customColumnId: updatedTodo.customColumnId,
+                        calendarReminderPreset: updatedTodo.calendarReminderPreset,
                     },
                 });
                 setEditDialogOpen(false);

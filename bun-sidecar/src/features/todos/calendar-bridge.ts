@@ -49,6 +49,7 @@ function doSyncTaskToCalendar(task: Todo): Promise<void> {
             priority: task.priority || "none",
             status: task.status,
             projectName: task.project || null,
+            calendarReminderPreset: task.calendarReminderPreset || "none",
             callback: callbackName,
         });
 

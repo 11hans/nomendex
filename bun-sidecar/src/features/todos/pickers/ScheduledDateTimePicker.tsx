@@ -120,6 +120,7 @@ export function ScheduledDateTimePicker({ scheduledEnd, scheduledStart, onChange
 
     const handleSave = () => {
         if (!localFrom) {
+            onChange({ scheduledStart: undefined, scheduledEnd: undefined });
             setOpen(false);
             return;
         }
@@ -323,7 +324,7 @@ export function ScheduledDateTimePicker({ scheduledEnd, scheduledStart, onChange
                             <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={handleCancel}>
                                 Cancel
                             </Button>
-                            <Button size="sm" className="h-7 text-xs px-3" onClick={handleSave} disabled={!localFrom}>
+                            <Button size="sm" className="h-7 text-xs px-3" onClick={handleSave}>
                                 Save
                             </Button>
                         </div>

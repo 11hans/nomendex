@@ -361,6 +361,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     duration: updatedTodo.duration ?? null,
                     attachments: updatedTodo.attachments,
                     customColumnId: updatedTodo.customColumnId,
+                    calendarReminderPreset: updatedTodo.calendarReminderPreset,
                 },
             });
             setEditDialogOpen(false);
@@ -373,6 +374,23 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             console.error("Failed to save todo:", error);
         } finally {
             setEditSaving(false);
+        }
+    };
+
+    const handleToggleCalendarReminder = async (todo: Todo) => {
+        try {
+            const updated = await todosAPI.updateTodo({
+                todoId: todo.id,
+                updates: { calendarReminderPreset: todo.calendarReminderPreset },
+            });
+            if (updated) {
+                setTodoToEdit(updated);
+                await loadTodos();
+                syncTaskToCalendar(updated).catch(() => { });
+                toast.success(todo.calendarReminderPreset === "30-15" ? "Reminders set (30 + 15 min)" : "Reminders removed");
+            }
+        } catch {
+            toast.error("Failed to update reminders");
         }
     };
 
@@ -1905,7 +1923,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             </div>
 
             {/* Edit Todo Modal */}
-            <TaskCardEditor todo={todoToEdit} open={editDialogOpen} onOpenChange={setEditDialogOpen} onSave={handleSaveTodo} onDelete={deleteTodoWithToast} saving={editSaving} availableTags={availableTags} availableProjects={availableProjects} />
+            <TaskCardEditor todo={todoToEdit} open={editDialogOpen} onOpenChange={setEditDialogOpen} onSave={handleSaveTodo} onDelete={deleteTodoWithToast} onToggleCalendarReminder={handleToggleCalendarReminder} saving={editSaving} availableTags={availableTags} availableProjects={availableProjects} />
 
             {/* Board Settings Dialog - Show for project views */}
             {filterProject && filterProject !== "" && (

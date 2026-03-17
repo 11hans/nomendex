@@ -76,6 +76,7 @@ export function DateTimePicker({ dueDate, onChange, compact }: DateTimePickerPro
 
     const handleSave = () => {
         if (!localDate) {
+            onChange({ dueDate: undefined });
             setOpen(false);
             return;
         }
@@ -223,7 +224,7 @@ export function DateTimePicker({ dueDate, onChange, compact }: DateTimePickerPro
                             <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={handleCancel}>
                                 Cancel
                             </Button>
-                            <Button size="sm" className="h-7 text-xs px-3" onClick={handleSave} disabled={!localDate}>
+                            <Button size="sm" className="h-7 text-xs px-3" onClick={handleSave}>
                                 Save
                             </Button>
                         </div>
