@@ -336,9 +336,11 @@ class CalendarManager {
         if let start = start {
             event.startDate = start
             if let end = end {
-                event.endDate = end
+                // EKEvent all-day events use exclusive end dates, so add 1 day to make
+                // the range inclusive. E.g. Mar 15–17 needs endDate = Mar 18 midnight.
+                event.endDate = isAllDay ? end.addingTimeInterval(86400) : end
             } else if isAllDay {
-                event.endDate = start
+                event.endDate = start.addingTimeInterval(86400)
             } else {
                 event.endDate = start.addingTimeInterval(TimeInterval(duration * 60))
             }

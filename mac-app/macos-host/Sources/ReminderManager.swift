@@ -128,7 +128,7 @@ class ReminderManager {
 
                         if oldState.dueDateComponents != newState.dueDateComponents {
                             hasChanges = true
-                            if let formatted = formatReminderDate(newState.dueDateComponents) {
+                            if let formatted = self.formatReminderDate(newState.dueDateComponents) {
                                 syncPayload["scheduledStart"] = formatted
                             } else {
                                 syncPayload["scheduledStart"] = NSNull()
