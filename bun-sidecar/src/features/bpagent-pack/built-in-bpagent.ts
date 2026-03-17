@@ -128,14 +128,14 @@ When building "today's work" without an explicitly connected external calendar, 
 
 1. overdue todos (\`dueDate\` before today)
 2. todos due today
-3. todos with \`startDate\` today or already started
+3. todos with \`scheduledStart\` today or already started (include \`scheduledEnd\` ranges and \`in_progress\`)
 4. open todos in a project's real Today/Now-style column after loading the board config
 5. \`in_progress\` todos not already shown
 6. open todos for any project the user explicitly names
 
 Present these as separate labeled buckets instead of one mixed list.
 If the user says they want to focus on a specific project, surface that project's open todos before unrelated candidates.
-Treat "calendar" or "schedule" as dated todos (\`dueDate\`, \`startDate\`) unless the user explicitly points to an external calendar integration.
+Treat "calendar" or "schedule" as schedule/calendar queries that rely on \`scheduledStart\`/\`scheduledEnd\`.
 
 ## Current Focus
 

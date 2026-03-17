@@ -14,10 +14,16 @@ function isRemindersAvailable(): boolean {
 
 export async function syncTaskToReminders(task: Todo): Promise<void> {
     if (!isRemindersAvailable()) return;
-    
+
     // Only high and medium priority tasks go to Reminders
     if (task.priority !== "high" && task.priority !== "medium") {
         // If it was previously in reminders but priority dropped, delete it
+        return removeTaskFromReminders(task.id);
+    }
+
+    // Need at least a schedule or deadline to create a reminder
+    const hasDate = Boolean(task.scheduledStart || task.scheduledEnd || task.dueDate);
+    if (!hasDate) {
         return removeTaskFromReminders(task.id);
     }
 
@@ -37,8 +43,8 @@ export async function syncTaskToReminders(task: Todo): Promise<void> {
             taskId: task.id,
             title: task.title,
             description: task.description || "",
-            dueDate: task.dueDate,
-            startDate: task.startDate,
+            scheduledStart: task.scheduledStart ?? task.dueDate ?? null,
+            scheduledEnd: task.scheduledEnd ?? null,
             priority: task.priority,
             status: task.status,
             callback: callbackName,

@@ -153,6 +153,13 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
                                 status: todo.status,
                                 project: todo.project,
                                 tags: todo.tags,
+                                scheduledStart: todo.scheduledStart ?? null,
+                                scheduledEnd: todo.scheduledEnd ?? null,
+                                dueDate: todo.dueDate ?? null,
+                                priority: todo.priority,
+                                duration: todo.duration,
+                                attachments: todo.attachments,
+                                customColumnId: todo.customColumnId,
                             });
                             // Re-archive it since this is the archived view
                             const newTodos = await todosAPI.getTodos({});
@@ -229,6 +236,13 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
                     project: updatedTodo.project,
                     archived: updatedTodo.archived,
                     tags: updatedTodo.tags,
+                    scheduledStart: updatedTodo.scheduledStart ?? null,
+                    scheduledEnd: updatedTodo.scheduledEnd ?? null,
+                    dueDate: updatedTodo.dueDate ?? null,
+                    priority: updatedTodo.priority,
+                    duration: updatedTodo.duration,
+                    attachments: updatedTodo.attachments,
+                    customColumnId: updatedTodo.customColumnId,
                 },
             });
             setEditDialogOpen(false);

@@ -15,6 +15,7 @@ import {
     ProjectPicker,
     TagsPicker,
     DateTimePicker,
+    ScheduledDateTimePicker,
     AttachmentPicker,
 } from "./pickers";
 
@@ -25,6 +26,8 @@ interface NewTodo {
     status: "todo" | "in_progress" | "done" | "later";
     tags: string[];
     dueDate?: string;
+    scheduledStart?: string;
+    scheduledEnd?: string;
     priority?: "high" | "medium" | "low" | "none";
     attachments?: Attachment[];
 }
@@ -245,11 +248,21 @@ export function CreateTodoDialog({
                             attachments={newTodo.attachments || []}
                             onChange={(attachments) => onNewTodoChange({ ...newTodo, attachments })}
                         />
-                        <DateTimePicker
-                            dueDate={newTodo.dueDate}
-                            startDate={undefined}
-                            onChange={({ dueDate }) => onNewTodoChange({ ...newTodo, dueDate })}
-                        />
+                        <div className="flex items-center gap-2">
+                            <span className="text-caption" style={{ color: styles.contentTertiary }}>Scheduled</span>
+                            <ScheduledDateTimePicker
+                                compact
+                                scheduledStart={newTodo.scheduledStart}
+                                scheduledEnd={newTodo.scheduledEnd}
+                                onChange={(dates) => onNewTodoChange({ ...newTodo, ...dates })}
+                            />
+                            <span className="text-caption" style={{ color: styles.contentTertiary }}>Deadline</span>
+                            <DateTimePicker
+                                compact
+                                dueDate={newTodo.dueDate}
+                                onChange={({ dueDate }) => onNewTodoChange({ ...newTodo, dueDate })}
+                            />
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-2 ml-auto">

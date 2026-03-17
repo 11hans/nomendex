@@ -128,19 +128,10 @@ class ReminderManager {
 
                         if oldState.dueDateComponents != newState.dueDateComponents {
                             hasChanges = true
-                            let formatter = DateFormatter()
-                            formatter.locale = Locale(identifier: "en_US_POSIX")
-
-                            if let dc = newState.dueDateComponents, let date = dc.date {
-                                if dc.hour == nil {
-                                    formatter.dateFormat = "yyyy-MM-dd"
-                                    formatter.timeZone = TimeZone.current
-                                    syncPayload["dueDate"] = formatter.string(from: date)
-                                } else {
-                                    formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
-                                    formatter.timeZone = TimeZone.current
-                                    syncPayload["dueDate"] = formatter.string(from: date)
-                                }
+                            if let formatted = formatReminderDate(newState.dueDateComponents) {
+                                syncPayload["scheduledStart"] = formatted
+                            } else {
+                                syncPayload["scheduledStart"] = NSNull()
                             }
                         }
 
@@ -302,15 +293,15 @@ class ReminderManager {
             }
 
             // Due Date logic
-            let dueDateStr = taskData["dueDate"] as? String
-            let startDateStr = taskData["startDate"] as? String
+            let scheduledStart = taskData["scheduledStart"] as? String
+            let scheduledEnd = taskData["scheduledEnd"] as? String
             var targetDateStr: String? = nil
 
-            // Prefer dueDate, fallback to startDate if needed for reminders
-            if let due = dueDateStr, !due.isEmpty {
-                targetDateStr = due
-            } else if let start = startDateStr, !start.isEmpty {
+            // Reminders care about the scheduled start if available, otherwise fallback to scheduled end
+            if let start = scheduledStart, !start.isEmpty {
                 targetDateStr = start
+            } else if let end = scheduledEnd, !end.isEmpty {
+                targetDateStr = end
             }
 
             if let dateStr = targetDateStr, let parsedDate = self.parseISO(dateStr) {
@@ -409,6 +400,19 @@ class ReminderManager {
         default:
             return nil
         }
+    }
+
+    private func formatReminderDate(_ components: DateComponents?) -> String? {
+        guard let components = components, let date = components.date else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
+        if components.hour == nil {
+            formatter.dateFormat = "yyyy-MM-dd"
+        } else {
+            formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        }
+        return formatter.string(from: date)
     }
 
     private func parseISO(_ string: String) -> Date? {

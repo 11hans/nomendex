@@ -249,6 +249,8 @@ export function InboxListView() {
         project: string;
         status: "todo" | "in_progress" | "done" | "later";
         tags: string[];
+        scheduledStart?: string;
+        scheduledEnd?: string;
         dueDate?: string;
         priority?: "high" | "medium" | "low" | "none";
         attachments?: Todo["attachments"];
@@ -258,6 +260,8 @@ export function InboxListView() {
         project: "Inbox",
         status: "todo",
         tags: [],
+        scheduledStart: undefined,
+        scheduledEnd: undefined,
         dueDate: undefined,
         priority: undefined,
         attachments: undefined,
@@ -270,6 +274,8 @@ export function InboxListView() {
             project: "Inbox",
             status: "todo",
             tags: [],
+            scheduledStart: undefined,
+            scheduledEnd: undefined,
             dueDate: undefined,
             priority: undefined,
             attachments: undefined,
@@ -359,9 +365,10 @@ export function InboxListView() {
                     project: updatedTodo.project === "" ? "Inbox" : updatedTodo.project,
                     archived: updatedTodo.archived,
                     tags: updatedTodo.tags,
-                    dueDate: updatedTodo.dueDate,
+                    scheduledStart: updatedTodo.scheduledStart ?? null,
+                    scheduledEnd: updatedTodo.scheduledEnd ?? null,
+                    dueDate: updatedTodo.dueDate ?? null,
                     priority: updatedTodo.priority,
-                    startDate: updatedTodo.startDate,
                     duration: updatedTodo.duration,
                     attachments: updatedTodo.attachments,
                 },
@@ -391,6 +398,8 @@ export function InboxListView() {
                 project: newTodo.project.trim() || undefined,
                 status: newTodo.status,
                 tags: newTodo.tags,
+                scheduledStart: newTodo.scheduledStart ?? null,
+                scheduledEnd: newTodo.scheduledEnd ?? null,
                 dueDate: newTodo.dueDate,
                 priority: newTodo.priority,
                 attachments: newTodo.attachments,
@@ -430,9 +439,10 @@ export function InboxListView() {
                                 status: todo.status,
                                 project: todo.project,
                                 tags: todo.tags,
+                                scheduledStart: todo.scheduledStart ?? null,
+                                scheduledEnd: todo.scheduledEnd ?? null,
                                 dueDate: todo.dueDate,
                                 priority: todo.priority,
-                                startDate: todo.startDate,
                                 duration: todo.duration,
                                 attachments: todo.attachments,
                             });

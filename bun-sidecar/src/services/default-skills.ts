@@ -22,7 +22,7 @@ const DEFAULT_SKILLS: DefaultSkill[] = [
       "SKILL.md": `---
 name: todos
 description: "Manages project todos via REST API. BEFORE using this skill, you must THINK: 'Does the user mention a project? Does the user imply a specific column like Today?'. Use when the user asks to create, view, update, or delete todos."
-version: 7
+version: 8
 source: nomendex
 ---
 
@@ -169,17 +169,17 @@ Use this workflow for read-only requests such as:
 ### Today Workset Order
 When answering a "today" or "schedule" query without an explicit external calendar integration, build the workset in this order:
 
-1. **Overdue** - todos with \`dueDate\` before today
-2. **Due Today** - todos with \`dueDate\` today
-3. **Started / In Progress** - todos with \`startDate\` today or earlier, plus \`in_progress\` items not already shown
+1. **Overdue** - todos with \`dueDate\` before today (deadline bucket)
+2. **Due Today** - todos with \`dueDate\` today (deadline bucket)
+3. **Scheduled / Started** - todos whose \`scheduledStart\` (and \`scheduledEnd\` ranges) cover today or earlier, plus \`in_progress\` items not already shown
 4. **Today / Now Columns** - open todos in real Today-style custom columns after loading the project board config
 5. **Focused Project** - if the user names a project, show that project's remaining open todos prominently
 6. **Other Candidates** - remaining open todos worth considering
 
-Present these as labeled buckets. Do NOT merge dated todos, Today-column todos, and \`in_progress\` into one ambiguous list.
+Present these as labeled buckets. Do NOT mix deadline buckets (\`dueDate\`) with schedule/today buckets (\`scheduledStart\`/\`scheduledEnd\`).
 
 ### Calendar / Schedule Interpretation
-- If the user says "calendar" or "schedule" and does not name an external calendar source, interpret that as dated todos (\`dueDate\`, \`startDate\`) first.
+- Treat "calendar" or "schedule" queries as looking for todos with \`scheduledStart\`/\`scheduledEnd\` (schedule/calendar context) while \`dueDate\` remains the deadline field used for overdue counts.
 - Only talk about an external calendar if the user explicitly points to one.
 
 ### Today Column Detection
@@ -1339,7 +1339,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 3
+version: 4
 source: nomendex
 ---
 
@@ -1401,14 +1401,14 @@ Morning planning is **read-only by default**. Summarize and propose a plan first
 ### Today Workset Algorithm
 Build today's workset via \`/todos\` using these buckets:
 
-1. **Overdue** - todos with \`dueDate\` before today
-2. **Due Today** - todos with \`dueDate\` today
-3. **Started / In Progress** - todos with \`startDate\` today or earlier, plus \`in_progress\` items not already shown
+1. **Overdue** - todos with \`dueDate\` before today (deadline bucket)
+2. **Due Today** - todos with \`dueDate\` today (deadline bucket)
+3. **Scheduled / In Progress** - todos whose \`scheduledStart\` includes today or earlier (use \`scheduledEnd\` ranges when available), plus \`in_progress\` items not already shown
 4. **Focused Project** - if the user says "today I want to focus mainly on Nomendex" (or another project), load that project's open todos before unrelated candidates
 5. **Other Candidates** - Today/Now custom-column todos after loading real board config, then remaining open todos
 
 Rules:
-- Treat "calendar" or "schedule" as dated todos unless the user explicitly points to an external calendar integration.
+- Treat "calendar" or "schedule" as schedule/calendar queries targeting todos with \`scheduledStart\`/\`scheduledEnd\`.
 - Never guess a Today column ID like \`col-today\`; load the project board config first.
 - If weekly or monthly goal files are template stubs, say so explicitly and do not invent live context from them.
 - Use project-note **Next Actions** only as a fallback when live todos do not provide enough operational detail.
@@ -2712,7 +2712,7 @@ If no matches are found:
       "SKILL.md": `---
 name: weekly
 description: Facilitate weekly review process with reflection, goal alignment, and planning. Create review notes, analyze past week, plan next week. Use on Sundays or whenever doing weekly planning.
-version: 3
+version: 4
 source: nomendex
 ---
 
@@ -2751,7 +2751,7 @@ Invoke with \`/weekly\` or ask Codex to help with your weekly review.
 
 ### Step 1: Reflection (10 minutes)
 - Review daily notes from past week
-- Fetch all todos via \`/todos\` skill (project, status, dueDate, priority)
+- Fetch all todos via \`/todos\` skill (project, status, \`scheduledStart\`/\`scheduledEnd\`, dueDate, priority)
 - Calculate todo completion rate by project
 - Identify wins and challenges
 - Capture lessons learned
@@ -2800,7 +2800,7 @@ The skill guides you through:
 - [ ] Identify overdue and blocked todos
 - [ ] Process inbox items
 - [ ] Update project statuses
-- [ ] Check upcoming dated todos (and external calendar only if explicitly available)
+- [ ] Check upcoming scheduled todos via \`scheduledStart\`/\`scheduledEnd\` (and external calendar only if explicitly available)
 - [ ] Review monthly goals
 - [ ] Plan next week's priorities
 - [ ] Plan todo distribution for next week

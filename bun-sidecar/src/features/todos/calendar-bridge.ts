@@ -15,8 +15,8 @@ let calendarSyncQueue: Promise<void> = Promise.resolve();
 export async function syncTaskToCalendar(task: Todo): Promise<void> {
     if (!isCalendarAvailable()) return;
 
-    // If both dates are cleared, we should remove it from the calendar
-    if (!task.dueDate && !task.startDate) {
+    // If both scheduled fields are cleared, remove from calendar
+    if (!task.scheduledStart && !task.scheduledEnd) {
         return removeTaskFromCalendar(task.id);
     }
 
@@ -42,8 +42,9 @@ function doSyncTaskToCalendar(task: Todo): Promise<void> {
             taskId: task.id,
             title: task.title,
             description: task.description || "",
+            scheduledStart: task.scheduledStart ?? null,
+            scheduledEnd: task.scheduledEnd ?? null,
             dueDate: task.dueDate,
-            startDate: task.startDate,
             duration: task.duration || 60,
             priority: task.priority || "none",
             status: task.status,

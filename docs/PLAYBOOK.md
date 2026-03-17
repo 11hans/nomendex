@@ -129,7 +129,7 @@ Tasks with dates are automatically synced to **Apple Calendar** via the native E
 | Calendar name | **Nomendex Tasks** (auto-created) |
 | All-day events | When task has date only (no time) |
 | Timed events | When task has date + time |
-| Time range | `startDate` → event start, `dueDate` → event end |
+| Time range | `scheduledStart` → event start, `scheduledEnd` → event end (deadline `dueDate` is kept separate) |
 | High priority | 🔴 Alarm 15 minutes before |
 | Medium priority | 🟡 Alarm 30 minutes before |
 | Done tasks | Prefixed with ✅ in calendar |

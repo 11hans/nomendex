@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { parseLocalDateString } from "@/features/notes/date-utils";
-import { DateTimePicker } from "./pickers";
+import { ScheduledDateTimePicker } from "./pickers";
 import { useTheme } from "@/hooks/useTheme";
 
 function parseChecklistLines(description: string) {
@@ -31,6 +31,42 @@ function toggleChecklistItem(description: string, lineIndex: number): string {
 
 function hasChecklistItems(description?: string): boolean {
     return !!description && /^-\s*\[[ xX]\]/m.test(description);
+}
+
+function formatScheduleDisplay(start?: string, end?: string): string | null {
+    if (!start && !end) return null;
+
+    const formatDay = (value: string) =>
+        parseLocalDateString(value.split("T")[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const formatTime = (value: string) => (value.includes("T") ? value.split("T")[1] : null);
+
+    if (start && end) {
+        const startDay = start.split("T")[0];
+        const endDay = end.split("T")[0];
+        const startTime = formatTime(start);
+        const endTime = formatTime(end);
+
+        if (startDay === endDay) {
+            if (!startTime && !endTime) return formatDay(start);
+            return `${formatDay(start)}${startTime ? `, ${startTime}` : ""} - ${endTime ?? "?"}`;
+        }
+
+        const startPart = `${formatDay(start)}${startTime ? `, ${startTime}` : ""}`;
+        const endPart = `${formatDay(end)}${endTime ? `, ${endTime}` : ""}`;
+        return `${startPart} - ${endPart}`;
+    }
+
+    if (start) {
+        const time = formatTime(start);
+        return `${formatDay(start)}${time ? ` ${time}` : ""}`;
+    }
+
+    if (end) {
+        const time = formatTime(end);
+        return `${formatDay(end)}${time ? ` ${time}` : ""}`;
+    }
+
+    return null;
 }
 
 /**
@@ -60,7 +96,7 @@ export function TodoCard({
     hideProject?: boolean;
     onToggleDone?: (todo: Todo) => void;
     hideStatusIcon?: boolean;
-    onDateChange?: (todo: Todo, dates: { dueDate?: string; startDate?: string }) => void;
+    onDateChange?: (todo: Todo, dates: { scheduledStart?: string; scheduledEnd?: string }) => void;
     onChecklistToggle?: (todo: Todo, newDescription: string) => void;
 }) {
     const { currentTheme } = useTheme();
@@ -82,12 +118,15 @@ export function TodoCard({
         }
     };
 
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const isOverdue = Boolean(
         todo.dueDate
         && todo.status !== "done"
         && !Number.isNaN(new Date(todo.dueDate).getTime())
-        && new Date(todo.dueDate).getTime() < Date.now()
+        && new Date(todo.dueDate).getTime() < startOfToday
     );
+    const scheduleLabel = formatScheduleDisplay(todo.scheduledStart, todo.scheduledEnd);
     const priorityColor = todo.priority ? PRIORITY_CONFIG.find((item) => item.value === todo.priority)?.color : undefined;
 
     return (
@@ -201,36 +240,39 @@ export function TodoCard({
                 <div className="min-w-0 flex-1">
                     {onDateChange ? (
                         <div
-                            className={`inline-flex max-w-full ${!todo.dueDate ? 'opacity-0 group-hover/card:opacity-100' : ''} transition-opacity`}
+                            className={`inline-flex max-w-full ${!(todo.scheduledStart || todo.scheduledEnd) ? 'opacity-0 group-hover/card:opacity-100' : ''} transition-opacity`}
                             onClick={(e) => { e.stopPropagation(); }}
                             onDoubleClick={(e) => { e.stopPropagation(); }}
                             onPointerDown={(e) => { e.stopPropagation(); }}
                         >
-                            <DateTimePicker
-                                dueDate={todo.dueDate}
-                                startDate={todo.startDate}
+                            <ScheduledDateTimePicker
+                                scheduledStart={todo.scheduledStart}
+                                scheduledEnd={todo.scheduledEnd}
                                 onChange={(dates) => onDateChange(todo, dates)}
                                 compact
                             />
                         </div>
                     ) : (
-                        todo.dueDate ? (
-                            <p
-                                className="text-caption flex items-center gap-1 truncate"
-                                style={{ color: isOverdue ? currentTheme.styles.semanticDestructive : currentTheme.styles.contentTertiary }}
-                            >
-                                <CalendarDays className="size-3 shrink-0" />
-                                <span className="truncate">
-                                    {parseLocalDateString(todo.dueDate.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                                    {(() => {
-                                        const startTime = todo.startDate?.includes('T') ? todo.startDate.split('T')[1] : null;
-                                        const dueTime = todo.dueDate.includes('T') ? todo.dueDate.split('T')[1] : null;
-                                        if (startTime && dueTime) return ` ${startTime}–${dueTime}`;
-                                        if (dueTime) return ` ${dueTime}`;
-                                        return null;
-                                    })()}
-                                </span>
-                            </p>
+                        scheduleLabel || isOverdue ? (
+                            <div className="flex items-center gap-2 min-w-0">
+                                {scheduleLabel && (
+                                    <p
+                                        className="text-caption flex items-center gap-1 truncate"
+                                        style={{ color: currentTheme.styles.contentTertiary }}
+                                    >
+                                        <CalendarDays className="size-3 shrink-0" />
+                                        <span className="truncate">{scheduleLabel}</span>
+                                    </p>
+                                )}
+                                {isOverdue && (
+                                    <span
+                                        className="text-caption shrink-0 font-medium"
+                                        style={{ color: currentTheme.styles.semanticDestructive }}
+                                    >
+                                        Overdue
+                                    </span>
+                                )}
+                            </div>
                         ) : (
                             <div />
                         )

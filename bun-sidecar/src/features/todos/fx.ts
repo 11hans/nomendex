@@ -5,9 +5,10 @@ import { createServiceLogger } from "@/lib/logger";
 import { Todo } from "./todo-types";
 import { FileDatabase } from "@/storage/FileDatabase";
 import path from "path";
-import { getTodosPath, hasActiveWorkspace } from "@/storage/root-path";
+import { getNomendexPath, getTodosPath, hasActiveWorkspace } from "@/storage/root-path";
 import type { Attachment } from "@/types/attachments";
 import { BoardConfig } from "./board-types";
+import { mkdir } from "node:fs/promises";
 
 // Create logger for todos plugin
 const todosLogger = createServiceLogger("TODOS");
@@ -19,6 +20,14 @@ let boardConfigDb: FileDatabase<BoardConfig> | null = null;
 
 function getBoardConfigPath(): string {
     return path.join(getTodosPath(), "..", "board-configs");
+}
+
+function getTodosLegacyDateMigrationMarkerPath(): string {
+    return path.join(getNomendexPath(), "migrations", "todos-schedule-deadline-v1.done");
+}
+
+function getTodosScheduleFieldRenameMigrationMarkerPath(): string {
+    return path.join(getNomendexPath(), "migrations", "todos-schedule-fields-v2.done");
 }
 
 /**
@@ -35,6 +44,11 @@ export async function initializeTodosService(): Promise<void> {
     // NEW: Initialize board config database
     boardConfigDb = new FileDatabase<BoardConfig>(getBoardConfigPath());
     await boardConfigDb.initialize();
+
+    // One-off migration: interpret legacy due/start as schedule fields.
+    await runTodosLegacyDateMigrationIfNeeded();
+    // One-off migration: rename scheduledStartAt/scheduledEndAt -> scheduledStart/scheduledEnd.
+    await runTodosScheduleFieldRenameMigrationIfNeeded();
     todosLogger.info("Todos service initialized");
 }
 
@@ -43,6 +57,266 @@ function getDb(): FileDatabase<Todo> {
         throw new Error("Todos service not initialized. Call initializeTodosService() first.");
     }
     return todosDb;
+}
+
+function hasOwnKey(obj: object, key: string): boolean {
+    return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function formatDateValue(value: Date): string {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    const hours = value.getHours();
+    const minutes = value.getMinutes();
+    const seconds = value.getSeconds();
+    const milliseconds = value.getMilliseconds();
+
+    if (hours === 0 && minutes === 0 && seconds === 0 && milliseconds === 0) {
+        return `${year}-${month}-${day}`;
+    }
+
+    return `${year}-${month}-${day}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function normalizeDateField(value: unknown): string | undefined {
+    if (value == null) {
+        return undefined;
+    }
+
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (!trimmed) return undefined;
+        // Validate format: must be YYYY-MM-DD or YYYY-MM-DDTHH:mm
+        if (parseLocalScheduleDate(trimmed) === undefined) {
+            return undefined;
+        }
+        return trimmed;
+    }
+
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+        return formatDateValue(value);
+    }
+
+    return undefined;
+}
+
+function normalizeDurationField(value: unknown): number | undefined {
+    if (value == null) {
+        return undefined;
+    }
+
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+        return undefined;
+    }
+
+    const rounded = Math.round(value);
+    return rounded > 0 ? rounded : undefined;
+}
+
+function parseLocalScheduleDate(value: string): Date | undefined {
+    const dateTimeMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+    if (dateTimeMatch) {
+        const [, yearStr, monthStr, dayStr, hourStr, minuteStr] = dateTimeMatch;
+        const year = Number(yearStr);
+        const month = Number(monthStr);
+        const day = Number(dayStr);
+        const hour = Number(hourStr);
+        const minute = Number(minuteStr);
+
+        if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day) || !Number.isInteger(hour) || !Number.isInteger(minute)) {
+            return undefined;
+        }
+
+        const parsed = new Date(year, month - 1, day, hour, minute, 0, 0);
+        if (
+            parsed.getFullYear() !== year
+            || parsed.getMonth() !== month - 1
+            || parsed.getDate() !== day
+            || parsed.getHours() !== hour
+            || parsed.getMinutes() !== minute
+        ) {
+            return undefined;
+        }
+        return parsed;
+    }
+
+    const dateMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateMatch) {
+        const [, yearStr, monthStr, dayStr] = dateMatch;
+        const year = Number(yearStr);
+        const month = Number(monthStr);
+        const day = Number(dayStr);
+
+        if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+            return undefined;
+        }
+
+        const parsed = new Date(year, month - 1, day, 0, 0, 0, 0);
+        if (
+            parsed.getFullYear() !== year
+            || parsed.getMonth() !== month - 1
+            || parsed.getDate() !== day
+        ) {
+            return undefined;
+        }
+        return parsed;
+    }
+
+    return undefined;
+}
+
+function deriveDurationFromSchedule(scheduledStart?: string, scheduledEnd?: string): number | undefined {
+    if (!scheduledStart || !scheduledEnd) {
+        return undefined;
+    }
+
+    const startHasTime = scheduledStart.includes("T");
+    const endHasTime = scheduledEnd.includes("T");
+    if (!startHasTime && !endHasTime) {
+        return undefined;
+    }
+
+    const startDate = parseLocalScheduleDate(scheduledStart);
+    const endDate = parseLocalScheduleDate(scheduledEnd);
+    if (!startDate || !endDate) {
+        return undefined;
+    }
+
+    const diffMinutes = Math.round((endDate.getTime() - startDate.getTime()) / 60000);
+    return diffMinutes > 0 ? diffMinutes : undefined;
+}
+
+function resolveLegacyScheduleFields(startValue: unknown, dueValue: unknown): {
+    scheduledStart?: string;
+    scheduledEnd?: string;
+} {
+    const legacyStart = normalizeDateField(startValue);
+    const legacyDue = normalizeDateField(dueValue);
+
+    if (legacyStart && legacyDue) {
+        return {
+            scheduledStart: legacyStart,
+            scheduledEnd: legacyDue,
+        };
+    }
+
+    if (legacyStart) {
+        return {
+            scheduledStart: legacyStart,
+            scheduledEnd: undefined,
+        };
+    }
+
+    if (legacyDue) {
+        return {
+            scheduledStart: legacyDue,
+            scheduledEnd: undefined,
+        };
+    }
+
+    return {
+        scheduledStart: undefined,
+        scheduledEnd: undefined,
+    };
+}
+
+async function runTodosLegacyDateMigrationIfNeeded(): Promise<void> {
+    const markerPath = getTodosLegacyDateMigrationMarkerPath();
+    const markerFile = Bun.file(markerPath);
+
+    if (await markerFile.exists()) {
+        todosLogger.info("Todos date migration already applied, skipping");
+        return;
+    }
+
+    const todos = await getDb().findAll();
+    let migratedCount = 0;
+
+    // Intentionally migrate all todos, including status="done".
+    // We preserve historical schedule context uniformly and avoid
+    // introducing status-based migration branches.
+    for (const todo of todos) {
+        const rawTodo = todo as unknown as Record<string, unknown>;
+        const hasLegacyStartKey = hasOwnKey(rawTodo, "startDate");
+        const hasLegacyDueKey = hasOwnKey(rawTodo, "dueDate");
+
+        if (!hasLegacyStartKey && !hasLegacyDueKey) {
+            continue;
+        }
+
+        const { scheduledStart, scheduledEnd } = resolveLegacyScheduleFields(rawTodo.startDate, rawTodo.dueDate);
+
+        const migrationUpdates = {
+            updatedAt: new Date().toISOString(),
+            startDate: undefined,
+            dueDate: undefined,
+            scheduledStart,
+            scheduledEnd,
+        } as Partial<Todo> & Record<string, unknown>;
+
+        await getDb().update(todo.id, migrationUpdates as Partial<Todo>);
+        migratedCount += 1;
+    }
+
+    await mkdir(path.dirname(markerPath), { recursive: true });
+    await Bun.write(markerPath, JSON.stringify({
+        migratedAt: new Date().toISOString(),
+        migratedCount,
+    }, null, 2));
+
+    todosLogger.info(`Todos legacy date migration complete (${migratedCount} records migrated)`);
+}
+
+// Cleans up `scheduledStartAt`/`scheduledEndAt` field names from the initial dev branch
+// implementation, renaming them to the final `scheduledStart`/`scheduledEnd` convention.
+async function runTodosScheduleFieldRenameMigrationIfNeeded(): Promise<void> {
+    const markerPath = getTodosScheduleFieldRenameMigrationMarkerPath();
+    const markerFile = Bun.file(markerPath);
+
+    if (await markerFile.exists()) {
+        todosLogger.info("Todos schedule field rename migration already applied, skipping");
+        return;
+    }
+
+    const todos = await getDb().findAll();
+    let migratedCount = 0;
+
+    for (const todo of todos) {
+        const rawTodo = todo as unknown as Record<string, unknown>;
+        const hasOldStartKey = hasOwnKey(rawTodo, "scheduledStartAt");
+        const hasOldEndKey = hasOwnKey(rawTodo, "scheduledEndAt");
+
+        if (!hasOldStartKey && !hasOldEndKey) {
+            continue;
+        }
+
+        const oldScheduledStart = normalizeDateField(rawTodo.scheduledStartAt);
+        const oldScheduledEnd = normalizeDateField(rawTodo.scheduledEndAt);
+        const hasNewStart = hasOwnKey(rawTodo, "scheduledStart");
+        const hasNewEnd = hasOwnKey(rawTodo, "scheduledEnd");
+        const normalizedNewStart = normalizeDateField(rawTodo.scheduledStart);
+        const normalizedNewEnd = normalizeDateField(rawTodo.scheduledEnd);
+
+        const migrationUpdates = {
+            updatedAt: new Date().toISOString(),
+            scheduledStart: hasNewStart ? normalizedNewStart : oldScheduledStart,
+            scheduledEnd: hasNewEnd ? normalizedNewEnd : oldScheduledEnd,
+            scheduledStartAt: undefined,
+            scheduledEndAt: undefined,
+        } as Partial<Todo> & Record<string, unknown>;
+
+        await getDb().update(todo.id, migrationUpdates as Partial<Todo>);
+        migratedCount += 1;
+    }
+
+    await mkdir(path.dirname(markerPath), { recursive: true });
+    await Bun.write(markerPath, JSON.stringify({
+        migratedAt: new Date().toISOString(),
+        migratedCount,
+    }, null, 2));
+
+    todosLogger.info(`Todos schedule field rename migration complete (${migratedCount} records migrated)`);
 }
 
 async function getTodos(input: { project?: string }) {
@@ -104,9 +378,10 @@ async function createTodo(input: {
     project?: string;
     status?: "todo" | "in_progress" | "done" | "later";
     tags?: string[];
-    dueDate?: string;
+    scheduledStart?: string | null;
+    scheduledEnd?: string | null;
+    dueDate?: string | null;
     priority?: "high" | "medium" | "low" | "none";
-    startDate?: string;
     duration?: number;
     attachments?: Attachment[];
     customColumnId?: string;
@@ -152,6 +427,13 @@ async function createTodo(input: {
             slug = Math.random().toString(36).substr(2, 6);
         }
 
+        const scheduledStart = normalizeDateField(input.scheduledStart);
+        const scheduledEnd = normalizeDateField(input.scheduledEnd);
+        const deadlineDueDate = normalizeDateField(input.dueDate);
+        const requestedDuration = normalizeDurationField(input.duration);
+        const derived = scheduledEnd ? deriveDurationFromSchedule(scheduledStart, scheduledEnd) : undefined;
+        const duration = derived ?? requestedDuration;
+
         const now = new Date().toISOString();
         const newTodo: Todo = {
             id: `todo-${slug}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -164,11 +446,12 @@ async function createTodo(input: {
             project: input.project,
             order: maxOrder + 1,
             tags: input.tags,
-            dueDate: input.dueDate,
+            scheduledStart,
+            scheduledEnd,
+            dueDate: deadlineDueDate,
             priority: input.priority,
             completedAt: status === "done" ? now : undefined,
-            startDate: input.startDate,
-            duration: input.duration,
+            duration,
             attachments: input.attachments,
             customColumnId: input.customColumnId,
         };
@@ -193,10 +476,11 @@ async function updateTodo(input: {
         archived?: boolean;
         order?: number;
         tags?: string[];
+        scheduledStart?: string | null;
+        scheduledEnd?: string | null;
         dueDate?: string | null;
         priority?: "high" | "medium" | "low" | "none";
         completedAt?: string;
-        startDate?: string | null;
         duration?: number | null;
         attachments?: Attachment[];
         customColumnId?: string;
@@ -214,15 +498,59 @@ async function updateTodo(input: {
             }
         }
 
+        const currentTodo = await getDb().findById(input.todoId);
+        if (!currentTodo) {
+            todosLogger.warn(`Todo not found for update: ${input.todoId}`);
+            throw new Error(`Todo with ID ${input.todoId} not found`);
+        }
+
         let updates = {
             ...input.updates,
             updatedAt: new Date().toISOString(),
-        };
+        } as Partial<Todo>;
+
+        if (hasOwnKey(input.updates, "scheduledStart")) {
+            updates.scheduledStart = normalizeDateField(input.updates.scheduledStart);
+        }
+
+        if (hasOwnKey(input.updates, "scheduledEnd")) {
+            updates.scheduledEnd = normalizeDateField(input.updates.scheduledEnd);
+        }
+
+        if (hasOwnKey(input.updates, "dueDate")) {
+            updates.dueDate = normalizeDateField(input.updates.dueDate);
+        }
+
+        if (hasOwnKey(input.updates, "duration")) {
+            updates.duration = normalizeDurationField(input.updates.duration);
+        }
+
+        const shouldReconcileDuration = hasOwnKey(input.updates, "scheduledStart")
+            || hasOwnKey(input.updates, "scheduledEnd")
+            || hasOwnKey(input.updates, "duration");
+
+        if (shouldReconcileDuration) {
+            const nextScheduledStart = hasOwnKey(input.updates, "scheduledStart")
+                ? updates.scheduledStart
+                : currentTodo.scheduledStart;
+            const nextScheduledEnd = hasOwnKey(input.updates, "scheduledEnd")
+                ? updates.scheduledEnd
+                : currentTodo.scheduledEnd;
+
+            // Range schedule is authoritative; when scheduledEnd exists, duration is derived from it.
+            // For date-only ranges (no time component), deriveDurationFromSchedule returns undefined;
+            // in that case we preserve the existing duration rather than clearing it.
+            if (nextScheduledEnd) {
+                const derived = deriveDurationFromSchedule(nextScheduledStart, nextScheduledEnd);
+                if (derived !== undefined) {
+                    updates.duration = derived;
+                }
+            }
+        }
 
         // If status is changing, assign new order for the target status
         if (input.updates.status) {
-            const currentTodo = await getDb().findById(input.todoId);
-            if (currentTodo && currentTodo.status !== input.updates.status) {
+            if (currentTodo.status !== input.updates.status) {
                 // Get existing todos to determine next order for new status
                 const existingTodos = await getDb().findAll();
                 const todosInNewStatus = existingTodos.filter(t =>
@@ -247,7 +575,7 @@ async function updateTodo(input: {
         const updated = await getDb().update(input.todoId, updates as Partial<Todo>);
 
         if (!updated) {
-            todosLogger.warn(`Todo not found for update: ${input.todoId}`);
+            todosLogger.warn(`Todo not found for update after write: ${input.todoId}`);
             throw new Error(`Todo with ID ${input.todoId} not found`);
         }
 

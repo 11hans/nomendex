@@ -112,7 +112,7 @@ export async function getTodosCommands(context: CommandContext): Promise<Command
                 try {
                     toast.info("Fetching todos...");
                     const allTodos = await todosAPI.getTodos();
-                    const toSync = allTodos.filter(t => t.dueDate || t.startDate);
+                    const toSync = allTodos.filter(t => t.scheduledStart || t.scheduledEnd);
 
                     if (toSync.length === 0) {
                         toast.info("No todos with dates found to sync.");

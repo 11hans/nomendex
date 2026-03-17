@@ -7,7 +7,7 @@ Tasks with dates and priorities are automatically synced to Apple Calendar and A
 1. **Apple Calendar**: When a user saves, moves, or deletes a task that has dates, the app syncs the corresponding event to Apple Calendar under a dedicated **"Nomendex Tasks"** calendar. It also features **Two-Way Sync**, where changes made directly in Calendar.app (e.g. moving or deleting events) are reflected back to Nomendex.
 2. **Apple Reminders**: Tasks with a priority of **high** or **medium** are automatically synced to a dedicated "Nomendex Tasks" list in Apple Reminders, complete with alarms. It also features **Two-Way Sync**, where completing a task in Reminders.app marks it as done in Nomendex, and changing its title or due date updates the markdown file as well.
 
-The integration is macOS-only, using the `WKScriptMessageHandler` bridge pattern for outgoing sync and `evaluateJavaScript` for incoming sync.
+The integration is macOS-only, using the `WKScriptMessageHandler` bridge pattern for outgoing sync and `evaluateJavaScript` for incoming sync. Outgoing sync builds events from `scheduledStart`/`scheduledEnd`, while `dueDate` is preserved as the deadline metadata (overdue logic lives in Nomendex, not the calendar).
 
 ## Architecture
 
@@ -32,7 +32,7 @@ Calendar.app
   ↓ EKEventStoreChangedNotification
 CalendarManager.swift (detectChanges)
   ↓ evaluateJavaScript -> window.__onCalendarChange
-calendar-change-bridge.ts
+calendar-change-bridge.ts (writes back `scheduledStart`/`scheduledEnd` plus deadline updates)
   ↓ todosAPI.updateTodo
 FileDatabase (markdown updated)
 ```
@@ -49,7 +49,7 @@ Calendar sync fires automatically on three events:
 
 The bridge functions are no-ops when:
 - Not running inside the native macOS app (no `window.webkit`)
-- Task has no `dueDate` and no `startDate`
+- Task has no `scheduledStart` and no `scheduledEnd`
 
 ### Manual Sync (Force Sync)
 
@@ -60,7 +60,8 @@ Users can manually trigger a full synchronization of all tasks that have dates c
 
 Force sync performs a **delete-and-recreate** cycle:
 1. Sends a `purge` action to Swift which deletes all Nomendex calendars (e.g. "Nomendex Tasks", "Nomendex - ProjectName")
-2. Upserts each task with a `startDate` or `dueDate` — this recreates the calendars and events from scratch
+2. Upserts each task that has `scheduledStart`/`scheduledEnd` (and includes `dueDate` for metadata) — this recreates the calendars and events from scratch
+   - Only tasks that carry scheduled info are synced; we no longer treat `dueDate` alone as enough to create a calendar event.
 
 Color behavior during purge/recreate:
 - Before delete, Swift stores each Nomendex calendar color (`cgColor`)
@@ -78,8 +79,9 @@ This approach avoids the need to read existing events (which requires full calen
 | Event lookup | Cached `eventIdentifier` first, then `nomendex://task/{id}` URL fallback |
 | All-day events | Created when task has date only (no time) |
 | Timed events | Created when task has date + time |
-| Time range | `startDate` → event start, `dueDate` → event end |
-| Duration fallback | If only `dueDate` with time: start = due − duration (default 60 min) |
+| Time range | `scheduledStart` → event start, `scheduledEnd` → event end |
+| Duration precedence | When `scheduledEnd` is set, it wins; `duration` is derived/ignored for end-time decisions |
+| Duration fallback | If only `scheduledStart` (with time): end = start + duration (default 60 min) |
 | High priority | 🔴 Alarm 15 minutes before |
 | Medium priority | 🟡 Alarm 30 minutes before |
 | Done tasks | Prefixed with ✅ in calendar title |
@@ -96,7 +98,7 @@ event.calendar = getOrCreateCalendar()  // "Nomendex Tasks"
 
 ### Date Parsing
 
-The Swift side handles both date formats:
+Swift parses the incoming `scheduledStart`/`scheduledEnd` strings (and reads `dueDate` for metadata) using the same local ISO formats:
 
 ```swift
 // "2026-02-16T14:00" → DateFormatter with "yyyy-MM-dd'T'HH:mm"
@@ -119,8 +121,9 @@ window.webkit.messageHandlers.calendarSync.postMessage({
     taskId: task.id,
     title: task.title,
     description: task.description || "",
+    scheduledStart: task.scheduledStart,
+    scheduledEnd: task.scheduledEnd,
     dueDate: task.dueDate,
-    startDate: task.startDate,
     duration: task.duration || 60,
     priority: task.priority || "none",
     status: task.status,

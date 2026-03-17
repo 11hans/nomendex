@@ -130,22 +130,16 @@ class CalendarManager {
                 if oldState.startDate != newState.startDate || oldState.endDate != newState.endDate || oldState.isAllDay != newState.isAllDay {
                     hasChanges = true
 
-                    let formatter = DateFormatter()
-                    formatter.locale = Locale(identifier: "en_US_POSIX")
-                    formatter.timeZone = TimeZone.current
-
-                    if let date = newState.startDate {
-                        formatter.dateFormat = newState.isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm"
-                        syncPayload["startDate"] = formatter.string(from: date)
+                    if let formattedStart = formatScheduledDate(newState.startDate, isAllDay: newState.isAllDay) {
+                        syncPayload["scheduledStart"] = formattedStart
                     } else {
-                        syncPayload["startDate"] = NSNull()
+                        syncPayload["scheduledStart"] = NSNull()
                     }
 
-                    if let date = newState.endDate {
-                        formatter.dateFormat = newState.isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm"
-                        syncPayload["dueDate"] = formatter.string(from: date)
+                    if let formattedEnd = formatScheduledDate(newState.endDate, isAllDay: newState.isAllDay) {
+                        syncPayload["scheduledEnd"] = formattedEnd
                     } else {
-                        syncPayload["dueDate"] = NSNull()
+                        syncPayload["scheduledEnd"] = NSNull()
                     }
                 }
 
@@ -317,31 +311,38 @@ class CalendarManager {
             event.notes = description
         }
 
-        // Parse dates
-        let dueDate = taskData["dueDate"] as? String
-        let startDate = taskData["startDate"] as? String
+        // Parse dates (scheduled fields preferred)
+        let scheduledStart = taskData["scheduledStart"] as? String
+        let scheduledEnd = taskData["scheduledEnd"] as? String
         let duration = taskData["duration"] as? Int ?? 60
 
-        if let startDateStr = startDate, let start = parseISO(startDateStr) {
+        var start: Date?
+        var end: Date?
+        var isAllDay = false
+
+        if let scheduledStart = scheduledStart, let parsed = parseISO(scheduledStart) {
+            start = parsed
+            isAllDay = !scheduledStart.contains("T")
+        }
+
+        if let scheduledEnd = scheduledEnd, let parsed = parseISO(scheduledEnd) {
+            end = parsed
+            if start == nil {
+                start = parsed
+                isAllDay = !scheduledEnd.contains("T")
+            }
+        }
+
+        if let start = start {
             event.startDate = start
-            if let dueDateStr = dueDate, let end = parseISO(dueDateStr) {
+            if let end = end {
                 event.endDate = end
+            } else if isAllDay {
+                event.endDate = start
             } else {
                 event.endDate = start.addingTimeInterval(TimeInterval(duration * 60))
             }
-            event.isAllDay = !startDateStr.contains("T")
-        } else if let dueDateStr = dueDate, let due = parseISO(dueDateStr) {
-            if dueDateStr.contains("T") {
-                // Time-specific: use due as start, calculate end from duration
-                event.startDate = due
-                event.endDate = due.addingTimeInterval(TimeInterval(duration * 60))
-                event.isAllDay = false
-            } else {
-                // All-day event
-                event.startDate = due
-                event.endDate = due
-                event.isAllDay = true
-            }
+            event.isAllDay = isAllDay
         } else {
             // No dates — nothing to sync
             sendResult(webView: webView, callback: callback, success: true, error: nil)
@@ -476,6 +477,15 @@ class CalendarManager {
         }
 
         return keeper
+    }
+
+    private func formatScheduledDate(_ date: Date?, isAllDay: Bool) -> String? {
+        guard let date = date else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
+        formatter.dateFormat = isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm"
+        return formatter.string(from: date)
     }
 
     private func parseISO(_ string: String) -> Date? {

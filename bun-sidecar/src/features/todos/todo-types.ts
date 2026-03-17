@@ -13,10 +13,15 @@ export const TodoSchema = z.object({
     project: z.string().optional(),
     order: z.number().optional(),
     tags: z.array(z.string()).optional(),
+    scheduledStart: z.string().optional(),
+    scheduledEnd: z.string().optional(),
+    // Semantic note:
+    // `dueDate` now means deadline only.
+    // Historical data used this field as schedule; startup migrations move that schedule
+    // data into `scheduledStart`/`scheduledEnd` and clear `dueDate`.
     dueDate: z.string().optional(),
     priority: z.enum(["high", "medium", "low", "none"]).optional(),
     completedAt: z.string().optional(),
-    startDate: z.string().optional(),
     duration: z.number().optional(),
     attachments: z.array(AttachmentSchema).optional(),
 });

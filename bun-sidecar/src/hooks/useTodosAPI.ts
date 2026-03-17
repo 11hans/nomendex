@@ -8,9 +8,10 @@ interface CreateTodoInput {
     project?: string;
     status?: "todo" | "in_progress" | "done" | "later";
     tags?: string[];
+    scheduledStart?: string | null;
+    scheduledEnd?: string | null;
     dueDate?: string | null;
     priority?: "high" | "medium" | "low" | "none";
-    startDate?: string;
     duration?: number;
     attachments?: Attachment[];
     customColumnId?: string;
@@ -25,9 +26,10 @@ interface UpdateTodoInput {
         project?: string;
         archived?: boolean;
         tags?: string[];
+        scheduledStart?: string | null;
+        scheduledEnd?: string | null;
         dueDate?: string | null;
         priority?: "high" | "medium" | "low" | "none";
-        startDate?: string | null;
         duration?: number | null;
         attachments?: Attachment[];
         customColumnId?: string;

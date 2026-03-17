@@ -1,113 +1,96 @@
 # Start Date & Time Range
 
-Tasks support both a start date/time and a due date/time, enabling time range display for scheduled tasks.
+Tasks now distinguish schedule (calendar/today) information from deadlines. The UI, API, and native integrations all look at `scheduledStart`/`scheduledEnd` to understand when an event happens, while `dueDate` is reserved for the deadline that drives overdue highlighting and deadline reminders.
 
 ## Overview
 
-Previously tasks only had a `dueDate` (date only). Now tasks support:
-- **Start date/time** — when the task begins
-- **Due date/time** — when the task is due (deadline)
-- **Duration** — length in minutes (default 60, reserved for future use)
+Previously there was a single `dueDate` field (and the optional `startDate` extension), which conflated schedule and deadline semantics. The current model separates those ideas:
 
-Both dates support an optional time component for scheduling within a day.
+- **`scheduledStart`** — when the task is scheduled to start (date or datetime, in local time). This is the value that calendars, today views, and schedule buckets examine first.
+- **`scheduledEnd`** — optional end point for multi-day ranges or time windows. When present, calendar events span from `scheduledStart` to `scheduledEnd`.
+- **`dueDate`** — the deadline. This field still supports dates and datetimes, but it no longer drives the schedule view. Use it for overdue detection, deadline badges, and `TodoCard`’s deadline display.
+- **`duration`** — length in minutes (defaults to 60). It is still used when a native calendar event needs a fallback end time and (`scheduledEnd` is missing).
 
 ## Date Format
 
-Combined ISO string format, backwards compatible with existing date-only values:
+All dates still use local ISO strings:
 
 | Type | Format | Example |
 |------|--------|---------|
 | Date only (all-day) | `YYYY-MM-DD` | `2026-02-16` |
 | Date + time | `YYYY-MM-DDThh:mm` | `2026-02-16T14:00` |
 
-Time detection is based on the presence of `T` in the string:
-
-```typescript
-const hasTime = dateString.includes('T');
-```
+Time detection still relies on the presence of `T`.
 
 ## Data
 
-Stored in task YAML frontmatter:
-
 ```yaml
-startDate: "2026-02-16T14:00"
-dueDate: "2026-02-16T15:00"
-duration: 60  # minutes, default 60
+scheduledStart: "2026-02-16T14:00"
+scheduledEnd: "2026-02-16T15:00"
+dueDate: "2026-02-16T16:00"
+duration: 60
 ```
 
-### Schema
+Legacy YAML may still contain `startDate`; startup migration removes it and rehydrates `scheduledStart`/`scheduledEnd`.
+
+## Schema
 
 ```typescript
 // todo-types.ts
-startDate: z.string().optional()
+scheduledStart: z.string().optional()
+scheduledEnd: z.string().optional()
 dueDate: z.string().optional()
 duration: z.number().optional()
 ```
 
 ## Editor UI
 
-Two date/time pickers in the `TaskCardEditor` footer:
+The editor now shows two separate pickers in the footer:
 
-1. **📅 Due Date** (calendar icon) — deadline / end time
-2. **→ Start Date** (arrow icon) — start time
+1. **Scheduled Range (`ScheduledDateTimePicker`)** — This range picker edits `scheduledStart`/`scheduledEnd`. It handles single-day or multi-day spans, optional times, and writing those fields independently of the deadline.
+2. **Deadline (`DateTimePicker`)** — This picker edits `dueDate` only. It shows due-time input, overdue coloring, and the compact pill for inline editing. Clearing this control removes the deadline without touching the scheduled range.
 
-Each opens a popover containing:
-- Calendar date picker (day selection)
-- Optional `<input type="time">` for selecting hours and minutes
-
-Setting a time converts the date from `YYYY-MM-DD` to `YYYY-MM-DDThh:mm`. Clearing the time reverts to date-only format.
+The separation keeps schedule edits (calendar/today) and deadline edits orthogonal, so inline updates, dialogs, and integrations don’t accidentally mix the two concerns.
 
 ## Card Display
 
-`TodoCard` renders time information intelligently based on available data:
+`TodoCard` now uses `scheduledStart`/`scheduledEnd` to show the task’s scheduled window. When both fields are present, it renders the range; when only `scheduledStart` exists it shows the single date/time.
 
-| Scenario | Display | Example |
-|----------|---------|---------|
-| Date only | `MMM DD` | `Feb 16` |
-| Due time only | `MMM DD HH:MM` | `Feb 16 14:00` |
-| Start + Due time | `MMM DD HH:MM–HH:MM` | `Feb 16 14:00–15:00` |
-
-```typescript
-// TodoCard.tsx — time range rendering
-const startTime = todo.startDate?.includes('T') ? todo.startDate.split('T')[1] : null;
-const dueTime = todo.dueDate.includes('T') ? todo.dueDate.split('T')[1] : null;
-if (startTime && dueTime) return ` ${startTime}–${dueTime}`;
-if (dueTime) return ` ${dueTime}`;
-```
+Deadline information still comes from `dueDate`. Overdue coloring, inline date pills, and `TodoCard`’s overdue badge only respond to `dueDate`, so scheduled changes don’t ring the overdue alarm unless the deadline moves.
 
 ## API
 
-Both `createTodo` and `updateTodo` accept `startDate` and `duration`:
+Both `createTodo` and `updateTodo` now accept:
 
 ```typescript
-// createTodo input
-startDate?: string    // ISO date or datetime
-duration?: number     // minutes
-
-// updateTodo input
-updates: {
-    startDate?: string
-    duration?: number
-    dueDate?: string  // existing field, now supports time
-}
+scheduledStart?: string | null
+scheduledEnd?: string | null
+dueDate?: string | null
+duration?: number | null
 ```
+
+### Duration vs Scheduled End
+
+- If `scheduledEnd` is present, it is authoritative for the event end. `duration` is derived from `scheduledStart -> scheduledEnd` when possible.
+- If only `scheduledStart` is present, `duration` is used by native calendar sync as the fallback to compute end time (`start + duration`, default 60).
+- This prevents conflicting data like `scheduledEnd = 15:00` together with `duration = 120`.
 
 ## Clearing Date & Time
 
-Clicking the **X** button next to the date pill clears both `dueDate` and `startDate`. The editor sets them to `undefined`, and the save handler converts to explicit `null` before sending to the API (since `JSON.stringify` drops `undefined` keys). The storage layer then strips `null` fields from the YAML file.
+The schedule picker clears `scheduledStart`/`scheduledEnd`; the deadline picker clears `dueDate`. Clearing one does not affect the other, so you can remove a deadline while keeping the event scheduled, or vice versa.
 
 ## File Structure
 
 ```
 bun-sidecar/src/features/todos/
-├── todo-types.ts        # startDate, duration fields in TodoSchema
-├── TaskCardEditor.tsx   # Time picker in Due Date popover + Start Date pill
-├── TodoCard.tsx          # Time range display logic
-├── browser-view.tsx     # Fields included in handleSaveTodo
-├── index.ts             # Updated function stubs
-└── fx.ts                # startDate, duration in create/update
+├── todo-types.ts            # scheduledStart/scheduledEnd/dueDate schema
+├── TaskCardEditor.tsx       # Two pickers: schedule + deadline
+├── TodoCard.tsx             # Displays schedule from scheduled* , overdue state from dueDate
+├── ScheduledDateTimePicker.tsx # Range picker for writing scheduled* fields
+├── DateTimePicker.tsx       # Deadline-only picker that changes dueDate
+├── browser-view.tsx         # Sends scheduled* + dueDate, respects new semantics
+└── fx.ts                    # create/update handle scheduled* + dueDate
 
 bun-sidecar/src/hooks/
-└── useTodosAPI.ts       # startDate, duration in API types
+└── useTodosAPI.ts           # Input types for scheduled* / dueDate
 ```

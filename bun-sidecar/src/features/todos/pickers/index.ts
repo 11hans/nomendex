@@ -6,3 +6,4 @@ export { ProjectPicker } from "./ProjectPicker";
 export { TagsPicker } from "./TagsPicker";
 export { DateTimePicker } from "./DateTimePicker";
 export { AttachmentPicker } from "./AttachmentPicker";
+export { ScheduledDateTimePicker } from "./ScheduledDateTimePicker";

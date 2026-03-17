@@ -81,6 +81,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         project: string;
         status: "todo" | "in_progress" | "done" | "later";
         tags: string[];
+        scheduledStart?: string;
+        scheduledEnd?: string;
         dueDate?: string;
         priority?: "high" | "medium" | "low" | "none";
         attachments?: Attachment[];
@@ -91,6 +93,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         project: filterProject && filterProject !== "" ? filterProject : "",
         status: "todo",
         tags: [],
+        scheduledStart: undefined,
+        scheduledEnd: undefined,
         dueDate: undefined,
         priority: undefined,
         attachments: undefined,
@@ -105,6 +109,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             project: projectValue,
             status: "todo",
             tags: [],
+            scheduledStart: undefined,
+            scheduledEnd: undefined,
             dueDate: undefined,
             priority: undefined,
             attachments: undefined,
@@ -305,6 +311,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                 project: newTodo.project || undefined,
                 status: newTodo.status,
                 tags: newTodo.tags.length > 0 ? newTodo.tags : undefined,
+                scheduledStart: newTodo.scheduledStart ?? null,
+                scheduledEnd: newTodo.scheduledEnd ?? null,
                 dueDate: newTodo.dueDate,
                 priority: newTodo.priority,
                 attachments: newTodo.attachments,
@@ -346,9 +354,10 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     status: updatedTodo.status,
                     project: updatedTodo.project,
                     tags: updatedTodo.tags,
+                    scheduledStart: updatedTodo.scheduledStart ?? null,
+                    scheduledEnd: updatedTodo.scheduledEnd ?? null,
                     dueDate: updatedTodo.dueDate ?? null,
                     priority: updatedTodo.priority,
-                    startDate: updatedTodo.startDate ?? null,
                     duration: updatedTodo.duration ?? null,
                     attachments: updatedTodo.attachments,
                     customColumnId: updatedTodo.customColumnId,
@@ -368,8 +377,12 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     };
 
     // Inline date change from kanban card (optimistic update + save)
-    const handleInlineDateChange = useCallback(async (todo: Todo, dates: { dueDate?: string; startDate?: string }) => {
-        const updatedTodo = { ...todo, dueDate: dates.dueDate, startDate: dates.startDate };
+    const handleInlineDateChange = useCallback(async (todo: Todo, dates: { scheduledStart?: string; scheduledEnd?: string }) => {
+        const updatedTodo = {
+            ...todo,
+            scheduledStart: dates.scheduledStart,
+            scheduledEnd: dates.scheduledEnd,
+        };
 
         // Optimistic update
         setTodos(prev => prev.map(t => t.id === todo.id ? updatedTodo : t));
@@ -378,8 +391,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             await todosAPI.updateTodo({
                 todoId: todo.id,
                 updates: {
-                    dueDate: dates.dueDate ?? null,
-                    startDate: dates.startDate ?? null,
+                    scheduledStart: dates.scheduledStart ?? null,
+                    scheduledEnd: dates.scheduledEnd ?? null,
                 },
             });
             // Sync to calendar (fire-and-forget)
@@ -774,13 +787,15 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             }
         });
 
-        // Sort by due date if enabled (closest first, no-date todos at bottom)
+        // Sort by schedule if enabled (closest first, no-date todos at bottom)
         if (sortByDate) {
             for (const colId of Object.keys(grouped)) {
                 grouped[colId].sort((a, b) => {
-                    const aHasDate = !!a.dueDate;
-                    const bHasDate = !!b.dueDate;
-                    if (aHasDate && bHasDate) return a.dueDate! < b.dueDate! ? -1 : a.dueDate! > b.dueDate! ? 1 : 0;
+                    const aDate = a.scheduledStart ?? a.scheduledEnd;
+                    const bDate = b.scheduledStart ?? b.scheduledEnd;
+                    const aHasDate = !!aDate;
+                    const bHasDate = !!bDate;
+                    if (aHasDate && bHasDate) return aDate! < bDate! ? -1 : aDate! > bDate! ? 1 : 0;
                     if (aHasDate) return -1;
                     if (bHasDate) return 1;
                     return (a.order ?? 0) - (b.order ?? 0);
@@ -879,6 +894,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                 status: todo.status,
                                 project: todo.project,
                                 tags: todo.tags,
+                                scheduledStart: todo.scheduledStart ?? null,
+                                scheduledEnd: todo.scheduledEnd ?? null,
                                 dueDate: todo.dueDate,
                                 attachments: todo.attachments,
                             });
@@ -1794,7 +1811,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                             size="sm"
                             className="h-7 px-2"
                             onClick={toggleSortByDate}
-                            title={sortByDate ? "Sort: By Due Date" : "Sort: Manual Order"}
+                            title={sortByDate ? "Sort: By Scheduled Date" : "Sort: Manual Order"}
                         >
                             {sortByDate ? <SortAsc className="w-4 h-4" /> : <ArrowUpDown className="w-4 h-4" />}
                         </Button>

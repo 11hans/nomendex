@@ -137,12 +137,14 @@ Tím se zabrání duplikovaným strukturám typu `daily-notes/` vs `Daily Notes/
 
 Pro dotazy typu „show today“, „co mám dnes dělat“, „schedule“, „calendar for today“:
 
-1. overdue TODO
-2. TODO splatné dnes
-3. started/in-progress TODO (včetně `startDate`)
+1. overdue TODO (úkoly s `dueDate` před dneškem)
+2. TODO splatné dnes (úkoly s `dueDate` dnes)
+3. scheduled/in-progress TODO (úkoly s `scheduledStart` zahrnujícím dnešek nebo dříve, plus `in_progress`)
 4. Today/Now custom sloupce po načtení reálné board konfigurace
 5. focused project TODO (pokud uživatel jmenuje projekt)
 6. ostatní kandidáti
+
+Schedule a calendar dotazy primárně zohledňují `scheduledStart`/`scheduledEnd`, výběry pro overdue a deadline spoléhají na `dueDate`.
 
 Výstup má být po bucket sekcích, ne jako jeden smíšený seznam.
 

@@ -3,8 +3,8 @@
 interface CalendarChange {
     taskId: string;
     title?: string;
-    startDate?: string | null;
-    dueDate?: string | null;
+    scheduledStart?: string | null;
+    scheduledEnd?: string | null;
     deleted?: boolean;
     completed?: boolean;
 }
@@ -25,8 +25,8 @@ export function initCalendarChangeListener(todosAPI: any) {
                 } else {
                     const updates: Record<string, any> = {};
                     if (change.title !== undefined) updates.title = change.title;
-                    if (change.startDate !== undefined) updates.startDate = change.startDate;
-                    if (change.dueDate !== undefined) updates.dueDate = change.dueDate;
+                    if (change.scheduledStart !== undefined) updates.scheduledStart = change.scheduledStart;
+                    if (change.scheduledEnd !== undefined) updates.scheduledEnd = change.scheduledEnd;
                     if (change.completed !== undefined) updates.status = change.completed ? "done" : "todo";
 
                     if (Object.keys(updates).length > 0) {

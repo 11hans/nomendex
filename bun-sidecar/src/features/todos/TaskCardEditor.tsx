@@ -16,6 +16,7 @@ import {
     ProjectPicker,
     TagsPicker,
     DateTimePicker,
+    ScheduledDateTimePicker,
     AttachmentPicker,
 } from "./pickers";
 
@@ -245,11 +246,21 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, sav
                             value={editedTodo.priority}
                             onChange={(priority) => setEditedTodo({ ...editedTodo, priority })}
                         />
-                        <DateTimePicker
-                            dueDate={editedTodo.dueDate}
-                            startDate={editedTodo.startDate}
-                            onChange={({ dueDate, startDate }) => setEditedTodo({ ...editedTodo, dueDate, startDate })}
-                        />
+                        <div className="flex items-center gap-2">
+                            <span className="text-caption" style={{ color: styles.contentTertiary }}>Scheduled</span>
+                            <ScheduledDateTimePicker
+                                compact
+                                scheduledStart={editedTodo.scheduledStart}
+                                scheduledEnd={editedTodo.scheduledEnd}
+                                onChange={(dates) => setEditedTodo({ ...editedTodo, ...dates })}
+                            />
+                            <span className="text-caption" style={{ color: styles.contentTertiary }}>Deadline</span>
+                            <DateTimePicker
+                                compact
+                                dueDate={editedTodo.dueDate}
+                                onChange={({ dueDate }) => setEditedTodo({ ...editedTodo, dueDate })}
+                            />
+                        </div>
 
                         <div className="h-5 w-px mx-0.5" style={{ backgroundColor: styles.borderDefault }} />
 

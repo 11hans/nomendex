@@ -14,7 +14,8 @@ Previously, `TaskCardEditor` contained inline implementations of status, priorit
 | `PriorityPicker` | 🚩 | Flag icon with color-coded popover, 4 levels |
 | `ProjectPicker` | 📁 | Select from existing projects (no inline create/search) |
 | `TagsPicker` | 🏷️ | Input to add tags + suggestion chips from existing tags |
-| `DateTimePicker` | 📅 | Range calendar + quick presets + shorthand time parsing |
+| `ScheduledDateTimePicker` | 🗓️ | Range calendar with start/end scheduling; maps to `scheduledStart`/`scheduledEnd` for calendar/today uses |
+| `DateTimePicker` | 📅 | Deadline-only picker with quick presets and shorthand time parsing |
 | `AttachmentPicker` | 📎 | File input trigger with upload handling |
 
 ### Interfaces
@@ -49,11 +50,18 @@ interface TagsPickerProps {
     availableTags: string[];
 }
 
+// ScheduledDateTimePicker
+interface ScheduledDateTimePickerProps {
+    scheduledStart?: string;
+    scheduledEnd?: string;
+    onChange: (dates: { scheduledStart?: string; scheduledEnd?: string }) => void;
+    compact?: boolean;  // Used for inline editing on TodoCard
+}
+
 // DateTimePicker
 interface DateTimePickerProps {
     dueDate?: string;
-    startDate?: string;
-    onChange: (dates: { dueDate?: string; startDate?: string }) => void;
+    onChange: (dates: { dueDate?: string }) => void;
     compact?: boolean;  // Used for inline editing on TodoCard
 }
 
@@ -66,19 +74,17 @@ interface AttachmentPickerProps {
 
 ## DateTimePicker Details
 
-The most complex picker, handling multiple date/time scenarios:
+Deadline-focused picker used for editing `dueDate`.
 
 | Feature | Description |
 |---------|-------------|
 | Quick presets | `Today`, `Tomorrow`, `Next week` shortcuts |
 | Calendar | Day selection via `Calendar` component |
 | Text input | Type date in natural format (parsed by `parseDateFromInput`) |
-| Due time | Optional `<input type="time">` for deadline hour |
-| Start time | Optional time for range start |
-| Time range | "Add end time" button to create `startDate → dueDate` range |
-| Clear | Remove individual times or clear all dates |
+| Due time | Optional `<input type="time">` for the deadline hour |
+| Clear | Remove the due date or clear the due time without affecting other fields |
 | Compact mode | Smaller trigger button for inline use on `TodoCard` |
-| Due-date color | trigger color changes for overdue/today/normal |
+| Due-date color | Trigger color changes for overdue, today, or future deadlines |
 
 ### Time Shorthand Parsing
 
@@ -91,6 +97,18 @@ The most complex picker, handling multiple date/time scenarios:
 ### Compact Mode (Inline Date Editing)
 
 When `compact={true}`, the picker renders a compact date pill directly on the `TodoCard`. Clicking it opens the full calendar popover for inline editing without opening the task editor dialog.
+
+## ScheduledDateTimePicker Details
+
+Dedicated picker for editing schedule information (`scheduledStart`/`scheduledEnd`) that powers calendar/today buckets.
+
+| Feature | Description |
+|---------|-------------|
+| Range calendar | Select a start and optional end day with clear endpoint styling (`scheduledStart` → start, `scheduledEnd` → end) |
+| Time editor | When the selection collapses to a single day, an optional `<input type="time">` controls the start time; clearing returns to all-day |
+| Clear | Remove scheduled_start/end values independently of the deadline field |
+| Compact mode | Inline pill for fast edits inside `TaskCardEditor` or `TodoCard`, similar to `DateTimePicker` |
+| Neutral styling | No overdue/today colors—schedule is neutral because deadlines live in `dueDate` |
 
 ## Keyboard Navigation
 
