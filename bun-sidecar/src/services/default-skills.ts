@@ -22,7 +22,7 @@ const DEFAULT_SKILLS: DefaultSkill[] = [
       "SKILL.md": `---
 name: todos
 description: "Manages project todos via REST API. BEFORE using this skill, you must THINK: 'Does the user mention a project? Does the user imply a specific column like Today?'. Use when the user asks to create, view, update, or delete todos."
-version: 8
+version: 9
 source: nomendex
 ---
 
@@ -215,6 +215,7 @@ Follow this checklist exactly for mutating requests:
 *   ❌ **DO NOT create with customColumnId**: API ignores it. Create then Update.
 *   ❌ **DO NOT treat planning as capture**: If the user is only describing bugs, ideas, or options during planning, ask whether they want them saved as todos.
 *   ❌ **DO NOT use cached tool output**: Never inspect \`.claude/projects/.../tool-results\` instead of calling the live API.
+*   ❌ **DO NOT invent goal/project links**: In daily/evening context, NEVER say "This task probably relates to goal X" unless there is an explicit link (project → goal via Supports field, or todo has a matching project name). State only what is in the data.
 
 ## Golden Example (Few-Shot)
 
@@ -1339,7 +1340,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 4
+version: 5
 source: nomendex
 ---
 
@@ -1418,8 +1419,9 @@ Rules:
 2. Pull incomplete tasks from yesterday's real daily note if one exists
 3. Build today's todo workset using the bucket order above
 4. If the user names a focus project, surface that project's open todos before unrelated work
-5. Read weekly/monthly goal files as strategic context only
-6. Ask focus questions and propose a plan before editing anything
+5. **Save workset snapshot** — after the workset is finalized, write a hidden HTML comment into today's daily note listing the todo IDs that form today's plan: \`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`. This snapshot is the evening flow's baseline for completion rate. Place it right after the \`## Tasks\` heading (or at the top of the note if Tasks section doesn't exist). If the daily note hasn't been created yet, include the comment when creating it.
+6. Read weekly/monthly goal files as strategic context only
+7. Ask focus questions and propose a plan before editing anything
 
 ### Context Surfacing
 Before interactive prompts, automatically surface:
@@ -1464,6 +1466,7 @@ When adding tasks to the daily note, recommend linking to goals/projects:
 ### Morning Checklist
 - [ ] Daily note path detected
 - [ ] Today workset reviewed (overdue, due today, started, focused project, other candidates)
+- [ ] Workset snapshot saved to daily note (\`<!-- workset: ... -->\`)
 - [ ] Yesterday's incomplete tasks reviewed
 - [ ] ONE priority identified
 - [ ] Time blocks set
@@ -1490,12 +1493,40 @@ When adding tasks to the daily note, recommend linking to goals/projects:
 
 ## Evening Shutdown (5 minutes)
 
+### Completion Scoring Protocol
+
+#### Step 1: Determine today's planned workset
+Read the morning workset snapshot from today's daily note:
+\`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`
+If the snapshot exists, those IDs are the baseline ("planned today").
+If no snapshot exists (morning flow was skipped), fall back to an API-based heuristic: todos with \`dueDate\` today, \`scheduledStart\` covering today, or in a Today/Now custom column. Note in the output that the morning workset was not recorded and the completion rate may be less precise.
+
+#### Step 2: Fetch completion data
+- Fetch active todos via \`/api/todos/list\`.
+- Fetch archived todos via \`/api/todos/archived\`.
+- Define **completed_today** as: \`status === "done"\` AND \`completedAt\` falls within today's local date (midnight to midnight). Include both active and archived todos — a todo completed today and then archived still counts.
+- **CRITICAL**: Use \`completedAt\`, NOT \`updatedAt\`. A todo edited today but completed yesterday is NOT completed today.
+
+#### Step 3: Classify ongoing vs planned
+- **Planned today**: todos whose IDs appear in the morning workset snapshot.
+- **Ongoing**: \`in_progress\` todos whose IDs are NOT in the morning workset. These are multi-day work items carried forward.
+- Ongoing todos do NOT enter the completion rate denominator or numerator. Show them in a separate "Ongoing" section.
+
+#### Step 4: Calculate completion rate
+\`completion_rate = completed_today ∩ planned_today / |planned_today|\`
+Only todos from the planned workset count. Bonus completions (todos not in the morning workset but completed today) are shown separately as "Extra wins".
+
+#### Step 5: One-way reconcile with daily note
+After computing metrics, scan today's daily note for \`[x]\` checkboxes.
+- Daily note \`[x]\` items that have a matching API todo → already counted, no action needed.
+- Daily note \`[x]\` items with NO matching API todo → mention them as ad-hoc completions: "You also checked off N items in your daily note that aren't tracked as API todos. Want to capture these?"
+- API completed todos without a daily note \`[x]\` → do NOT flag this. API is the source of truth.
+
 ### Capture
-1. Mark completed tasks with [x]
-2. Review and update todos via \`/todos\` skill:
-   - Mark completed todos as done
+1. Review and update todos via \`/todos\` skill:
+   - Mark completed todos as done (sets \`completedAt\` automatically)
    - Move or reschedule uncompleted items from today's workset
-   - Calculate today's completion rate
+2. Mark completed tasks with [x] in daily note
 3. Add notes and learnings
 4. Log energy levels (1-10)
 5. Record gratitude items
@@ -1504,29 +1535,38 @@ When adding tasks to the daily note, recommend linking to goals/projects:
 Automatically generate an end-of-day summary showing which goals and projects received attention:
 \`\`\`markdown
 ### Today's Cascade Impact
-- **Todos completed:** 5/8 (62.5%)
+- **Planned completion:** 5/7 (71.4%)
   - [Nomendex] 2/3 todos
   - [Health] 1/1 todo
-  - [Work] 2/4 todos
+  - [Work] 2/3 todos
+- **Extra wins:** 1 (unplanned todo completed)
+- **Ongoing (not in today's rate):** 2 in_progress
+  - [Work] Redesign homepage (day 3)
+  - [Nomendex] API refactor (day 5)
 - **Goals touched:** [[Goal 1]] (2 tasks), [[Goal 3]] (1 task)
 - **Projects advanced:** [[ProjectA]] (3 tasks), [[ProjectB]] (1 task)
-- **Unlinked tasks:** 2 (consider linking to a goal or project)
-- **Insight:** Overcommitted on Work todos — reduce tomorrow
+- **Ad-hoc note items:** 1 (not in API)
+- **Insight:** Focused day on Nomendex — consider closing the API refactor this week
 \`\`\`
 
-### Reflect
+### Reflect & Prepare (parallel)
+These run in parallel — reflection does not wait for reconcile to complete:
+
+**Reflect:**
 - What went well today?
 - What could be better?
 - What did I learn?
 - What am I grateful for?
 
-### Prepare
+**Prepare:**
 1. Identify tomorrow's priority (preview)
 2. Move incomplete tasks to tomorrow or delete
 3. Commit changes to git (\`/push\`)
 
 ### Shutdown Checklist
-- [ ] All tasks updated (done/moved/deleted)
+- [ ] Todos updated (done/moved/rescheduled)
+- [ ] Completion rate calculated (from \`completedAt\`, not \`updatedAt\`)
+- [ ] Daily note reconciled (ad-hoc items surfaced)
 - [ ] Reflection completed
 - [ ] Tomorrow's priority identified
 - [ ] Changes committed
@@ -1619,6 +1659,11 @@ TaskCreate:
   activeForm: "Pulling incomplete tasks from yesterday..."
 
 TaskCreate:
+  subject: "Save workset snapshot"
+  description: "Write <!-- workset: id1, id2, ... --> into today's daily note as the evening baseline"
+  activeForm: "Saving workset snapshot..."
+
+TaskCreate:
   subject: "Surface relevant goals"
   description: "Read weekly/monthly goals as strategic context only when they contain real content"
   activeForm: "Checking strategic goal context..."
@@ -1633,7 +1678,8 @@ TaskCreate:
 
 Morning routine tasks run sequentially:
 \`\`\`
-TaskUpdate: "Pull incomplete tasks", addBlockedBy: [create-daily-note-id]
+TaskUpdate: "Pull incomplete tasks", addBlockedBy: [inspect-daily-note-id]
+TaskUpdate: "Save workset snapshot", addBlockedBy: [fetch-todos-id]
 TaskUpdate: "Surface relevant goals", addBlockedBy: [pull-incomplete-tasks-id]
 TaskUpdate: "Set time blocks", addBlockedBy: [surface-relevant-goals-id]
 \`\`\`
@@ -1642,19 +1688,19 @@ TaskUpdate: "Set time blocks", addBlockedBy: [surface-relevant-goals-id]
 
 \`\`\`
 TaskCreate:
-  subject: "Update task statuses"
-  description: "Mark completed tasks, note blockers"
-  activeForm: "Updating task statuses..."
-
-TaskCreate:
   subject: "Update todos"
-  description: "Mark completed todos and reschedule unfinished items from today's workset"
+  description: "Mark completed todos as done via /todos skill, reschedule unfinished items from today's workset"
   activeForm: "Updating todos via /todos skill..."
 
 TaskCreate:
   subject: "Calculate completion rate"
-  description: "Calculate todo and task completion for the day"
+  description: "Read morning workset snapshot, fetch active + archived todos, compute completion from completedAt, classify ongoing separately"
   activeForm: "Calculating completion rate..."
+
+TaskCreate:
+  subject: "Reconcile daily note"
+  description: "Scan daily note [x] items, surface ad-hoc completions not in API"
+  activeForm: "Reconciling daily note..."
 
 TaskCreate:
   subject: "Generate reflection prompts"
@@ -1666,6 +1712,17 @@ TaskCreate:
   description: "Identify tomorrow's priority and move incomplete tasks"
   activeForm: "Preparing tomorrow's preview..."
 \`\`\`
+
+### Evening Dependencies
+
+\`\`\`
+"Calculate completion rate" depends on "Update todos" (needs final todo states)
+"Prepare tomorrow's preview" depends on "Calculate completion rate" (needs to know what's left)
+"Reconcile daily note" runs in parallel with "Generate reflection prompts" (independent)
+"Generate reflection prompts" does NOT depend on "Calculate completion rate" (soft dependency — reflection can start immediately)
+\`\`\`
+
+If reconcile surfaces ad-hoc items and the user responds, update the cascade impact summary after the response. Do not block the evening flow waiting for it.
 
 Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
 
@@ -2474,7 +2531,7 @@ Works with:
       "SKILL.md": `---
 name: review
 description: Smart review router. Detects context (morning, Sunday, end of month) and launches the appropriate review workflow. Use anytime for the right review at the right time.
-version: 1
+version: 2
 source: nomendex
 ---
 
@@ -2582,7 +2639,7 @@ Launching weekly review...
 ## Edge Cases
 
 - **Multiple triggers** (e.g., last Sunday of month): Monthly takes priority over weekly
-- **No daily note exists**: Create one first, then continue with review
+- **No daily note exists**: Ask the user — "Today's daily note doesn't exist yet. Want me to create it before continuing with the review?" Do NOT auto-create.
 - **User says "no" to suggestion**: Fall through to next detection level
 - **Explicit argument overrides everything**: \`/review monthly\` runs monthly review even on a Tuesday morning
 

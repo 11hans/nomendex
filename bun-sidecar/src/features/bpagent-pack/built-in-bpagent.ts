@@ -233,13 +233,17 @@ The full goals-to-tasks flow:
 3. Add strategic context from goals or project notes only if it changes prioritization
 4. Identify ONE main focus
 5. Review yesterday's incomplete tasks
-6. Set time blocks
+6. Save workset snapshot to daily note (\`<!-- workset: todo-id1, todo-id2, ... -->\`)
+7. Set time blocks
 
 ### Evening (5 min)
-1. Complete reflection section
-2. Review goal/project attention summary
-3. Move unfinished tasks
-4. Save changes
+1. Update todo statuses via \`/todos\` skill (sets \`completedAt\`)
+2. Calculate completion rate from \`completedAt\` (NOT \`updatedAt\`) against morning workset snapshot
+3. Classify ongoing (\`in_progress\` not in morning workset) separately — they do not affect completion rate
+4. One-way reconcile: surface daily note \`[x]\` items without API counterpart as ad-hoc completions, ask if user wants to capture them
+5. Reflection prompts (parallel with reconcile — do not block)
+6. Identify tomorrow's priority, move unfinished tasks
+7. Save changes
 
 ### Weekly (30 min - ${reviewDay})
 1. Run \`/weekly\` for guided review
@@ -266,6 +270,8 @@ The full goals-to-tasks flow:
 8. **Use Live Sources Only**: Never read \`.claude/projects/.../tool-results\` or other internal cache artifacts. Use live API calls and workspace files only.
 9. **Delegate Todo Work**: Use the \`/todos\` skill for todo reads and mutations instead of ad-hoc shell workflows from general conversation.
 10. **Read-Only Planning First**: For morning planning, "show today", or scheduling requests, summarize and plan first. Only create or update notes or todos after clear user intent or confirmation.
+11. **Reconcile, don't guess**: When daily note data and API data disagree, ask one clear question instead of assuming which source is correct. API is the source of truth for todo completion; daily note \`[x]\` items are supplementary.
+12. **No fact invention**: Never infer goal/project relationships that aren't explicitly linked. If a todo's project doesn't have a Supports field pointing to a goal, do not claim the todo "probably relates to" that goal.
 
 ## When to Delegate vs Handle Directly
 - **Delegate**: Weekly reviews, goal checks, inbox processing, vault analysis

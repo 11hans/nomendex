@@ -70,12 +70,16 @@ Vytvoří nebo aktualizuje dnešní denní záznam.
 - Teprve pak strategický kontext z cílů a projektů
 - Identifikace jednoho hlavního zaměření dne
 - Přehled nedokončených úkolů z předchozího dne
+- Uložení workset snapshotu do daily note (`<!-- workset: id1, id2, ... -->`)
 - Nastavení časových bloků
 
 **Večerní rutina (5 min):**
-- Doplnění sekce reflexe
-- Přehled pozornosti věnované cílům a projektům
-- Přesun nedokončených úkolů
+- Aktualizace stavu todos přes `/todos` skill (nastaví `completedAt`)
+- Výpočet completion rate z `completedAt` (NE `updatedAt`) proti rannímu workset snapshotu
+- Ongoing úkoly (`in_progress` mimo ranní workset) se zobrazí zvlášť a nevstupují do completion rate
+- Jednosměrný reconcile: daily note `[x]` bez protějšku v API → nabídnout zachycení jako ad-hoc
+- Reflexe (paralelně s reconcile)
+- Identifikace zítřejší priority, přesun nedokončených úkolů
 - Uložení změn
 
 ### `/weekly` – Týdenní review
@@ -147,6 +151,8 @@ Pro dotazy typu „show today“, „co mám dnes dělat“, „schedule“, „
 Schedule a calendar dotazy primárně zohledňují `scheduledStart`/`scheduledEnd`, výběry pro overdue a deadline spoléhají na `dueDate`.
 
 Výstup má být po bucket sekcích, ne jako jeden smíšený seznam.
+
+Po sestavení worksetu agent uloží snapshot ID do daily note jako `<!-- workset: id1, id2, ... -->`. Tento snapshot slouží jako baseline pro večerní completion rate. Pokud ranní workset nebyl uložen (ranní flow se nepustil), večerní flow použije API heuristiku s upozorněním na nižší přesnost.
 
 ## Read-only default pro plánování
 
