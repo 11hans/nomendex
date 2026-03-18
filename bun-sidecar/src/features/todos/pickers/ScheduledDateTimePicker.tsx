@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { useTheme } from "@/hooks/useTheme";
-import { CalendarDays, Clock, X } from "lucide-react";
+import { CalendarClock, Clock, X } from "lucide-react";
 import { toLocalDateString, parseLocalDateString } from "@/features/notes/date-utils";
 import type { DateRange } from "react-day-picker";
 import { parseTimeInput, RangeDayButton } from "./picker-utils";
@@ -224,7 +224,7 @@ export function ScheduledDateTimePicker({ scheduledEnd, scheduledStart, onChange
                         className={`flex items-center gap-1 ${compact ? 'px-0 py-0 text-caption' : 'px-2 py-1 text-sm'} rounded font-medium transition-colors hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-offset-1`}
                         style={{ color: getDateColor() }}
                     >
-                        <CalendarDays className={compact ? "size-3 shrink-0" : "size-4 shrink-0"} />
+                        <CalendarClock className={compact ? "size-3 shrink-0" : "size-4 shrink-0"} />
                         {renderDateLabel()}
                     </button>
                 </PopoverTrigger>

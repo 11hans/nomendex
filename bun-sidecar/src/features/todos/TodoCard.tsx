@@ -1,9 +1,8 @@
-import { Settings, Trash2, Archive, ArchiveRestore, Copy, CalendarDays, Bell } from "lucide-react";
+import { Settings, Trash2, Archive, ArchiveRestore, CalendarDays, Bell, AlertCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Todo, PRIORITY_CONFIG } from "./todo-types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { toast } from "sonner";
 import { parseLocalDateString } from "@/features/notes/date-utils";
 import { ScheduledDateTimePicker } from "./pickers";
 import { useTheme } from "@/hooks/useTheme";
@@ -100,23 +99,6 @@ export function TodoCard({
     onChecklistToggle?: (todo: Todo, newDescription: string) => void;
 }) {
     const { currentTheme } = useTheme();
-
-    const handleCopy = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        e.preventDefault();
-
-        const content = todo.description
-            ? `${todo.title}\n\n${todo.description}`
-            : todo.title;
-
-        try {
-            await navigator.clipboard.writeText(content);
-            toast("Todo copied to clipboard");
-        } catch (error) {
-            console.error("Failed to copy to clipboard:", error);
-            toast("Failed to copy to clipboard");
-        }
-    };
 
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -251,25 +233,30 @@ export function TodoCard({
                                 onChange={(dates) => onDateChange(todo, dates)}
                                 compact
                             />
+                            {todo.calendarReminderPreset === "30-15" && (
+                                <Bell className="size-3 shrink-0" style={{ color: "#3b82f6" }} />
+                            )}
                         </div>
                     ) : (
                         scheduleLabel || isOverdue ? (
-                            <div className="flex items-center gap-2 min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0">
                                 {scheduleLabel && (
-                                    <p
-                                        className="text-caption flex items-center gap-1 truncate"
-                                        style={{ color: currentTheme.styles.contentTertiary }}
-                                    >
-                                        <CalendarDays className="size-3 shrink-0" />
-                                        <span className="truncate">{scheduleLabel}</span>
-                                    </p>
+                                    <span title={scheduleLabel}>
+                                        <CalendarDays
+                                            className="size-3 shrink-0"
+                                            style={{ color: currentTheme.styles.contentTertiary }}
+                                        />
+                                    </span>
+                                )}
+                                {todo.calendarReminderPreset === "30-15" && (
+                                    <Bell className="size-3 shrink-0" style={{ color: "#3b82f6" }} />
                                 )}
                                 {isOverdue && (
-                                    <span
-                                        className="text-caption shrink-0 font-medium"
-                                        style={{ color: currentTheme.styles.semanticDestructive }}
-                                    >
-                                        Overdue
+                                    <span title="Overdue">
+                                        <AlertCircle
+                                            className="size-3 shrink-0"
+                                            style={{ color: currentTheme.styles.semanticDestructive }}
+                                        />
                                     </span>
                                 )}
                             </div>
@@ -278,9 +265,6 @@ export function TodoCard({
                         )
                     )}
                 </div>
-                {todo.calendarReminderPreset === "30-15" && (
-                    <Bell className="size-3 shrink-0" style={{ color: "#3b82f6" }} />
-                )}
                 {/* Actions - show when selected */}
                 <div className={`shrink-0 flex items-center gap-0.5 transition-opacity duration-150 ${selected ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100'}`}>
                     <button
@@ -295,16 +279,6 @@ export function TodoCard({
                         style={{ color: currentTheme.styles.contentTertiary }}
                     >
                         <Settings className="size-3" />
-                    </button>
-                    <button
-                        type="button"
-                        className="inline-flex items-center justify-center size-6 rounded hover:bg-surface-elevated"
-                        onClick={handleCopy}
-                        title="Copy"
-                        aria-label="Copy todo content"
-                        style={{ color: currentTheme.styles.contentTertiary }}
-                    >
-                        <Copy className="size-3" />
                     </button>
                     <button
                         type="button"

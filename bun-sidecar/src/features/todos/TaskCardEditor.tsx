@@ -248,19 +248,56 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                             onChange={(priority) => setEditedTodo({ ...editedTodo, priority })}
                         />
                         <div className="flex items-center gap-2">
-                            <span className="text-caption" style={{ color: styles.contentTertiary }}>Scheduled</span>
                             <ScheduledDateTimePicker
-                                compact
                                 scheduledStart={editedTodo.scheduledStart}
                                 scheduledEnd={editedTodo.scheduledEnd}
                                 onChange={(dates) => setEditedTodo({ ...editedTodo, ...dates })}
                             />
-                            <span className="text-caption" style={{ color: styles.contentTertiary }}>Deadline</span>
                             <DateTimePicker
-                                compact
                                 dueDate={editedTodo.dueDate}
                                 onChange={({ dueDate }) => setEditedTodo({ ...editedTodo, dueDate })}
                             />
+                            {onToggleCalendarReminder && (() => {
+                                const hasTimed = editedTodo.scheduledStart?.includes("T") || editedTodo.scheduledEnd?.includes("T");
+                                const isActive = editedTodo.calendarReminderPreset === "30-15";
+                                return (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="h-8 px-2 rounded-md"
+                                                disabled={!hasTimed}
+                                                onClick={() => onToggleCalendarReminder({
+                                                    ...editedTodo,
+                                                    calendarReminderPreset: isActive ? "none" : "30-15",
+                                                })}
+                                                style={{
+                                                    color: isActive ? "#fff" : styles.contentSecondary,
+                                                    backgroundColor: isActive ? "#3b82f6" : "transparent",
+                                                    opacity: hasTimed ? 1 : 0.4,
+                                                }}
+                                            >
+                                                <Bell className="size-4" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent
+                                            className="z-[100]"
+                                            style={{
+                                                backgroundColor: styles.surfaceTertiary,
+                                                color: styles.contentPrimary,
+                                                border: `1px solid ${styles.borderDefault}`,
+                                            }}
+                                        >
+                                            {!hasTimed
+                                                ? "Set a time to enable reminders"
+                                                : isActive
+                                                    ? "Remove 30/15 min reminders"
+                                                    : "Add 30 + 15 min reminders"}
+                                        </TooltipContent>
+                                    </Tooltip>
+                                );
+                            })()}
                         </div>
 
                         <div className="h-5 w-px mx-0.5" style={{ backgroundColor: styles.borderDefault }} />
@@ -302,47 +339,6 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                                 Add checklist item
                             </TooltipContent>
                         </Tooltip>
-                        {onToggleCalendarReminder && (() => {
-                            const hasTimed = editedTodo.scheduledStart?.includes("T") || editedTodo.scheduledEnd?.includes("T");
-                            const isActive = editedTodo.calendarReminderPreset === "30-15";
-                            return (
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-8 px-2 rounded-md"
-                                            disabled={!hasTimed}
-                                            onClick={() => onToggleCalendarReminder({
-                                                ...editedTodo,
-                                                calendarReminderPreset: isActive ? "none" : "30-15",
-                                            })}
-                                            style={{
-                                                color: isActive ? "#fff" : styles.contentSecondary,
-                                                backgroundColor: isActive ? "#3b82f6" : "transparent",
-                                                opacity: hasTimed ? 1 : 0.4,
-                                            }}
-                                        >
-                                            <Bell className="size-4" />
-                                        </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent
-                                        className="z-[100]"
-                                        style={{
-                                            backgroundColor: styles.surfaceTertiary,
-                                            color: styles.contentPrimary,
-                                            border: `1px solid ${styles.borderDefault}`,
-                                        }}
-                                    >
-                                        {!hasTimed
-                                            ? "Set a time to enable reminders"
-                                            : isActive
-                                                ? "Remove 30/15 min reminders"
-                                                : "Add 30 + 15 min reminders"}
-                                    </TooltipContent>
-                                </Tooltip>
-                            );
-                        })()}
                     </div>
 
                     <div className="flex items-center gap-2 ml-auto">
