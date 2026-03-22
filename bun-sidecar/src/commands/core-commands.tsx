@@ -425,5 +425,19 @@ export function getCoreCommands(context: CoreCommandContext): Command[] {
                 }
             },
         },
+        {
+            id: "core.openClaudeCodeDangerous",
+            name: "Open Claude Code Dangerously",
+            description: "Launch Claude Code with --dangerously-skip-permissions",
+            icon: "Terminal",
+            callback: async () => {
+                context.closeCommandMenu();
+                try {
+                    await fetch("/api/workspaces/open-terminal?dangerous=true", { method: "POST" });
+                } catch (error) {
+                    console.error("Failed to open Claude Code:", error);
+                }
+            },
+        },
     ];
 }

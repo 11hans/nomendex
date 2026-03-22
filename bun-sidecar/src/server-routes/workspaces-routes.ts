@@ -198,7 +198,7 @@ export const workspacesRoutes = {
 
     // Open terminal with Claude Code in workspace directory
     "/api/workspaces/open-terminal": {
-        async POST() {
+        async POST(req: Request) {
             try {
                 if (!hasActiveWorkspace()) {
                     const response: Result = {
@@ -209,7 +209,12 @@ export const workspacesRoutes = {
                     return Response.json(response, { status: 400 });
                 }
 
+                const url = new URL(req.url);
+                const dangerous = url.searchParams.get("dangerous") === "true";
                 const workspacePath = getRootPath();
+                const claudeCmd = dangerous
+                    ? "claude --dangerously-skip-permissions"
+                    : "claude";
 
                 // Use osascript to launch Ghostty and run claude in the workspace directory
                 // This activates Ghostty, opens a new tab, and types the cd + claude command
@@ -220,7 +225,7 @@ export const workspacesRoutes = {
                         tell process "Ghostty"
                             keystroke "t" using command down
                             delay 0.3
-                            keystroke "cd ${workspacePath.replace(/"/g, '\\"')} && claude"
+                            keystroke "cd ${workspacePath.replace(/"/g, '\\"')} && ${claudeCmd}"
                             keystroke return
                         end tell
                     end tell
