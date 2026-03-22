@@ -411,5 +411,19 @@ export function getCoreCommands(context: CoreCommandContext): Command[] {
                 context.toggleLayoutMode();
             },
         },
+        {
+            id: "core.openClaudeCode",
+            name: "Open Claude Code",
+            description: "Launch Claude Code in the workspace directory",
+            icon: "Terminal",
+            callback: async () => {
+                context.closeCommandMenu();
+                try {
+                    await fetch("/api/workspaces/open-terminal", { method: "POST" });
+                } catch (error) {
+                    console.error("Failed to open Claude Code:", error);
+                }
+            },
+        },
     ];
 }
