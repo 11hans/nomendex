@@ -11,6 +11,7 @@ import { logsAPI } from "@/hooks/useLogsAPI";
 import { dispatchRefresh } from "@/lib/events";
 import { useCommandDialog } from "@/components/CommandDialogProvider";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
+import { SwitchWorkspaceDialog } from "@/components/SwitchWorkspaceDialog";
 
 interface CoreCommandContext {
     openDialog: (config: { title?: string; description?: string; content?: React.ReactNode }) => void;
@@ -409,6 +410,18 @@ export function getCoreCommands(context: CoreCommandContext): Command[] {
             callback: () => {
                 context.closeCommandMenu();
                 context.toggleLayoutMode();
+            },
+        },
+        {
+            id: "core.switchWorkspace",
+            name: "Switch Workspace",
+            description: "Switch to a different workspace",
+            icon: "FolderSync",
+            callback: () => {
+                context.closeCommandMenu();
+                context.openDialog({
+                    content: <SwitchWorkspaceDialog />,
+                });
             },
         },
     ];
