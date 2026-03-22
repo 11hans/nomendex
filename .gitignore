@@ -75,3 +75,7 @@ bun.lockb
 
 # Agent editing lock files
 *.claude-lock
+
+# Removed legacy directories
+crdt/
+team-backend/
