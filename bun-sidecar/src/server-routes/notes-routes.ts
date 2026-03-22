@@ -25,6 +25,12 @@ import {
     isExplicitTag,
     getExplicitTags,
 } from "@/features/notes/tags-service";
+import { addSSEClient, type NoteEvent } from "@/services/notes-watcher";
+import {
+    enableAgentEditing,
+    disableAgentEditing,
+    isAgentEditingEnabled,
+} from "@/services/agent-editing";
 
 export const notesRoutes = {
     "/api/notes/list": {
@@ -259,6 +265,62 @@ export const notesRoutes = {
         async POST(req: Request) {
             const args = await req.json();
             const result = await functions.revealInFinder.fx(args);
+            return Response.json(result);
+        },
+    },
+    // SSE endpoint for real-time note events (lock/unlock, file changes)
+    "/api/notes/events": {
+        GET() {
+            let cleanup: (() => void) | null = null;
+
+            const stream = new ReadableStream({
+                start(controller) {
+                    const encoder = new TextEncoder();
+
+                    const send = (event: NoteEvent) => {
+                        try {
+                            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+                        } catch {
+                            // Stream closed
+                            cleanup?.();
+                        }
+                    };
+
+                    // Send initial keepalive
+                    controller.enqueue(encoder.encode(": connected\n\n"));
+
+                    cleanup = addSSEClient(send);
+                },
+                cancel() {
+                    cleanup?.();
+                },
+            });
+
+            return new Response(stream, {
+                headers: {
+                    "Content-Type": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    Connection: "keep-alive",
+                },
+            });
+        },
+    },
+    // Agent editing hooks management
+    "/api/notes/agent-editing/status": {
+        async GET() {
+            const enabled = await isAgentEditingEnabled();
+            return Response.json({ enabled });
+        },
+    },
+    "/api/notes/agent-editing/enable": {
+        async POST() {
+            const result = await enableAgentEditing();
+            return Response.json(result);
+        },
+    },
+    "/api/notes/agent-editing/disable": {
+        async POST() {
+            const result = await disableAgentEditing();
             return Response.json(result);
         },
     },

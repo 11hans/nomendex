@@ -11,6 +11,7 @@ import { logsAPI } from "@/hooks/useLogsAPI";
 import { dispatchRefresh } from "@/lib/events";
 import { useCommandDialog } from "@/components/CommandDialogProvider";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
+import { SwitchWorkspaceDialog } from "@/components/SwitchWorkspaceDialog";
 
 interface CoreCommandContext {
     openDialog: (config: { title?: string; description?: string; content?: React.ReactNode }) => void;
@@ -419,6 +420,46 @@ export function getCoreCommands(context: CoreCommandContext): Command[] {
             callback: () => {
                 context.closeCommandMenu();
                 context.toggleLayoutMode();
+            },
+        },
+        {
+            id: "core.switchWorkspace",
+            name: "Switch Workspace",
+            description: "Switch to a different workspace",
+            icon: "FolderSync",
+            callback: () => {
+                context.closeCommandMenu();
+                context.openDialog({
+                    content: <SwitchWorkspaceDialog />,
+                });
+            },
+        },
+        {
+            id: "core.openClaudeCode",
+            name: "Open Claude Code",
+            description: "Launch Claude Code in the workspace directory",
+            icon: "Terminal",
+            callback: async () => {
+                context.closeCommandMenu();
+                try {
+                    await fetch("/api/workspaces/open-terminal", { method: "POST" });
+                } catch (error) {
+                    console.error("Failed to open Claude Code:", error);
+                }
+            },
+        },
+        {
+            id: "core.openClaudeCodeDangerous",
+            name: "Open Claude Code Dangerously",
+            description: "Launch Claude Code with --dangerously-skip-permissions",
+            icon: "Terminal",
+            callback: async () => {
+                context.closeCommandMenu();
+                try {
+                    await fetch("/api/workspaces/open-terminal?dangerous=true", { method: "POST" });
+                } catch (error) {
+                    console.error("Failed to open Claude Code:", error);
+                }
             },
         },
     ];

@@ -123,8 +123,9 @@ export function NotesView(props: NotesViewProps) {
     const prevActiveTabIdRef = useRef<string | undefined>(undefined);
     const lastAppliedScrollToLineRef = useRef<number | null>(null);
     const { currentTheme } = useTheme();
-    const { isLocked: isFileLocked } = useFileLocks();
+    const { isLocked: isFileLocked, getLock } = useFileLocks();
     const isLocked = isFileLocked(noteFileName);
+    const currentLock = getLock(noteFileName);
     const notesAPI = useNotesAPI();
     const contentRef = useRef(content);
     const noteFileNameRef = useRef(noteFileName);
@@ -669,6 +670,63 @@ export function NotesView(props: NotesViewProps) {
 
         return unsubscribe;
     }, [noteFileName, notesAPI]);
+
+    // Subscribe to real-time file change events from the notes watcher (SSE)
+    useEffect(() => {
+        return subscribe("notes:fileChanged", async ({ fileName, source }) => {
+            // Only handle events for this note
+            if (fileName !== noteFileName) return;
+
+            // If the file was changed by an agent while locked, auto-reload silently
+            const locked = isFileLocked(noteFileName);
+
+            if (locked || source === "agent") {
+                // Auto-reload: the user expects changes from the agent
+                try {
+                    const freshNote = await notesAPI.getNoteByFileName({ fileName: noteFileName, skipCache: true });
+                    const freshContent = freshNote?.content || "";
+                    setNote(freshNote);
+                    setContent(freshContent);
+                    setHeadings(parseHeadings(freshContent));
+                    lastSavedContentRef.current = freshContent;
+                    lastKnownMtimeRef.current = freshNote?.mtime ?? null;
+                    initializedContentRef.current = freshContent;
+
+                    if (viewRef.current) {
+                        const doc = tableMarkdownParser.parse(freshContent) || tableSchema.nodes.doc.createAndFill();
+                        const stateWithNewDoc = EditorState.create({
+                            doc,
+                            plugins: viewRef.current.state.plugins,
+                            selection: Selection.atStart(doc!),
+                        });
+                        viewRef.current.updateState(stateWithNewDoc);
+                    }
+
+                    // Update tags and project from front matter
+                    const noteTags = freshNote?.frontMatter?.tags;
+                    if (Array.isArray(noteTags)) {
+                        setTags(noteTags.filter((tag): tag is string => typeof tag === "string"));
+                    } else {
+                        setTags([]);
+                    }
+                    const noteProject = freshNote?.frontMatter?.project;
+                    if (typeof noteProject === "string") {
+                        setProject(noteProject);
+                    } else {
+                        setProject(null);
+                    }
+
+                    // Show toast when lock is released (source === "agent")
+                    if (source === "agent") {
+                        toast("Note updated by Claude", { duration: 3000 });
+                    }
+                } catch (error) {
+                    console.error("Failed to reload note from file change event:", error);
+                }
+            }
+            // For non-agent external changes, the existing mtime-based check handles it on tab activation
+        });
+    }, [noteFileName, notesAPI, isFileLocked, parseHeadings]);
 
     // Store updateActiveHeadingFromCursor in a ref to avoid infinite rerenders
     const updateActiveHeadingFromCursorRef = useRef(updateActiveHeadingFromCursor);
@@ -1600,6 +1658,21 @@ export function NotesView(props: NotesViewProps) {
                         <ProjectInput project={project} onProjectChange={handleProjectChange} />
                         <TagInput tags={tags} onTagsChange={handleTagsChange} placeholder="Add tag..." />
                     </div>
+                </div>
+            )}
+
+            {/* Agent editing banner */}
+            {isLocked && currentLock && (
+                <div
+                    className="shrink-0 px-4 py-2 flex items-center gap-2 text-sm"
+                    style={{
+                        backgroundColor: currentTheme.styles.surfaceAccent,
+                        color: currentTheme.styles.contentAccent,
+                        borderBottom: `1px solid ${currentTheme.styles.borderDefault}`,
+                    }}
+                >
+                    <span className="inline-block w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: currentTheme.styles.contentAccent }} />
+                    <span>{currentLock.agentName} is editing this note...</span>
                 </div>
             )}
 

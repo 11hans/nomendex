@@ -16,6 +16,8 @@ import {
     AlertTriangle,
     Columns2,
     Command,
+    FolderSync,
+    Terminal,
 } from "lucide-react";
 import {
     CommandDialog,
@@ -53,6 +55,8 @@ const iconMap = {
     MessageCircle,
     AlertTriangle,
     Columns2,
+    FolderSync,
+    Terminal,
 } as const;
 
 const groupTitles: Record<string, string> = {

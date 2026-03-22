@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-02-23T21:38:40.786Z",
+  "scenarioResults": [
+    {
+      "scenario": "plain-paragraph",
+      "direction": "A to B",
+      "noteFileName": "crdt-e2e-plain-paragraph-a-to-b-1771882699830-142062.md",
+      "sourceUser": "user-a",
+      "targetUser": "user-b",
+      "pass": false,
+      "keySequence": [
+        "type:The quick brown fox jumps over the lazy dog."
+      ],
+      "screenshots": {
+        "source": "/Users/jacobcolling/nomendex/bun-sidecar/docs/specs/team/issues/artifacts/crdt-playwright/plain-paragraph-a-to-b-source-1771882699830-142062.png",
+        "target": "/Users/jacobcolling/nomendex/bun-sidecar/docs/specs/team/issues/artifacts/crdt-playwright/plain-paragraph-a-to-b-target-1771882699830-142062.png"
+      },
+      "elapsedMs": 0,
+      "sourceSnapshot": null,
+      "targetSnapshot": null,
+      "logs": [],
+      "error": "page.waitForSelector: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('.editor-content .ProseMirror') to be visible\u001b[22m\n"
+    }
+  ]
+}

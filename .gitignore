@@ -75,3 +75,9 @@ bun.lockb
 
 johns-notes/
 
+# Agent editing lock files
+*.claude-lock
+
+# Removed legacy directories
+crdt/
+team-backend/
