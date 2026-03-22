@@ -75,6 +75,9 @@ export interface AppEventMap {
     "notes:runSpellcheck": Record<string, never>;
     "notes:clearSpellcheck": Record<string, never>;
     "notes:openSearch": Record<string, never>;
+
+    // Notes file events (from SSE watcher)
+    "notes:fileChanged": { fileName: string; source: "agent" | "external" };
 }
 
 type AppEventType = keyof AppEventMap;
