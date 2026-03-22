@@ -72,3 +72,10 @@ bun.lockb
 
 # Nomendex workspace data
 .nomendex/
+
+# Agent editing lock files
+*.claude-lock
+
+# Removed legacy directories
+crdt/
+team-backend/
