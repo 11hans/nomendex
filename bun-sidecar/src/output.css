@@ -79,6 +79,7 @@
     --color-warning: var(--warning);
     --color-destructive: var(--destructive);
     --color-ring: var(--accent);
+    --color-surface-raised: var(--surface-raised);
     --color-surface-elevated: var(--surface-elevated);
     --color-card: oklch(0.99 0.002 270 / 0.9);
     --color-secondary: oklch(0.95 0.004 270 / 0.6);
@@ -4042,14 +4043,14 @@
       border-radius: 0;
     }
   }
-  .data-\[selected\=true\]\:bg-accent {
+  .data-\[selected\=true\]\:bg-surface-raised {
     &[data-selected="true"] {
-      background-color: var(--color-accent);
+      background-color: var(--color-surface-raised);
     }
   }
-  .data-\[selected\=true\]\:text-accent-foreground {
+  .data-\[selected\=true\]\:text-foreground {
     &[data-selected="true"] {
-      color: var(--color-accent-foreground);
+      color: var(--color-foreground);
     }
   }
   .data-\[selected\=true\]\:ring-1 {
