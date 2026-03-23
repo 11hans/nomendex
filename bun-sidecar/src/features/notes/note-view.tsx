@@ -184,10 +184,19 @@ export function NotesView(props: NotesViewProps) {
             }
 
             // Default: open as a note
+            // If the target has no folder separator, try to resolve by basename across subfolders.
+            // This handles navigation links like [[3-21-2026]] that should resolve to daily-notes/3-21-2026.md.
+            let noteFileName = `${target}.md`;
+            if (!target.includes("/")) {
+                const resolved = await notesAPIRef.current.resolveNote({ name: target }).catch(() => null);
+                if (resolved) {
+                    noteFileName = resolved.fileName;
+                }
+            }
             openTab({
                 pluginMeta: { id: "notes", name: "Notes", icon: "file" },
                 view: "editor",
-                props: { noteFileName: `${target}.md` },
+                props: { noteFileName },
             });
         });
     }, [openTab]);

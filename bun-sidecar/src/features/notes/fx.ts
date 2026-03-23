@@ -514,6 +514,37 @@ async function revealNoteInFinder(args: { fileName: string }) {
     return { success: true };
 }
 
+/**
+ * Resolve a wiki link target to a full note path by searching for a basename match.
+ * Returns the first note whose filename (without folder) matches the given name.
+ * Used as a fallback when a wiki link target doesn't include a subfolder path.
+ */
+export async function resolveNoteByBaseName(args: { name: string }): Promise<{ fileName: string } | null> {
+    const targetBase = args.name.endsWith(".md") ? args.name : `${args.name}.md`;
+
+    try {
+        // Check root level first
+        const rootFiles = await getStorage().listFiles(undefined);
+        if (rootFiles.includes(targetBase)) {
+            return { fileName: targetBase };
+        }
+
+        // Search subfolders (skipping system dirs)
+        const folders = await getStorage().listAllFoldersRecursive(undefined);
+        for (const folder of folders) {
+            if (shouldSkipFolder(folder.path)) continue;
+            const files = await getStorage().listFiles(folder.path);
+            if (files.includes(targetBase)) {
+                return { fileName: `${folder.path}/${targetBase}` };
+            }
+        }
+
+        return null;
+    } catch {
+        return null;
+    }
+}
+
 async function moveNoteToFolder(args: { fileName: string; targetFolder: string | null }) {
     // Extract just the file name (without path)
     const lastSlash = args.fileName.lastIndexOf("/");

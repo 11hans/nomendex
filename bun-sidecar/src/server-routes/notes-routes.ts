@@ -1,7 +1,7 @@
 // Direct API routes for notes feature
 // These replace the generic /api/plugin-registry endpoint
 
-import { functions } from "@/features/notes/fx";
+import { functions, resolveNoteByBaseName } from "@/features/notes/fx";
 import {
     getBacklinksForNote,
     getAllPhantomLinks,
@@ -97,6 +97,13 @@ export const notesRoutes = {
         async POST(req: Request) {
             const args = await req.json();
             const result = await functions.updateNoteTags.fx(args);
+            return Response.json(result);
+        },
+    },
+    "/api/notes/resolve": {
+        async POST(req: Request) {
+            const args = await req.json();
+            const result = await resolveNoteByBaseName(args);
             return Response.json(result);
         },
     },

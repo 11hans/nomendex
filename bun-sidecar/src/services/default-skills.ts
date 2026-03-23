@@ -2287,6 +2287,8 @@ When processing templates, replace:
 - \`{{date+1}}\` - Tomorrow
 - \`{{time}}\` - Current time
 
+**CRITICAL — Daily note navigation links**: When a template contains wiki links to adjacent daily notes (e.g. \`[[{{yesterday}}]]\` or \`[[{{tomorrow}}]]\`), always include the full subfolder path in the resolved link. For example, if daily notes live in \`daily-notes/\`, the resolved link must be \`[[daily-notes/3-21-2026]]\`, NOT \`[[3-21-2026]]\`. A bare filename without the folder prefix cannot be resolved to the correct file and will create a broken or duplicate note.
+
 ## Common Patterns
 
 ### Daily Note Creation
