@@ -306,7 +306,7 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
             <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Left Panel - Session List */}
                 <div
-                    className="w-72 shrink-0 border-r flex flex-col h-full min-h-0"
+                    className="w-72 shrink-0 overflow-hidden border-r flex flex-col h-full min-h-0"
                     style={{
                         backgroundColor: styles.surfacePrimary,
                         borderColor: styles.borderDefault,
@@ -375,7 +375,7 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                         tabIndex={0}
                         onKeyDown={handleKeyDown}
                     >
-                        <ScrollArea className="h-full">
+                        <div className="h-full overflow-y-auto overflow-x-hidden">
                             <div className="px-2 py-2 space-y-1.5">
                                 {isLoadingSessions ? (
                                     <div className="p-6 text-center" style={{ color: styles.contentSecondary }}>
@@ -406,7 +406,7 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                             <div
                                                 key={session.id}
                                                 ref={isSelected ? selectedRowRef : undefined}
-                                                className="group relative overflow-hidden rounded-lg border transition-colors"
+                                                className="group relative min-w-0 overflow-hidden rounded-lg border transition-colors"
                                                 style={{
                                                     borderColor: isSelected ? styles.surfaceAccent : styles.borderDefault,
                                                     backgroundColor: styles.surfaceSecondary,
@@ -430,7 +430,18 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                                         >
                                                             {session.title}
                                                         </span>
-                                                        <ChevronRight className="ml-auto size-3 opacity-60 shrink-0" style={{ color: styles.contentTertiary }} />
+                                                        <span
+                                                            className="ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:text-red-500"
+                                                            style={{ color: styles.contentTertiary }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                e.preventDefault();
+                                                                handleDeleteSession(session.id, e);
+                                                            }}
+                                                        >
+                                                            <Trash2 className="h-3 w-3" />
+                                                        </span>
+                                                        <ChevronRight className="size-3 opacity-60 shrink-0" style={{ color: styles.contentTertiary }} />
                                                     </div>
                                                     <div
                                                         className="mt-0.5 text-caption truncate"
@@ -457,22 +468,12 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                                         </div>
                                                     )}
                                                 </button>
-
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="absolute top-1.5 right-1.5 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    style={{ color: styles.contentTertiary }}
-                                                    onClick={(e) => handleDeleteSession(session.id, e)}
-                                                >
-                                                    <Trash2 className="h-3.5 w-3.5" />
-                                                </Button>
                                             </div>
                                         );
                                     })
                                 )}
                             </div>
-                        </ScrollArea>
+                        </div>
                     </div>
                 </div>
 
@@ -526,13 +527,13 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                 </div>
                             ) : (
                                 <ScrollArea className="flex-1">
-                                    <div className="mx-auto max-w-3xl space-y-3 p-4">
+                                    <div className="mx-auto max-w-3xl min-w-0 space-y-3 p-4">
                                         {selectedMessages.map((message) => (
                                             <Message key={message.id} from={message.role}>
                                                 <div
                                                     className={message.role === "user"
-                                                        ? "ml-auto w-fit max-w-[90%] rounded-lg border px-2.5 py-2"
-                                                        : "w-full rounded-lg border px-2.5 py-2"
+                                                        ? "ml-auto w-fit max-w-[90%] min-w-0 overflow-hidden rounded-lg border px-2.5 py-2"
+                                                        : "w-full min-w-0 overflow-hidden rounded-lg border px-2.5 py-2"
                                                     }
                                                     style={{
                                                         borderColor: styles.borderDefault,
@@ -564,7 +565,7 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                                             if (block.type === "text") {
                                                                 if (searchQuery.trim()) {
                                                                     return (
-                                                                        <div key={block.id} className="whitespace-pre-wrap">
+                                                                        <div key={block.id} className="whitespace-pre-wrap break-words overflow-hidden">
                                                                             {highlightMatches(
                                                                                 block.content,
                                                                                 searchQuery,

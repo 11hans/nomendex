@@ -6,6 +6,7 @@
   :root, :host {
     --font-sans: 'JetBrains Mono', monospace;
     --font-mono: 'JetBrains Mono', monospace;
+    --color-red-500: oklch(63.7% 0.237 25.331);
     --color-amber-500: oklch(76.9% 0.188 70.08);
     --color-yellow-600: oklch(68.1% 0.162 75.834);
     --color-sky-500: oklch(68.5% 0.169 237.323);
@@ -361,9 +362,6 @@
   }
   .right-1 {
     right: calc(var(--spacing) * 1);
-  }
-  .right-1\.5 {
-    right: calc(var(--spacing) * 1.5);
   }
   .right-2 {
     right: calc(var(--spacing) * 2);
@@ -3354,6 +3352,13 @@
     &:hover {
       @media (hover: hover) {
         color: var(--color-muted-foreground);
+      }
+    }
+  }
+  .hover\:text-red-500 {
+    &:hover {
+      @media (hover: hover) {
+        color: var(--color-red-500);
       }
     }
   }
