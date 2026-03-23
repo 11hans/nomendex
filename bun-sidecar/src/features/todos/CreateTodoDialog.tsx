@@ -249,16 +249,12 @@ export function CreateTodoDialog({
                             onChange={(attachments) => onNewTodoChange({ ...newTodo, attachments })}
                         />
                         <div className="flex items-center gap-2">
-                            <span className="text-caption" style={{ color: styles.contentTertiary }}>Scheduled</span>
                             <ScheduledDateTimePicker
-                                compact
                                 scheduledStart={newTodo.scheduledStart}
                                 scheduledEnd={newTodo.scheduledEnd}
                                 onChange={(dates) => onNewTodoChange({ ...newTodo, ...dates })}
                             />
-                            <span className="text-caption" style={{ color: styles.contentTertiary }}>Deadline</span>
                             <DateTimePicker
-                                compact
                                 dueDate={newTodo.dueDate}
                                 onChange={({ dueDate }) => onNewTodoChange({ ...newTodo, dueDate })}
                             />
