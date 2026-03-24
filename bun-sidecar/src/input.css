@@ -415,21 +415,24 @@
 }
 
 .editor-content .ProseMirror h1 {
-	font-size: 0.875rem;
+	font-size: 1rem;
 }
 
 .editor-content .ProseMirror h2 {
-	font-size: 0.75rem;
+	font-size: 0.875rem;
 }
 
-.editor-content .ProseMirror h3,
+.editor-content .ProseMirror h3 {
+	font-size: 0.8125rem;
+}
+
 .editor-content .ProseMirror h4 {
-	font-size: 0.6875rem;
+	font-size: 0.75rem;
 }
 
 .editor-content .ProseMirror h5,
 .editor-content .ProseMirror h6 {
-	font-size: 0.625rem;
+	font-size: 0.6875rem;
 }
 
 .editor-content .ProseMirror ul,
