@@ -1,7 +1,7 @@
 import { RouteHandler } from "../types/Routes";
 import { getRootPath, getNomendexPath } from "../storage/root-path";
 import { createServiceLogger } from "../lib/logger";
-import { createGitClient, CommitInfo, ConflictFile, AuthConfig } from "../lib/git";
+import { createGitClient, CommitInfo, ConflictFile, AuthConfig, FileChange } from "../lib/git";
 import { GitAuthModeSchema } from "../types/Workspace";
 
 const logger = createServiceLogger("GIT-SYNC");
@@ -63,6 +63,7 @@ interface GitStatusResponse {
     currentBranch?: string;
     remoteBranch?: string;
     status?: string;
+    changedFileEntries?: FileChange[];
     changedFiles?: number;
     hasUncommittedChanges?: boolean;
     hasMergeConflict?: boolean;
@@ -222,6 +223,7 @@ export const gitStatusRoute: RouteHandler<GitStatusResponse> = {
                 currentBranch,
                 remoteBranch,
                 status: statusLines,
+                changedFileEntries: statusResult.changedFiles,
                 changedFiles,
                 hasUncommittedChanges,
                 hasMergeConflict,
@@ -434,20 +436,34 @@ export const gitPullRoute: RouteHandler<GitSyncResponse> = {
 
 // Commit local changes (stage and commit, no push)
 export const gitCommitRoute: RouteHandler<GitSyncResponse> = {
-    POST: async (_req) => {
+    POST: async (req) => {
         try {
             const git = getGitClient();
             logger.info("Committing local changes", { path: getRootPath() });
 
-            // Stage all changes
-            await git.addAll();
-            logger.info("Staged all changes");
+            let body: { message?: string; files?: string[] } = {};
+            try {
+                body = await req.json();
+            } catch {
+                // No body — use legacy behavior
+            }
+
+            if (body.files && body.files.length > 0) {
+                // Selective staging: stage only specified files
+                await git.stageFiles(body.files);
+                logger.info("Staged selected files", { count: body.files.length });
+            } else if (!body.message) {
+                // Legacy behavior: stage all changes
+                await git.addAll();
+                logger.info("Staged all changes");
+            }
+            // If message is provided but no files, commit whatever is currently staged
 
             // Check if there are changes to commit
             const hasStagedChanges = await git.hasStagedChanges();
 
             if (hasStagedChanges) {
-                const commitMessage = `Sync from Nomendex - ${new Date().toISOString()}`;
+                const commitMessage = body.message || `Sync from Nomendex - ${new Date().toISOString()}`;
                 const sha = await git.commit(commitMessage);
                 logger.info("Changes committed", { sha: sha.slice(0, 7) });
 
@@ -684,6 +700,135 @@ export const gitFetchStatusRoute: RouteHandler<GitFetchStatusResponse> = {
                     aheadCount: 0,
                     incomingCommits: [],
                     incomingFiles: [],
+                    error: errorMessage,
+                },
+                { status: 500 }
+            );
+        }
+    },
+};
+
+interface GitFileDiffResponse {
+    success: boolean;
+    filePath: string;
+    status: FileChange["status"] | "unchanged";
+    baseContent: string;
+    currentContent: string;
+    baseExists: boolean;
+    currentExists: boolean;
+    isBinary: boolean;
+    truncated: boolean;
+    error?: string;
+}
+
+// Get diff-friendly file content for a changed file (HEAD vs working tree)
+export const gitFileDiffRoute: RouteHandler<GitFileDiffResponse> = {
+    GET: async (req) => {
+        try {
+            const url = new URL(req.url);
+            const rawPath = url.searchParams.get("path");
+
+            if (!rawPath) {
+                return Response.json(
+                    {
+                        success: false,
+                        filePath: "",
+                        status: "unchanged",
+                        baseContent: "",
+                        currentContent: "",
+                        baseExists: false,
+                        currentExists: false,
+                        isBinary: false,
+                        truncated: false,
+                        error: "File path is required",
+                    },
+                    { status: 400 }
+                );
+            }
+
+            const filePath = rawPath.replace(/\\/g, "/").replace(/^\.\/+/, "");
+            if (filePath.startsWith("/") || filePath.split("/").includes("..")) {
+                return Response.json(
+                    {
+                        success: false,
+                        filePath,
+                        status: "unchanged",
+                        baseContent: "",
+                        currentContent: "",
+                        baseExists: false,
+                        currentExists: false,
+                        isBinary: false,
+                        truncated: false,
+                        error: "Invalid file path",
+                    },
+                    { status: 400 }
+                );
+            }
+
+            const git = getGitClient();
+            const result = await git.getChangedFileContent(filePath);
+
+            if (result.status === "unchanged") {
+                return Response.json(
+                    {
+                        success: false,
+                        filePath,
+                        status: "unchanged",
+                        baseContent: "",
+                        currentContent: "",
+                        baseExists: false,
+                        currentExists: false,
+                        isBinary: false,
+                        truncated: false,
+                        error: "File has no local changes",
+                    },
+                    { status: 404 }
+                );
+            }
+
+            if ((result.status === "modified" || result.status === "deleted") && !result.baseExists) {
+                return Response.json(
+                    {
+                        success: false,
+                        filePath,
+                        status: result.status,
+                        baseContent: "",
+                        currentContent: result.currentContent,
+                        baseExists: false,
+                        currentExists: result.currentExists,
+                        isBinary: result.isBinary,
+                        truncated: result.truncated,
+                        error: "Unable to load HEAD version for this file",
+                    },
+                    { status: 500 }
+                );
+            }
+
+            return Response.json({
+                success: true,
+                filePath: result.path,
+                status: result.status,
+                baseContent: result.baseContent,
+                currentContent: result.currentContent,
+                baseExists: result.baseExists,
+                currentExists: result.currentExists,
+                isBinary: result.isBinary,
+                truncated: result.truncated,
+            });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.error("Failed to get file diff content", { error: errorMessage });
+            return Response.json(
+                {
+                    success: false,
+                    filePath: "",
+                    status: "unchanged",
+                    baseContent: "",
+                    currentContent: "",
+                    baseExists: false,
+                    currentExists: false,
+                    isBinary: false,
+                    truncated: false,
                     error: errorMessage,
                 },
                 { status: 500 }
@@ -956,6 +1101,187 @@ export const gitConflictContentRoute: RouteHandler<ConflictContentResponse> = {
                     oursContent: "",
                     theirsContent: "",
                     mergedContent: "",
+                    error: errorMessage,
+                },
+                { status: 500 }
+            );
+        }
+    },
+};
+
+// Discard changes for files (revert to HEAD or delete untracked)
+export const gitDiscardRoute: RouteHandler<GitSyncResponse> = {
+    POST: async (req) => {
+        try {
+            const git = getGitClient();
+            const { files } = (await req.json()) as { files: string[] };
+
+            if (!files || files.length === 0) {
+                return Response.json({ success: false, error: "No files specified" }, { status: 400 });
+            }
+
+            await git.discardFiles(files);
+            logger.info("Discarded changes", { count: files.length });
+
+            return Response.json({ success: true, message: `Discarded changes in ${files.length} file(s)` });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.error("Failed to discard changes", { error: errorMessage });
+            return Response.json({ success: false, error: errorMessage }, { status: 500 });
+        }
+    },
+};
+
+// Stage files
+export const gitStageRoute: RouteHandler<GitSyncResponse> = {
+    POST: async (req) => {
+        try {
+            const git = getGitClient();
+            const { files } = (await req.json()) as { files: string[] };
+
+            if (!files || files.length === 0) {
+                return Response.json({ success: false, error: "No files specified" }, { status: 400 });
+            }
+
+            await git.stageFiles(files);
+            logger.info("Staged files", { count: files.length });
+
+            return Response.json({ success: true, message: `Staged ${files.length} file(s)` });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.error("Failed to stage files", { error: errorMessage });
+            return Response.json({ success: false, error: errorMessage }, { status: 500 });
+        }
+    },
+};
+
+// Unstage files
+export const gitUnstageRoute: RouteHandler<GitSyncResponse> = {
+    POST: async (req) => {
+        try {
+            const git = getGitClient();
+            const { files } = (await req.json()) as { files: string[] };
+
+            if (!files || files.length === 0) {
+                return Response.json({ success: false, error: "No files specified" }, { status: 400 });
+            }
+
+            await git.unstageFiles(files);
+            logger.info("Unstaged files", { count: files.length });
+
+            return Response.json({ success: true, message: `Unstaged ${files.length} file(s)` });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.error("Failed to unstage files", { error: errorMessage });
+            return Response.json({ success: false, error: errorMessage }, { status: 500 });
+        }
+    },
+};
+
+// Stage all files
+export const gitStageAllRoute: RouteHandler<GitSyncResponse> = {
+    POST: async () => {
+        try {
+            const git = getGitClient();
+            await git.addAll();
+            logger.info("Staged all files");
+            return Response.json({ success: true, message: "All files staged" });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.error("Failed to stage all files", { error: errorMessage });
+            return Response.json({ success: false, error: errorMessage }, { status: 500 });
+        }
+    },
+};
+
+// Unstage all files
+export const gitUnstageAllRoute: RouteHandler<GitSyncResponse> = {
+    POST: async () => {
+        try {
+            const git = getGitClient();
+            const detailed = await git.statusDetailed();
+            const stagedPaths = detailed.stagedFiles.map((f) => f.path);
+            if (stagedPaths.length > 0) {
+                await git.unstageFiles(stagedPaths);
+            }
+            logger.info("Unstaged all files", { count: stagedPaths.length });
+            return Response.json({ success: true, message: "All files unstaged" });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.error("Failed to unstage all files", { error: errorMessage });
+            return Response.json({ success: false, error: errorMessage }, { status: 500 });
+        }
+    },
+};
+
+// Detailed status (staged vs unstaged)
+interface GitDetailedStatusResponse {
+    success: boolean;
+    stagedFiles: FileChange[];
+    unstagedFiles: FileChange[];
+    hasUncommittedChanges: boolean;
+    currentBranch?: string;
+    remoteBranch?: string;
+    remoteUrl?: string;
+    hasMergeConflict?: boolean;
+    recentCommits?: CommitInfo[];
+    error?: string;
+}
+
+export const gitStatusDetailedRoute: RouteHandler<GitDetailedStatusResponse> = {
+    GET: async () => {
+        try {
+            const git = getGitClient();
+            const detailed = await git.statusDetailed();
+
+            let currentBranch: string | undefined;
+            try {
+                currentBranch = await git.currentBranch() ?? undefined;
+            } catch {
+                currentBranch = undefined;
+            }
+
+            let remoteBranch: string | undefined;
+            let remoteUrl: string | undefined;
+            try {
+                const remotes = await git.listRemotes();
+                if (remotes.length > 0) {
+                    remoteUrl = remotes[0]?.url;
+                    remoteBranch = currentBranch ? `origin/${currentBranch}` : undefined;
+                }
+            } catch {
+                // no remotes
+            }
+
+            let hasMergeConflict = false;
+            try {
+                hasMergeConflict = await git.hasMergeConflict();
+            } catch {
+                // ignore
+            }
+
+            const recentCommits = await git.log({ depth: 5 });
+
+            return Response.json({
+                success: true,
+                stagedFiles: detailed.stagedFiles,
+                unstagedFiles: detailed.unstagedFiles,
+                hasUncommittedChanges: detailed.hasUncommittedChanges,
+                currentBranch,
+                remoteBranch,
+                remoteUrl,
+                hasMergeConflict,
+                recentCommits,
+            });
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            logger.error("Failed to get detailed status", { error: errorMessage });
+            return Response.json(
+                {
+                    success: false,
+                    stagedFiles: [],
+                    unstagedFiles: [],
+                    hasUncommittedChanges: false,
                     error: errorMessage,
                 },
                 { status: 500 }

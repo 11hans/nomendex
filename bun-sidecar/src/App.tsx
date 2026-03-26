@@ -9,7 +9,7 @@ import { Layout } from "./components/Layout";
 import { WorkspacePage } from "./pages/WorkspacePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { HelpPage } from "./pages/HelpPage";
-import { SyncPage } from "./pages/SyncPage";
+import { SyncPage } from "./pages/sync/SyncPage";
 import { ConflictResolvePage } from "./pages/ConflictResolvePage";
 import { AgentsPage } from "./pages/AgentsPage";
 import { McpServersPage } from "./pages/McpServersPage";

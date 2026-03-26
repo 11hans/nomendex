@@ -36,6 +36,23 @@ export interface StatusResult {
     hasUncommittedChanges: boolean;
 }
 
+export interface ChangedFileContentResult {
+    path: string;
+    status: FileChange["status"] | "unchanged";
+    baseContent: string;
+    currentContent: string;
+    baseExists: boolean;
+    currentExists: boolean;
+    isBinary: boolean;
+    truncated: boolean;
+}
+
+export interface DetailedStatusResult {
+    stagedFiles: FileChange[];
+    unstagedFiles: FileChange[];
+    hasUncommittedChanges: boolean;
+}
+
 export interface FetchStatusResult {
     behindCount: number;
     aheadCount: number;
@@ -63,6 +80,7 @@ export interface MergeState {
 }
 
 const MERGE_STATE_FILE = "NOMENDEX_MERGE_STATE";
+const MAX_DIFF_PREVIEW_BYTES = 200 * 1024;
 
 interface GitClientConfig {
     dir: string;
@@ -332,6 +350,76 @@ export function createGitClient(config: GitClientConfig) {
         },
 
         /**
+         * Get text content for a changed file in HEAD vs working tree.
+         * Used for inline diff previews in the Sync UI.
+         */
+        async getChangedFileContent(filepath: string): Promise<ChangedFileContentResult> {
+            const statusResult = await this.status();
+            const fileChange = statusResult.changedFiles.find((f) => f.path === filepath);
+            const status = fileChange?.status ?? "unchanged";
+
+            const toPreviewText = (bytes: Uint8Array): { text: string; binary: boolean; truncated: boolean } => {
+                const binary = bytes.includes(0);
+                if (binary) {
+                    return { text: "", binary: true, truncated: false };
+                }
+
+                const truncated = bytes.length > MAX_DIFF_PREVIEW_BYTES;
+                const slice = truncated ? bytes.slice(0, MAX_DIFF_PREVIEW_BYTES) : bytes;
+                const text = Buffer.from(slice).toString("utf-8");
+
+                return {
+                    text: truncated ? `${text}\n\n... [preview truncated]` : text,
+                    binary: false,
+                    truncated,
+                };
+            };
+
+            let baseBytes: Uint8Array | null = null;
+            let currentBytes: Uint8Array | null = null;
+            let headOid: string | null = null;
+
+            try {
+                headOid = await git.resolveRef({ fs, dir, ref: "HEAD" });
+            } catch {
+                headOid = null;
+            }
+
+            if (headOid) {
+                try {
+                    const blob = await git.readBlob({ fs, dir, oid: headOid, filepath });
+                    baseBytes = blob.blob;
+                } catch {
+                    baseBytes = null;
+                }
+            }
+
+            try {
+                const fullPath = `${dir}/${filepath}`;
+                const file = Bun.file(fullPath);
+                if (await file.exists()) {
+                    currentBytes = new Uint8Array(await file.arrayBuffer());
+                }
+            } catch {
+                currentBytes = null;
+            }
+
+            const basePreview = baseBytes ? toPreviewText(baseBytes) : { text: "", binary: false, truncated: false };
+            const currentPreview = currentBytes ? toPreviewText(currentBytes) : { text: "", binary: false, truncated: false };
+
+            return {
+                path: filepath,
+                status,
+                baseContent: basePreview.text,
+                currentContent: currentPreview.text,
+                baseExists: !!baseBytes,
+                currentExists: !!currentBytes,
+                isBinary: basePreview.binary || currentPreview.binary,
+                truncated: basePreview.truncated || currentPreview.truncated,
+            };
+        },
+
+        /**
          * Get recent commits
          */
         async log(opts: { depth?: number } = {}): Promise<CommitInfo[]> {
@@ -376,6 +464,137 @@ export function createGitClient(config: GitClientConfig) {
                 }
             }
             return false;
+        },
+
+        /**
+         * Discard working tree changes for a file (restore to HEAD state).
+         * For untracked files, deletes the file.
+         */
+        async discardFile(filepath: string): Promise<void> {
+            const matrix = await git.statusMatrix({ fs, dir, filepaths: [filepath] });
+            if (matrix.length === 0) return;
+
+            const [, head, workdir] = matrix[0]!;
+
+            if (head === 0 && workdir === 2) {
+                // Untracked file — delete it
+                const fullPath = `${dir}/${filepath}`;
+                try {
+                    fs.unlinkSync(fullPath);
+                } catch {
+                    // ignore if already gone
+                }
+                // Also remove from index if it was staged
+                try {
+                    await git.remove({ fs, dir, filepath });
+                } catch {
+                    // ignore
+                }
+            } else {
+                // Tracked file — checkout from HEAD
+                await git.checkout({ fs, dir, ref: "HEAD", filepaths: [filepath], force: true });
+            }
+        },
+
+        /**
+         * Discard working tree changes for multiple files
+         */
+        async discardFiles(filepaths: string[]): Promise<void> {
+            for (const filepath of filepaths) {
+                await this.discardFile(filepath);
+            }
+        },
+
+        /**
+         * Stage a single file
+         */
+        async stageFile(filepath: string): Promise<void> {
+            const fullPath = `${dir}/${filepath}`;
+            const file = Bun.file(fullPath);
+            if (await file.exists()) {
+                await git.add({ fs, dir, filepath });
+            } else {
+                await git.remove({ fs, dir, filepath });
+            }
+        },
+
+        /**
+         * Stage multiple files
+         */
+        async stageFiles(filepaths: string[]): Promise<void> {
+            for (const filepath of filepaths) {
+                await this.stageFile(filepath);
+            }
+        },
+
+        /**
+         * Unstage a single file (reset index entry to match HEAD)
+         */
+        async unstageFile(filepath: string): Promise<void> {
+            await git.resetIndex({ fs, dir, filepath });
+        },
+
+        /**
+         * Unstage multiple files
+         */
+        async unstageFiles(filepaths: string[]): Promise<void> {
+            for (const filepath of filepaths) {
+                await this.unstageFile(filepath);
+            }
+        },
+
+        /**
+         * Get detailed status separating staged and unstaged changes
+         */
+        async statusDetailed(): Promise<DetailedStatusResult> {
+            const matrix = await git.statusMatrix({ fs, dir });
+            const stagedFiles: FileChange[] = [];
+            const unstagedFiles: FileChange[] = [];
+
+            for (const [filepath, head, workdir, stage] of matrix) {
+                // Status matrix: [filepath, HEAD, WORKDIR, STAGE]
+                // HEAD: 0 = absent, 1 = present
+                // WORKDIR: 0 = absent, 1 = identical to HEAD, 2 = different
+                // STAGE: 0 = absent, 1 = identical to HEAD, 2 = identical to WORKDIR, 3 = different from both
+
+                // Staged changes: index differs from HEAD
+                if (stage !== head) {
+                    if (head === 0 && stage !== 0) {
+                        stagedFiles.push({ path: filepath, status: "added" });
+                    } else if (head === 1 && stage === 0) {
+                        stagedFiles.push({ path: filepath, status: "deleted" });
+                    } else if (head === 1 && (stage === 2 || stage === 3)) {
+                        stagedFiles.push({ path: filepath, status: "modified" });
+                    }
+                }
+
+                // Unstaged changes: workdir differs from index
+                if (workdir !== stage) {
+                    if (stage === 0 && workdir === 2) {
+                        // Not in index, present in workdir → untracked
+                        if (head === 0) {
+                            unstagedFiles.push({ path: filepath, status: "untracked" });
+                        } else {
+                            unstagedFiles.push({ path: filepath, status: "modified" });
+                        }
+                    } else if (workdir === 0 && stage !== 0) {
+                        // In index but deleted from workdir
+                        unstagedFiles.push({ path: filepath, status: "deleted" });
+                    } else if (workdir === 2 && stage === 1) {
+                        // Workdir different from index (which matches HEAD)
+                        unstagedFiles.push({ path: filepath, status: "modified" });
+                    } else if (workdir === 2 && stage === 3) {
+                        // Workdir different from index (which also differs from HEAD) — partially staged
+                        unstagedFiles.push({ path: filepath, status: "modified" });
+                    }
+                }
+            }
+
+            return {
+                stagedFiles,
+                unstagedFiles,
+                hasUncommittedChanges: stagedFiles.length > 0 || unstagedFiles.length > 0,
+            };
         },
 
         /**

@@ -5,7 +5,7 @@ import { initializeWorkspaceServices } from "./services/workspace-init";
 import { appendFile } from "node:fs/promises";
 import { baseDirRoute } from "./server-routes/base-dir";
 import { workspaceRoutes } from "./server-routes/workspace-routes";
-import { gitInstalledRoute, gitInitRoute, gitStatusRoute, gitSetupRemoteRoute, gitPullRoute, gitPushRoute, gitCommitRoute, gitFetchStatusRoute, gitConflictsRoute, gitResolveConflictRoute, gitAbortMergeRoute, gitContinueMergeRoute, gitConflictContentRoute } from "./server-routes/git-sync";
+import { gitInstalledRoute, gitInitRoute, gitStatusRoute, gitSetupRemoteRoute, gitPullRoute, gitPushRoute, gitCommitRoute, gitFetchStatusRoute, gitFileDiffRoute, gitConflictsRoute, gitResolveConflictRoute, gitAbortMergeRoute, gitContinueMergeRoute, gitConflictContentRoute, gitStageRoute, gitUnstageRoute, gitStageAllRoute, gitUnstageAllRoute, gitStatusDetailedRoute, gitDiscardRoute } from "./server-routes/git-sync";
 // Feature-specific routes (replacing plugin registry)
 import { todosRoutes } from "./server-routes/todos-routes";
 import { notesRoutes } from "./server-routes/notes-routes";
@@ -235,11 +235,18 @@ const server = serve<WSData>({
         "/api/git/push": gitPushRoute,
         "/api/git/commit": gitCommitRoute,
         "/api/git/fetch-status": gitFetchStatusRoute,
+        "/api/git/file-diff": gitFileDiffRoute,
         "/api/git/conflicts": gitConflictsRoute,
         "/api/git/resolve-conflict": gitResolveConflictRoute,
         "/api/git/abort-merge": gitAbortMergeRoute,
         "/api/git/continue-merge": gitContinueMergeRoute,
         "/api/git/conflict-content": gitConflictContentRoute,
+        "/api/git/stage": gitStageRoute,
+        "/api/git/unstage": gitUnstageRoute,
+        "/api/git/stage-all": gitStageAllRoute,
+        "/api/git/unstage-all": gitUnstageAllRoute,
+        "/api/git/status-detailed": gitStatusDetailedRoute,
+        "/api/git/discard": gitDiscardRoute,
 
         // Catch-all for unknown API routes - return JSON 404 instead of HTML
         "/api/*": {
