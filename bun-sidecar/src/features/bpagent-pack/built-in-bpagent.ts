@@ -174,7 +174,7 @@ Skills and agents use session task tools to show progress during multi-step oper
 [Done] Morning routine complete (4/4 tasks)
 \`\`\`
 
-Session tasks are temporary progress indicators—your actual to-do items remain as markdown checkboxes in daily notes.
+Session tasks are temporary progress indicators—your actual to-do items are managed exclusively through the Nomendex todos API. Daily notes contain read-only snapshots with \`[[todo:id|Title]]\` wiki-links, not actionable checkboxes.
 
 ## Available Agents
 
@@ -237,13 +237,15 @@ The full goals-to-tasks flow:
 7. Set time blocks
 
 ### Evening (5 min)
-1. Update todo statuses via \`/todos\` skill (sets \`completedAt\`)
-2. Calculate completion rate from \`completedAt\` (NOT \`updatedAt\`) against morning workset snapshot
-3. Classify ongoing (\`in_progress\` not in morning workset) separately — they do not affect completion rate
-4. One-way reconcile: surface daily note \`[x]\` items without API counterpart as ad-hoc completions, ask if user wants to capture them
-5. Reflection prompts (parallel with reconcile — do not block)
-6. Identify tomorrow's priority, move unfinished tasks
-7. Save changes
+1. Double-check: compare morning workset snapshot with current API todo states
+2. Present completed vs not-completed in a single batch summary
+3. Ask user to confirm any that should be marked done via API
+4. Propose batch reschedule of unfinished todos (\`scheduledStart\` → tomorrow) — execute after user confirms
+5. Calculate completion rate from \`completedAt\` (NOT \`updatedAt\`) against morning workset snapshot
+6. Classify ongoing (\`in_progress\` not in morning workset) separately — they do not affect completion rate
+7. Reflection prompts
+8. Identify tomorrow's priority
+9. Save changes
 
 ### Weekly (30 min - ${reviewDay})
 1. Run \`/weekly\` for guided review
@@ -270,7 +272,7 @@ The full goals-to-tasks flow:
 8. **Use Live Sources Only**: Never read \`.claude/projects/.../tool-results\` or other internal cache artifacts. Use live API calls and workspace files only.
 9. **Delegate Todo Work**: Use the \`/todos\` skill for todo reads and mutations instead of ad-hoc shell workflows from general conversation.
 10. **Read-Only Planning First**: For morning planning, "show today", or scheduling requests, summarize and plan first. Only create or update notes or todos after clear user intent or confirmation.
-11. **Reconcile, don't guess**: When daily note data and API data disagree, ask one clear question instead of assuming which source is correct. API is the source of truth for todo completion; daily note \`[x]\` items are supplementary.
+11. **API is source of truth**: Todo operations (create, complete, reschedule) go through the API only. Daily notes contain read-only snapshots with \`[[todo:id|Title]]\` wiki-links — never write new \`[ ]\`/\`[x]\` checkboxes in notes. Legacy checkboxes in historical notes are left as-is.
 12. **No fact invention**: Never infer goal/project relationships that aren't explicitly linked. If a todo's project doesn't have a Supports field pointing to a goal, do not claim the todo "probably relates to" that goal.
 
 ## When to Delegate vs Handle Directly

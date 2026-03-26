@@ -1340,7 +1340,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 5
+version: 6
 source: nomendex
 ---
 
@@ -1350,7 +1350,7 @@ Creates daily notes and provides structured workflows for morning planning, midd
 
 ## Usage
 
-Invoke with \`/daily\` or ask Codex to create today's note or help with daily routines.
+Invoke with \`/daily\` or ask BPagent to create today's note or help with daily routines.
 
 ### Create Today's Note
 \`\`\`
@@ -1419,7 +1419,7 @@ Rules:
 2. Pull incomplete tasks from yesterday's real daily note if one exists
 3. Build today's todo workset using the bucket order above
 4. If the user names a focus project, surface that project's open todos before unrelated work
-5. **Save workset snapshot** — after the workset is finalized, write a hidden HTML comment into today's daily note listing the todo IDs that form today's plan: \`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`. This snapshot is the evening flow's baseline for completion rate. Place it right after the \`## Tasks\` heading (or at the top of the note if Tasks section doesn't exist). If the daily note hasn't been created yet, include the comment when creating it.
+5. **Save workset snapshot** — after the workset is finalized, write the read-only todo list with \`[[todo:id|Title]]\` wiki-links into today's daily note under \`## Today's Workset\`, plus a hidden HTML comment listing the todo IDs: \`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`. This snapshot is the evening flow's baseline for completion rate. Place it right after the \`## Today's Workset\` heading (or at the top of the note if the section doesn't exist). If the daily note hasn't been created yet, include both when creating it.
 6. Read weekly/monthly goal files as strategic context only
 7. Ask focus questions and propose a plan before editing anything
 
@@ -1432,20 +1432,20 @@ Before interactive prompts, automatically surface:
 - **Other Candidates** from Today/Now columns or remaining open work
 - **Strategic Context** from weekly/monthly goals only when those files contain real content
 
-Display as a brief context block at the top of the morning routine:
+Display as a brief context block at the top of the morning routine using \`[[todo:id|Title]]\` wiki-links (never checkboxes):
 \`\`\`markdown
 ### Today's Context
 - **Overdue:**
-  - [ ] [ProjectA] Fix bug from yesterday
+  - [[todo:abc-123|Fix bug from yesterday]] · [ProjectA] · high · due 3/25
 - **Due Today:**
-  - [ ] [Ops] Send meter reading (due today)
+  - [[todo:def-456|Send meter reading]] · [Ops] · medium · due 3/26
 - **Started / In Progress:**
-  - [ ] [Work] Draft reply to Tomas
+  - [[todo:ghi-789|Draft reply to Tomas]] · [Work] · in_progress
 - **Focused Project - Nomendex:**
-  - [ ] Observe BPagent and note UI bugs
-  - [ ] Fix kanban sorting placement
+  - [[todo:jkl-012|Observe BPagent and note UI bugs]] · medium
+  - [[todo:mno-345|Fix kanban sorting placement]] · high
 - **Other Candidates:**
-  - [ ] [Health] 30min run
+  - [[todo:pqr-678|30min run]] · [Health] · low
 - **Strategic Context:**
   - Monthly focus: Nomendex audit + Q2 planning
   - Weekly review: template stub, no live ONE Big Thing yet
@@ -1456,21 +1456,24 @@ Display as a brief context block at the top of the morning routine:
 - "What might get in the way?"
 - "How do you want to feel at end of day?"
 
-### Task Creation Guidance
-When adding tasks to the daily note, recommend linking to goals/projects:
-\`\`\`markdown
-- [ ] Draft API spec — Supports: [[Projects/MyApp]]
-- [ ] Review chapter 3 — Supports: [[1. Yearly Goals#Read 12 books]]
+### New Todo Proposals
+When the morning routine reveals a need for new todos, propose them to the user for confirmation before creating via API. Never write new checkboxes in the daily note.
+\`\`\`
+Proposed new todos:
+1. "Draft API spec" · project: MyApp · priority: high · scheduledStart: today
+2. "Review chapter 3" · project: Personal · priority: medium · scheduledStart: today
+Create all? (or specify which ones)
 \`\`\`
 
 ### Morning Checklist
-- [ ] Daily note path detected
-- [ ] Today workset reviewed (overdue, due today, started, focused project, other candidates)
-- [ ] Workset snapshot saved to daily note (\`<!-- workset: ... -->\`)
-- [ ] Yesterday's incomplete tasks reviewed
-- [ ] ONE priority identified
-- [ ] Time blocks set
-- [ ] Potential obstacles identified
+- Daily note path detected
+- Today workset reviewed (overdue, due today, started, focused project, other candidates)
+- Read-only workset with \`[[todo:id|Title]]\` wiki-links written to daily note
+- Workset snapshot saved (\`<!-- workset: ... -->\`)
+- Yesterday's incomplete tasks reviewed
+- ONE priority identified
+- Time blocks set
+- Potential obstacles identified
 
 ## Midday Check-in (2-3 minutes)
 
@@ -1516,20 +1519,45 @@ If no snapshot exists (morning flow was skipped), fall back to an API-based heur
 \`completion_rate = completed_today ∩ planned_today / |planned_today|\`
 Only todos from the planned workset count. Bonus completions (todos not in the morning workset but completed today) are shown separately as "Extra wins".
 
-#### Step 5: One-way reconcile with daily note
-After computing metrics, scan today's daily note for \`[x]\` checkboxes.
-- Daily note \`[x]\` items that have a matching API todo → already counted, no action needed.
-- Daily note \`[x]\` items with NO matching API todo → mention them as ad-hoc completions: "You also checked off N items in your daily note that aren't tracked as API todos. Want to capture these?"
-- API completed todos without a daily note \`[x]\` → do NOT flag this. API is the source of truth.
+#### Step 5: Double-check and batch actions
+Present a single batch summary comparing morning workset with current API state:
+
+\`\`\`
+✓ Completed (3/7):
+- [[todo:abc-123|Fix bug]] — done at 14:30
+- [[todo:def-456|Send reading]] — done at 16:00
+- [[todo:ghi-789|Draft reply]] — done at 17:20
+
+⬜ Not completed (4/7):
+- [[todo:jkl-012|Observe UI bugs]] — still todo
+- [[todo:mno-345|Fix sorting]] — still in_progress
+- [[todo:pqr-678|30min run]] — still todo
+- [[todo:stu-901|Review PR]] — still todo
+
+Should any of the incomplete ones be marked as done?
+\`\`\`
+
+After user responds:
+- Mark confirmed todos as done via API (sets \`completedAt\`)
+- For remaining incomplete todos, propose batch reschedule:
+\`\`\`
+Reschedule these 3 to tomorrow (scheduledStart → YYYY-MM-DD)?
+- [[todo:jkl-012|Observe UI bugs]]
+- [[todo:pqr-678|30min run]]
+- [[todo:stu-901|Review PR]]
+Confirm? (or specify which ones to skip/drop)
+\`\`\`
+- Execute reschedule via API after confirmation
+
+#### Step 6: Legacy reconcile (optional, historical notes only)
+If today's daily note contains legacy \`[x]\` checkboxes (from before API-only migration):
+- Daily note \`[x]\` items with NO matching API todo → mention as ad-hoc completions: "Want to capture these as API todos?"
+- Do NOT create new checkboxes. This step is read-only.
 
 ### Capture
-1. Review and update todos via \`/todos\` skill:
-   - Mark completed todos as done (sets \`completedAt\` automatically)
-   - Move or reschedule uncompleted items from today's workset
-2. Mark completed tasks with [x] in daily note
-3. Add notes and learnings
-4. Log energy levels (1-10)
-5. Record gratitude items
+1. Add notes and learnings to daily note (plain text, no checkboxes)
+2. Log energy levels (1-10)
+3. Record gratitude items
 
 ### Goal & Project Attention Summary
 Automatically generate an end-of-day summary showing which goals and projects received attention:
@@ -1541,11 +1569,13 @@ Automatically generate an end-of-day summary showing which goals and projects re
   - [Work] 2/3 todos
 - **Extra wins:** 1 (unplanned todo completed)
 - **Ongoing (not in today's rate):** 2 in_progress
-  - [Work] Redesign homepage (day 3)
-  - [Nomendex] API refactor (day 5)
+  - [[todo:abc-123|Redesign homepage]] · [Work] · day 3
+  - [[todo:def-456|API refactor]] · [Nomendex] · day 5
+- **Rescheduled to tomorrow:** 2
+  - [[todo:ghi-789|Observe UI bugs]] · [Nomendex]
+  - [[todo:jkl-012|30min run]] · [Health]
 - **Goals touched:** [[Goal 1]] (2 tasks), [[Goal 3]] (1 task)
 - **Projects advanced:** [[ProjectA]] (3 tasks), [[ProjectB]] (1 task)
-- **Ad-hoc note items:** 1 (not in API)
 - **Insight:** Focused day on Nomendex — consider closing the API refactor this week
 \`\`\`
 
@@ -1559,21 +1589,21 @@ These run in parallel — reflection does not wait for reconcile to complete:
 - What am I grateful for?
 
 **Prepare:**
-1. Identify tomorrow's priority (preview)
-2. Move incomplete tasks to tomorrow or delete
+1. Identify tomorrow's priority (preview from rescheduled todos)
+2. Incomplete tasks already rescheduled via API in double-check step
 3. Commit changes to git (\`/push\`)
 
 ### Shutdown Checklist
-- [ ] Todos updated (done/moved/rescheduled)
-- [ ] Completion rate calculated (from \`completedAt\`, not \`updatedAt\`)
-- [ ] Daily note reconciled (ad-hoc items surfaced)
-- [ ] Reflection completed
-- [ ] Tomorrow's priority identified
-- [ ] Changes committed
+- Todos double-checked with user (batch confirm done/reschedule)
+- Completion rate calculated (from \`completedAt\`, not \`updatedAt\`)
+- Incomplete todos rescheduled to tomorrow via API
+- Reflection completed
+- Tomorrow's priority identified
+- Changes committed
 
 ## Daily Note Structure
 
-Standard daily note template:
+Standard daily note template. The \`## Today's Workset\` section is populated by the morning routine with read-only \`[[todo:id|Title]]\` wiki-links from the API. Never write \`[ ]\` or \`[x]\` checkboxes in new daily notes.
 
 \`\`\`markdown
 # {{date}}
@@ -1586,15 +1616,20 @@ Standard daily note template:
 - Afternoon (12-5):
 - Evening (5+):
 
-## Tasks
-### Must Do Today
-- [ ]
+## Today's Workset
+<!-- workset: todo-id1, todo-id2, todo-id3 -->
 
-### Work
-- [ ]
+**Overdue:**
+- [[todo:id|Title]] · [Project] · priority · due date
 
-### Personal
-- [ ]
+**Due Today:**
+- [[todo:id|Title]] · [Project] · priority
+
+**Scheduled / In Progress:**
+- [[todo:id|Title]] · [Project] · status
+
+**Other:**
+- [[todo:id|Title]] · [Project] · priority
 
 ## Notes
 [Capture thoughts, meeting notes, ideas]
@@ -1688,19 +1723,19 @@ TaskUpdate: "Set time blocks", addBlockedBy: [surface-relevant-goals-id]
 
 \`\`\`
 TaskCreate:
-  subject: "Update todos"
-  description: "Mark completed todos as done via /todos skill, reschedule unfinished items from today's workset"
-  activeForm: "Updating todos via /todos skill..."
+  subject: "Double-check todos"
+  description: "Compare morning workset snapshot with current API state, present batch summary of completed vs incomplete"
+  activeForm: "Comparing workset with current todo states..."
+
+TaskCreate:
+  subject: "Batch confirm & reschedule"
+  description: "Ask user to confirm done items and reschedule incomplete todos to tomorrow via API"
+  activeForm: "Processing batch confirmations..."
 
 TaskCreate:
   subject: "Calculate completion rate"
   description: "Read morning workset snapshot, fetch active + archived todos, compute completion from completedAt, classify ongoing separately"
   activeForm: "Calculating completion rate..."
-
-TaskCreate:
-  subject: "Reconcile daily note"
-  description: "Scan daily note [x] items, surface ad-hoc completions not in API"
-  activeForm: "Reconciling daily note..."
 
 TaskCreate:
   subject: "Generate reflection prompts"
@@ -1709,24 +1744,22 @@ TaskCreate:
 
 TaskCreate:
   subject: "Prepare tomorrow's preview"
-  description: "Identify tomorrow's priority and move incomplete tasks"
+  description: "Identify tomorrow's priority from rescheduled and upcoming todos"
   activeForm: "Preparing tomorrow's preview..."
 \`\`\`
 
 ### Evening Dependencies
 
 \`\`\`
-"Calculate completion rate" depends on "Update todos" (needs final todo states)
+"Batch confirm & reschedule" depends on "Double-check todos" (needs the comparison data)
+"Calculate completion rate" depends on "Batch confirm & reschedule" (needs final todo states after user confirms)
 "Prepare tomorrow's preview" depends on "Calculate completion rate" (needs to know what's left)
-"Reconcile daily note" runs in parallel with "Generate reflection prompts" (independent)
-"Generate reflection prompts" does NOT depend on "Calculate completion rate" (soft dependency — reflection can start immediately)
+"Generate reflection prompts" runs independently (can start any time)
 \`\`\`
-
-If reconcile surfaces ad-hoc items and the user responds, update the cascade impact summary after the response. Do not block the evening flow waiting for it.
 
 Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
 
-Task tools provide visibility into what's happening during longer operations. Tasks are session-scoped and don't persist between Codex sessions—your actual work items remain in your daily note markdown checkboxes.
+Task tools provide visibility into what's happening during longer operations. Tasks are session-scoped and don't persist between BPagent sessions—your actual work items are managed exclusively through the Nomendex todos API.
 
 ## Integration
 
@@ -2771,7 +2804,7 @@ If no matches are found:
       "SKILL.md": `---
 name: weekly
 description: Facilitate weekly review process with reflection, goal alignment, and planning. Create review notes, analyze past week, plan next week. Use on Sundays or whenever doing weekly planning.
-version: 4
+version: 5
 source: nomendex
 ---
 
@@ -2781,7 +2814,7 @@ Facilitates your weekly review process by creating a review note and guiding ref
 
 ## Usage
 
-Invoke with \`/weekly\` or ask Codex to help with your weekly review.
+Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
 
 \`\`\`
 /weekly
@@ -2853,22 +2886,24 @@ The skill guides you through:
 
 ## Weekly Review Checklist
 
-- [ ] Review all daily notes
-- [ ] Fetch and analyze todos via \`/todos\` skill
-- [ ] Calculate todo completion rates by project
-- [ ] Identify overdue and blocked todos
-- [ ] Process inbox items
-- [ ] Update project statuses
-- [ ] Check upcoming scheduled todos via \`scheduledStart\`/\`scheduledEnd\` (and external calendar only if explicitly available)
-- [ ] Review monthly goals
-- [ ] Plan next week's priorities
-- [ ] Plan todo distribution for next week
-- [ ] Block time for important work
-- [ ] Clean digital workspace
-- [ ] Archive completed todos and items
-- [ ] Commit changes to Git
+- Review all daily notes
+- Fetch and analyze todos via \`/todos\` skill
+- Calculate todo completion rates by project
+- Identify overdue and blocked todos
+- Process inbox items
+- Update project statuses
+- Check upcoming scheduled todos via \`scheduledStart\`/\`scheduledEnd\` (and external calendar only if explicitly available)
+- Review monthly goals
+- Plan next week's priorities
+- Propose new todos and todo distribution for next week (batch confirm with user, then create/update via API)
+- Block time for important work
+- Clean digital workspace
+- Archive completed todos via API (batch confirm with user)
+- Commit changes to Git
 
 ## Weekly Review Note Format
+
+All todo references use \`[[todo:id|Title]]\` wiki-links. Never write \`[ ]\`/\`[x]\` checkboxes — todo state is managed exclusively through the API.
 
 \`\`\`markdown
 # Weekly Review: YYYY-MM-DD
@@ -2890,11 +2925,11 @@ The skill guides you through:
 | [[ProjectB]] | 0 | 5 | 0% |
 
 ### Overdue Todos
-- [ ] [ProjectA] Fix critical bug (due: 3/10)
-- [ ] [ProjectB] Book appointment (due: 3/12)
+- [[todo:abc-123|Fix critical bug]] · [ProjectA] · high · due 3/10
+- [[todo:def-456|Book appointment]] · [ProjectB] · medium · due 3/12
 
 ### Blocked Todos
-- [ ] [ProjectA] Deploy to prod (blocked by: payment gateway)
+- [[todo:ghi-789|Deploy to prod]] · [ProjectA] · blocked by: payment gateway
 
 ### Today Column Patterns
 - Average "Today" todos: 8/day
@@ -2903,11 +2938,11 @@ The skill guides you through:
 
 ## Goal Progress
 ### Monthly Goals
-- [ ] Goal 1 (XX%)
-- [ ] Goal 2 (XX%)
+- Goal 1 (XX%)
+- Goal 2 (XX%)
 
 ### This Week's Contribution
-- [Task] -> [[Goal]]
+- [[todo:id|Completed task]] → [[Goal]]
 - [Completed todos via linked projects or explicit goal references]
 
 ## Project Progress
@@ -2922,28 +2957,31 @@ The skill guides you through:
 >
 
 ### Key Tasks
-- [ ]
-- [ ]
-- [ ]
+Proposed new todos for next week (agent creates via API after user confirms batch):
+1. "Task title" · project: X · priority: high · scheduledStart: Monday
+2. "Task title" · project: Y · priority: medium · scheduledStart: Tuesday
+3. "Task title" · project: X · priority: low · scheduledStart: Wednesday
 
 ### Todo Plan
+Distribution of existing + new todos across the week (agent sets \`scheduledStart\` via API after confirmation):
+
 **Monday:**
-- [ ] [ProjectA] Start audit
-- [ ] [ProjectB] Morning routine
+- [[todo:abc-123|Start audit]] · [ProjectA] · high
+- [[todo:def-456|Morning routine]] · [ProjectB] · low
 
 **Tuesday:**
-- [ ] [ProjectA] Review UI bugs
-- [ ] [ProjectB] 30min run
+- [[todo:ghi-789|Review UI bugs]] · [ProjectA] · medium
+- [[todo:jkl-012|30min run]] · [ProjectB] · low
 
 **Wednesday:**
-- [ ] [ProjectA] Deploy feature
-- [ ] [ProjectB] Meal prep
+- [[todo:mno-345|Deploy feature]] · [ProjectA] · high
+- [[todo:pqr-678|Meal prep]] · [ProjectB] · low
 
 (Continue for rest of week...)
 
 ### Project Next-Actions
-- [ ] [ProjectA] - [specific next step]
-- [ ] [ProjectB] - [specific next step]
+- [[todo:id|Specific next step]] · [ProjectA]
+- [[todo:id|Specific next step]] · [ProjectB]
 
 ### Time Blocks
 - Monday:
@@ -2953,14 +2991,17 @@ The skill guides you through:
 - Friday:
 
 ### Todo Housekeeping
-**Archive:**
-- [x] Old completed todos from 2+ weeks ago
+Actions executed via API after user confirms batch:
 
-**Delete:**
-- [ ] Stale todos no longer relevant
+**Archive:** (agent calls archive endpoint)
+- [[todo:abc-123|Old completed todo]] · done 3/10
+- [[todo:def-456|Another old todo]] · done 3/8
 
-**Re-prioritize:**
-- [ ] Move X to high priority
+**Delete:** (agent calls delete endpoint)
+- [[todo:ghi-789|Stale todo]] · created 2/15, no activity
+
+**Re-prioritize:** (agent calls update endpoint)
+- [[todo:jkl-012|Move X to high priority]] · current: low → proposed: high
 
 ## Notes
 \`\`\`
@@ -3057,7 +3098,7 @@ Reflect is blocked until Collect completes. Plan is blocked until Reflect comple
 
 Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
 
-Task tools are session-scoped and don't persist between Codex sessions—your actual weekly review content is saved in the review note.
+Task tools are session-scoped and don't persist between BPagent sessions—your actual work items are managed through the Nomendex todos API, and the weekly review note serves as a read-only snapshot.
 
 ## Agent Team Workflow (Optional)
 
