@@ -144,6 +144,7 @@ export async function initializeWorkspaceServices(): Promise<void> {
 | `/api/workspaces/add` | POST | Add new workspace |
 | `/api/workspaces/remove` | POST | Remove workspace from list |
 | `/api/workspaces/rename` | POST | Rename a workspace |
+| `/api/workspaces/open-terminal` | POST | Open Claude Code in the active workspace (`?dangerous=true` for `--dangerously-skip-permissions`) |
 
 ### Filesystem API Routes
 
@@ -169,6 +170,17 @@ Dropdown menu in the sidebar footer showing:
 - List of all workspaces (click to switch)
 - "Add Workspace..." option
 - "Manage Workspaces..." option
+
+### Command Palette Integration
+
+**File:** `src/commands/core-commands.tsx`
+
+Workspace-related commands:
+- **Switch Workspace** — opens `SwitchWorkspaceDialog` from anywhere in the app
+- **Open Claude Code** — calls `/api/workspaces/open-terminal` to open a new Ghostty tab in the active workspace and run `claude`
+- **Open Claude Code Dangerously** — same flow, but appends `--dangerously-skip-permissions`
+
+The `open-terminal` route is implemented in `src/server-routes/workspaces-routes.ts` and uses AppleScript (`osascript`) to activate Ghostty and inject the command.
 
 ### WorkspaceManager
 

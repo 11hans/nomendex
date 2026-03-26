@@ -20,6 +20,7 @@ A workspace is a folder on your Mac that contains your notes, tasks, project dat
 - **Add workspace** — choose any folder on your Mac
 - **Switch** — use the workspace switcher in the sidebar footer
 - **Manage** — rename or remove workspaces from the settings
+- **Command palette shortcuts** — use **Switch Workspace**, **Open Claude Code**, or **Open Claude Code Dangerously**
 
 **What's inside a workspace:**
 ```
@@ -50,6 +51,7 @@ A full-featured Markdown note editor with support for rich content.
 | **Markdown editing** | Full ProseMirror-based editor with live preview |
 | **Tables** | Create and edit markdown tables with keyboard navigation |
 | **Wiki links** | Link notes together with `[[double brackets]]` |
+| **Smart wiki-link opening** | Links without folder paths can still resolve notes in subfolders (for example daily notes) |
 | **Backlinks** | See which notes link to the current note (sidebar panel) |
 | **Phantom links** | Discover links to notes that don't exist yet — create them with one click |
 | **File browser** | Navigate your notes tree with a tree-style browser |
@@ -158,6 +160,7 @@ Have conversations with Claude directly inside the app. Chat sessions are persis
 | **Session history** | Browse, search, and resume past conversations |
 | **Image attachments** | Paste, drag-drop, or click to attach images for Claude to analyze |
 | **Tool execution** | Claude can use tools with your permission |
+| **Interactive agent questions** | Agents can show clickable option prompts instead of asking you to type short clarifications |
 | **Message queue** | Queue follow-up messages while Claude is still responding |
 | **Cancel** | Stop a response at any time |
 
@@ -177,6 +180,8 @@ When Claude wants to use a tool:
 1. You'll see a permission prompt with the tool name and input
 2. Choose **Allow** (one-time), **Deny**, or **Always Allow** (persisted per agent)
 3. Pre-allowed tools execute automatically without prompting
+
+> **Note:** `AskUserQuestion` is intentionally always interactive, so those prompts are never auto-allowed.
 
 ---
 
@@ -225,6 +230,8 @@ Memory can be scoped to a single agent or shared across the workspace, which mak
 Nomendex can sync the active workspace with a Git remote.
 
 - **Sync page** — checks Git installation, repository setup, remote config, and auth readiness
+- **Source control mode** — stage/unstage/discard files and commit selected changes directly in the app
+- **Inline diffs** — preview `HEAD` vs working tree changes before staging or committing
 - **Auth modes** — use local Git credentials or a GitHub PAT stored in **Settings → API Keys**
 - **Auto-sync** — supports interval-based sync and sync-on-change
 - **Quick Sync** — the sidebar shows a one-click sync button when the workspace is ready

@@ -8,6 +8,7 @@ The chat system allows users to have conversations with Claude through configure
 - **Streaming responses** - Real-time message updates via Server-Sent Events
 - **Session persistence** - Conversations are saved and can be resumed
 - **Tool execution** - Claude can use tools with permission prompts
+- **Interactive agent questions** - `AskUserQuestion` renders clickable choices instead of free-text clarifications
 - **Image attachments** - Send images for Claude to analyze (see [attachments.md](./attachments.md))
 - **Agent integration** - Each session uses a configured agent (see [agents.md](./agents.md))
 
@@ -232,9 +233,14 @@ Content-Type: application/json
 
 {
     "permissionId": "uuid",
-    "response": "allow" | "deny" | "always_allow"
+    "decision": "allow" | "deny",
+    "alwaysAllow": true,              // Optional
+    "toolName": "Read",               // Optional
+    "updatedInput": { "key": "value"} // Optional
 }
 ```
+
+`updatedInput` is used by interactive tools (for example `AskUserQuestion`) to send user-selected answers back into the tool call input payload.
 
 ### Cancel Query
 
@@ -279,6 +285,7 @@ Features:
 - Streaming text/thinking display
 - Ordered insertion of streaming content blocks (stable turn/index order)
 - Tool call visualization (collapsible)
+- Interactive `AskUserQuestion` banner with option chips + custom "Other" input
 - Image attachments in messages
 - Agent selector dropdown
 - Cancel button during streaming
@@ -354,8 +361,8 @@ Users can switch agents mid-conversation via the agent selector dropdown. The ne
 ## Tool Permission Flow
 
 1. **SDK invokes canUseTool callback** with tool name and input
-2. **Backend checks** if tool is in agent's `allowedTools`
-3. **If pre-allowed**: Return `{ behavior: "allow" }` immediately
+2. **Backend checks** if tool is in agent's `allowedTools` (except `AskUserQuestion`, which is always interactive)
+3. **If pre-allowed** (non-`AskUserQuestion`): Return `{ behavior: "allow" }` immediately
 4. **If not allowed**:
    - Generate permission request ID
    - Send `permission_request` SSE event to client
@@ -363,8 +370,22 @@ Users can switch agents mid-conversation via the agent selector dropdown. The ne
 5. **User responds**:
    - **Deny**: Tool execution blocked
    - **Allow**: One-time permission granted
-   - **Always Allow**: Permission persisted to agent config
-6. **Stale cleanup**: Pending permissions expire after 5 minutes
+   - **Always Allow**: Permission persisted to agent config (except `AskUserQuestion`)
+6. **Backend returns** `{ behavior: "allow", updatedInput }` when provided by the client
+7. **Stale cleanup**: Pending permissions expire after 5 minutes
+
+### AskUserQuestion Interactive Flow
+
+`AskUserQuestion` is handled differently from normal tool permissions:
+
+1. Backend always emits a permission request for this tool (never auto-allows from `allowedTools`)
+2. Chat UI parses `input.questions` and renders a structured banner
+3. User selects options (single or multi-select) or fills a custom "Other" answer
+4. Frontend posts `/api/chat/permission-response` with:
+   - `decision: "allow"`
+   - `updatedInput: { ...originalInput, answers }`
+5. Backend resumes tool execution with the updated input payload
+6. `AskUserQuestion` is never persisted via "Always Allow"
 
 ## File Structure
 
@@ -374,6 +395,7 @@ src/
 │   ├── index.ts              # Types, schemas, function stubs
 │   ├── chat-view.tsx         # Main chat UI component
 │   ├── browser-view.tsx      # Session browser component
+│   ├── AskUserQuestionBanner.tsx  # Interactive AskUserQuestion UI
 │   ├── sessionUtils.ts       # Message reconstruction utilities
 │   └── commands.tsx          # Command palette integration
 ├── server-routes/

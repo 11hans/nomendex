@@ -19,6 +19,20 @@ Use double brackets to create wiki links in your notes:
 This relates to [[Project Alpha]] and [[Meeting Notes]].
 ```
 
+### Wiki Link Target Resolution
+
+When opening a wiki link target from the editor:
+- if the target includes a folder path (for example `daily-notes/3-21-2026`), it opens that exact note path
+- if the target has no folder separator, the app falls back to basename resolution across subfolders
+
+Fallback resolution behavior:
+1. Check root-level notes first
+2. Search note subfolders recursively
+3. Skip system folders (`todos`, `.nomendex`, `.git`, `.github`)
+4. Return the first matching basename (for example `[[3-21-2026]]` can resolve to `daily-notes/3-21-2026.md`)
+
+This is implemented through `POST /api/notes/resolve` and used by `note-view.tsx` during wiki-link click handling.
+
 ### Index Structure
 
 The index is stored at `{workspace}/.noetic/backlinks.json` and contains:
@@ -89,6 +103,14 @@ Response: {
         { "targetName": "Future Feature", "referencedIn": ["project.md"] }
     ]
 }
+```
+
+### Resolve Wiki-Link Target By Basename
+
+```
+POST /api/notes/resolve
+Body: { "name": "3-21-2026" }
+Response: { "fileName": "daily-notes/3-21-2026.md" } | null
 ```
 
 ### Get All Phantom Links
