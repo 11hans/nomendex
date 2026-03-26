@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { PluginInstance, PluginBase, SerializablePlugin } from "@/types/Plugin";
 import { WorkspaceState, WorkspaceTab, WorkspaceStateSchema, ProjectPreferences, GitAuthMode, NotesLocation, AutoSyncConfig, Pane, LayoutMode } from "@/types/Workspace";
+import type { TodoFilterState, TodoViewPreferences } from "@/features/todos/todo-filter-types";
+import { createDefaultFilterState } from "@/features/todos/todo-filter-types";
 import { type RouteParams } from "./useRouting";
 import { emit } from "@/lib/events";
 
@@ -59,6 +61,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         autoSync: { enabled: true, syncOnChanges: true, intervalSeconds: 60, paused: false },
         chatInputEnterToSend: true,
         showHiddenFiles: false,
+        todoViewPreferences: {},
     });
     const [loading, setLoading] = useState(true);
     const initialRouteHandledRef = useRef(false);
@@ -760,6 +763,32 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         [updateWorkspace]
     );
 
+    // Get todo view preferences for a specific view
+    type TodoViewKey = keyof TodoViewPreferences;
+    const getTodoViewPreferences = useCallback(
+        (viewKey: TodoViewKey): TodoFilterState => {
+            return workspace.todoViewPreferences?.[viewKey] ?? createDefaultFilterState();
+        },
+        [workspace.todoViewPreferences]
+    );
+
+    // Update todo view preferences for a specific view
+    const setTodoViewPreferences = useCallback(
+        (viewKey: TodoViewKey, preferences: Partial<TodoFilterState>) => {
+            updateWorkspace((prev) => ({
+                ...prev,
+                todoViewPreferences: {
+                    ...prev.todoViewPreferences,
+                    [viewKey]: {
+                        ...(prev.todoViewPreferences?.[viewKey] ?? createDefaultFilterState()),
+                        ...preferences,
+                    },
+                },
+            }));
+        },
+        [updateWorkspace]
+    );
+
     // Git auth mode
     const setGitAuthMode = useCallback(
         (mode: GitAuthMode) => {
@@ -1138,6 +1167,11 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         projectPreferences: workspace.projectPreferences,
         getProjectPreferences,
         setProjectPreferences,
+
+        // Todo view preferences
+        todoViewPreferences: workspace.todoViewPreferences,
+        getTodoViewPreferences,
+        setTodoViewPreferences,
 
         // Git auth mode
         gitAuthMode: workspace.gitAuthMode,

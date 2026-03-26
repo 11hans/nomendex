@@ -5,15 +5,15 @@ import { subscribe } from "@/lib/events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AlertCircle, CheckCircle2, Clock, Calendar, Eye, EyeOff, MoreHorizontal, Archive, Search, Plus, Settings, Circle, ArrowLeft, FileSearch, ArrowUpDown, SortAsc } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Calendar, Eye, EyeOff, MoreHorizontal, Archive, Plus, Settings, Circle, ArrowLeft, FileSearch } from "lucide-react";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
 import { TodoCard } from "./TodoCard";
 import { CreateTodoDialog } from "./CreateTodoDialog";
 import { TaskCardEditor } from "./TaskCardEditor";
-import { TagFilter } from "./TagFilter";
-import { PriorityFilter } from "./PriorityFilter";
 import { Todo } from "./todo-types";
+import { useTodoFilterState } from "./useTodoFilterState";
+import { filterAndSortTodos, urgencyComparator } from "./todo-filter-utils";
+import { TodoFilterToolbar } from "./TodoFilterToolbar";
 import { BoardConfig, BoardColumn, getDefaultColumns } from "@/features/projects/project-types";
 import { BoardSettingsDialog } from "./BoardSettingsDialog";
 import { syncTaskToCalendar, removeTaskFromCalendar } from "./calendar-bridge";
@@ -59,8 +59,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const [todos, setTodos] = useState<Todo[]>([]);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
-    const [selectedTags, setSelectedTags] = useState<string[]>([]);
-    const [selectedPriority, setSelectedPriority] = useState<"high" | "medium" | "low" | "none" | null>(null);
+    const todoFilter = useTodoFilterState("browser", { defaultSortMode: "urgency" });
+    const isManualSort = todoFilter.filterState.sortMode === "manual";
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [todoToEdit, setTodoToEdit] = useState<Todo | null>(null);
@@ -74,7 +74,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const projectPreferencesKey = filterProject === null || filterProject === undefined ? "__all__" : filterProject === "" ? "__none__" : filterProject;
     const projectPrefs = getProjectPreferences(projectPreferencesKey);
     const showLaterColumn = !projectPrefs.hideLaterColumn;
-    const sortByDate = projectPrefs.sortByDate ?? true;
     const [newTodo, setNewTodo] = useState<{
         title: string;
         description: string;
@@ -121,10 +120,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const [boardConfig, setBoardConfig] = useState<BoardConfig | null>(null);
     const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
 
-    // Search and keyboard navigation state
-    const [searchQuery, setSearchQuery] = useState("");
+    // Keyboard navigation state
     const [selectedTodoId, setSelectedTodoId] = useState<string | null>(initialSelectedTodoId ?? null);
-    const searchInputRef = useRef<HTMLInputElement>(null);
 
     // Helper to open create dialog with specific status OR column
     const openCreateDialogWithStatus = useCallback((status: "todo" | "in_progress" | "done" | "later", columnId?: string) => {
@@ -157,12 +154,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const toggleShowLaterColumn = useCallback(() => {
         setProjectPreferences(projectPreferencesKey, { hideLaterColumn: !projectPrefs.hideLaterColumn });
     }, [setProjectPreferences, projectPreferencesKey, projectPrefs.hideLaterColumn]);
-
-    // Toggle sort by due date - persists to workspace.json
-    const toggleSortByDate = useCallback(() => {
-        setProjectPreferences(projectPreferencesKey, { sortByDate: !projectPrefs.sortByDate });
-    }, [setProjectPreferences, projectPreferencesKey, projectPrefs.sortByDate]);
-
 
     // Update the tab name based on the project - only once when component mounts
     // Skip when embedded (parent manages tab name)
@@ -674,8 +665,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                         }
                     }
                 } else {
-                    // Same column reorder
-                    if (activeIndex !== overIndex) {
+                    // Same column reorder (only in manual sort mode)
+                    if (activeIndex !== overIndex && isManualSort) {
                         const columnTodos = todos.filter(t => getColumnForTodo(t) === activeColumnId);
                         const reorderedTodos = arrayMove(
                             columnTodos,
@@ -710,29 +701,9 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             console.error("Error in drag end handler:", error);
             await loadTodos();
         }
-    }, [todos, todosAPI, loadTodos, boardConfig, getColumnForTodo]);
+    }, [todos, todosAPI, loadTodos, boardConfig, getColumnForTodo, isManualSort]);
 
-    const handleTagToggle = (tag: string) => {
-        setSelectedTags((prev) =>
-            prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-        );
-    };
-
-    const handleClearAllTags = () => {
-        setSelectedTags([]);
-    };
-
-    // Fuzzy search function
-    const fuzzySearch = (query: string, text: string): boolean => {
-        // Escape regex special characters in each character before joining
-        const escapeRegex = (char: string) => char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const pattern = query.toLowerCase().split("").map(escapeRegex).join(".*");
-        const regex = new RegExp(pattern);
-        return regex.test(text.toLowerCase());
-    };
-
-
-
+    // Convenience
     // --- Dynamic Columns Logic ---
 
     const displayColumns = useMemo<BoardColumn[]>(() => {
@@ -761,31 +732,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     }, [boardConfig, showLaterColumn]);
 
     const todosByColumn = useMemo(() => {
-        let filteredTodos = todos;
-
-        // Apply search filtering
-        if (searchQuery.trim()) {
-            filteredTodos = filteredTodos.filter((todo) =>
-                fuzzySearch(searchQuery, todo.title) ||
-                (todo.description && fuzzySearch(searchQuery, todo.description))
-            );
-        }
-
-        // Apply tag filtering if tags are selected
-        if (selectedTags.length > 0) {
-            filteredTodos = filteredTodos.filter((todo) =>
-                todo.tags?.some((tag) => selectedTags.includes(tag))
-            );
-        }
-
-        // Apply priority filtering
-        if (selectedPriority) {
-            filteredTodos = filteredTodos.filter((todo) =>
-                (todo.priority || "none") === selectedPriority
-            );
-        }
-
-
+        // Filter todos using shared pipeline (skip status filter since columns handle it)
+        const filteredTodos = filterAndSortTodos(todos, todoFilter.filterState, { skipStatusFilter: true });
 
         // Group by column
         const grouped: Record<string, Todo[]> = {};
@@ -798,31 +746,19 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             if (grouped[colId]) {
                 grouped[colId].push(todo);
             } else {
-                // If column doesn't exist (e.g. legacy status "later" but column hidden), 
-                // maybe ignore or put in default? 
-                // For now, let's put in the first column or todo
                 if (grouped['todo']) grouped['todo'].push(todo);
             }
         });
 
-        // Sort by schedule if enabled (closest first, no-date todos at bottom)
-        if (sortByDate) {
+        // Sort within columns: urgency mode uses urgencyComparator, manual uses order field
+        if (!isManualSort) {
             for (const colId of Object.keys(grouped)) {
-                grouped[colId].sort((a, b) => {
-                    const aDate = a.scheduledStart ?? a.scheduledEnd;
-                    const bDate = b.scheduledStart ?? b.scheduledEnd;
-                    const aHasDate = !!aDate;
-                    const bHasDate = !!bDate;
-                    if (aHasDate && bHasDate) return aDate! < bDate! ? -1 : aDate! > bDate! ? 1 : 0;
-                    if (aHasDate) return -1;
-                    if (bHasDate) return 1;
-                    return (a.order ?? 0) - (b.order ?? 0);
-                });
+                grouped[colId].sort(urgencyComparator);
             }
         }
 
         return grouped;
-    }, [todos, selectedTags, selectedPriority, searchQuery, displayColumns, getColumnForTodo, sortByDate]);
+    }, [todos, todoFilter.filterState, displayColumns, getColumnForTodo, isManualSort]);
 
 
     // Flattened list of all visible todos for keyboard navigation
@@ -1108,9 +1044,9 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         }
     }, [selectedTodoId, handleOpenTodo]);
 
-    // Move handlers - reorder with Shift+Arrow
+    // Move handlers - reorder with Shift+Arrow (only in manual sort mode)
     const moveUp = useCallback(async () => {
-        if (!selectedTodoId) return;
+        if (!selectedTodoId || !isManualSort) return;
         const pos = getTodoPosition(selectedTodoId);
         if (!pos || pos.index === 0) return; // Can't move up if at top
 
@@ -1141,10 +1077,10 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             console.error("Failed to reorder todos:", error);
             await loadTodos();
         }
-    }, [selectedTodoId, getTodoPosition, todosByColumn, todosAPI, loadTodos]);
+    }, [selectedTodoId, getTodoPosition, todosByColumn, todosAPI, loadTodos, isManualSort]);
 
     const moveDown = useCallback(async () => {
-        if (!selectedTodoId) return;
+        if (!selectedTodoId || !isManualSort) return;
         const pos = getTodoPosition(selectedTodoId);
         if (!pos) return;
 
@@ -1177,7 +1113,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             console.error("Failed to reorder todos:", error);
             await loadTodos();
         }
-    }, [selectedTodoId, getTodoPosition, todosByColumn, todosAPI, loadTodos]);
+    }, [selectedTodoId, getTodoPosition, todosByColumn, todosAPI, loadTodos, isManualSort]);
 
     const moveRight = useCallback(async () => {
         if (!selectedTodoId) return;
@@ -1316,25 +1252,19 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         }
     }, [selectedTodoId, todos]);
 
+    const isInputFocused = () => {
+        const el = document.activeElement;
+        return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement;
+    };
+
     // Register keyboard shortcuts
     useKeyboardShortcuts([
-        {
-            id: 'todos.search',
-            name: 'Focus Search',
-            combo: { key: '/' },
-            handler: () => {
-                searchInputRef.current?.focus();
-                searchInputRef.current?.select();
-            },
-            category: 'Navigation',
-            priority: 10,
-        },
         {
             id: 'todos.navigate-down',
             name: 'Navigate Down',
             combo: { key: 'ArrowDown' },
             handler: navigateDown,
-            when: () => flattenedTodos.length > 0 && document.activeElement !== searchInputRef.current,
+            when: () => flattenedTodos.length > 0 && !isInputFocused(),
             category: 'Navigation',
         },
         {
@@ -1342,7 +1272,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             name: 'Navigate Up',
             combo: { key: 'ArrowUp' },
             handler: navigateUp,
-            when: () => flattenedTodos.length > 0 && document.activeElement !== searchInputRef.current,
+            when: () => flattenedTodos.length > 0 && !isInputFocused(),
             category: 'Navigation',
         },
         {
@@ -1350,7 +1280,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             name: 'Navigate Right',
             combo: { key: 'ArrowRight' },
             handler: navigateRight,
-            when: () => flattenedTodos.length > 0 && document.activeElement !== searchInputRef.current,
+            when: () => flattenedTodos.length > 0 && !isInputFocused(),
             category: 'Navigation',
         },
         {
@@ -1358,7 +1288,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             name: 'Navigate Left',
             combo: { key: 'ArrowLeft' },
             handler: navigateLeft,
-            when: () => flattenedTodos.length > 0 && document.activeElement !== searchInputRef.current,
+            when: () => flattenedTodos.length > 0 && !isInputFocused(),
             category: 'Navigation',
         },
         {
@@ -1366,7 +1296,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             name: 'Move Up',
             combo: { key: 'ArrowUp', shift: true },
             handler: moveUp,
-            when: () => selectedTodoId !== null && document.activeElement !== searchInputRef.current,
+            when: () => selectedTodoId !== null && !isInputFocused(),
             category: 'Actions',
         },
         {
@@ -1374,7 +1304,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             name: 'Move Down',
             combo: { key: 'ArrowDown', shift: true },
             handler: moveDown,
-            when: () => selectedTodoId !== null && document.activeElement !== searchInputRef.current,
+            when: () => selectedTodoId !== null && !isInputFocused(),
             category: 'Actions',
         },
         {
@@ -1382,7 +1312,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             name: 'Move Right',
             combo: { key: 'ArrowRight', shift: true },
             handler: moveRight,
-            when: () => selectedTodoId !== null && document.activeElement !== searchInputRef.current,
+            when: () => selectedTodoId !== null && !isInputFocused(),
             category: 'Actions',
         },
         {
@@ -1390,7 +1320,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             name: 'Move Left',
             combo: { key: 'ArrowLeft', shift: true },
             handler: moveLeft,
-            when: () => selectedTodoId !== null && document.activeElement !== searchInputRef.current,
+            when: () => selectedTodoId !== null && !isInputFocused(),
             category: 'Actions',
         },
         {
@@ -1398,7 +1328,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             name: 'Archive Todo',
             combo: { key: 'a' },
             handler: archiveSelected,
-            when: () => selectedTodoId !== null && document.activeElement !== searchInputRef.current,
+            when: () => selectedTodoId !== null && !isInputFocused(),
             category: 'Actions',
         },
         {
@@ -1406,7 +1336,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             name: 'Delete Todo',
             combo: { key: 'Delete' },
             handler: deleteSelected,
-            when: () => selectedTodoId !== null && document.activeElement !== searchInputRef.current,
+            when: () => selectedTodoId !== null && !isInputFocused(),
             category: 'Actions',
         },
         {
@@ -1414,7 +1344,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             name: 'Delete Todo',
             combo: { key: 'Backspace' },
             handler: deleteSelected,
-            when: () => selectedTodoId !== null && document.activeElement !== searchInputRef.current,
+            when: () => selectedTodoId !== null && !isInputFocused(),
             category: 'Actions',
         },
         {
@@ -1422,20 +1352,20 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             name: 'Open Todo',
             combo: { key: 'Enter' },
             handler: openSelectedTodo,
-            when: () => selectedTodoId !== null && document.activeElement !== searchInputRef.current,
+            when: () => selectedTodoId !== null && !isInputFocused(),
             category: 'Actions',
         },
         {
             id: 'todos.escape-search',
-            name: 'Clear Search',
+            name: 'Clear Search / Blur',
             combo: { key: 'Escape' },
             handler: () => {
-                if (document.activeElement === searchInputRef.current && searchQuery) {
-                    setSearchQuery("");
-                    return true;
-                }
-                if (document.activeElement === searchInputRef.current) {
-                    searchInputRef.current?.blur();
+                if (isInputFocused()) {
+                    if (todoFilter.filterState.searchQuery) {
+                        todoFilter.setSearchQuery("");
+                        return true;
+                    }
+                    (document.activeElement as HTMLElement)?.blur();
                     return true;
                 }
                 return false;
@@ -1459,7 +1389,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             handler: () => {
                 setCreateDialogOpen(true);
             },
-            when: () => document.activeElement !== searchInputRef.current,
+            when: () => !isInputFocused(),
             category: 'Actions',
         },
         {
@@ -1477,13 +1407,13 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             name: 'Copy Todo',
             combo: { key: ';' },
             handler: copySelectedTodo,
-            when: () => selectedTodoId !== null && document.activeElement !== searchInputRef.current,
+            when: () => selectedTodoId !== null && !isInputFocused(),
             category: 'Actions',
         }
     ], {
         context: 'plugin:todos',
         onlyWhenActive: true,
-        deps: [loadTodos, flattenedTodos, selectedTodoId, searchQuery, navigateDown, navigateUp, navigateLeft, navigateRight, openSelectedTodo, moveUp, moveDown, moveLeft, moveRight, archiveSelected, deleteSelected, copySelectedTodo]
+        deps: [loadTodos, flattenedTodos, selectedTodoId, todoFilter.filterState.searchQuery, navigateDown, navigateUp, navigateLeft, navigateRight, openSelectedTodo, moveUp, moveDown, moveLeft, moveRight, archiveSelected, deleteSelected, copySelectedTodo]
     });
 
     // Refs for scrolling
@@ -1544,7 +1474,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             transform,
             transition,
             isDragging,
-        } = useSortable({ id: todo.id });
+        } = useSortable({ id: todo.id, disabled: !isManualSort });
 
         const style = {
             transform: CSS.Transform.toString(transform),
@@ -1754,120 +1684,56 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     </div>
                 </div>
 
-                <div className="shrink-0 mt-2.5 flex items-center gap-1.5">
-                    <div className="relative flex-1 min-w-[220px] max-w-[420px]">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3" style={{ color: currentTheme.styles.contentTertiary }} />
-                        <Input
-                            ref={searchInputRef}
-                            placeholder="search todos..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            onKeyDown={(e) => {
-                                if (flattenedTodos.length === 0) return;
-
-                                // Shift+Arrow = move card
-                                if (e.shiftKey) {
-                                    if (e.key === "ArrowDown") {
-                                        e.preventDefault();
-                                        moveDown();
-                                    } else if (e.key === "ArrowUp") {
-                                        e.preventDefault();
-                                        moveUp();
-                                    } else if (e.key === "ArrowRight") {
-                                        e.preventDefault();
-                                        moveRight();
-                                    } else if (e.key === "ArrowLeft") {
-                                        e.preventDefault();
-                                        moveLeft();
-                                    }
-                                    return;
-                                }
-
-                                // Arrow = navigate
-                                if (e.key === "ArrowDown") {
-                                    e.preventDefault();
-                                    navigateDown();
-                                } else if (e.key === "ArrowUp") {
-                                    e.preventDefault();
-                                    navigateUp();
-                                } else if (e.key === "ArrowRight") {
-                                    e.preventDefault();
-                                    navigateRight();
-                                } else if (e.key === "ArrowLeft") {
-                                    e.preventDefault();
-                                    navigateLeft();
-                                } else if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    openSelectedTodo();
-                                } else if (e.key === "Escape") {
-                                    if (searchQuery) {
-                                        e.preventDefault();
-                                        setSearchQuery("");
-                                    } else {
-                                        searchInputRef.current?.blur();
-                                    }
-                                }
-                            }}
-                            className="h-8 pl-8 text-xs bg-transparent"
-                            style={{ borderColor: currentTheme.styles.borderDefault, color: currentTheme.styles.contentPrimary }}
-                        />
-                    </div>
-
-                    <div className="ml-auto flex items-center gap-2">
-                        <TagFilter
-                            availableTags={availableTags}
-                            selectedTags={selectedTags}
-                            onTagToggle={handleTagToggle}
-                            onClearAll={handleClearAllTags}
-                        />
-                        <PriorityFilter
-                            selectedPriority={selectedPriority}
-                            onPriorityChange={setSelectedPriority}
-                        />
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 px-2"
-                            onClick={toggleSortByDate}
-                            title={sortByDate ? "Sort: By Scheduled Date" : "Sort: Manual Order"}
-                        >
-                            {sortByDate ? <SortAsc className="w-4 h-4" /> : <ArrowUpDown className="w-4 h-4" />}
-                        </Button>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-7 px-2">
-                                    <MoreHorizontal className="w-4 h-4" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={openArchivedView}>
-                                    <Archive className="w-4 h-4 mr-2" />
-                                    Open Archived
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                    onClick={archiveAllDone}
-                                    disabled={todos.filter(t => t.status === "done").length === 0}
-                                >
-                                    <Archive className="w-4 h-4 mr-2" />
-                                    Archive All Done ({todos.filter(t => t.status === "done").length})
-                                </DropdownMenuItem>
-
-                                {/* Board Settings Link - Show for project views */}
-                                {filterProject && filterProject !== "" && (
-                                    <DropdownMenuItem onClick={() => setBoardSettingsOpen(true)}>
-                                        <Settings className="w-4 h-4 mr-2" />
-                                        {boardConfig ? "Board Settings" : "Setup Custom Board"}
+                <div className="shrink-0 mt-2.5">
+                    <TodoFilterToolbar
+                        filterState={todoFilter.filterState}
+                        onSearchChange={todoFilter.setSearchQuery}
+                        onSortModeChange={todoFilter.setSortMode}
+                        onActivatePreset={todoFilter.activatePreset}
+                        onFilterChange={(partial) => {
+                            if (partial.selectedPriority !== undefined) todoFilter.setSelectedPriority(partial.selectedPriority);
+                            if (partial.dueFilter !== undefined) todoFilter.setDueFilter(partial.dueFilter);
+                            if (partial.selectedTags !== undefined) todoFilter.setSelectedTags(partial.selectedTags);
+                            if (partial.selectedProject !== undefined) todoFilter.setSelectedProject(partial.selectedProject);
+                        }}
+                        onClearAllFilters={todoFilter.clearAllFilters}
+                        availableTags={availableTags}
+                        allowedSortModes={["urgency", "manual"]}
+                        activeFilterChips={todoFilter.activeFilterChips}
+                        hasActiveFilters={todoFilter.hasActiveFilters}
+                        trailingActions={
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" size="sm" className="h-7 px-2">
+                                        <MoreHorizontal className="w-4 h-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={openArchivedView}>
+                                        <Archive className="w-4 h-4 mr-2" />
+                                        Open Archived
                                     </DropdownMenuItem>
-                                )}
-
-                                <DropdownMenuItem onClick={toggleShowLaterColumn}>
-                                    {showLaterColumn ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
-                                    {showLaterColumn ? "Hide Later Column" : "Show Later Column"}
-                                </DropdownMenuItem>
-
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
+                                    <DropdownMenuItem
+                                        onClick={archiveAllDone}
+                                        disabled={todos.filter(t => t.status === "done").length === 0}
+                                    >
+                                        <Archive className="w-4 h-4 mr-2" />
+                                        Archive All Done ({todos.filter(t => t.status === "done").length})
+                                    </DropdownMenuItem>
+                                    {filterProject && filterProject !== "" && (
+                                        <DropdownMenuItem onClick={() => setBoardSettingsOpen(true)}>
+                                            <Settings className="w-4 h-4 mr-2" />
+                                            {boardConfig ? "Board Settings" : "Setup Custom Board"}
+                                        </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem onClick={toggleShowLaterColumn}>
+                                        {showLaterColumn ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
+                                        {showLaterColumn ? "Hide Later Column" : "Show Later Column"}
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        }
+                    />
                 </div>
 
                 {/* Kanban Board */}

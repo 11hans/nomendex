@@ -32,6 +32,7 @@ export const workspaceRoutes = {
                         autoSync: { enabled: true, syncOnChanges: true, intervalSeconds: 60, paused: false },
                         chatInputEnterToSend: true,
                         showHiddenFiles: false,
+                        todoViewPreferences: {},
                     };
                     await Bun.write(`${getNomendexPath()}/workspace.json`, JSON.stringify(defaultWorkspace, null, 2));
 

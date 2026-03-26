@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { PluginInstanceSchema } from "./Plugin";
+import { TodoViewPreferencesSchema } from "@/features/todos/todo-filter-types";
 
 export const WorkspaceTabSchema = z.object({
     id: z.string(),
@@ -63,6 +64,7 @@ export const WorkspaceStateSchema = z.object({
     autoSync: AutoSyncConfigSchema.default({ enabled: true, syncOnChanges: true, intervalSeconds: 60, paused: false }),
     chatInputEnterToSend: z.boolean().default(true),
     showHiddenFiles: z.boolean().default(false),
+    todoViewPreferences: TodoViewPreferencesSchema.default({}),
 });
 
 export type WorkspaceTab = z.infer<typeof WorkspaceTabSchema>;

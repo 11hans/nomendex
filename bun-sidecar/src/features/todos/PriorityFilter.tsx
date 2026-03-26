@@ -4,6 +4,46 @@ import { useTheme } from "@/hooks/useTheme";
 import { useState } from "react";
 import { PRIORITY_CONFIG, type PriorityValue } from "./todo-types";
 
+// ─── Extracted content component for reuse in TodoFilterPopover ─────────────
+
+interface PriorityFilterContentProps {
+    selectedPriority: PriorityValue | null;
+    onPriorityChange: (priority: PriorityValue | null) => void;
+    onClose?: () => void;
+}
+
+export function PriorityFilterContent({ selectedPriority, onPriorityChange, onClose }: PriorityFilterContentProps) {
+    const { currentTheme } = useTheme();
+
+    return (
+        <div className="flex flex-col gap-0.5">
+            {PRIORITY_CONFIG.map((option) => {
+                const isActive = selectedPriority === option.value;
+                return (
+                    <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => {
+                            onPriorityChange(isActive ? null : option.value);
+                            onClose?.();
+                        }}
+                        className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded text-sm transition-colors text-left"
+                        style={{
+                            backgroundColor: isActive ? currentTheme.styles.surfaceTertiary : 'transparent',
+                            color: option.color || currentTheme.styles.contentPrimary,
+                        }}
+                    >
+                        <Flag className="size-3.5" style={{ color: option.color || currentTheme.styles.contentTertiary }} />
+                        {option.label}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+// ─── Original PriorityFilter with Popover wrapper ───────────────────────────
+
 interface PriorityFilterProps {
     selectedPriority: PriorityValue | null;
     onPriorityChange: (priority: PriorityValue | null) => void;

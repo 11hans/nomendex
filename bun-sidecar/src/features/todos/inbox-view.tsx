@@ -4,7 +4,6 @@ import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useTheme } from "@/hooks/useTheme";
 import { subscribe } from "@/lib/events";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { CreateTodoDialog } from "./CreateTodoDialog";
 import { TaskCardEditor } from "./TaskCardEditor";
@@ -12,6 +11,10 @@ import { Todo } from "./todo-types";
 import { syncTaskToCalendar, removeTaskFromCalendar } from "./calendar-bridge";
 import { syncTaskToReminders, removeTaskFromReminders } from "./reminder-bridge";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
+import { useTodoFilterState } from "./useTodoFilterState";
+import { filterAndSortTodos, fuzzyMatch } from "./todo-filter-utils";
+import { TodoFilterToolbar } from "./TodoFilterToolbar";
+import type { TodoStatusBucket } from "./todo-filter-types";
 import {
     DndContext,
     DragCancelEvent,
@@ -28,12 +31,8 @@ import {
     Archive,
     ArchiveRestore,
     ChevronRight,
-    Inbox,
     ListTodo,
-    Search,
 } from "lucide-react";
-
-type InboxFilter = "all" | "active" | "completed" | "archived";
 
 const INBOX_PROJECT = "Inbox";
 const ALL_TASKS = "__all__";
@@ -50,7 +49,7 @@ function compareGroupNames(a: string, b: string): number {
     return a.localeCompare(b);
 }
 
-function getFilterForTodo(todo: Todo): Exclude<InboxFilter, "all"> {
+function getStatusBucketForTodo(todo: Todo): Exclude<TodoStatusBucket, "all"> {
     if (todo.archived) return "archived";
     if (todo.status === "done") return "completed";
     return "active";
@@ -161,7 +160,7 @@ function DraggableTodoRow({
         disabled: todo.archived,
     });
 
-    const statusType = getFilterForTodo(todo);
+    const statusType = getStatusBucketForTodo(todo);
     const dateLabel = formatRelativeDateLabel(todo.updatedAt);
     const leadTag = todo.tags?.[0];
 
@@ -230,8 +229,7 @@ export function InboxListView() {
     const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
     const [todoToEdit, setTodoToEdit] = useState<Todo | null>(null);
     const [editSaving, setEditSaving] = useState(false);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [filter, setFilter] = useState<InboxFilter>("all");
+    const todoFilter = useTodoFilterState("inbox", { defaultSortMode: "urgency", defaultStatusBucket: "all" });
     const [draggedTodoId, setDraggedTodoId] = useState<string | null>(null);
     const [selectedGroup, setSelectedGroup] = useState<string>(ALL_TASKS);
     const hasSetTabNameRef = useRef<boolean>(false);
@@ -602,51 +600,15 @@ export function InboxListView() {
         setEditDialogOpen(true);
     };
 
-    const fuzzySearch = (query: string, text: string): boolean => {
-        if (!query) return true;
-        const q = query.toLowerCase();
-        const t = text.toLowerCase();
-
-        let qIdx = 0;
-        let tIdx = 0;
-
-        while (qIdx < q.length && tIdx < t.length) {
-            if (q[qIdx] === t[tIdx]) {
-                qIdx++;
-            }
-            tIdx++;
-        }
-
-        return qIdx === q.length;
-    };
+    // Pre-filter by selected group, then apply filter pipeline
+    const groupScopedTodos = useMemo(() => {
+        if (selectedGroup === ALL_TASKS) return todos;
+        return todos.filter((todo) => getGroupName(todo) === selectedGroup);
+    }, [todos, selectedGroup]);
 
     const filteredTodos = useMemo(() => {
-        let filtered = todos;
-
-        // Group filter
-        if (selectedGroup !== ALL_TASKS) {
-            filtered = filtered.filter((todo) => getGroupName(todo) === selectedGroup);
-        }
-
-        if (searchQuery.trim()) {
-            filtered = filtered.filter((todo) =>
-                fuzzySearch(searchQuery, todo.title)
-                || (todo.description ? fuzzySearch(searchQuery, todo.description) : false)
-                || (todo.project ? fuzzySearch(searchQuery, todo.project) : false)
-                || (todo.tags?.some((tag) => fuzzySearch(searchQuery, tag)) ?? false)
-            );
-        }
-
-        if (filter !== "all") {
-            filtered = filtered.filter((todo) => getFilterForTodo(todo) === filter);
-        }
-
-        return filtered.sort((a, b) => {
-            const aTime = new Date(a.updatedAt).getTime();
-            const bTime = new Date(b.updatedAt).getTime();
-            return bTime - aTime;
-        });
-    }, [todos, searchQuery, filter, selectedGroup]);
+        return filterAndSortTodos(groupScopedTodos, todoFilter.filterState);
+    }, [groupScopedTodos, todoFilter.filterState]);
 
     // Counts per group (active tasks only, for sidebar badges)
     const groupCounts = useMemo(() => {
@@ -660,36 +622,30 @@ export function InboxListView() {
         return counts;
     }, [todos]);
 
-    // Counts for filter buttons (scoped to current group selection)
-    const filterCounts = useMemo(() => {
-        let scoped = todos;
-        if (selectedGroup !== ALL_TASKS) {
-            scoped = scoped.filter((todo) => getGroupName(todo) === selectedGroup);
-        }
-        if (searchQuery.trim()) {
+    // Counts for status bucket buttons (scoped to current group + search)
+    const statusBucketCounts = useMemo(() => {
+        let scoped = groupScopedTodos;
+        const query = todoFilter.filterState.searchQuery.trim();
+        if (query) {
             scoped = scoped.filter((todo) =>
-                fuzzySearch(searchQuery, todo.title)
-                || (todo.description ? fuzzySearch(searchQuery, todo.description) : false)
-                || (todo.project ? fuzzySearch(searchQuery, todo.project) : false)
-                || (todo.tags?.some((tag) => fuzzySearch(searchQuery, tag)) ?? false)
+                fuzzyMatch(query, todo.title)
+                || (todo.description ? fuzzyMatch(query, todo.description) : false)
+                || (todo.project ? fuzzyMatch(query, todo.project) : false)
+                || (todo.tags?.some((tag) => fuzzyMatch(query, tag)) ?? false)
             );
         }
         return {
             all: scoped.length,
-            active: scoped.filter((todo) => getFilterForTodo(todo) === "active").length,
-            completed: scoped.filter((todo) => getFilterForTodo(todo) === "completed").length,
-            archived: scoped.filter((todo) => getFilterForTodo(todo) === "archived").length,
+            active: scoped.filter((todo) => getStatusBucketForTodo(todo) === "active").length,
+            completed: scoped.filter((todo) => getStatusBucketForTodo(todo) === "completed").length,
+            archived: scoped.filter((todo) => getStatusBucketForTodo(todo) === "archived").length,
         };
-    }, [todos, selectedGroup, searchQuery]);
+    }, [groupScopedTodos, todoFilter.filterState.searchQuery]);
 
     // Non-inbox projects for sidebar listing
     const sidebarProjects = useMemo(() =>
         projectGroups.filter((g) => g !== INBOX_PROJECT),
     [projectGroups]);
-
-    const selectedGroupLabel = selectedGroup === ALL_TASKS
-        ? "All Tasks"
-        : selectedGroup;
 
     const isProjectLocked = selectedGroup !== ALL_TASKS;
 
@@ -724,17 +680,10 @@ export function InboxListView() {
                 <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
                     {/* Left Panel — Sidebar */}
                     <ResizablePanel defaultSize={20} minSize={12} maxSize={35} className="flex flex-col min-h-0" style={{ backgroundColor: styles.surfaceSecondary }}>
-                        {/* Search */}
+                        {/* Sidebar header */}
                         <div className="shrink-0 p-2.5 pb-1.5">
-                            <div className="relative">
-                                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3" style={{ color: styles.contentTertiary }} />
-                                <Input
-                                    placeholder="search tasks..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="h-8 pl-8 text-xs bg-transparent"
-                                    style={{ borderColor: styles.borderDefault, color: styles.contentPrimary }}
-                                />
+                            <div className="px-3 py-1 text-[10px] font-medium uppercase tracking-[0.12em]" style={{ color: styles.contentTertiary }}>
+                                Groups
                             </div>
                         </div>
 
@@ -801,56 +750,49 @@ export function InboxListView() {
 
                     {/* Right Panel — Detail */}
                     <ResizablePanel className="flex flex-col min-w-0 min-h-0">
-                        {/* Header */}
+                        {/* Header with toolbar */}
                         <div
-                            className="shrink-0 px-4 py-2.5 flex items-center gap-2"
+                            className="shrink-0 px-3 py-2"
                             style={{ borderBottom: `1px solid ${styles.borderDefault}` }}
                         >
-                            {selectedGroup === INBOX_PROJECT && <Inbox className="size-3.5" style={{ color: styles.contentTertiary }} />}
-                            {selectedGroup === ALL_TASKS && <ListTodo className="size-3.5" style={{ color: styles.contentTertiary }} />}
-                            <span className="text-xs font-medium uppercase tracking-[0.1em]" style={{ color: styles.contentPrimary }}>
-                                {selectedGroupLabel}
-                            </span>
-                            <span className="text-caption" style={{ color: styles.contentTertiary }}>
-                                {filterCounts.all} items
-                            </span>
-
-                            <div className="ml-auto flex items-center gap-1.5">
-                                <div className="flex items-center gap-0.5">
-                                    {(["all", "active", "completed", "archived"] as const).map((value) => (
-                                        <button
-                                            key={value}
-                                            onClick={() => setFilter(value)}
-                                            className="h-7 rounded-md px-2 text-caption transition-colors"
-                                            style={filter === value ? {
-                                                backgroundColor: styles.surfaceAccent,
-                                                color: styles.contentPrimary,
-                                            } : {
-                                                color: styles.contentTertiary,
-                                            }}
-                                        >
-                                            {value}
-                                            <span className="ml-1 opacity-70">{filterCounts[value]}</span>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <CreateTodoDialog
-                                    open={createDialogOpen}
-                                    onOpenChange={handleOpenCreateDialog}
-                                    newTodo={newTodo}
-                                    onNewTodoChange={setNewTodo}
-                                    onCreateTodo={createTodo}
-                                    loading={loading}
-                                    projectLocked={isProjectLocked}
-                                    availableTags={availableTags}
-                                    availableProjects={availableProjects}
-                                    triggerLabel="+ new"
-                                    hideTriggerIcon
-                                    triggerVariant="default"
-                                    triggerClassName="h-7 px-2 text-xs font-medium rounded-md"
-                                />
-                            </div>
+                            <TodoFilterToolbar
+                                filterState={todoFilter.filterState}
+                                onSearchChange={todoFilter.setSearchQuery}
+                                onSortModeChange={todoFilter.setSortMode}
+                                onActivatePreset={todoFilter.activatePreset}
+                                onFilterChange={(partial) => {
+                                    if (partial.selectedPriority !== undefined) todoFilter.setSelectedPriority(partial.selectedPriority);
+                                    if (partial.dueFilter !== undefined) todoFilter.setDueFilter(partial.dueFilter);
+                                    if (partial.selectedTags !== undefined) todoFilter.setSelectedTags(partial.selectedTags);
+                                    if (partial.selectedProject !== undefined) todoFilter.setSelectedProject(partial.selectedProject);
+                                }}
+                                onClearAllFilters={todoFilter.clearAllFilters}
+                                availableTags={availableTags}
+                                availableProjects={isProjectLocked ? undefined : availableProjects}
+                                showStatusBucket
+                                statusBucketCounts={statusBucketCounts}
+                                onStatusBucketChange={todoFilter.setStatusBucket}
+                                allowedSortModes={["urgency", "recent"]}
+                                activeFilterChips={todoFilter.activeFilterChips}
+                                hasActiveFilters={todoFilter.hasActiveFilters}
+                                trailingActions={
+                                    <CreateTodoDialog
+                                        open={createDialogOpen}
+                                        onOpenChange={handleOpenCreateDialog}
+                                        newTodo={newTodo}
+                                        onNewTodoChange={setNewTodo}
+                                        onCreateTodo={createTodo}
+                                        loading={loading}
+                                        projectLocked={isProjectLocked}
+                                        availableTags={availableTags}
+                                        availableProjects={availableProjects}
+                                        triggerLabel="+ new"
+                                        hideTriggerIcon
+                                        triggerVariant="default"
+                                        triggerClassName="h-7 px-2 text-xs font-medium rounded-md"
+                                    />
+                                }
+                            />
                         </div>
 
                         {/* Task list */}
@@ -859,7 +801,7 @@ export function InboxListView() {
                                 <div className="h-full flex flex-col items-center justify-center gap-2">
                                     <ListTodo className="size-10 opacity-20" style={{ color: styles.contentTertiary }} />
                                     <span className="text-xs" style={{ color: styles.contentTertiary }}>
-                                        {searchQuery.trim() || filter !== "all"
+                                        {todoFilter.filterState.searchQuery.trim() || todoFilter.hasActiveFilters
                                             ? "no tasks match current filters"
                                             : "no tasks yet"}
                                     </span>

@@ -2,15 +2,17 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle2, Clock, Calendar, Archive, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { TodoCard } from "./TodoCard";
 import { TaskCardEditor } from "./TaskCardEditor";
-import { TagFilter } from "./TagFilter";
 import { Todo } from "./todo-types";
+import { useTodoFilterState } from "./useTodoFilterState";
+import { filterAndSortTodos, urgencyComparator } from "./todo-filter-utils";
+import { TodoFilterToolbar } from "./TodoFilterToolbar";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useTheme } from "@/hooks/useTheme";
 import {
     DndContext,
     DragEndEvent,
@@ -41,7 +43,8 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
     const [todos, setTodos] = useState<Todo[]>([]);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
-    const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const todoFilter = useTodoFilterState("archived", { defaultSortMode: "urgency" });
+    const { currentTheme } = useTheme();
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [todoToEdit, setTodoToEdit] = useState<Todo | null>(null);
     const [editSaving, setEditSaving] = useState(false);
@@ -336,32 +339,25 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
         }
     }, [todos, todosAPI, updateTodoStatus, loadTodos]);
 
-    const handleTagToggle = (tag: string) => {
-        setSelectedTags((prev) =>
-            prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-        );
-    };
-
-    const handleClearAllTags = () => {
-        setSelectedTags([]);
-    };
-
     const todosByStatus = useMemo(() => {
-        // Apply tag filtering if tags are selected
-        let filteredTodos = todos;
-        if (selectedTags.length > 0) {
-            filteredTodos = todos.filter((todo) =>
-                todo.tags?.some((tag) => selectedTags.includes(tag))
-            );
+        const filtered = filterAndSortTodos(todos, todoFilter.filterState, { skipStatusFilter: true });
+
+        const grouped = {
+            todo: filtered.filter((t) => t.status === "todo"),
+            in_progress: filtered.filter((t) => t.status === "in_progress"),
+            done: filtered.filter((t) => t.status === "done"),
+            later: filtered.filter((t) => t.status === "later"),
+        };
+
+        // Apply urgency sort within each column
+        if (todoFilter.filterState.sortMode !== "manual") {
+            for (const key of Object.keys(grouped) as Array<keyof typeof grouped>) {
+                grouped[key].sort(urgencyComparator);
+            }
         }
 
-        return {
-            todo: filteredTodos.filter((t) => t.status === "todo"),
-            in_progress: filteredTodos.filter((t) => t.status === "in_progress"),
-            done: filteredTodos.filter((t) => t.status === "done"),
-            later: filteredTodos.filter((t) => t.status === "later"),
-        };
-    }, [todos, selectedTags]);
+        return grouped;
+    }, [todos, todoFilter.filterState]);
 
     // Sortable Todo Card component
     function SortableTodoCard({ todo }: { todo: Todo }) {
@@ -441,27 +437,38 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
 
     return (
         <div className="px-6 py-4 space-y-6">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                    <Archive className="w-5 h-5 text-muted-foreground" />
-                    <h2 className="text-lg font-semibold">Archived Todos</h2>
-                    <Badge variant="outline" className="text-xs">
-                        {todos.length} items
-                    </Badge>
-                </div>
-                <div className="flex items-center gap-2">
-                    <TagFilter
-                        availableTags={availableTags}
-                        selectedTags={selectedTags}
-                        onTagToggle={handleTagToggle}
-                        onClearAll={handleClearAllTags}
-                    />
-                    <Button variant="outline" size="sm" onClick={openActiveView}>
-                        <ArrowLeft className="w-4 h-4 mr-2" />
+            <TodoFilterToolbar
+                filterState={todoFilter.filterState}
+                onSearchChange={todoFilter.setSearchQuery}
+                onSortModeChange={todoFilter.setSortMode}
+                onActivatePreset={todoFilter.activatePreset}
+                onFilterChange={(partial) => {
+                    if (partial.selectedTags !== undefined) todoFilter.setSelectedTags(partial.selectedTags);
+                    if (partial.selectedPriority !== undefined) todoFilter.setSelectedPriority(partial.selectedPriority);
+                    if (partial.dueFilter !== undefined) todoFilter.setDueFilter(partial.dueFilter);
+                    if (partial.selectedProject !== undefined) todoFilter.setSelectedProject(partial.selectedProject);
+                }}
+                onClearAllFilters={todoFilter.clearAllFilters}
+                availableTags={availableTags}
+                availableProjects={availableProjects}
+                showStatusBucket={false}
+                allowedSortModes={["urgency", "recent"]}
+                activeFilterChips={todoFilter.activeFilterChips}
+                hasActiveFilters={todoFilter.hasActiveFilters}
+                trailingActions={
+                    <button
+                        onClick={openActiveView}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors"
+                        style={{
+                            color: currentTheme.styles.contentTertiary,
+                            border: `1px solid ${currentTheme.styles.borderDefault}`,
+                        }}
+                    >
+                        <ArrowLeft className="size-3.5" />
                         Back to Active
-                    </Button>
-                </div>
-            </div>
+                    </button>
+                }
+            />
 
             {todos.length === 0 ? (
                 <div className="text-center py-12">

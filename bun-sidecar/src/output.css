@@ -300,6 +300,9 @@
   .inset-y-0 {
     inset-block: calc(var(--spacing) * 0);
   }
+  .-top-0\.5 {
+    top: calc(var(--spacing) * -0.5);
+  }
   .-top-1\.5 {
     top: calc(var(--spacing) * -1.5);
   }
@@ -347,6 +350,9 @@
   }
   .top-full {
     top: 100%;
+  }
+  .-right-0\.5 {
+    right: calc(var(--spacing) * -0.5);
   }
   .-right-1 {
     right: calc(var(--spacing) * -1);
@@ -570,6 +576,9 @@
   .mb-1 {
     margin-bottom: calc(var(--spacing) * 1);
   }
+  .mb-1\.5 {
+    margin-bottom: calc(var(--spacing) * 1.5);
+  }
   .mb-2 {
     margin-bottom: calc(var(--spacing) * 2);
   }
@@ -672,6 +681,10 @@
   .size-\(--cell-size\) {
     width: var(--cell-size);
     height: var(--cell-size);
+  }
+  .size-1\.5 {
+    width: calc(var(--spacing) * 1.5);
+    height: calc(var(--spacing) * 1.5);
   }
   .size-2 {
     width: calc(var(--spacing) * 2);
@@ -874,6 +887,9 @@
   }
   .max-h-\[calc\(100\%-2rem\)\] {
     max-height: calc(100% - 2rem);
+  }
+  .max-h-\[min\(70vh\,500px\)\] {
+    max-height: min(70vh, 500px);
   }
   .min-h-0 {
     min-height: calc(var(--spacing) * 0);
@@ -1090,6 +1106,9 @@
   }
   .max-w-\[160px\] {
     max-width: 160px;
+  }
+  .max-w-\[220px\] {
+    max-width: 220px;
   }
   .max-w-\[340px\] {
     max-width: 340px;
