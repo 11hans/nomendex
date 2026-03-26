@@ -60,6 +60,26 @@ function buildAgentContext(workspaceFolder: string): string {
     return `<agent-context>
 Today is ${dayOfWeek}, ${dateStr}.
 You are working in the folder: ${workspaceFolder}
+
+## AskUserQuestion tool
+You have access to the AskUserQuestion tool which presents the user with multiple-choice questions in a clickable UI. Use it instead of plain-text questions whenever the user needs to choose between 2-4 concrete options. This is much faster for the user than typing an answer.
+
+When to use:
+- Clarifying ambiguous instructions (e.g. "which approach?", "which file?")
+- Gathering preferences or configuration choices
+- Offering implementation alternatives before starting work
+- Any decision point where you can enumerate the reasonable options
+
+When NOT to use:
+- Questions that require a free-form, detailed answer
+- Simple yes/no confirmations (just ask in text)
+- When there is only one reasonable path forward
+
+Tips:
+- Put the recommended option first and append "(Recommended)" to its label
+- Use multiSelect: true only when choices are genuinely non-exclusive
+- Keep option labels short (1-5 words); put detail in the description field
+- The user always has an "Other" option to type a custom answer
 </agent-context>`;
 }
 
@@ -212,6 +232,7 @@ type PermissionResponse = {
     decision: PermissionDecision;
     alwaysAllow?: boolean;
     toolName?: string;
+    updatedInput?: Record<string, unknown>;
 };
 type PendingPermission = {
     resolve: (response: PermissionResponse) => void;
@@ -493,8 +514,8 @@ export const chatRoutes = {
                         };
                     }
 
-                    // Check if tool is already allowed for this agent
-                    if (agentAllowedTools.includes(toolName)) {
+                    // AskUserQuestion must always be interactive — never auto-allow
+                    if (toolName !== "AskUserQuestion" && agentAllowedTools.includes(toolName)) {
                         console.log(`[Permissions] Tool "${toolName}" auto-allowed for agent ${agentConfig.id}`);
                         return {
                             behavior: "allow" as const,
@@ -526,8 +547,8 @@ export const chatRoutes = {
                     console.log(`[Permissions] Decision for ${permissionId}: ${response.decision}, alwaysAllow: ${response.alwaysAllow}`);
 
                     if (response.decision === "allow") {
-                        // If "Always Allow" was selected, persist the permission for this agent
-                        if (response.alwaysAllow) {
+                        // AskUserQuestion is always interactive — never persist to allowedTools
+                        if (response.alwaysAllow && toolName !== "AskUserQuestion") {
                             console.log(`[Permissions] Persisting always-allow for tool: ${toolName} on agent: ${agentConfig.id}`);
                             await addAllowedTool({ agentId: agentConfig.id, toolName });
                             // Also add to our local cache so subsequent calls in this session auto-allow
@@ -536,7 +557,7 @@ export const chatRoutes = {
 
                         return {
                             behavior: "allow" as const,
-                            updatedInput: input,
+                            updatedInput: response.updatedInput ?? input,
                         };
                     } else {
                         return { behavior: "deny" as const, message: "User denied permission" };
@@ -1031,7 +1052,7 @@ export const chatRoutes = {
         async POST(req: Request) {
             try {
                 const body = await req.json();
-                const { permissionId, decision, alwaysAllow, toolName } = body;
+                const { permissionId, decision, alwaysAllow, toolName, updatedInput } = body;
 
                 console.log(`[Permissions] Received response for ${permissionId}: ${decision}, alwaysAllow: ${alwaysAllow}`);
 
@@ -1058,7 +1079,7 @@ export const chatRoutes = {
                     );
                 }
 
-                pending.resolve({ decision, alwaysAllow, toolName });
+                pending.resolve({ decision, alwaysAllow, toolName, updatedInput });
                 console.log(`[Permissions] Resolved permission ${permissionId} with ${decision}, alwaysAllow: ${alwaysAllow}`);
 
                 return Response.json({ success: true });

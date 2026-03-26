@@ -58,6 +58,7 @@ import { agentsAPI } from "@/hooks/useAgentsAPI";
 import { QueuedMessagesList } from "./QueuedMessagesList";
 import type { QueuedMessage } from "./index";
 import { useTabScrollPersistence, hasSavedScrollPosition } from "@/hooks/useTabScrollPersistence";
+import { AskUserQuestionBanner, parseAskUserQuestionInput } from "./AskUserQuestionBanner";
 import { OverlayScrollbar } from "@/components/OverlayScrollbar";
 import { removeFileLock, upsertFileLock } from "@/hooks/useFileLocks";
 
@@ -509,7 +510,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
 
     const respondToPermission = useCallback(async (
         decision: "allow" | "deny",
-        options?: { permissionId?: string; alwaysAllow?: boolean }
+        options?: { permissionId?: string; alwaysAllow?: boolean; updatedInput?: Record<string, unknown> }
     ) => {
         // Get the ID from the passed param or current pending permission
         const id = options?.permissionId ?? pendingPermission?.permissionId;
@@ -531,6 +532,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                     decision,
                     alwaysAllow: options?.alwaysAllow,
                     toolName,
+                    updatedInput: options?.updatedInput,
                 }),
             });
         } catch (error) {
@@ -1172,43 +1174,67 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
             </OverlayScrollbar>
 
             {/* Permission Request Banner */}
-            {pendingPermission && (
-                <div className="mx-auto w-full max-w-3xl px-4 pb-2">
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-2.5 py-2">
-                        <div className="flex min-w-0 items-center gap-2">
-                            <ShieldAlert className="h-4 w-4 shrink-0 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">
-                                Allow <span className="font-mono text-foreground">{pendingPermission.toolName}</span>?
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => respondToPermission("deny")}
-                            >
-                                Deny
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => respondToPermission("allow")}
-                            >
-                                Allow
-                            </Button>
-                            <Button
-                                type="button"
-                                size="sm"
-                                onClick={() => respondToPermission("allow", { alwaysAllow: true })}
-                            >
-                                Always Allow
-                            </Button>
+            {pendingPermission && (() => {
+                // AskUserQuestion: show interactive question UI
+                if (pendingPermission.toolName === "AskUserQuestion") {
+                    const questions = parseAskUserQuestionInput(pendingPermission.input);
+                    if (questions) {
+                        return (
+                            <AskUserQuestionBanner
+                                questions={questions}
+                                onSubmit={(answers) => {
+                                    respondToPermission("allow", {
+                                        updatedInput: {
+                                            ...pendingPermission.input,
+                                            answers,
+                                        },
+                                    });
+                                }}
+                                onDeny={() => respondToPermission("deny")}
+                            />
+                        );
+                    }
+                }
+
+                // Standard permission banner for all other tools
+                return (
+                    <div className="mx-auto w-full max-w-3xl px-4 pb-2">
+                        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-2.5 py-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                                <ShieldAlert className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">
+                                    Allow <span className="font-mono text-foreground">{pendingPermission.toolName}</span>?
+                                </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => respondToPermission("deny")}
+                                >
+                                    Deny
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => respondToPermission("allow")}
+                                >
+                                    Allow
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => respondToPermission("allow", { alwaysAllow: true })}
+                                >
+                                    Always Allow
+                                </Button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             <div className="mx-auto w-full max-w-3xl px-4 pb-4 pt-1">
                 {/* Queued messages list */}
