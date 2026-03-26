@@ -797,7 +797,7 @@ export function InboxListView() {
                         </div>
                     </ResizablePanel>
 
-                    <ResizableHandle />
+                    <ResizableHandle withHandle />
 
                     {/* Right Panel — Detail */}
                     <ResizablePanel className="flex flex-col min-w-0 min-h-0">
