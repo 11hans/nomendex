@@ -54,18 +54,18 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     // API hook
     const notesAPI = useNotesAPI();
 
-    // Set tab name for browser view - only once when component mounts
+    // Set tab name for browser view - only once when this tab is active
     useEffect(() => {
         if (
-            activeTab &&
+            activeTab?.id === tabId &&
             activeTab.pluginInstance.plugin.id === "notes" &&
             activeTab.pluginInstance.viewId !== "editor" &&
             !hasSetTabNameRef.current
         ) {
-            setTabName(activeTab.id, "Notes Browse");
+            setTabName(tabId, "Notes Browse");
             hasSetTabNameRef.current = true;
         }
-    }, [activeTab, setTabName]);
+    }, [activeTab, setTabName, tabId]);
 
     // Auto-focus search input when tab becomes active
     useEffect(() => {

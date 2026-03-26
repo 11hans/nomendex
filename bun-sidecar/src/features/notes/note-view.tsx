@@ -580,16 +580,24 @@ export function NotesView(props: NotesViewProps) {
         [debouncedSave, parseHeadings]
     );
 
-    // Update tab name to show just the document name - only once when component mounts
+    // Update tab name to show just the document name for standalone editor tabs only.
+    // The compact NotesView is embedded inside the notes browser tab and must not rename it.
     useEffect(() => {
-        // Only set tab name when this tab is active and we haven't set it yet
-        if (activeTab?.id === tabId && !hasSetTabNameRef.current) {
+        if (compact) return;
+
+        const isActiveEditorTab =
+            activeTab?.id === tabId &&
+            activeTab.pluginInstance.plugin.id === "notes" &&
+            activeTab.pluginInstance.viewId === "editor" &&
+            activeTab.pluginInstance.instanceProps?.noteFileName === noteFileName;
+
+        if (isActiveEditorTab && !hasSetTabNameRef.current) {
             // Remove .md extension for cleaner display
             const displayName = noteFileName.replace(/\.md$/, "");
             setTabName(tabId, displayName);
             hasSetTabNameRef.current = true;
         }
-    }, [activeTab?.id, tabId, noteFileName, setTabName]);
+    }, [activeTab, compact, tabId, noteFileName, setTabName]);
 
     useEffect(() => {
         let cancelled = false;

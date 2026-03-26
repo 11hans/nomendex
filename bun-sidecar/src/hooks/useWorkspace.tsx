@@ -485,6 +485,26 @@ export function useWorkspace(_initialRoute?: RouteParams) {
     const setTabName = useCallback(
         (tabId: string, title: string) => {
             updateWorkspace((prev) => {
+                if (prev.layoutMode === "split") {
+                    let changed = false;
+                    const updatedPanes = prev.panes.map((pane) => {
+                        let paneChanged = false;
+                        const updatedTabs = pane.tabs.map((tab) => {
+                            if (tab.id !== tabId || tab.title === title) {
+                                return tab;
+                            }
+                            paneChanged = true;
+                            changed = true;
+                            return { ...tab, title };
+                        });
+
+                        return paneChanged ? { ...pane, tabs: updatedTabs } : pane;
+                    });
+
+                    if (!changed) return prev;
+                    return { ...prev, panes: updatedPanes };
+                }
+
                 const currentTab = prev.tabs.find((tab) => tab.id === tabId);
                 if (currentTab?.title === title) return prev;
                 return {
