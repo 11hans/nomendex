@@ -52,16 +52,18 @@ const terminalSessions = new Map<string, TerminalSession>();
 // Map to track WebSocket to session ID
 const wsToSessionMap = new Map<ServerWebSocket<TerminalWSData>, string>();
 
-// Initialize workspace paths, secrets, and feature services
+// Initialize workspace paths, secrets, and feature services.
+// Do NOT re-throw on failure — the server must always start so the frontend
+// can render an actionable error screen instead of a blank page.
 startupLog.info('Initializing workspace services...');
+let startupError: string | null = null;
 try {
     await initializeWorkspaceServices();
     startupLog.info('Workspace services initialized successfully');
 } catch (error) {
-    startupLog.error('Failed to initialize workspace services', {
-        error: error instanceof Error ? error.message : String(error)
-    });
-    throw error;
+    startupError = error instanceof Error ? error.message : String(error);
+    startupLog.error('Failed to initialize workspace services', { error: startupError });
+    startupLog.warn('Server starting in degraded mode');
 }
 
 const server = serve<WSData>({
@@ -75,6 +77,32 @@ const server = serve<WSData>({
                 startupLog.info('Health check passed - server ready');
                 markStartupComplete();
                 return new Response("OK", { status: 200 });
+            },
+        },
+
+        // Startup status — lets the frontend detect degraded mode
+        "/api/startup-status": {
+            GET() {
+                if (startupError) {
+                    return Response.json({ ok: false, state: "failed", error: startupError });
+                }
+                return Response.json({ ok: true, state: "ready" });
+            },
+        },
+
+        // Retry workspace init after a transient failure (e.g. iCloud not yet mounted)
+        "/api/startup-status/retry": {
+            async POST() {
+                try {
+                    await initializeWorkspaceServices();
+                    startupError = null;
+                    startupLog.info('Startup retry succeeded');
+                    return Response.json({ ok: true, state: "ready" });
+                } catch (error) {
+                    startupError = error instanceof Error ? error.message : String(error);
+                    startupLog.error('Startup retry failed', { error: startupError });
+                    return Response.json({ ok: false, state: "failed", error: startupError });
+                }
             },
         },
         ...workspaceRoutes,
