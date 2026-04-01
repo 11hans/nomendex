@@ -56,30 +56,44 @@ async function scanDirectory(params: {
 
     const glob = new Bun.Glob("**/*.md");
 
-    for await (const relativePath of glob.scan({ cwd: dirPath })) {
-        const fullPath = join(dirPath, relativePath);
+    try {
+        for await (const relativePath of glob.scan({ cwd: dirPath })) {
+            const fullPath = join(dirPath, relativePath);
 
-        try {
-            // Check if file is online-only
-            if (await isOnlineOnly(fullPath)) {
-                skippedOnlineOnly++;
-                continue;
+            try {
+                // Check if file is online-only
+                if (await isOnlineOnly(fullPath)) {
+                    skippedOnlineOnly++;
+                    continue;
+                }
+
+                // Get mtime
+                const stats = await stat(fullPath);
+
+                files.push({
+                    relativePath,
+                    fullPath,
+                    source,
+                    mtime: stats.mtime.getTime(),
+                });
+            } catch (error) {
+                skippedErrors++;
+                startupLog.warn(`Failed to stat file: ${fullPath}`, {
+                    error: error instanceof Error ? error.message : String(error),
+                });
             }
-
-            // Get mtime
-            const stats = await stat(fullPath);
-
-            files.push({
-                relativePath,
-                fullPath,
-                source,
-                mtime: stats.mtime.getTime(),
+        }
+    } catch (error) {
+        // Bun.Glob.scan() itself can throw EPERM when the directory is an
+        // iCloud online-only placeholder — return whatever we collected so far.
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "EPERM" || code === "EACCES") {
+            startupLog.warn(`Directory not readable (iCloud online-only?), skipping scan`, {
+                path: dirPath,
+                filesCollected: files.length,
             });
-        } catch (error) {
-            skippedErrors++;
-            startupLog.warn(`Failed to stat file: ${fullPath}`, {
-                error: error instanceof Error ? error.message : String(error),
-            });
+        } else {
+            throw error;
         }
     }
 
