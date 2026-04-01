@@ -33,7 +33,17 @@ export function extractWikiLinks(content: string): string[] {
     while ((match = WIKI_LINK_REGEX.exec(content)) !== null) {
         const linkTarget = match[1];
         if (linkTarget) {
-            links.push(linkTarget.trim());
+            // Parse the target: [[target|display]] -> use target part
+            const pipeIndex = linkTarget.indexOf("|");
+            const target = pipeIndex !== -1 ? linkTarget.slice(0, pipeIndex).trim() : linkTarget.trim();
+
+            // Skip todo: prefixed links — these reference todos, not notes,
+            // and should not generate backlinks or phantom note entries.
+            if (target.startsWith("todo:")) {
+                continue;
+            }
+
+            links.push(target);
         }
     }
     // Dedupe

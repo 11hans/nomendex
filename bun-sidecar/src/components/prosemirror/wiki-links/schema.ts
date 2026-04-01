@@ -13,11 +13,14 @@ export const wikiLinkNodeSpec: NodeSpec = {
         title: { default: "" },
     },
     toDOM(node) {
+        const isTodoLink = (node.attrs.href as string).startsWith("todo:");
         return [
             "a",
             {
-                class: "wiki-link",
-                href: `#/notes/${encodeURIComponent(node.attrs.href)}`,
+                class: isTodoLink ? "wiki-link todo-link" : "wiki-link",
+                href: isTodoLink
+                    ? `#/todos/${encodeURIComponent((node.attrs.href as string).slice(5))}`
+                    : `#/notes/${encodeURIComponent(node.attrs.href)}`,
                 "data-wiki-link": node.attrs.href,
                 title: node.attrs.title || node.attrs.href,
             },

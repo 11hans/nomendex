@@ -155,6 +155,30 @@ export function NotesView(props: NotesViewProps) {
     // Subscribe to wiki link click events and navigate
     useEffect(() => {
         return subscribe("wikilink:click", async ({ target }) => {
+            // Check if this is a todo: prefixed link (e.g., [[todo:abc-123|Title]])
+            if (target.startsWith("todo:")) {
+                const selectedTodoId = target.slice(5); // Remove "todo:" prefix
+
+                // Fetch the todo to get its project
+                try {
+                    const todo = await todosAPI.getTodoById({ todoId: selectedTodoId });
+                    openTab({
+                        pluginMeta: { id: "todos", name: "Todos", icon: "list-todo" },
+                        view: "browser",
+                        props: { project: todo.project, selectedTodoId },
+                    });
+                } catch (error) {
+                    console.error("Failed to fetch todo for wiki link:", error);
+                    // Fallback: open todos without project filter
+                    openTab({
+                        pluginMeta: { id: "todos", name: "Todos", icon: "list-todo" },
+                        view: "browser",
+                        props: { selectedTodoId },
+                    });
+                }
+                return;
+            }
+
             // Check if this is a todo link (e.g., todos/todo-1737036787-slug.md)
             if (target.startsWith("todos/")) {
                 // Extract the todo ID from the path (remove "todos/" prefix and ".md" suffix)

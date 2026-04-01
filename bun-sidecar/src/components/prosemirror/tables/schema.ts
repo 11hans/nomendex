@@ -44,10 +44,11 @@ const wikiLinkNodeSpec: NodeSpec = {
         title: { default: "" },
     },
     toDOM(node) {
+        const isTodoLink = (node.attrs.href as string).startsWith("todo:");
         return [
             "span",
             {
-                class: "wiki-link",
+                class: isTodoLink ? "wiki-link todo-link" : "wiki-link",
                 "data-wiki-link": node.attrs.href,
                 title: node.attrs.title || node.attrs.href,
             },

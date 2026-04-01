@@ -17,6 +17,17 @@
     border-bottom-color: rgba(59, 130, 246, 0.5);
 }
 
+/* Todo link variant */
+.wiki-link.todo-link {
+    background-color: rgba(139, 92, 246, 0.1);
+    border-bottom: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.wiki-link.todo-link:hover {
+    background-color: rgba(139, 92, 246, 0.2);
+    border-bottom-color: rgba(139, 92, 246, 0.5);
+}
+
 /* Broken/missing link */
 .wiki-link.broken {
     color: inherit;
