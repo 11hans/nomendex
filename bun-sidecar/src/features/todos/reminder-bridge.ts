@@ -12,8 +12,15 @@ function isRemindersAvailable(): boolean {
     return !!window.webkit?.messageHandlers?.reminderSync;
 }
 
-export async function syncTaskToReminders(task: Todo): Promise<void> {
-    if (!isRemindersAvailable()) return;
+export function isRemindersSyncAvailable(): boolean {
+    return isRemindersAvailable();
+}
+
+// Serialize reminder sync calls to avoid duplicate reminders from concurrent upserts
+let reminderSyncQueue: Promise<boolean> = Promise.resolve(true);
+
+export async function syncTaskToReminders(task: Todo): Promise<boolean> {
+    if (!isRemindersAvailable()) return false;
 
     // Only high and medium priority tasks go to Reminders
     if (task.priority !== "high" && task.priority !== "medium") {
@@ -27,7 +34,13 @@ export async function syncTaskToReminders(task: Todo): Promise<void> {
         return removeTaskFromReminders(task.id);
     }
 
-    return new Promise<void>((resolve) => {
+    const op = reminderSyncQueue.then(() => doSyncTaskToReminders(task));
+    reminderSyncQueue = op.catch(() => false);
+    return op;
+}
+
+function doSyncTaskToReminders(task: Todo): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
         const callbackName = `__reminderSyncCallback_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         
         (window as unknown as Record<string, unknown>)[callbackName] = (result: ReminderSyncResult) => {
@@ -35,7 +48,7 @@ export async function syncTaskToReminders(task: Todo): Promise<void> {
                 console.warn("[reminder-bridge] sync error:", result.error);
             }
             delete (window as unknown as Record<string, unknown>)[callbackName];
-            resolve();
+            resolve(result.success);
         };
 
         window.webkit!.messageHandlers!.reminderSync!.postMessage({
@@ -54,16 +67,22 @@ export async function syncTaskToReminders(task: Todo): Promise<void> {
         setTimeout(() => {
             if ((window as unknown as Record<string, unknown>)[callbackName]) {
                 delete (window as unknown as Record<string, unknown>)[callbackName];
-                resolve();
+                resolve(false);
             }
         }, 5000);
     });
 }
 
-export async function removeTaskFromReminders(taskId: string): Promise<void> {
-    if (!isRemindersAvailable()) return;
+export async function removeTaskFromReminders(taskId: string): Promise<boolean> {
+    if (!isRemindersAvailable()) return false;
 
-    return new Promise<void>((resolve) => {
+    const op = reminderSyncQueue.then(() => doRemoveTaskFromReminders(taskId));
+    reminderSyncQueue = op.catch(() => false);
+    return op;
+}
+
+function doRemoveTaskFromReminders(taskId: string): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
         const callbackName = `__reminderSyncCallback_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         
         (window as unknown as Record<string, unknown>)[callbackName] = (result: ReminderSyncResult) => {
@@ -71,7 +90,7 @@ export async function removeTaskFromReminders(taskId: string): Promise<void> {
                 console.warn("[reminder-bridge] delete error:", result.error);
             }
             delete (window as unknown as Record<string, unknown>)[callbackName];
-            resolve();
+            resolve(result.success);
         };
 
         window.webkit!.messageHandlers!.reminderSync!.postMessage({
@@ -83,7 +102,7 @@ export async function removeTaskFromReminders(taskId: string): Promise<void> {
         setTimeout(() => {
             if ((window as unknown as Record<string, unknown>)[callbackName]) {
                 delete (window as unknown as Record<string, unknown>)[callbackName];
-                resolve();
+                resolve(false);
             }
         }, 5000);
     });

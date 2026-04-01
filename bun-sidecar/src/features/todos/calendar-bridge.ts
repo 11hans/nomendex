@@ -9,11 +9,15 @@ function isCalendarAvailable(): boolean {
     return !!window.webkit?.messageHandlers?.calendarSync;
 }
 
-// Serialize calendar sync calls to prevent duplicate events from concurrent upserts
-let calendarSyncQueue: Promise<void> = Promise.resolve();
+export function isCalendarSyncAvailable(): boolean {
+    return isCalendarAvailable();
+}
 
-export async function syncTaskToCalendar(task: Todo): Promise<void> {
-    if (!isCalendarAvailable()) return;
+// Serialize calendar sync calls to prevent duplicate events from concurrent upserts
+let calendarSyncQueue: Promise<boolean> = Promise.resolve(true);
+
+export async function syncTaskToCalendar(task: Todo): Promise<boolean> {
+    if (!isCalendarAvailable()) return false;
 
     // If both scheduled fields are cleared, remove from calendar
     if (!task.scheduledStart && !task.scheduledEnd) {
@@ -22,19 +26,19 @@ export async function syncTaskToCalendar(task: Todo): Promise<void> {
 
     // Chain onto queue to prevent concurrent upserts creating duplicates
     const op = calendarSyncQueue.then(() => doSyncTaskToCalendar(task));
-    calendarSyncQueue = op.catch(() => { /* swallow to keep chain alive */ });
+    calendarSyncQueue = op.catch(() => false);
     return op;
 }
 
-function doSyncTaskToCalendar(task: Todo): Promise<void> {
-    return new Promise<void>((resolve) => {
+function doSyncTaskToCalendar(task: Todo): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
         const callbackName = `__calendarSyncCallback_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         (window as unknown as Record<string, unknown>)[callbackName] = (result: CalendarSyncResult) => {
             if (!result.success && result.error) {
                 console.warn("[calendar-bridge] sync error:", result.error);
             }
             delete (window as unknown as Record<string, unknown>)[callbackName];
-            resolve();
+            resolve(result.success);
         };
 
         window.webkit!.messageHandlers!.calendarSync!.postMessage({
@@ -57,39 +61,39 @@ function doSyncTaskToCalendar(task: Todo): Promise<void> {
         setTimeout(() => {
             if ((window as unknown as Record<string, unknown>)[callbackName]) {
                 delete (window as unknown as Record<string, unknown>)[callbackName];
-                resolve();
+                resolve(false);
             }
         }, 5000);
     });
 }
 
-export async function removeTaskFromCalendar(taskId: string): Promise<void> {
-    if (!isCalendarAvailable()) return;
+export async function removeTaskFromCalendar(taskId: string): Promise<boolean> {
+    if (!isCalendarAvailable()) return false;
 
     // Chain onto queue to prevent racing with concurrent upserts
     const op = calendarSyncQueue.then(() => doRemoveTaskFromCalendar(taskId));
-    calendarSyncQueue = op.catch(() => { /* swallow to keep chain alive */ });
+    calendarSyncQueue = op.catch(() => false);
     return op;
 }
 
 /** Deletes all Nomendex calendars (wipe before force sync). Calendars are recreated by upsert. */
-export async function purgeCalendarEvents(): Promise<void> {
-    if (!isCalendarAvailable()) return;
+export async function purgeCalendarEvents(): Promise<boolean> {
+    if (!isCalendarAvailable()) return false;
 
     const op = calendarSyncQueue.then(() => doPurgeCalendarEvents());
-    calendarSyncQueue = op.catch(() => { /* swallow to keep chain alive */ });
+    calendarSyncQueue = op.catch(() => false);
     return op;
 }
 
-function doPurgeCalendarEvents(): Promise<void> {
-    return new Promise<void>((resolve) => {
+function doPurgeCalendarEvents(): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
         const callbackName = `__calendarSyncCallback_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         (window as unknown as Record<string, unknown>)[callbackName] = (result: CalendarSyncResult) => {
             if (!result.success && result.error) {
                 console.warn("[calendar-bridge] purge error:", result.error);
             }
             delete (window as unknown as Record<string, unknown>)[callbackName];
-            resolve();
+            resolve(result.success);
         };
 
         window.webkit!.messageHandlers!.calendarSync!.postMessage({
@@ -100,21 +104,21 @@ function doPurgeCalendarEvents(): Promise<void> {
         setTimeout(() => {
             if ((window as unknown as Record<string, unknown>)[callbackName]) {
                 delete (window as unknown as Record<string, unknown>)[callbackName];
-                resolve();
+                resolve(false);
             }
         }, 5000);
     });
 }
 
-function doRemoveTaskFromCalendar(taskId: string): Promise<void> {
-    return new Promise<void>((resolve) => {
+function doRemoveTaskFromCalendar(taskId: string): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
         const callbackName = `__calendarSyncCallback_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         (window as unknown as Record<string, unknown>)[callbackName] = (result: CalendarSyncResult) => {
             if (!result.success && result.error) {
                 console.warn("[calendar-bridge] delete error:", result.error);
             }
             delete (window as unknown as Record<string, unknown>)[callbackName];
-            resolve();
+            resolve(result.success);
         };
 
         window.webkit!.messageHandlers!.calendarSync!.postMessage({
@@ -126,7 +130,7 @@ function doRemoveTaskFromCalendar(taskId: string): Promise<void> {
         setTimeout(() => {
             if ((window as unknown as Record<string, unknown>)[callbackName]) {
                 delete (window as unknown as Record<string, unknown>)[callbackName];
-                resolve();
+                resolve(false);
             }
         }, 5000);
     });
