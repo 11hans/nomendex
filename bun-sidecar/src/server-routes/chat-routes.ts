@@ -667,7 +667,8 @@ export const chatRoutes = {
                     // BPagent: use dedicated system prompt with real notes path + context
                     const notesPath = getNotesPath();
                     const vaultConfig = await readVaultConfig(notesPath);
-                    let bpagentPrompt = `${buildAgentContext(notesPath)}\n\n${buildBpagentSystemPrompt(notesPath, vaultConfig)}`;
+                    const serverPort = parseInt(process.env.PORT || "1234", 10);
+                    let bpagentPrompt = `${buildAgentContext(notesPath)}\n\n${buildBpagentSystemPrompt(notesPath, vaultConfig, serverPort)}`;
 
                     // Inject memory recall into system prompt (non-fatal on error)
                     try {
@@ -698,6 +699,7 @@ export const chatRoutes = {
                     sdkOptions.agents = buildBpagentSubagents({
                         notesPath,
                         config: vaultConfig,
+                        port: serverPort,
                     });
                     chatLogger.info("BPagent session: injected subagents + memory", {
                         subagents: Object.keys(sdkOptions.agents),

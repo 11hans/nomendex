@@ -11,9 +11,11 @@ import type { VaultConfig } from "./built-in-bpagent";
 export function buildBpagentSubagents(input?: {
     notesPath: string;
     config: VaultConfig | null;
+    port: number;
 }): Record<string, AgentDefinition> {
     const notesPath = input?.notesPath ?? ".";
     const folderMapping = input?.config?.folderMapping;
+    const port = input?.port ?? 1234;
 
     const dailyNotesDir = path.join(notesPath, folderMapping?.dailyNotes ?? "daily-notes");
     const goalsDir = path.join(notesPath, folderMapping?.goals ?? "Goals");
@@ -35,11 +37,11 @@ You facilitate the weekly review process for a personal knowledge management sys
 1. Read all daily notes from the past 7 days
 2. Extract completed tasks, wins, and challenges
 3. Identify patterns in productivity and mood
-4. Gather incomplete tasks for carry-forward decision
+4. Gather incomplete single-day tasks for carry-forward decision and keep multi-day scheduled todos as context only
 
 ### Phase 2: Reflect (10 minutes)
-1. Read current Goals files (Monthly, Yearly, 3-Year)
-2. Calculate progress toward each goal
+1. Fetch goal progress via API: \`curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'\`
+2. Review computed progress per goal (use \`computedProgress\` from the response, never count checkboxes)
 3. Identify goal-action alignment gaps
 4. Note what worked and what did not
 
@@ -49,15 +51,28 @@ You facilitate the weekly review process for a personal knowledge management sys
 3. Set specific, measurable targets
 4. Anticipate obstacles and plan responses
 
+## API Base URL
+
+All API endpoints are available at \`http://localhost:${port}\`. The port is already resolved — do **not** read \`serverport.json\`.
+
 ## Data Sources
 
-Treat \`${notesPath}\` as vault root. Always read these files:
-- \`${goalsDir}/0. Three Year Goals.md\` - Long-term vision
-- \`${goalsDir}/1. Yearly Goals.md\` - Annual objectives
-- \`${goalsDir}/2. Monthly Goals.md\` - Current month priorities
+### Primary: Typed API (source of truth for goals & progress)
+- Goal forest: \`curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'\`
+- Monthly goals: \`curl -s http://localhost:${port}/api/goals/list -X POST -H 'Content-Type: application/json' -d '{"horizon":"monthly","status":"active"}'\`
+- Projects: \`curl -s http://localhost:${port}/api/projects/list -X POST -H 'Content-Type: application/json' -d '{}'\`
+
+### Secondary: Markdown narrative (for context and reflection)
 - \`${goalsDir}/3. Weekly Review.md\` - Previous reviews
 - \`${dailyNotesDir}/*.md\` - Past 7 days of notes
-- Do not read goal/project context from workspace root unless it resolves to the same path.
+
+Do not read \`${goalsDir}/0-2.md\` dashboard files as data sources — they are generated summaries. Use the API instead.
+
+## Daily-note Truth Rules
+- **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
+- **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
+- **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
+- **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
 
 ## Output Format
 
@@ -75,10 +90,13 @@ Generate a structured weekly review:
 ### Patterns Noticed
 - [Recurring themes]
 
-### Goal Progress
-| Goal | Progress | Notes |
-|------|----------|-------|
-| [Goal 1] | [X%] | [Status] |
+### Streak Status
+- Denní review streak: [DEN X from latest daily note, or "streak neuveden"]
+
+### Goal Progress (from /api/goals/graph/forest)
+| Goal | Mode | Progress | Notes |
+|------|------|----------|-------|
+| [Goal 1] | [rollup/metric/manual/milestone] | [X%] | [Status] |
 
 ### Next Week
 
@@ -90,7 +108,10 @@ Generate a structured weekly review:
 | ... | ... |
 
 ### Carry Forward
-- [ ] [Task from this week]
+- [ ] [Single-day task from this week]
+
+### Multi-day Context
+- [[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-04-02
 \`\`\`
 
 ## Coaching Integration
@@ -125,7 +146,7 @@ Works well with:
 - \`/weekly\` skill for structured workflow
 - Goal Aligner agent for deep analysis
 - Note Organizer agent for archiving old notes`,
-            tools: ["Read", "Write", "Edit", "Glob", "Grep", "TaskCreate", "TaskUpdate", "TaskList"],
+            tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "TaskCreate", "TaskUpdate", "TaskList"],
             model: "inherit",
         },
 
@@ -137,25 +158,30 @@ Works well with:
 
 You analyze the alignment between daily activities and stated goals at all levels, helping users ensure their time investment matches their priorities.
 
-## Vault Paths
+## API Base URL
 
-- Vault root: \`${notesPath}\`
-- Goal files: \`${goalsDir}/\`
+All API endpoints are available at \`http://localhost:${port}\`. The port is already resolved — do **not** read \`serverport.json\`.
+
+## Data Sources
+
+### Primary: Typed API (source of truth for goals & progress)
+- Goal forest: \`curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'\`
+- Projects: \`curl -s http://localhost:${port}/api/projects/list -X POST -H 'Content-Type: application/json' -d '{}'\`
+
+### Secondary: Markdown narrative (for activity patterns)
 - Daily notes: \`${dailyNotesDir}/\`
-- Project notes: \`${projectsDir}/\`
-- Use these paths as the source of truth for analysis context.
+- Project notes: \`${projectsDir}/\` (mirror notes, not source of truth)
+
+Do not read \`${goalsDir}/0-2.md\` dashboard files as data sources — they are generated summaries.
 
 ## Analysis Framework
 
 ### 1. Goal Cascade Review
-Read and understand the goal hierarchy:
+Fetch the full goal hierarchy via API:
+\`\`\`bash
+curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'
 \`\`\`
-3-Year Vision
-  -> Annual Objectives
-      -> Monthly Priorities
-          -> Weekly Focus
-              -> Daily Tasks
-\`\`\`
+The response contains a nested tree: vision → yearly → quarterly → monthly with \`computedProgress\` per node. Use this as the authoritative goal cascade — never parse markdown files for goal data.
 
 ### 2. Activity Audit
 Scan recent daily notes (7-30 days) to categorize time spent:
@@ -223,16 +249,15 @@ When analyzing, surface these insights:
 Track multi-file analysis with session tasks:
 
 \`\`\`
-[Spinner] Reading 3-year goals...
-[Spinner] Reading yearly goals...
-[Spinner] Reading monthly goals...
+[Spinner] Fetching goal forest from API...
+[Spinner] Fetching project list from API...
 [Spinner] Scanning 7 days of daily notes...
 [Spinner] Analyzing activity patterns...
 [Spinner] Calculating alignment score...
-[Done] Goal alignment analysis complete (6/6 steps)
+[Done] Goal alignment analysis complete (5/5 steps)
 \`\`\`
 
-Task tools provide visibility when analyzing the full goal cascade across multiple files.
+Task tools provide visibility when analyzing the goal cascade via API and daily notes.
 
 ## Integration
 
@@ -240,7 +265,7 @@ Works well with:
 - Weekly Reviewer agent for regular check-ins
 - Productivity Coach output style for accountability
 - \`/onboard\` skill for full context`,
-            tools: ["Read", "Grep", "Glob", "TaskCreate", "TaskUpdate", "TaskList"],
+            tools: ["Read", "Grep", "Glob", "Bash", "TaskCreate", "TaskUpdate", "TaskList"],
             model: "inherit",
         },
 
