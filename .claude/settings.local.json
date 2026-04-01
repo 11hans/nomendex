@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(find:*)",
-      "Bash(bun run:*)"
+      "Bash(bun run:*)",
+      "Read(//Users/honza/Desktop/**)",
+      "Bash(osascript -e 'tell application \"\"Finder\"\" to get POSIX path of \\(\\(POSIX file \"\"/Users/honza/Desktop/TheVault\"\" as alias\\) as text\\)')",
+      "Bash(mdls -name kMDItemKind -name kMDItemPath /Users/honza/Desktop/TheVault)",
+      "Bash(bun test:*)",
+      "Bash(git log:*)"
     ]
   }
 }
