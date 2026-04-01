@@ -22,7 +22,7 @@ const DEFAULT_SKILLS: DefaultSkill[] = [
       "SKILL.md": `---
 name: todos
 description: "Manages project todos via REST API. BEFORE using this skill, you must THINK: 'Does the user mention a project? Does the user imply a specific column like Today?'. Use when the user asks to create, view, update, or delete todos."
-version: 9
+version: 11
 source: nomendex
 ---
 
@@ -166,17 +166,24 @@ Use this workflow for read-only requests such as:
 - If the user is brainstorming, reviewing bugs, or planning work, do NOT silently create todos. Ask whether they want the items captured first.
 - Never read internal cache artifacts such as \`.claude/projects/.../tool-results\`. Use live API calls and workspace files only.
 
+### Todo Safety Rules
+- **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
+- **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
+- **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
+- **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
+
 ### Today Workset Order
 When answering a "today" or "schedule" query without an explicit external calendar integration, build the workset in this order:
 
 1. **Overdue** - todos with \`dueDate\` before today (deadline bucket)
 2. **Due Today** - todos with \`dueDate\` today (deadline bucket)
-3. **Scheduled / Started** - todos whose \`scheduledStart\` (and \`scheduledEnd\` ranges) cover today or earlier, plus \`in_progress\` items not already shown
-4. **Today / Now Columns** - open todos in real Today-style custom columns after loading the project board config
-5. **Focused Project** - if the user names a project, show that project's remaining open todos prominently
-6. **Other Candidates** - remaining open todos worth considering
+3. **Scheduled / Started** - single-day todos whose \`scheduledStart\` (and non-multi-day \`scheduledEnd\` ranges) cover today or earlier, plus non-multi-day \`in_progress\` items not already shown
+4. **Multi-day Context** - todos whose \`scheduledStart\`/\`scheduledEnd\` span more than 1 local calendar day; show separately as context only
+5. **Today / Now Columns** - open todos in real Today-style custom columns after loading the project board config
+6. **Focused Project** - if the user names a project, show that project's remaining open todos prominently
+7. **Other Candidates** - remaining open todos worth considering
 
-Present these as labeled buckets. Do NOT mix deadline buckets (\`dueDate\`) with schedule/today buckets (\`scheduledStart\`/\`scheduledEnd\`).
+Present these as labeled buckets. Do NOT mix deadline buckets (\`dueDate\`) with schedule/today buckets (\`scheduledStart\`/\`scheduledEnd\`). \`Multi-day Context\` is informational and not part of the actionable daily workset.
 
 ### Calendar / Schedule Interpretation
 - Treat "calendar" or "schedule" queries as looking for todos with \`scheduledStart\`/\`scheduledEnd\` (schedule/calendar context) while \`dueDate\` remains the deadline field used for overdue counts.
@@ -215,7 +222,11 @@ Follow this checklist exactly for mutating requests:
 *   ❌ **DO NOT create with customColumnId**: API ignores it. Create then Update.
 *   ❌ **DO NOT treat planning as capture**: If the user is only describing bugs, ideas, or options during planning, ask whether they want them saved as todos.
 *   ❌ **DO NOT use cached tool output**: Never inspect \`.claude/projects/.../tool-results\` instead of calling the live API.
-*   ❌ **DO NOT invent goal/project links**: In daily/evening context, NEVER say "This task probably relates to goal X" unless there is an explicit link (project → goal via Supports field, or todo has a matching project name). State only what is in the data.
+*   ❌ **DO NOT invent goal/project links**: In daily/evening context, NEVER say "This task probably relates to goal X" unless there is an explicit typed link (project.goalRef → goal ID, or todo.resolvedGoalRefs contains the goal ID). State only what is in the data.
+*   ❌ **DO NOT reschedule from stale list data**: Re-fetch the concrete todo via \`/api/todos/get\` immediately before any reschedule/update.
+*   ❌ **DO NOT batch-reschedule multi-day todos**: Show them as \`Multi-day context\` only.
+*   ❌ **DO NOT hide duplicate titles**: When titles repeat, show visible plain-text ID + \`scheduledStart\`-\`scheduledEnd\`.
+*   ❌ **DO NOT invent streak arithmetic**: Use the latest relevant daily note verbatim, or say \`streak neuveden\`.
 
 ## Golden Example (Few-Shot)
 
@@ -287,7 +298,7 @@ See the **projects** skill for full documentation on loading board configuration
       "SKILL.md": `---
 name: manage-skills
 description: Manages Claude Code skills - creates, updates, and maintains skills following established design principles. Use when the user asks to create a skill, update a skill, refactor a skill, or wants to teach Claude a new capability.
-version: 4
+version: 5
 source: nomendex
 ---
 
@@ -342,7 +353,7 @@ For rendering interactive HTML interfaces in chat, use the **create-interface** 
       "SKILL.md": `---
 name: projects
 description: "Working with projects and custom Kanban boards. BEFORE using this skill, you must THINK: 'Does the user assume the project already exists? Am I creating a duplicate because of case sensitivity?'. Use when the user mentions a project name."
-version: 4
+version: 5
 source: nomendex
 ---
 
@@ -714,7 +725,7 @@ It must detect the real folder, nesting, and filename pattern from \`vault-confi
 ## Getting the Notes Directory
 
 \`\`\`bash
-NOTES_DIR=$(curl -s http://localhost:1234/api/workspace/paths | jq -r '.data.notes')
+NOTES_DIR=$(curl -s http://localhost:$PORT/api/workspace/paths | jq -r '.data.notes')
 \`\`\`
 
 Daily notes are stored at the detected folder under \`$NOTES_DIR\`.
@@ -1015,7 +1026,7 @@ esac
       "SKILL.md": `---
 name: adopt
 description: Scaffold the BPagent system onto an existing Obsidian vault. Scans your vault structure, maps folders interactively, and generates configuration.
-version: 2
+version: 3
 source: nomendex
 ---
 
@@ -1078,7 +1089,7 @@ Use AskUserQuestion to confirm or correct the detected mappings.
 | Role | Purpose | Detection Signal |
 |------|---------|-----------------|
 | Daily Notes | Daily journal entries | Date-named files (\`M-D-YYYY\`) |
-| Goals | Goal cascade (3-year → weekly) | Files with goal/review keywords |
+| Goals | Typed goals + mirror notes + weekly review | Goal/review keywords, existing Goals folder |
 | Projects | Active projects | Subdirs with project keywords |
 | Templates | Reusable note structures | Files with template keywords or in Templates/ |
 | Archives | Completed/inactive content | Folder named Archive(s) |
@@ -1152,11 +1163,17 @@ Replace values with the user's actual answers from Phase 2 and 3.
 
 Check what's missing and offer to create it. **Always ask before creating.**
 
-### 5a. Goal Cascade Files
+### 5a. Typed Goals Bootstrap
 
 If the goals folder is empty or newly created:
-- "Your goals folder is empty. Want me to create the goal cascade? (3-year vision, yearly goals, monthly goals, weekly review)"
-- If yes: create the 4 goal files, adapting paths to the user's folder names
+- Ask: "Your goals folder is empty. Want me to bootstrap the typed goals system (API-first) and weekly review note?"
+- If yes:
+  1. Create \`<Goals>/goals/\` for per-goal mirror notes (bidirectional sync target)
+  2. Create \`<Goals>/3. Weekly Review.md\` if missing (working note template)
+  3. **Do not** manually create \`Goals/0. 3-Year Vision.md\`, \`Goals/1. Yearly Goals.md\`, or \`Goals/2. Monthly Goals.md\` as source files (these are generated dashboards in Typed Goal Graph)
+  4. Offer to create initial goals through API:
+     - Use \`POST /api/goals/create\` for first vision/yearly/monthly goals
+     - Then run \`POST /api/goals/sync/dashboards {}\` and \`POST /api/goals/sync/all {}\`
 - If no: skip
 
 ### 5b. Templates
@@ -1192,10 +1209,10 @@ Mapped folders:
 
 Created:
   ✓ vault-config.json (preferences & folder mapping)
-  ✓ Goal cascade files (4 files)
+  ✓ Typed goals bootstrap (\`Goals/goals/\` + optional \`Goals/3. Weekly Review.md\`)
   ✓ Standard templates (3 files)
 
-Your vault structure is unchanged — only vault-config.json and templates were added.
+Your vault structure is preserved. Configuration and optional bootstrap files were added; typed goal data lives in \`.nomendex/goals/\` and dashboards are generated via sync.
 \`\`\`
 
 ### 6c. Next Steps
@@ -1203,7 +1220,7 @@ Your vault structure is unchanged — only vault-config.json and templates were 
 Suggest what to do next:
 - "Try \`/daily\` to create today's note"
 - "Try \`/review\` for a guided weekly review"
-- "Fill in your goals in \`Goals/0. 3-Year Vision.md\`"
+- "Try \`/goal-tracking\` to create your first typed goals, then run \`/monthly\` or \`/weekly\`"
 
 ## Error Handling
 
@@ -1217,6 +1234,7 @@ Works with:
 - \`/weekly\` — uses mapped goals folder from vault-config.json
 - \`/review\` — respects adopted vault structure
 - \`/monthly\` — uses mapped goals folder from vault-config.json
+- \`/goal-tracking\` — manages typed goals via API and syncs dashboards
 `,
     },
   },
@@ -1340,7 +1358,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 6
+version: 8
 source: nomendex
 ---
 
@@ -1399,38 +1417,49 @@ Your daily template can use:
 
 Morning planning is **read-only by default**. Summarize and propose a plan first. Only create or update notes and todos after explicit confirmation or a clear instruction to do so.
 
+### Todo Safety Rules
+- **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
+- **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
+- **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
+- **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
+
 ### Today Workset Algorithm
 Build today's workset via \`/todos\` using these buckets:
 
 1. **Overdue** - todos with \`dueDate\` before today (deadline bucket)
 2. **Due Today** - todos with \`dueDate\` today (deadline bucket)
-3. **Scheduled / In Progress** - todos whose \`scheduledStart\` includes today or earlier (use \`scheduledEnd\` ranges when available), plus \`in_progress\` items not already shown
-4. **Focused Project** - if the user says "today I want to focus mainly on Nomendex" (or another project), load that project's open todos before unrelated candidates
-5. **Other Candidates** - Today/Now custom-column todos after loading real board config, then remaining open todos
+3. **Scheduled / In Progress** - single-day todos whose \`scheduledStart\` includes today or earlier (use non-multi-day \`scheduledEnd\` ranges when available), plus non-multi-day \`in_progress\` items not already shown
+4. **Multi-day Context** - todos whose \`scheduledStart\`/\`scheduledEnd\` are more than 1 local calendar day apart; show separately as context only
+5. **Focused Project** - if the user says "today I want to focus mainly on Nomendex" (or another project), load that project's open todos before unrelated candidates
+6. **Other Candidates** - Today/Now custom-column todos after loading real board config, then remaining open todos
 
 Rules:
 - Treat "calendar" or "schedule" as schedule/calendar queries targeting todos with \`scheduledStart\`/\`scheduledEnd\`.
 - Never guess a Today column ID like \`col-today\`; load the project board config first.
 - If weekly or monthly goal files are template stubs, say so explicitly and do not invent live context from them.
 - Use project-note **Next Actions** only as a fallback when live todos do not provide enough operational detail.
+- \`Multi-day Context\` is informational only and never belongs in the actionable workset snapshot.
 
 ### Automated Steps
 1. Detect today's real daily-note path and open it only if it already exists or the user explicitly asked to create/open it
 2. Pull incomplete tasks from yesterday's real daily note if one exists
-3. Build today's todo workset using the bucket order above
-4. If the user names a focus project, surface that project's open todos before unrelated work
-5. **Save workset snapshot** — after the workset is finalized, write the read-only todo list with \`[[todo:id|Title]]\` wiki-links into today's daily note under \`## Today's Workset\`, plus a hidden HTML comment listing the todo IDs: \`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`. This snapshot is the evening flow's baseline for completion rate. Place it right after the \`## Today's Workset\` heading (or at the top of the note if the section doesn't exist). If the daily note hasn't been created yet, include both when creating it.
-6. Read weekly/monthly goal files as strategic context only
-7. Ask focus questions and propose a plan before editing anything
+3. Build today's actionable single-day todo workset using the bucket order above
+4. Surface \`Multi-day Context\` separately and keep it out of the actionable workset snapshot
+5. If the user names a focus project, surface that project's open todos before unrelated work
+6. **Save workset snapshot** — after the workset is finalized, write only the actionable single-day todo list with \`[[todo:id|Title]]\` wiki-links into today's daily note under \`## Today's Workset\`, plus a hidden HTML comment listing the todo IDs: \`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`. Never include \`Multi-day Context\` items in this snapshot. This snapshot is the evening flow's baseline for completion rate. Place it right after the \`## Today's Workset\` heading (or at the top of the note if the section doesn't exist). If the daily note hasn't been created yet, include both when creating it.
+7. Read typed goal progress from Goals API first; use weekly/monthly notes only as strategic narrative context
+8. Ask focus questions and propose a plan before editing anything
 
 ### Context Surfacing
 Before interactive prompts, automatically surface:
 - **Overdue** todos
 - **Due Today** todos
 - **Started / In Progress** todos
+- **Multi-day Context** todos
 - **Focused Project** open todos if the user named a project
 - **Other Candidates** from Today/Now columns or remaining open work
 - **Strategic Context** from weekly/monthly goals only when those files contain real content
+- **Goal Progress** from \`POST /api/goals/list { "status": "active" }\` + \`POST /api/goals/graph { "goalId": "..." }\` for each active goal
 
 Display as a brief context block at the top of the morning routine using \`[[todo:id|Title]]\` wiki-links (never checkboxes):
 \`\`\`markdown
@@ -1441,11 +1470,18 @@ Display as a brief context block at the top of the morning routine using \`[[tod
   - [[todo:def-456|Send meter reading]] · [Ops] · medium · due 3/26
 - **Started / In Progress:**
   - [[todo:ghi-789|Draft reply to Tomas]] · [Work] · in_progress
+- **Multi-day Context:**
+  - [[todo:aaa-111|Pohotovost]] · id: aaa-111 · 2026-03-31 → 2026-04-02 · [Ops] · in_progress
 - **Focused Project - Nomendex:**
   - [[todo:jkl-012|Observe BPagent and note UI bugs]] · medium
   - [[todo:mno-345|Fix kanban sorting placement]] · high
 - **Other Candidates:**
-  - [[todo:pqr-678|30min run]] · [Health] · low
+  - [[todo:pqr-678|Pohotovost]] · id: pqr-678 · 2026-03-31 → 2026-03-31 · [Ops] · low
+  - [[todo:qrs-679|30min run]] · [Health] · low
+- **Goal Progress** (from Goals API):
+  - Career & Professional: ████▢▢▢▢▢▢ 40% (rollup)
+  - Health & Wellness: 12/72 tréninků (17%)
+  - Personal Growth: ██▢▢▢▢▢▢▢▢ 15% (manual)
 - **Strategic Context:**
   - Monthly focus: Nomendex audit + Q2 planning
   - Weekly review: template stub, no live ONE Big Thing yet
@@ -1467,8 +1503,8 @@ Create all? (or specify which ones)
 
 ### Morning Checklist
 - Daily note path detected
-- Today workset reviewed (overdue, due today, started, focused project, other candidates)
-- Read-only workset with \`[[todo:id|Title]]\` wiki-links written to daily note
+- Today workset reviewed (overdue, due today, started, multi-day context, focused project, other candidates)
+- Read-only single-day workset with \`[[todo:id|Title]]\` wiki-links written to daily note
 - Workset snapshot saved (\`<!-- workset: ... -->\`)
 - Yesterday's incomplete tasks reviewed
 - ONE priority identified
@@ -1501,8 +1537,8 @@ Create all? (or specify which ones)
 #### Step 1: Determine today's planned workset
 Read the morning workset snapshot from today's daily note:
 \`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`
-If the snapshot exists, those IDs are the baseline ("planned today").
-If no snapshot exists (morning flow was skipped), fall back to an API-based heuristic: todos with \`dueDate\` today, \`scheduledStart\` covering today, or in a Today/Now custom column. Note in the output that the morning workset was not recorded and the completion rate may be less precise.
+If the snapshot exists, those IDs are the baseline ("planned today"). Before computing completion, reclassify any snapshot todo whose \`scheduledStart\`/\`scheduledEnd\` are more than 1 local calendar day apart into \`Multi-day Context\` and remove it from the planned set.
+If no snapshot exists (morning flow was skipped), fall back to an API-based heuristic: single-day todos with \`dueDate\` today, \`scheduledStart\` covering today, or in a Today/Now custom column. Note in the output that the morning workset was not recorded and the completion rate may be less precise. Show multi-day scheduled todos separately as \`Multi-day Context\`.
 
 #### Step 2: Fetch completion data
 - Fetch active todos via \`/api/todos/list\`.
@@ -1511,13 +1547,14 @@ If no snapshot exists (morning flow was skipped), fall back to an API-based heur
 - **CRITICAL**: Use \`completedAt\`, NOT \`updatedAt\`. A todo edited today but completed yesterday is NOT completed today.
 
 #### Step 3: Classify ongoing vs planned
-- **Planned today**: todos whose IDs appear in the morning workset snapshot.
+- **Planned today**: todos whose IDs appear in the morning workset snapshot, after removing anything reclassified into \`Multi-day Context\`.
 - **Ongoing**: \`in_progress\` todos whose IDs are NOT in the morning workset. These are multi-day work items carried forward.
-- Ongoing todos do NOT enter the completion rate denominator or numerator. Show them in a separate "Ongoing" section.
+- **Multi-day Context**: todos whose \`scheduledStart\`/\`scheduledEnd\` are more than 1 local calendar day apart, regardless of whether they were previously shown in the morning snapshot.
+- Ongoing todos and \`Multi-day Context\` do NOT enter the completion rate denominator or numerator. Show them in separate sections.
 
 #### Step 4: Calculate completion rate
 \`completion_rate = completed_today ∩ planned_today / |planned_today|\`
-Only todos from the planned workset count. Bonus completions (todos not in the morning workset but completed today) are shown separately as "Extra wins".
+Only todos from the planned single-day workset count. Bonus completions (todos not in the morning workset but completed today) are shown separately as "Extra wins". \`Multi-day Context\` and \`Ongoing\` items never count toward the denominator or numerator.
 
 #### Step 5: Double-check and batch actions
 Present a single batch summary comparing morning workset with current API state:
@@ -1528,26 +1565,30 @@ Present a single batch summary comparing morning workset with current API state:
 - [[todo:def-456|Send reading]] — done at 16:00
 - [[todo:ghi-789|Draft reply]] — done at 17:20
 
-⬜ Not completed (4/7):
-- [[todo:jkl-012|Observe UI bugs]] — still todo
-- [[todo:mno-345|Fix sorting]] — still in_progress
-- [[todo:pqr-678|30min run]] — still todo
+⬜ Not completed (single-day planned only, 3/6):
+- [[todo:jkl-012|Pohotovost]] · id: jkl-012 · 2026-03-31 → 2026-03-31 — still todo
+- [[todo:pqr-678|Morava]] · id: pqr-678 · 2026-03-31 → 2026-03-31 — still todo
 - [[todo:stu-901|Review PR]] — still todo
+
+↔ Multi-day Context (not in today's rate or reschedule):
+- [[todo:mno-345|Pohotovost]] · id: mno-345 · 2026-03-31 → 2026-04-03 — still in_progress
 
 Should any of the incomplete ones be marked as done?
 \`\`\`
 
 After user responds:
 - Mark confirmed todos as done via API (sets \`completedAt\`)
-- For remaining incomplete todos, propose batch reschedule:
+- For remaining incomplete single-day planned todos, propose batch reschedule:
 \`\`\`
 Reschedule these 3 to tomorrow (scheduledStart → YYYY-MM-DD)?
-- [[todo:jkl-012|Observe UI bugs]]
-- [[todo:pqr-678|30min run]]
+- [[todo:jkl-012|Pohotovost]] · id: jkl-012 · 2026-03-31 → 2026-03-31
+- [[todo:pqr-678|Morava]] · id: pqr-678 · 2026-03-31 → 2026-03-31
 - [[todo:stu-901|Review PR]]
 Confirm? (or specify which ones to skip/drop)
 \`\`\`
-- Execute reschedule via API after confirmation
+- Before each reschedule call, re-fetch that todo via \`POST /api/todos/get { todoId }\`.
+- If refreshed \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown, stop for that todo, show the refreshed state, and ask again.
+- Execute reschedule via API only after the fresh re-check and confirmation.
 
 #### Step 6: Legacy reconcile (optional, historical notes only)
 If today's daily note contains legacy \`[x]\` checkboxes (from before API-only migration):
@@ -1571,10 +1612,14 @@ Automatically generate an end-of-day summary showing which goals and projects re
 - **Ongoing (not in today's rate):** 2 in_progress
   - [[todo:abc-123|Redesign homepage]] · [Work] · day 3
   - [[todo:def-456|API refactor]] · [Nomendex] · day 5
+- **Multi-day Context (not in today's rate or reschedule):** 1
+  - [[todo:ghi-789|Pohotovost]] · id: ghi-789 · 2026-03-31 → 2026-04-03 · [Nomendex]
 - **Rescheduled to tomorrow:** 2
-  - [[todo:ghi-789|Observe UI bugs]] · [Nomendex]
-  - [[todo:jkl-012|30min run]] · [Health]
-- **Goals touched:** [[Goal 1]] (2 tasks), [[Goal 3]] (1 task)
+  - [[todo:jkl-012|Observe UI bugs]] · [Nomendex]
+  - [[todo:pqr-678|30min run]] · [Health]
+- **Goals touched** (from \`resolvedGoalRefs\` on completed todos):
+  - Career & Professional: 2 tasks (████▢▢▢▢▢▢ 22% overall)
+  - Health & Wellness: 1 task (13/72 metric)
 - **Projects advanced:** [[ProjectA]] (3 tasks), [[ProjectB]] (1 task)
 - **Insight:** Focused day on Nomendex — consider closing the API refactor this week
 \`\`\`
@@ -1596,7 +1641,7 @@ These run in parallel — reflection does not wait for reconcile to complete:
 ### Shutdown Checklist
 - Todos double-checked with user (batch confirm done/reschedule)
 - Completion rate calculated (from \`completedAt\`, not \`updatedAt\`)
-- Incomplete todos rescheduled to tomorrow via API
+- Incomplete single-day todos rescheduled to tomorrow via API after fresh \`/api/todos/get\` checks
 - Reflection completed
 - Tomorrow's priority identified
 - Changes committed
@@ -1700,7 +1745,7 @@ TaskCreate:
 
 TaskCreate:
   subject: "Surface relevant goals"
-  description: "Read weekly/monthly goals as strategic context only when they contain real content"
+  description: "Fetch typed goal progress via Goals API, then read weekly/monthly notes only for strategic narrative context when they contain real content"
   activeForm: "Checking strategic goal context..."
 
 TaskCreate:
@@ -1780,8 +1825,8 @@ Works with:
     files: {
       "SKILL.md": `---
 name: goal-tracking
-description: Track progress toward 3-year, yearly, monthly, and weekly goals. Calculate completion percentages, surface stalled goals, connect daily tasks to objectives. Use for goal reviews and progress tracking.
-version: 4
+description: Track progress across the typed goal hierarchy (vision/yearly/quarterly/monthly), surface stalled goals, and connect projects/todos via goalRef and resolvedGoalRefs. Use for goal reviews and progress tracking.
+version: 6
 source: nomendex
 ---
 
@@ -1789,233 +1834,99 @@ source: nomendex
 
 Track and manage the cascading goal system from long-term vision to daily tasks.
 
-## Goal Hierarchy
+## Goal Hierarchy (Typed Store)
 
 \`\`\`
-Goals/0. Three Year Goals.md   <- Vision (Life areas)
-    ↓
-Goals/1. Yearly Goals.md       <- Annual objectives
-    ↓
-Projects/*.md                  <- Active projects (bridge layer)
-    ↓
-Goals/2. Monthly Goals.md      <- Current month focus
-    ↓
-Goals/3. Weekly Review.md      <- Weekly planning
-    ↓
-[daily notes folder]/*.md      <- Daily tasks and actions
+GoalRecord store (.nomendex/goals/)    ← source of truth
+  vision → yearly → quarterly → monthly (parentGoalId chain)
+      ↓ goalRef
+  ProjectConfig (.nomendex/projects.json)
+      ↓ resolvedGoalRefs
+  Todos (.nomendex/todos/)
+
+Mirror notes (Goals/goals/*.md) = readable/editable views
+Dashboards (Goals/0-2.md) = generated summaries
 \`\`\`
 
-## Goal-to-Todo Bridge
+## Goal-to-Todo Bridge (Typed)
 
-Goals do **not** map directly to todos by default.
-Use this bridge order:
-1. Goal -> linked project via "Goal Link" / "Supports"
-2. Project -> todos via the project's open todos
-3. Explicit goal references in notes only when they already exist in the text
+Linkage is through typed fields only:
+1. \`project.goalRef\` → single goal ID
+2. \`todo.goalRefs\` → explicit goal override (optional)
+3. \`todo.resolvedGoalRefs\` → computed snapshot (goalRefs or inherited from project.goalRef)
 
-Do NOT infer a direct todo-to-goal mapping from title similarity alone.
+Do NOT infer goal-todo mappings from title similarity or text content.
 
-## Goal File Formats
+## Progress Calculation (per progressMode)
 
-### Three Year Goals
-\`\`\`markdown
-## Life Areas
-- Career: [Vision statement]
-- Health: [Vision statement]
-- Relationships: [Vision statement]
-- Financial: [Vision statement]
-- Learning: [Vision statement]
-- Personal: [Vision statement]
-\`\`\`
+| Mode | Formula | Example |
+|------|---------|---------|
+| \`rollup\` | Average of child goal progress (leaf-only: goals with children count ONLY children) | Career yearly = avg(Q1, Q2, Q3, Q4) |
+| \`metric\` | \`progressCurrent / progressTarget * 100\` | 12/72 tréninků = 17% |
+| \`manual\` | \`progressValue\` (0-100, set by user/agent) | Rekonstrukce = 15% |
+| \`milestone\` | Completed child goals / total child goals | 2/4 quarterly milestones = 50% |
 
-### Yearly Goals
-\`\`\`markdown
-## 2024 Goals
-- [ ] Goal 1 (XX% complete)
-- [ ] Goal 2 (XX% complete)
-- [x] Goal 3 (100% complete)
-\`\`\`
+Use \`/api/goals/graph\` to get computed progress — never calculate manually from markdown.
 
-### Monthly Goals
-\`\`\`markdown
-## This Month's Focus
-1. **Primary:** [Main focus]
-2. **Secondary:** [Supporting goal]
-3. **Stretch:** [If time permits]
-
-### Key Results
-- [ ] Measurable outcome 1
-- [ ] Measurable outcome 2
-\`\`\`
-
-## Progress Calculation
-
-### Checklist-Based Goals
-\`\`\`
-Progress = (Completed checkboxes / Total checkboxes) * 100
-\`\`\`
-
-### Metric-Based Goals
-\`\`\`
-Progress = (Current value / Target value) * 100
-\`\`\`
-
-### Time-Based Goals
-\`\`\`
-Progress = (Days elapsed / Total days) * 100
-\`\`\`
-
-## Common Operations
+## Common Operations (API-first)
 
 ### View Goal Progress
-1. Read all goal files
-2. Parse checkbox completion rates
-3. Calculate overall and per-goal progress
-4. Identify stalled or at-risk goals
+1. \`POST /api/goals/list { "status": "active" }\` — get all active goals
+2. \`POST /api/goals/graph { "goalId": "..." }\` — get full graph per goal (children, projects, todos, computed progress)
+3. Display progress per progressMode format
 
 ### Update Goal Status
-1. Find goal in appropriate file
-2. Update checkbox or percentage
-3. Add date stamp for significant milestones
-4. Update related weekly review
+1. \`POST /api/goals/update { "goalId": "...", "updates": { "status": "completed" } }\`
+2. For metric: \`"updates": { "progressCurrent": 15 }\`
+3. For manual: \`"updates": { "progressValue": 25 }\`
+4. After updates: \`POST /api/goals/sync/dashboards\` to regenerate views
 
-### Connect Task to Goal
-When adding tasks to daily notes:
-1. Identify which goal the task supports
-2. Add goal reference: \`Supports: [[1. Yearly Goals#Goal Name]]\`
-3. Use appropriate priority tag
+### Create New Goal
+\`POST /api/goals/create { "title": "...", "area": "...", "horizon": "monthly", "progressMode": "rollup", "parentGoalId": "..." }\`
 
 ### Surface Stalled Goals
-1. Check last activity date for each goal
-2. Flag goals with no progress in 14+ days
-3. Suggest actions to restart momentum
-
-## Project-Aware Progress
-
-### Project Integration
-When calculating goal progress, include project data:
-1. Read all project files \`Projects/*.md\` for active projects
-2. Match projects to goals via their "Goal Link" / "Supports" field
-3. Fetch todos for each project via \`/todos\` skill
-4. Include project completion % and todo completion rate in goal progress calculations through the project bridge
-5. Surface which projects support each goal
-
-### Orphan Goal Detection
-Flag goals that have no active project supporting them:
-- A goal with 0 linked projects may need a project created (\`/project new\`)
-- A goal with only completed/archived projects may need a new initiative
-
-### Todo-Based Progress Signals
-Use linked-project todos to detect goal momentum:
-1. Goals with high linked-project todo completion (60%+) = strong momentum
-2. Goals with many blocked linked-project todos = need attention
-3. Goals whose linked projects have no open todos = missing concrete actions
-4. Goals with overdue linked-project todos = falling behind
+1. Fetch all active goals
+2. Check \`updatedAt\` — flag goals with no updates in 14+ days
+3. Check linked todos — goals whose linked projects have no open todos = missing actions
 
 ## Progress Report Format
 
 \`\`\`markdown
-## Goal Progress Report
+## Goal Progress Report (from /api/goals/graph)
 
-### Overall: XX%
+### Cascade Overview
+| Area | Vision | Yearly | Quarterly | Monthly |
+|------|--------|--------|-----------|---------|
+| Career | ██▢▢▢ 20% | Nomendex: 20% (rollup) | Q2 Launch: 0/4 (milestone) | April: 0% |
+| Health | █▢▢▢▢ 5% | Movement: 12/72 (metric) | — | March: 2/6 (metric) |
 
-### By Goal
-| Goal | Progress | Projects | Todos | Last Activity | Status |
-|------|----------|----------|-------|---------------|--------|
-| Goal 1 | 75% | [[ProjectA]] (80%), [[ProjectB]] (60%) | 25/40 (62%) | 2 days ago | On Track |
-| Goal 2 | 30% | (none) | 0/0 (0%) | 14 days ago | Stalled |
+### By Goal (yearly, with children)
+| Goal | Progress | Mode | Projects | Open Todos |
+|------|----------|------|----------|------------|
+| Nomendex v produkci | 20% | rollup | Nomendex (goalRef) | 12 open |
+| Pohybový návyk | 17% | metric (12/72) | Health (goalRef) | 3 open |
 
-### Project Status
-| Project | Goal | Progress | Todos | Phase |
-|---------|------|----------|-------|-------|
-| [[ProjectA]] | Goal 1 | 80% | 15/20 (75%) | Active |
-| [[ProjectB]] | Goal 1 | 60% | 10/20 (50%) | Active |
-
-### Orphan Goals (no active project)
-- Goal 2 — Consider \`/project new\` to create a supporting project
+### Orphan Goals (no linked project)
+- "Online kurz" — no project with goalRef pointing here
 
 ### Goals Needing Attention
-- **Goal 2:** Linked projects have no open todos = missing concrete actions
-- **ProjectB:** 5 blocked todos = blockers need resolution
-
-### This Week's Contributions
-- [Task] -> [[Goal 1]] via [[ProjectA]]
-- [Completed todo via linked project] -> [[Goal 1]] via [[ProjectA]]
-- [Task] -> [[Goal 2]]
+- **Pohybový návyk:** 12/72 = behind pace (should be ~18 by now)
+- **Freelance zakázka:** 0% progress, no linked todos
 
 ### Recommended Focus
 1. [Stalled goal needs attention]
 2. [Nearly complete goal - finish it]
 3. [Orphan goal needs a project]
-4. [Goals with blocked todos need unblocking]
 \`\`\`
-
-## Task-Based Progress Tracking
-
-The goal tracking skill uses session tasks when generating comprehensive progress reports.
-
-### Progress Report Tasks
-
-Create tasks at skill start:
-
-\`\`\`
-TaskCreate:
-  subject: "Read three-year goals"
-  description: "Load vision statements from Goals/0. Three Year Goals.md"
-  activeForm: "Reading three-year goals..."
-
-TaskCreate:
-  subject: "Read yearly goals"
-  description: "Load annual objectives from Goals/1. Yearly Goals.md"
-  activeForm: "Reading yearly goals..."
-
-TaskCreate:
-  subject: "Read monthly goals"
-  description: "Load current month focus from Goals/2. Monthly Goals.md"
-  activeForm: "Reading monthly goals..."
-
-TaskCreate:
-  subject: "Scan recent daily notes"
-  description: "Find task completions and goal contributions from past week"
-  activeForm: "Scanning recent daily notes..."
-
-TaskCreate:
-  subject: "Fetch todos by project"
-  description: "Load todos for all projects via /todos skill"
-  activeForm: "Fetching todos for goal-project mapping..."
-
-TaskCreate:
-  subject: "Calculate completion percentages"
-  description: "Compute progress for each goal based on checkboxes, metrics, and todos"
-  activeForm: "Calculating completion percentages..."
-
-TaskCreate:
-  subject: "Identify stalled goals"
-  description: "Flag goals with no progress in 14+ days or missing todos"
-  activeForm: "Identifying stalled goals..."
-\`\`\`
-
-### Dependencies
-
-Goal file reads can run in parallel, but analysis depends on having all data:
-\`\`\`
-TaskUpdate: "Scan recent daily notes", addBlockedBy: [read-monthly-goals-id]
-TaskUpdate: "Calculate completion percentages", addBlockedBy: [scan-recent-daily-notes-id]
-TaskUpdate: "Identify stalled goals", addBlockedBy: [calculate-completion-percentages-id]
-\`\`\`
-
-Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
-
-Task tools are session-scoped and don't persist—your actual goal progress is tracked through markdown checkboxes and percentages in your goal files.
 
 ## Integration Points
 
-- \`/todos\`: Fetch todos by project for goal progress calculation
-- \`/weekly\` review: Full progress assessment with project and todo rollup
-- \`/daily\` planning: Surface relevant goals and project next-actions
-- \`/monthly\` review: Adjust goals as needed, check quarterly milestones
-- \`/project status\`: Project completion and todo rates feed goal calculations
-- Quarterly review: Cascade from 3-year vision
+- \`/api/goals/*\`: All goal CRUD and progress queries
+- \`/api/goals/graph\`: Full cascade for any goal
+- \`/api/goals/sync/dashboards\`: Regenerate aggregated markdown views
+- \`/weekly\` review: Goal progress assessment with typed data
+- \`/daily\` planning: Surface goal progress context
+- \`/monthly\` review: Quarterly milestone check, next month goal creation
 `,
     },
   },
@@ -2025,7 +1936,7 @@ Task tools are session-scoped and don't persist—your actual goal progress is t
       "SKILL.md": `---
 name: monthly
 description: Monthly review and planning. Roll up weekly reviews, check quarterly milestones, set next month's focus. Use at end of month or start of new month.
-version: 3
+version: 5
 source: nomendex
 ---
 
@@ -2046,10 +1957,31 @@ Or ask:
 
 ## What This Skill Does
 
-1. **Creates or opens monthly goals file** (\`Goals/2. Monthly Goals.md\`)
+1. **Fetches monthly goal data** via \`/api/goals/list\` and \`/api/goals/graph/forest\`
 2. **Rolls up weekly reviews** from the past month
-3. **Checks quarterly milestones** against yearly goals
+3. **Checks quarterly milestones** via typed goal hierarchy
 4. **Plans next month's** focus areas and priorities
+
+## Data Sources
+
+### Primary: Typed API (source of truth)
+- Monthly goals: \`POST /api/goals/list { "horizon": "monthly", "status": "active" }\`
+- Full goal forest with progress: \`POST /api/goals/graph/forest {}\`
+- Quarterly goals: \`POST /api/goals/list { "horizon": "quarterly", "status": "active" }\`
+- Yearly goals: \`POST /api/goals/list { "horizon": "yearly", "status": "active" }\`
+- Projects: \`POST /api/projects/list {}\`
+
+### Secondary: Markdown narrative
+- Weekly reviews (\`Goals/3. Weekly Review.md\` or weekly review notes)
+- Daily notes from past 30 days
+
+**Important:** \`Goals/2. Monthly Goals.md\` is a generated-only dashboard — never read it as an editable source and never write to it directly. Use the API to manage goals, then call \`POST /api/goals/sync/dashboards {}\` to regenerate dashboards.
+
+## Todo Safety Rules
+- **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
+- **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
+- **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
+- **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
 
 ## Review Process
 
@@ -2058,42 +1990,46 @@ Or ask:
 1. Read all weekly reviews from the past month (\`Goals/3. Weekly Review.md\` or weekly review notes)
 2. Read daily notes from past 30 days (scan for patterns)
 3. Fetch todos data for past month via \`/todos\` skill
-4. Read current \`Goals/2. Monthly Goals.md\` for this month's targets
-5. Read project files \`Projects/*.md\` for project status updates
+4. Fetch current monthly goals via \`POST /api/goals/list { "horizon": "monthly", "status": "active" }\`
+5. Fetch project status via \`POST /api/projects/list {}\`
 
 **Extract:**
 - Wins from each week
 - Challenges and recurring blockers
 - Todo completion rates by project
 - Monthly todo patterns (total completed, overdue, blocked)
-- Goal progress percentages
+- Goal progress from API (\`computedProgress\` per goal)
 - Project milestones completed
 - Habits tracked (completion rates)
+- Explicit streak labels from the latest relevant daily note, copied verbatim
 
 ### Phase 2: Reflect on Month (10 minutes)
 
-1. Read \`Goals/1. Yearly Goals.md\` for quarterly milestones
-2. Calculate which quarter we're in and check milestone progress
-3. Identify patterns across weeks (energy, productivity, focus areas)
-4. Compare planned vs actual outcomes
+1. Fetch quarterly milestones via \`POST /api/goals/list { "horizon": "quarterly", "status": "active" }\`
+2. Fetch yearly goals via \`POST /api/goals/list { "horizon": "yearly", "status": "active" }\`
+3. Use \`POST /api/goals/graph/forest {}\` for full progress overview
+4. Calculate which quarter we're in and check milestone progress
+5. Identify patterns across weeks (energy, productivity, focus areas)
+6. Compare planned vs actual outcomes
 
 **Generate:**
 - Monthly accomplishment summary
-- Quarterly milestone progress check
+- Quarterly milestone progress check (from API data)
 - Pattern analysis (what worked, what didn't)
 - Goal alignment assessment
 
 ### Phase 3: Plan Next Month (10 minutes)
 
-1. Identify next month's quarterly milestones
-2. Surface projects that need attention
+1. Identify next month's quarterly milestones from goal forest
+2. Surface projects that need attention (via \`/api/projects/list\`)
 3. Set next month's primary focus (ONE thing)
 4. Define 3-tier priorities (must/should/nice-to-have)
 5. Plan habits to build or maintain
 
 **Write:**
-- Update \`Goals/2. Monthly Goals.md\` with next month's plan
+- Create new monthly goals via \`POST /api/goals/create { horizon: "monthly", ... }\` or update existing via \`POST /api/goals/update\`
 - Set specific weekly milestones for the month ahead
+- Call \`POST /api/goals/sync/dashboards {}\` to regenerate \`Goals/2. Monthly Goals.md\` and other dashboards
 
 ## Output Format
 
@@ -2132,18 +2068,18 @@ Or ask:
 - Best performing: Nomendex (improving scoping)
 - Needs attention: Health (overcommitting, break into smaller todos)
 
-### Goal Progress
-| Goal | Start of Month | End of Month | Delta |
-|------|---------------|-------------|-------|
-| [Goal 1] | 30% | 45% | +15% |
-| [Goal 2] | 50% | 55% | +5% |
+### Goal Progress (from \`/api/goals/graph\`)
+| Goal | Progress | Mode | Delta |
+|------|----------|------|-------|
+| Nomendex v produkci | 20% | rollup | +5% |
+| Pohybový návyk | 12/72 | metric | +8 |
+| Denní review streak | DEN 1 | manual | from latest daily note |
 
-### Quarterly Milestone Check
-**Quarter: Q[N] ([Month Range])**
-| Milestone | Status | Notes |
-|-----------|--------|-------|
-| [Milestone 1] | On Track | [Detail] |
-| [Milestone 2] | At Risk | [What's needed] |
+### Quarterly Milestone Check (from \`/api/goals/list { "horizon": "quarterly" }\`)
+| Milestone | Goal ID | Status | Progress |
+|-----------|---------|--------|----------|
+| Q2 Launch | goal-xxx | active | 0/4 milestone |
+| Q1 Audit | goal-yyy | active | 2/3 milestone |
 
 ### Project Status
 | Project | Progress | Status | Next Month Focus |
@@ -2187,13 +2123,16 @@ Or ask:
 
 ## Data Sources
 
-Always read these files:
-- \`Goals/0. Three Year Goals.md\` - Long-term vision context
-- \`Goals/1. Yearly Goals.md\` - Quarterly milestones and annual objectives
-- \`Goals/2. Monthly Goals.md\` - Current month's plan (to review) and next month's (to write)
-- \`Goals/3. Weekly Review.md\` - Weekly reviews from past month
-- \`[daily notes folder]/*.md\` - Past 30 days of notes
-- \`Projects/*.md\` - All active project files with statuses
+**Primary (typed store via API):**
+- \`/api/goals/list\` — all goals by horizon, status, area
+- \`/api/goals/graph\` — per-goal progress with children, projects, todos
+- \`/api/projects/list\` — projects with goalRef
+- \`/api/todos/list\` — todos with resolvedGoalRefs
+
+**Secondary (markdown for narrative context):**
+- Weekly Review notes — for qualitative reflection rollup
+- Daily notes — for pattern analysis
+- Mirror notes are synced views, not primary data
 
 ## Task-Based Progress Tracking
 
@@ -2252,7 +2191,7 @@ Works with:
       "SKILL.md": `---
 name: obsidian-vault-ops
 description: Read and write Obsidian vault files, manage wiki-links, process markdown with YAML frontmatter. Use when working with vault file operations, creating notes, or managing links.
-version: 3
+version: 4
 source: nomendex
 ---
 
@@ -2266,7 +2205,7 @@ Core operations for reading, writing, and managing files in an Obsidian vault.
 vault-root/
 ├── vault-config.json   # Optional folder mapping + personalization
 ├── [daily notes folder]  # Detect real folder name, nesting, and filename pattern
-├── Goals/              # Goal cascade files
+├── Goals/              # Dashboards (0-2), Weekly Review, and per-goal mirrors (goals/)
 ├── Projects/           # Canonical project notes (*.md)
 ├── Templates/          # Reusable note structures
 └── Archives/           # Completed/inactive content
@@ -2359,7 +2298,7 @@ When processing templates, replace:
       "SKILL.md": `---
 name: project
 description: Create, track, and archive projects linked to goals using Nomendex Projects API and canonical project markdown notes. Use for project lifecycle management, status dashboards, and project note synchronization.
-version: 4
+version: 5
 source: nomendex
 ---
 
@@ -2367,10 +2306,10 @@ source: nomendex
 
 Manage projects using a single source of truth:
 - Project entity and board config in \`.nomendex/projects.json\` via \`/api/projects/*\`
-- Canonical project note in \`Projects/<ProjectName>.md\` (auto-managed by backend)
+- Canonical project note in \`Projects/<ProjectName>.md\` (auto-managed by backend via mirror sync)
 
 Projects are the bridge between strategic goals and operational todos:
-\`goal -> project -> todos\`
+\`GoalRecord (goalRef) → ProjectConfig → Todos (resolvedGoalRefs)\`
 
 For day planning, live open todos are the primary operational source.
 Use the project note's **Next Actions** section only as fallback context when the todo list is missing or underspecified.
@@ -2391,13 +2330,16 @@ Use the project note's **Next Actions** section only as fallback context when th
 Creates a project entity and canonical project note.
 
 **Steps:**
-1. Read \`Goals/1. Yearly Goals.md\` to list available goals
+1. Fetch available goals via \`POST /api/goals/list { "horizon": "yearly", "status": "active" }\`
 2. Ask user which goal this project supports (or "none" for standalone)
 3. Ask for project name
 4. Call \`/api/projects/list\` and reuse existing project if name matches (case-insensitive)
 5. If not found, call \`/api/projects/create\` (send \`X-Nomendex-UI: true\`)
-6. Read created project via \`/api/projects/get-by-name\` and confirm \`projectNoteFile\`
-7. If linked to a goal, add \`[[Projects/<ProjectName>.md|<ProjectName>]]\` reference in yearly goals
+6. If linked to a goal, set the link via \`POST /api/projects/update { "projectId": "...", "updates": { "goalRef": "<goalId>" } }\`
+7. Read created project via \`/api/projects/get-by-name\` and confirm \`projectNoteFile\`
+8. Call \`POST /api/goals/sync/dashboards {}\` to regenerate goal dashboards with the new project link
+
+**Note:** The goal link is stored as \`goalRef\` (typed goal ID) on the project entity, NOT as a \`Supports:\` wiki-link in markdown. The mirror sync system will automatically reflect the link in the project's canonical note.
 
 **Canonical Project Note Template (\`Projects/<ProjectName>.md\`):**
 \`\`\`markdown
@@ -2405,9 +2347,6 @@ Creates a project entity and canonical project note.
 
 ## Overview
 [Brief description of what this project achieves]
-
-## Goal Link
-Supports: [[1. Yearly Goals#<Goal Name>]]
 
 ## Status
 - **Phase:** Planning | Active | Review | Complete
@@ -2438,30 +2377,29 @@ Supports: [[1. Yearly Goals#<Goal Name>]]
 
 ### \`/project status\`
 
-Builds a dashboard from Projects API plus canonical project notes plus todos.
+Builds a dashboard from Projects API, Goals API, and todos.
 
 **Steps:**
-1. Call \`/api/projects/list\` (include archived if user asks)
-2. For each project, read \`projectNoteFile\` from project config
-3. Load note content via \`/api/notes/get\`
-4. Extract phase/progress/goal/next-action from note sections
-5. Fetch todos for each project via \`/todos\` skill
-6. Calculate todo completion rate per project
-7. Display dashboard table
+1. Call \`POST /api/projects/list {}\` (include archived if user asks)
+2. For each project with a \`goalRef\`, call \`POST /api/goals/graph { "goalId": "<goalRef>" }\` for goal progress
+3. Fetch todos for each project via \`/todos\` skill
+4. Calculate todo completion rate per project
+5. Load project note via \`/api/notes/get\` for narrative context (Next Actions, Log) only
+6. Display dashboard table
 
 **Output Format:**
 \`\`\`markdown
 ## Project Dashboard
 
-| Project | Phase | Progress | Todos | Goal | Next Action |
-|---------|-------|----------|-------|------|-------------|
-| ProjectA | Active | 60% | 12/20 (60%) | [[Goal 1]] | Review PR |
-| ProjectB | Planning | 10% | 0/5 (0%) | [[Goal 3]] | Draft spec |
+| Project | Phase | Goal Progress | Todos | Goal | Next Action |
+|---------|-------|---------------|-------|------|-------------|
+| ProjectA | Active | 60% (rollup) | 12/20 (60%) | Goal Title | Review PR |
+| ProjectB | Planning | 10% (manual) | 0/5 (0%) | Goal Title | Draft spec |
 
 ### Summary
 - Active projects: N
 - Total progress (weighted): X%
-- Projects without goal link: [list]
+- Projects without goalRef: [list]
 - Stalled projects (no update in 14+ days): [list]
 - Projects with blocked todos: [list]
 \`\`\`
@@ -2476,7 +2414,8 @@ Archives project via project API lifecycle.
 3. Call \`/api/projects/update\` with \`updates: { archived: true }\`
 4. Backend auto-moves canonical note from \`Projects/\` to \`Archives/Projects/\`
 5. Update goal references to mark completion if needed
-6. Report archived location and summary
+6. Call \`POST /api/goals/sync/dashboards {}\` to regenerate dashboards
+7. Report archived location and summary
 
 ## Project Naming Conventions
 
@@ -2486,21 +2425,19 @@ Archives project via project API lifecycle.
 
 ## Cascade Integration
 
-Projects are the critical middle layer:
+Projects are the critical middle layer in the typed store:
 
 \`\`\`
-Goals/1. Yearly Goals.md     <- "What I want to achieve"
-    |
+GoalRecord store (.nomendex/goals/)  <- "What I want to achieve" (source of truth)
+    | goalRef
     v
-Projects/<ProjectName>.md    <- "How I'll achieve it"
-    |
+ProjectConfig (.nomendex/projects.json)  <- "How I'll achieve it"
+    | resolvedGoalRefs (inherited)
     v
-[daily notes folder]/*.md    <- "What I'm doing today"
-\`\`\`
+Todos (.nomendex/todos/)             <- "What I'm doing today"
 
-When creating tasks in daily notes, reference the project:
-\`\`\`markdown
-- [ ] Draft API spec — [[Projects/MyApp.md|MyApp]]
+Mirror notes (Goals/goals/*.md, Projects/*.md) = readable/editable views
+Dashboards (Goals/0-2.md) = generated summaries
 \`\`\`
 
 ## Task-Based Progress Tracking
@@ -2508,9 +2445,9 @@ When creating tasks in daily notes, reference the project:
 ### New Project Tasks
 \`\`\`
 TaskCreate:
-  subject: "Read yearly goals"
-  description: "Load goals for project linking"
-  activeForm: "Reading yearly goals..."
+  subject: "Fetch yearly goals"
+  description: "Load goals via /api/goals/list for project linking"
+  activeForm: "Fetching yearly goals..."
 
 TaskCreate:
   subject: "Create project entity"
@@ -2804,7 +2741,7 @@ If no matches are found:
       "SKILL.md": `---
 name: weekly
 description: Facilitate weekly review process with reflection, goal alignment, and planning. Create review notes, analyze past week, plan next week. Use on Sundays or whenever doing weekly planning.
-version: 5
+version: 8
 source: nomendex
 ---
 
@@ -2832,34 +2769,41 @@ Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
    - Analyzes todos completion and patterns via \`/todos\` skill
    - Identifies incomplete tasks
    - Plans upcoming week
-   - Aligns with monthly goals
+   - Aligns with typed goals (monthly/quarterly/yearly) via Goals API
 
 3. **Automates Housekeeping**
    - Archives old daily notes
    - Updates project statuses
    - Cleans up completed and stale todos
 
+## Todo Safety Rules
+- **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
+- **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
+- **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
+- **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
+
 ## Review Process Steps
 
 ### Step 1: Reflection (10 minutes)
 - Review daily notes from past week
 - Fetch all todos via \`/todos\` skill (project, status, \`scheduledStart\`/\`scheduledEnd\`, dueDate, priority)
-- Calculate todo completion rate by project
+- Calculate todo completion rate by project while keeping \`Multi-day Context\` separate from day-level completion math
 - Identify wins and challenges
 - Capture lessons learned
+- Copy any explicit streak wording from the latest relevant daily note verbatim
 
 ### Step 2: Goal Alignment + Project Rollup (10 minutes)
-- Check monthly goal progress
-- Map project progress and explicitly linked tasks to monthly goals
+- Fetch goal progress from \`/api/goals/list\` with \`{ "status": "active" }\` and \`/api/goals/graph\` for each
+- Display progress per progressMode (rollup %, metric current/target, manual %, milestone count)
+- Map project progress via \`goalRef\` (from \`/api/projects/get\`) to their linked goals
 - Identify overdue and blocked todos
-- Adjust weekly priorities
-- Ensure alignment with yearly goals
-- Read project files \`Projects/*.md\` for current status
-- Compile project progress table for the review note
+- Adjust weekly priorities based on goal progress gaps
+- When creating todos for next week, set \`goalRefs\` if the todo serves a goal not covered by the project's \`goalRef\`
+- Compile project progress table with goalRef link for the review note
 
 ### Step 3: Planning (10 minutes)
 - Set ONE big thing for the week
-- Review and triage uncompleted todos (archive/delete/carry over)
+- Review and triage uncompleted single-day todos (archive/delete/carry over) while showing multi-day scheduled todos as context only
 - Plan todo distribution for next week by day
 - Include project next-actions when planning week
 - Schedule important tasks
@@ -2890,10 +2834,12 @@ The skill guides you through:
 - Fetch and analyze todos via \`/todos\` skill
 - Calculate todo completion rates by project
 - Identify overdue and blocked todos
+- Keep multi-day scheduled todos in a separate context section, not carry-forward or daily-rate math
 - Process inbox items
 - Update project statuses
 - Check upcoming scheduled todos via \`scheduledStart\`/\`scheduledEnd\` (and external calendar only if explicitly available)
-- Review monthly goals
+- Review monthly goals from API (plus weekly-note narrative context)
+- Copy streak values from the latest relevant daily note verbatim; do not derive them from todo text or checkbox arithmetic
 - Plan next week's priorities
 - Propose new todos and todo distribution for next week (batch confirm with user, then create/update via API)
 - Block time for important work
@@ -2925,31 +2871,37 @@ All todo references use \`[[todo:id|Title]]\` wiki-links. Never write \`[ ]\`/\`
 | [[ProjectB]] | 0 | 5 | 0% |
 
 ### Overdue Todos
-- [[todo:abc-123|Fix critical bug]] · [ProjectA] · high · due 3/10
-- [[todo:def-456|Book appointment]] · [ProjectB] · medium · due 3/12
+- [[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-10 → 2026-03-10 · [ProjectA] · high
+- [[todo:def-456|Pohotovost]] · id: def-456 · 2026-03-12 → 2026-03-12 · [ProjectB] · medium
 
 ### Blocked Todos
 - [[todo:ghi-789|Deploy to prod]] · [ProjectA] · blocked by: payment gateway
+
+### Multi-day Context
+- [[todo:mno-345|Morava]] · id: mno-345 · 2026-03-11 → 2026-03-14 · [ProjectB] · context only
 
 ### Today Column Patterns
 - Average "Today" todos: 8/day
 - Completion rate: 5/8 (62.5%)
 - **Insight:** Overcommitting by ~3 todos/day
 
-## Goal Progress
-### Monthly Goals
-- Goal 1 (XX%)
-- Goal 2 (XX%)
+## Goal Progress (from \`/api/goals/graph\`)
+### Yearly Goals
+| Area | Goal | Progress | Mode |
+|------|------|----------|------|
+| Career & Professional | Nomendex v produkci | ████▢▢▢▢▢▢ 20% | rollup |
+| Health & Wellness | Pohybový návyk | 12/72 tréninků (17%) | metric |
+| Personal Growth | Denní review streak | DEN 1 (from latest daily note) | manual |
 
-### This Week's Contribution
-- [[todo:id|Completed task]] → [[Goal]]
-- [Completed todos via linked projects or explicit goal references]
+### This Week's Goal Contribution (from \`resolvedGoalRefs\` on completed todos)
+- Career & Professional: 5 todos completed → +3% progress
+- Health & Wellness: 2 todos completed → 14/72 metric
 
 ## Project Progress
 | Project | Phase | Progress | Next Action |
 |---------|-------|----------|-------------|
-| [[ProjectA]] | Active | 60% | [Next step] |
-| [[ProjectB]] | Planning | 10% | [Next step] |
+| [[ProjectA]] | Active | 60% | goalRef: goal-xyz | [Next step] |
+| [[ProjectB]] | Planning | 10% | goalRef: — | [Next step] |
 
 ## Next Week Planning
 
@@ -3013,17 +2965,19 @@ Fetch and analyze todos from Nomendex API:
 - **Completion metrics**: Calculate completion rate by project
 - **Overdue detection**: Identify todos past their due date
 - **Blocker identification**: Surface todos marked as blocked
-- **Pattern analysis**: Track "Today" column usage and completion
-- **Goal mapping**: Connect completed todos to monthly goals
+- **Pattern analysis**: Track "Today" column usage and completion while keeping multi-day context out of day-level completion-rate math
+- **Goal mapping**: Connect completed todos to typed goals via \`resolvedGoalRefs\`
+- **Disambiguation**: When titles repeat, show visible plain-text ID + \`scheduledStart\`-\`scheduledEnd\`
 
 Example usage in weekly review:
 \`\`\`
 Use /todos skill to:
 1. Fetch all todos from past week
 2. Group by project and status
-3. Calculate completion rates
+3. Calculate completion rates (exclude multi-day context from daily-rate math)
 4. Identify overdue items
 5. Analyze daily "Today" column patterns
+6. Render duplicate titles with visible IDs and scheduled ranges
 \`\`\`
 
 ### Auto-Archive
@@ -3040,6 +2994,7 @@ Calculate habit success rates from daily notes:
 - Count habit checkboxes
 - Show completion percentage
 - Identify patterns
+- For streak-style habits, copy the explicit label from the latest relevant daily note verbatim; do not derive streak arithmetic
 
 ## Best Practices
 
@@ -3107,9 +3062,9 @@ For a faster, more thorough weekly review, use agent teams to parallelize the co
 \`\`\`
 Team Lead (coordinator)
 ├── collector agent — Read all daily notes, extract wins/challenges/tasks
-├── goal-analyzer agent — Read goal files, calculate progress, find gaps
-├── project-scanner agent — Read Projects/*.md files, get status updates
-└── todo-collector agent — Fetch todos via API, analyze completion, identify patterns
+├── goal-analyzer agent — Fetch goal progress via /api/goals/graph/forest, find alignment gaps
+├── project-scanner agent — Fetch projects via /api/projects/list, read project notes for narrative context
+└── todo-collector agent — Fetch todos via /todos skill, analyze completion, identify patterns
 \`\`\`
 
 ### How to Use
@@ -3122,13 +3077,13 @@ When invoking \`/weekly\`, you can request the team-based approach:
 The team lead:
 1. Spawns four agents to work in parallel
 2. Collector reads daily notes and extracts highlights
-3. Goal-analyzer reads all goal files and calculates progress
-4. Project-scanner reads all project files (Projects/*.md) for status
+3. Goal-analyzer fetches goal forest via \`POST /api/goals/graph/forest {}\` and analyzes computed progress per goal
+4. Project-scanner fetches project list via \`POST /api/projects/list {}\`, reads project notes for narrative context only
 5. Todo-collector fetches todos via \`/todos\` skill and analyzes:
    - Completion rates by project
    - Overdue and blocked todos
    - "Today" column patterns
-   - Mapping of completed todos to monthly goals
+   - Mapping of completed todos to typed goals (via \`resolvedGoalRefs\`)
 6. Team lead synthesizes findings into the weekly review note
 
 This makes the review faster (parallel collection) and more thorough (dedicated analysis per area).

@@ -124,12 +124,17 @@ function serializeFrontMatter(frontMatter: FrontMatter, body: string): string {
 }
 
 function buildProjectFrontMatter(project: ProjectConfig): FrontMatter {
-    return {
+    const fm: FrontMatter = {
         project: project.name,
         projectId: project.id,
         status: project.archived ? "archived" : "active",
         managedBy: "nomendex-project-sync",
+        syncVersion: 1,
     };
+    if (project.goalRef) {
+        fm.goalRef = project.goalRef;
+    }
+    return fm;
 }
 
 function extractSection(content: string, headings: string[]): string | null {
@@ -174,62 +179,79 @@ function buildDefaultProjectNoteBody(projectName: string): string {
 ## Overview
 Describe what this project should achieve.
 
-## Status
-- Phase: Planning
-- Progress: 0%
-
-## Milestones
-- [ ] Define milestone 1
-
-## Next Actions
-- [ ] Define the first actionable step
+## Notes
+- ${today}: Project created
 
 ## Decisions
 - ${today}: Project note initialized
 
-## Log
-- ${today}: Project created`;
+<!-- managed:start -->
+## Goal Link
+
+_No goal linked to this project._
+
+## Active Todos
+
+_No active todos in this project._
+
+## Progress
+
+**Todos**: 0/0 complete
+<!-- managed:end -->`;
 }
 
 function buildMigratedProjectNoteBody(projectName: string, sourceRelativePath: string, legacyContent: string): string {
     const today = new Date().toISOString().split("T")[0] || "";
     const overview = extractSection(legacyContent, ["Overview", "Summary", "Context"]) || "Migrated from legacy project context.";
-    const status = extractSection(legacyContent, ["Status", "Progress", "Phase"]) || "- Phase: Active\n- Progress: (set value)";
-    const milestones = extractSection(legacyContent, ["Milestones", "Targets", "Roadmap"]) || "- [ ] Review migrated milestones";
-    const nextActions = extractSection(legacyContent, ["Next Actions", "Action Items", "Tasks"]) || "- [ ] Review and refine next actions";
     const decisions = extractSection(legacyContent, ["Decisions", "Key Decisions"]) || "- Capture key decisions here";
     const log = extractSection(legacyContent, ["Log", "Notes", "Updates"])
         || `- ${today}: Migrated from \`${sourceRelativePath}\``;
+
+    // Collect legacy sections (Status, Milestones, Next Actions) into Legacy Notes
+    const legacyParts: string[] = [];
+    const status = extractSection(legacyContent, ["Status", "Progress", "Phase"]);
+    if (status) legacyParts.push(`### Status\n${status}`);
+    const milestones = extractSection(legacyContent, ["Milestones", "Targets", "Roadmap"]);
+    if (milestones) legacyParts.push(`### Milestones\n${milestones}`);
+    const nextActions = extractSection(legacyContent, ["Next Actions", "Action Items", "Tasks"]);
+    if (nextActions) legacyParts.push(`### Next Actions\n${nextActions}`);
 
     const snapshotLines = legacyContent.trim().split("\n");
     const truncated = snapshotLines.length > 200;
     const snapshot = snapshotLines.slice(0, 200).map((line) => `> ${line}`).join("\n");
     const truncationLine = truncated ? "\n> ... [truncated after 200 lines]" : "";
 
+    legacyParts.push(`### Legacy Snapshot\nMigrated from \`${sourceRelativePath}\` on ${today}.\n\n${snapshot}${truncationLine}`);
+
+    const legacyNotes = legacyParts.join("\n\n");
+
     return `# Project: ${projectName}
 
 ## Overview
 ${overview}
 
-## Status
-${status}
-
-## Milestones
-${milestones}
-
-## Next Actions
-${nextActions}
+## Notes
+${log}
 
 ## Decisions
 ${decisions}
 
-## Log
-${log}
+## Legacy Notes
+${legacyNotes}
 
-## Legacy Snapshot
-Migrated from \`${sourceRelativePath}\` on ${today}.
+<!-- managed:start -->
+## Goal Link
 
-${snapshot}${truncationLine}`;
+_No goal linked to this project._
+
+## Active Todos
+
+_No active todos in this project._
+
+## Progress
+
+**Todos**: 0/0 complete
+<!-- managed:end -->`;
 }
 
 function collectUsedProjectNotePaths(projects: ProjectConfig[], excludeProjectId?: string): Set<string> {
@@ -384,7 +406,9 @@ async function removeDirectoryIfEmpty(absolutePath: string): Promise<void> {
 }
 
 /**
- * Read the projects file from disk
+ * Read the projects file from disk.
+ * Returns an empty file if the file does not exist or is an iCloud online-only
+ * placeholder that cannot be opened yet (EPERM).
  */
 async function readProjectsFile(): Promise<ProjectsFile> {
     const filePath = getProjectsFilePath();
@@ -395,8 +419,17 @@ async function readProjectsFile(): Promise<ProjectsFile> {
         return { version: 1, projects: [] };
     }
 
-    const raw = await file.json();
-    return ProjectsFileSchema.parse(raw);
+    try {
+        const raw = await file.json();
+        return ProjectsFileSchema.parse(raw);
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "EPERM" || code === "EACCES") {
+            projectsLogger.warn("projects.json is not readable (iCloud online-only?), using empty default", { error: (error as Error).message });
+            return { version: 1, projects: [] };
+        }
+        throw error;
+    }
 }
 
 /**
@@ -404,7 +437,18 @@ async function readProjectsFile(): Promise<ProjectsFile> {
  */
 async function writeProjectsFile(data: ProjectsFile): Promise<void> {
     const filePath = getProjectsFilePath();
-    await Bun.write(filePath, JSON.stringify(data, null, 2));
+    try {
+        await Bun.write(filePath, JSON.stringify(data, null, 2));
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "EPERM" || code === "EACCES") {
+            projectsLogger.warn("Cannot write projects.json (iCloud online-only?), skipping write", {
+                error: (error as Error).message,
+            });
+            return;
+        }
+        throw error;
+    }
 }
 
 /**
@@ -480,7 +524,17 @@ async function migrateLegacyProjectNotes(): Promise<void> {
         return;
     }
 
-    const entries = await readdir(projectsDirectory, { withFileTypes: true });
+    let entries: import("node:fs").Dirent[];
+    try {
+        entries = await readdir(projectsDirectory, { withFileTypes: true }) as import("node:fs").Dirent[];
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "EPERM" || code === "EACCES") {
+            projectsLogger.warn("Projects directory not readable (iCloud online-only?), skipping legacy migration", { path: projectsDirectory });
+            return;
+        }
+        throw error;
+    }
     const legacyDirectories = entries.filter((entry) => entry.isDirectory());
     if (legacyDirectories.length === 0) {
         return;
@@ -682,6 +736,7 @@ export async function updateProject(input: {
         color?: string;
         archived?: boolean;
         board?: BoardConfig;
+        goalRef?: string;
     };
 }): Promise<ProjectConfig> {
     projectsLogger.info(`Updating project: ${input.projectId}`);
@@ -753,6 +808,26 @@ export async function updateProject(input: {
     await ensureProjectNote(updatedProject);
     data.projects[index] = updatedProject;
     await writeProjectsFile(data);
+
+    // If goalRef changed, recompute resolvedGoalRefs on all OPEN todos in this project.
+    // Calling updateTodo with an empty updates object triggers its resolvedGoalRefs
+    // recomputation logic, which will pick up the new project goalRef.
+    if (input.updates.goalRef !== undefined && input.updates.goalRef !== existingProject.goalRef) {
+        const projectTodos = await getTodos({});
+        const openTodosInProject = projectTodos.filter(
+            (todo) => todo.project === updatedProject.name
+                && todo.status !== "done" && !todo.archived,
+        );
+
+        for (const todo of openTodosInProject) {
+            await updateTodo({
+                todoId: todo.id,
+                updates: {},
+            });
+        }
+
+        projectsLogger.info(`Recomputed resolvedGoalRefs for ${openTodosInProject.length} open todos in project ${updatedProject.name}`);
+    }
 
     projectsLogger.info(`Updated project: ${input.projectId}`);
     return updatedProject;

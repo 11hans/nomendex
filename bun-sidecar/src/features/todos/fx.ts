@@ -221,6 +221,20 @@ function resolveLegacyScheduleFields(startValue: unknown, dueValue: unknown): {
     };
 }
 
+function isPermissionError(error: unknown): boolean {
+    if (!error || typeof error !== "object") {
+        return false;
+    }
+
+    const code = (error as { code?: unknown }).code;
+    if (code === "EPERM" || code === "EACCES") {
+        return true;
+    }
+
+    const message = (error as { message?: unknown }).message;
+    return typeof message === "string" && /(?:permission denied|operation not permitted|EPERM|EACCES)/i.test(message);
+}
+
 async function runTodosLegacyDateMigrationIfNeeded(): Promise<void> {
     const markerPath = getTodosLegacyDateMigrationMarkerPath();
     const markerFile = Bun.file(markerPath);
@@ -319,6 +333,35 @@ async function runTodosScheduleFieldRenameMigrationIfNeeded(): Promise<void> {
     todosLogger.info(`Todos schedule field rename migration complete (${migratedCount} records migrated)`);
 }
 
+/**
+ * Compute resolvedGoalRefs for a todo.
+ * If the todo has explicit goalRefs, use those.
+ * Otherwise, inherit from the project's goalRef.
+ */
+function computeResolvedGoalRefs(
+    goalRefs: string[] | null | undefined,
+    projectGoalRef: string | undefined,
+): string[] {
+    if (goalRefs != null) return goalRefs;
+    if (projectGoalRef) return [projectGoalRef];
+    return [];
+}
+
+/**
+ * Look up a project's goalRef by project name.
+ * Returns undefined if project not found or has no goalRef.
+ */
+async function getProjectGoalRef(projectName: string | undefined): Promise<string | undefined> {
+    if (!projectName || projectName.trim() === "") return undefined;
+    try {
+        const { getProjectByName } = await import("@/features/projects/fx");
+        const project = await getProjectByName({ name: projectName });
+        return project?.goalRef ?? undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 async function getTodos(input: { project?: string }) {
     todosLogger.info(`Getting todos${input.project != null ? ` for project: ${input.project || 'No Project'}` : ''}`);
 
@@ -386,6 +429,7 @@ async function createTodo(input: {
     attachments?: Attachment[];
     customColumnId?: string;
     calendarReminderPreset?: "30-15" | "none";
+    goalRefs?: string[];
 }) {
     todosLogger.info(`Creating new todo: ${input.title}`);
 
@@ -435,6 +479,10 @@ async function createTodo(input: {
         const derived = scheduledEnd ? deriveDurationFromSchedule(scheduledStart, scheduledEnd) : undefined;
         const duration = derived ?? requestedDuration;
 
+        // Compute resolvedGoalRefs
+        const projectGoalRef = await getProjectGoalRef(input.project);
+        const resolvedGoalRefs = computeResolvedGoalRefs(input.goalRefs, projectGoalRef);
+
         const now = new Date().toISOString();
         const newTodo: Todo = {
             id: `todo-${slug}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -456,6 +504,8 @@ async function createTodo(input: {
             attachments: input.attachments,
             customColumnId: input.customColumnId,
             calendarReminderPreset: input.calendarReminderPreset,
+            goalRefs: input.goalRefs,
+            resolvedGoalRefs: resolvedGoalRefs.length > 0 ? resolvedGoalRefs : undefined,
         };
 
         const created = await getDb().create(newTodo);
@@ -487,6 +537,7 @@ async function updateTodo(input: {
         attachments?: Attachment[];
         customColumnId?: string;
         calendarReminderPreset?: "30-15" | "none";
+        goalRefs?: string[];
     };
 }) {
     todosLogger.info(`Updating todo: ${input.todoId}`);
@@ -575,6 +626,31 @@ async function updateTodo(input: {
             }
         }
 
+        // Compute resolvedGoalRefs based on status and archived state.
+        // "closed" means status=done OR archived=true.
+        const effectiveStatus = input.updates.status ?? currentTodo.status;
+        const effectiveArchived = input.updates.archived ?? currentTodo.archived;
+        const isClosed = effectiveStatus === "done" || effectiveArchived === true;
+        const wasClosed = currentTodo.status === "done" || currentTodo.archived === true;
+        const isClosing = isClosed && !wasClosed;
+
+        if (isClosing) {
+            // Freezing: compute and set resolvedGoalRefs as a snapshot
+            const effectiveGoalRefs = input.updates.goalRefs ?? currentTodo.goalRefs;
+            const effectiveProject = input.updates.project ?? currentTodo.project;
+            const projectGoalRef = await getProjectGoalRef(effectiveProject);
+            const resolved = computeResolvedGoalRefs(effectiveGoalRefs, projectGoalRef);
+            updates.resolvedGoalRefs = resolved.length > 0 ? resolved : undefined;
+        } else if (!isClosed) {
+            // Open todo: recompute resolvedGoalRefs
+            const effectiveGoalRefs = input.updates.goalRefs ?? currentTodo.goalRefs;
+            const effectiveProject = input.updates.project ?? currentTodo.project;
+            const projectGoalRef = await getProjectGoalRef(effectiveProject);
+            const resolved = computeResolvedGoalRefs(effectiveGoalRefs, projectGoalRef);
+            updates.resolvedGoalRefs = resolved.length > 0 ? resolved : undefined;
+        }
+        // If already closed (done/archived) and staying closed, don't recompute — keep frozen
+
         const updated = await getDb().update(input.todoId, updates as Partial<Todo>);
 
         if (!updated) {
@@ -644,6 +720,10 @@ async function getProjects() {
         todosLogger.info(`Found ${projects.length} unique projects`);
         return projects;
     } catch (error) {
+        if (isPermissionError(error)) {
+            todosLogger.warn("Permission error while loading todo projects; returning empty fallback list", { error });
+            return [];
+        }
         todosLogger.error(`Failed to get projects`, { error });
         throw error;
     }
@@ -713,6 +793,75 @@ async function unarchiveTodo(input: { todoId: string }) {
         todosLogger.error(`Failed to unarchive todo ${input.todoId}`, { error });
         throw error;
     }
+}
+
+/**
+ * Batch recompute resolvedGoalRefs for all todos.
+ * - Open todos: recompute from explicit goalRefs or project.goalRef (live).
+ * - Done/archived todos: only fill in if currently missing (frozen snapshot).
+ * Returns counts of updated and skipped todos.
+ */
+export async function recomputeAllGoalRefs(): Promise<{
+    updated: number;
+    skipped: number;
+    errors: number;
+}> {
+    todosLogger.info("Starting batch recompute of resolvedGoalRefs");
+    const todos = await getDb().findAll();
+
+    // Build project→goalRef map once (avoid N×M lookups)
+    const projectGoalRefMap = new Map<string, string>();
+    try {
+        const { listProjects } = await import("@/features/projects/fx");
+        const projects = await listProjects({ includeArchived: false });
+        for (const p of projects) {
+            if (p.name && p.goalRef) {
+                projectGoalRefMap.set(p.name.trim().toLowerCase(), p.goalRef);
+            }
+        }
+    } catch {
+        todosLogger.warn("Failed to load projects for batch recompute");
+    }
+
+    let updated = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const todo of todos) {
+        try {
+            const isClosed = todo.status === "done" || todo.archived === true;
+
+            if (isClosed) {
+                // Frozen: closed todos never get resolvedGoalRefs recomputed.
+                // Their snapshot was taken at completion time.
+                skipped++;
+            } else {
+                // Open: always recompute
+                const projectGoalRef = todo.project
+                    ? projectGoalRefMap.get(todo.project.trim().toLowerCase())
+                    : undefined;
+                const resolved = computeResolvedGoalRefs(todo.goalRefs, projectGoalRef);
+                const current = todo.resolvedGoalRefs ?? [];
+                const hasChange =
+                    resolved.length !== current.length ||
+                    resolved.some((r, i) => r !== current[i]);
+                if (hasChange) {
+                    await getDb().update(todo.id, {
+                        resolvedGoalRefs: resolved.length > 0 ? resolved : undefined,
+                        updatedAt: new Date().toISOString(),
+                    });
+                    updated++;
+                } else {
+                    skipped++;
+                }
+            }
+        } catch {
+            errors++;
+        }
+    }
+
+    todosLogger.info(`Batch recompute done: updated=${updated}, skipped=${skipped}, errors=${errors}`);
+    return { updated, skipped, errors };
 }
 
 async function getArchivedTodos(input: { project?: string }) {

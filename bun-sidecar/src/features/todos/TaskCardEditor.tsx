@@ -40,8 +40,12 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
     const [editedTodo, setEditedTodo] = useState<Todo | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const descriptionRef = useRef<HTMLTextAreaElement>(null);
+    const reminderAutoDisabledRef = useRef(false);
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
+
+    const hasTimedSchedule = (item: Pick<Todo, "scheduledStart" | "scheduledEnd">): boolean =>
+        Boolean(item.scheduledStart?.includes("T") || item.scheduledEnd?.includes("T"));
 
     // Handle Cmd+Enter from native Mac app
     useNativeSubmit(() => {
@@ -52,7 +56,31 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
 
     useEffect(() => {
         setEditedTodo(todo);
+        reminderAutoDisabledRef.current = false;
     }, [todo]);
+
+    const handleScheduledDateChange = (dates: { scheduledStart?: string; scheduledEnd?: string }) => {
+        setEditedTodo((prev) => {
+            if (!prev) return prev;
+
+            const next: Todo = { ...prev, ...dates };
+            const hadTimed = hasTimedSchedule(prev);
+            const hasTimed = hasTimedSchedule(next);
+            const wasActive = prev.calendarReminderPreset === "30-15";
+
+            // If alerts were active and we remove time, temporarily disable alerts.
+            // If time is added back in this edit session, restore the previous alert preset.
+            if (hadTimed && !hasTimed && wasActive) {
+                reminderAutoDisabledRef.current = true;
+                next.calendarReminderPreset = "none";
+            } else if (!hadTimed && hasTimed && reminderAutoDisabledRef.current && next.calendarReminderPreset !== "30-15") {
+                next.calendarReminderPreset = "30-15";
+                reminderAutoDisabledRef.current = false;
+            }
+
+            return next;
+        });
+    };
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -251,7 +279,7 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                             <ScheduledDateTimePicker
                                 scheduledStart={editedTodo.scheduledStart}
                                 scheduledEnd={editedTodo.scheduledEnd}
-                                onChange={(dates) => setEditedTodo({ ...editedTodo, ...dates })}
+                                onChange={handleScheduledDateChange}
                             />
                             <DateTimePicker
                                 dueDate={editedTodo.dueDate}
@@ -260,6 +288,7 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                             {onToggleCalendarReminder && (() => {
                                 const hasTimed = editedTodo.scheduledStart?.includes("T") || editedTodo.scheduledEnd?.includes("T");
                                 const isActive = editedTodo.calendarReminderPreset === "30-15";
+                                const canToggle = hasTimed || isActive;
                                 return (
                                     <Tooltip>
                                         <TooltipTrigger asChild>
@@ -267,15 +296,27 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                                                 variant="ghost"
                                                 size="sm"
                                                 className="h-8 px-2 rounded-md"
-                                                disabled={!hasTimed}
-                                                onClick={() => onToggleCalendarReminder({
-                                                    ...editedTodo,
-                                                    calendarReminderPreset: isActive ? "none" : "30-15",
-                                                })}
+                                                disabled={!canToggle}
+                                                onClick={() => {
+                                                    const nextPreset = isActive ? "none" : "30-15";
+                                                    // Optimistic local toggle so editor state isn't overwritten
+                                                    // by stale server data while the dialog is open.
+                                                    setEditedTodo({
+                                                        ...editedTodo,
+                                                        calendarReminderPreset: nextPreset,
+                                                    });
+                                                    if (nextPreset === "30-15") {
+                                                        reminderAutoDisabledRef.current = false;
+                                                    }
+                                                    onToggleCalendarReminder({
+                                                        ...editedTodo,
+                                                        calendarReminderPreset: nextPreset,
+                                                    });
+                                                }}
                                                 style={{
                                                     color: isActive ? "#fff" : styles.contentSecondary,
                                                     backgroundColor: isActive ? "#3b82f6" : "transparent",
-                                                    opacity: hasTimed ? 1 : 0.4,
+                                                    opacity: canToggle ? 1 : 0.4,
                                                 }}
                                             >
                                                 <Bell className="size-4" />
@@ -289,11 +330,11 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                                                 border: `1px solid ${styles.borderDefault}`,
                                             }}
                                         >
-                                            {!hasTimed
-                                                ? "Set a time to enable reminders"
+                                            {!hasTimed && !isActive
+                                                ? "Set a scheduled time to enable calendar alerts"
                                                 : isActive
-                                                    ? "Remove 30/15 min reminders"
-                                                    : "Add 30 + 15 min reminders"}
+                                                    ? "Remove 30/15 min calendar alerts"
+                                                    : "Add 30 + 15 min calendar alerts"}
                                         </TooltipContent>
                                     </Tooltip>
                                 );

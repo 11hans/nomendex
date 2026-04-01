@@ -22,9 +22,12 @@ import { useTheme } from "@/hooks/useTheme";
 import { todosPluginSerial } from "@/features/todos";
 import { notesPluginSerial } from "@/features/notes";
 import { TaskCardEditor } from "@/features/todos/TaskCardEditor";
+import { syncTaskToCalendar, removeTaskFromCalendar } from "@/features/todos/calendar-bridge";
+import { syncTaskToReminders, removeTaskFromReminders } from "@/features/todos/reminder-bridge";
 import type { Todo } from "@/features/todos/todo-types";
 import type { Note } from "@/features/notes";
 import { projectsPluginSerial, type ProjectDetailViewProps } from "./index";
+import { toast } from "sonner";
 
 const INITIAL_NOTES_LIMIT = 10;
 
@@ -213,6 +216,8 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                 setEditDialogOpen(false);
                 setTodoToEdit(null);
                 setTodos(await todosAPI.getTodos({ project: projectName }));
+                syncTaskToCalendar(updatedTodo).catch(() => { });
+                syncTaskToReminders(updatedTodo).catch(() => { });
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : "Failed to save todo";
                 setError(errorMessage);
@@ -228,12 +233,48 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
             try {
                 await todosAPI.deleteTodo({ todoId: todo.id });
                 setTodos((prev) => prev.filter((t) => t.id !== todo.id));
+                removeTaskFromCalendar(todo.id).catch(() => { });
+                removeTaskFromReminders(todo.id).catch(() => { });
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : "Failed to delete todo";
                 setError(errorMessage);
             }
         },
         [todosAPI, setError]
+    );
+
+    const handleToggleCalendarReminder = useCallback(
+        async (todo: Todo) => {
+            try {
+                const updated = await todosAPI.updateTodo({
+                    todoId: todo.id,
+                    updates: { calendarReminderPreset: todo.calendarReminderPreset },
+                });
+                if (!updated) return;
+
+                setTodos((prev) => prev.map((item) =>
+                    item.id === updated.id
+                        ? { ...item, calendarReminderPreset: updated.calendarReminderPreset }
+                        : item
+                ));
+
+                const calendarSyncOk = await syncTaskToCalendar(updated);
+                if (calendarSyncOk) {
+                    toast.success(
+                        todo.calendarReminderPreset === "30-15"
+                            ? "Calendar alerts set (30 + 15 min)"
+                            : "Calendar alerts removed"
+                    );
+                } else {
+                    toast("Alert setting saved, but Calendar sync is unavailable");
+                }
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : "Failed to update calendar alerts";
+                setError(errorMessage);
+                toast.error("Failed to update calendar alerts");
+            }
+        },
+        [todosAPI, projectName, setError]
     );
 
     const sortedTodos = useMemo(() => sortTodosByUpdatedDesc(todos), [todos]);
@@ -554,6 +595,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                 onOpenChange={setEditDialogOpen}
                 onSave={handleSaveTodo}
                 onDelete={handleDeleteTodo}
+                onToggleCalendarReminder={handleToggleCalendarReminder}
                 saving={editSaving}
                 availableTags={availableTags}
                 availableProjects={availableProjects}

@@ -23,6 +23,7 @@ export const ProjectConfigSchema = z.object({
     archived: z.boolean().optional(),
     projectNoteFile: z.string().optional(), // Canonical project note path (relative to notes root)
     board: BoardConfigSchema.optional(), // Custom kanban board configuration
+    goalRef: z.string().optional(), // single goal ID, e.g., "goal-career-nomendex-launch"
     createdAt: z.string(),
     updatedAt: z.string(),
 });

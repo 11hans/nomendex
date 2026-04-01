@@ -18,7 +18,17 @@ export async function getAllProjects(): Promise<ProjectConfig[]> {
         return [];
     }
 
-    const data = await file.json();
+    let data: unknown;
+    try {
+        data = await file.json();
+    } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "EPERM" || code === "EACCES") {
+            // iCloud online-only placeholder — treat as empty
+            return [];
+        }
+        throw error;
+    }
     const parsed = ProjectsFileSchema.safeParse(data);
     if (!parsed.success) {
         logger.error("Failed to parse projects.json", { error: parsed.error });

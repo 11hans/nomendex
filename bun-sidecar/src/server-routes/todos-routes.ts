@@ -16,6 +16,7 @@ import {
     getBoardConfig,
     saveBoardConfig,
     deleteColumn,
+    recomputeAllGoalRefs,
 } from "@/features/todos/fx";
 
 export const todosRoutes = {
@@ -110,6 +111,16 @@ export const todosRoutes = {
         async POST(req: Request) {
             const args = await req.json();
             return Response.json(await deleteColumn(args));
+        },
+    },
+    "/api/todos/recompute-goal-refs": {
+        async POST() {
+            try {
+                return Response.json(await recomputeAllGoalRefs());
+            } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                return Response.json({ error: msg }, { status: 500 });
+            }
         },
     },
 };
