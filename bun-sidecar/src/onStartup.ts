@@ -1,7 +1,6 @@
 import { startupLog } from "./lib/logger";
 import { getRootPath, getNomendexPath, getTodosPath, getNotesPath, getUploadsPath, getSkillsPath, hasActiveWorkspace, getActiveWorkspacePath } from "./storage/root-path";
-import { mkdir, access } from "node:fs/promises";
-import { constants } from "node:fs";
+import { mkdir, stat } from "node:fs/promises";
 import { initializeBacklinksWithData } from "./features/notes/backlinks-service";
 import { initializeTagsWithData } from "./features/notes/tags-service";
 import { scanAndExtractAll } from "./features/notes/notes-indexer";
@@ -51,19 +50,54 @@ export async function onStartup(): Promise<SkillUpdateCheckResult | null> {
     const workspacePath = getActiveWorkspacePath();
     startupLog.info(`Active workspace path: ${workspacePath}`);
 
-    // Validate workspace path exists and is accessible
+    // Validate workspace path exists and is a directory.
+    // Uses stat() rather than access(R_OK|W_OK) because the write-permission check
+    // triggers a stricter macOS TCC evaluation that can return EPERM on iCloud Drive
+    // paths even when the folder is fully accessible via the Finder.
+    // Actual write failures will surface naturally when we create subdirectories below.
+    //
+    // iCloud daemon may take several seconds to mount after login, so retry with backoff.
     startupLog.info("Validating workspace path...");
-    try {
-        await access(workspacePath!, constants.R_OK | constants.W_OK);
-        startupLog.info("Workspace path is accessible");
-    } catch (error) {
-        startupLog.error("Workspace path is not accessible", {
-            path: workspacePath,
-            error: error instanceof Error ? error.message : String(error),
-        });
-        startupLog.error("Startup cannot continue - workspace path invalid or inaccessible");
-        startupLog.info("=== Startup Sequence Failed ===");
-        throw new Error(`Workspace path not accessible: ${workspacePath}`);
+    {
+        const RETRY_DELAYS_MS = [0, 2000, 5000, 10000, 15000]; // total wait up to ~32 s
+        let lastError: unknown;
+        let accessible = false;
+
+        for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
+            const delay = RETRY_DELAYS_MS[attempt]!;
+            if (delay > 0) {
+                startupLog.info(`Workspace not yet accessible - retrying in ${delay / 1000}s (attempt ${attempt + 1}/${RETRY_DELAYS_MS.length})`, { path: workspacePath });
+                await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+
+            try {
+                const s = await stat(workspacePath!);
+                if (!s.isDirectory()) {
+                    throw new Error(`Workspace path is not a directory: ${workspacePath}`);
+                }
+                accessible = true;
+                startupLog.info("Workspace path is accessible", { attempt: attempt + 1 });
+                break;
+            } catch (error) {
+                lastError = error;
+                const code = (error as NodeJS.ErrnoException).code;
+                // Only retry on EPERM / EACCES - these are the transient iCloud timing errors.
+                // For ENOENT (path truly missing) or wrong type, fail immediately.
+                if (code !== "EPERM" && code !== "EACCES") {
+                    break;
+                }
+            }
+        }
+
+        if (!accessible) {
+            startupLog.error("Workspace path is not accessible after retries", {
+                path: workspacePath,
+                error: lastError instanceof Error ? lastError.message : String(lastError),
+            });
+            startupLog.error("Startup cannot continue - workspace path invalid or inaccessible");
+            startupLog.info("=== Startup Sequence Failed ===");
+            throw new Error(`Workspace path not accessible: ${workspacePath}`);
+        }
     }
 
     // Ensure root directory and feature folders exist (with granular error handling)

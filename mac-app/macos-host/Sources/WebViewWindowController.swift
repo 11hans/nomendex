@@ -58,6 +58,7 @@ class WebViewWindowController: NSWindowController, WKNavigationDelegate, NSWindo
         userContentController.add(self, name: "checkForUpdatesInBackground")
         userContentController.add(self, name: "calendarSync")
         userContentController.add(self, name: "reminderSync")
+        userContentController.add(self, name: "frontendError")
         config.userContentController = userContentController
         config.preferences.javaScriptEnabled = true
         let webView = WKWebView(frame: .zero, configuration: config)
@@ -154,6 +155,20 @@ class WebViewWindowController: NSWindowController, WKNavigationDelegate, NSWindo
         webView.load(URLRequest(url: url))
     }
 
+    /// Called when the sidecar reports a failed startup (e.g. workspace not accessible).
+    /// Loads the server URL so the React app can display an actionable error screen.
+    func loadStartupFallback(error: String, serverURL: URL) {
+        log("Startup fallback — loading server URL for React error screen:", error)
+        load(url: serverURL)
+    }
+
+    /// Called while waiting for the sidecar to become ready.
+    /// Loads the server URL so the React app can display a loading state.
+    func loadStartupInitializing(serverURL: URL) {
+        log("Startup initializing — loading server URL")
+        load(url: serverURL)
+    }
+
     func show() {
         self.window?.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
@@ -238,6 +253,8 @@ class WebViewWindowController: NSWindowController, WKNavigationDelegate, NSWindo
                 let callback = taskData["callback"] as? String
                 ReminderManager.shared.syncTask(taskData, webView: webView, callback: callback)
             }
+        } else if message.name == "frontendError" {
+            log("Frontend runtime signal:", message.body)
         }
     }
     
@@ -270,6 +287,18 @@ class WebViewWindowController: NSWindowController, WKNavigationDelegate, NSWindo
         // Start observing calendar and reminder changes once the webview is ready
         CalendarManager.shared.startObserving(webView: webView)
         ReminderManager.shared.startObserving(webView: webView)
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        log("WebView didFail navigation:", error.localizedDescription)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        log("WebView didFailProvisionalNavigation:", error.localizedDescription)
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        log("WebView content process terminated")
     }
 
     // MARK: - NSWindowDelegate
@@ -318,4 +347,3 @@ extension NSColor {
         return luminance < 0.5
     }
 }
-

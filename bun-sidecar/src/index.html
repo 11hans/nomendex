@@ -8,6 +8,59 @@
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
         <link rel="stylesheet" href="./output.css" />
+        <script>
+            (() => {
+                const postToServer = (payload) => {
+                    try {
+                        fetch("/api/frontend-log", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                level: "error",
+                                message: "Frontend runtime error",
+                                meta: payload,
+                            }),
+                        }).catch(() => {});
+                    } catch {}
+                };
+
+                const postToNative = (payload) => {
+                    try {
+                        const handler = window.webkit?.messageHandlers?.frontendError;
+                        if (handler?.postMessage) handler.postMessage(payload);
+                    } catch {}
+                };
+
+                const report = (payload) => {
+                    postToNative(payload);
+                    postToServer(payload);
+                };
+
+                window.addEventListener(
+                    "error",
+                    (event) => {
+                        report({
+                            type: "error",
+                            message: event.message,
+                            source: event.filename,
+                            line: event.lineno,
+                            column: event.colno,
+                            stack: event.error?.stack ?? null,
+                        });
+                    },
+                    true
+                );
+
+                window.addEventListener("unhandledrejection", (event) => {
+                    const reason = event.reason;
+                    report({
+                        type: "unhandledrejection",
+                        message: typeof reason === "string" ? reason : reason?.message ?? String(reason),
+                        stack: reason?.stack ?? null,
+                    });
+                });
+            })();
+        </script>
         <script type="module" src="./frontend.tsx" async></script>
     </head>
     <body>

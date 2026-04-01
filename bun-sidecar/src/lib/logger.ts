@@ -20,7 +20,7 @@ function getLogFile(): string {
 // Mark startup as complete - stops file logging
 export function markStartupComplete(): void {
   if (isStartupMode) {
-    writeStartupLog('STARTUP', 'Startup complete - file logging disabled');
+    consoleLog('INFO', 'Startup complete - forcing file log to continue active');
     isStartupMode = false;
   }
 }
@@ -44,26 +44,24 @@ try {
   console.error('Failed to clear log file:', error);
 }
 
-// Write a startup log entry (only during startup mode)
-function writeStartupLog(level: string, message: string, meta?: Record<string, unknown>): void {
-  if (!isStartupMode) return;
-
-  const timestamp = new Date().toISOString();
-  const metaStr = meta ? ` ${JSON.stringify(meta)}` : '';
-  const logEntry = `${timestamp} [${level}] ${message}${metaStr}\n`;
-
-  try {
-    appendFileSync(LOG_FILE, logEntry);
-  } catch (error) {
-    console.error('Failed to write startup log:', error);
-  }
+// Write a startup log entry (kept for API compatibility but now handles double-logging prevention natively)
+function writeStartupLog(_level: string, _message: string, _meta?: Record<string, unknown>): void {
+  // Doing nothing here since consoleLog will handle file writing for everything
 }
 
-// Console logging (always active)
+// Console logging (always active and writes to file)
 function consoleLog(level: string, message: string, meta?: Record<string, unknown>): void {
   const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
   const metaStr = meta && Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
   console.log(`${timestamp} [${level}] ${message}${metaStr}`);
+  
+  // Output everything to LOG_FILE as well
+  try {
+    const logEntry = `${new Date().toISOString()} [${level}] ${message}${metaStr}\n`;
+    appendFileSync(LOG_FILE, logEntry);
+  } catch {
+    // silently fail
+  }
 }
 
 // Startup logger - writes to both console and file (during startup only)

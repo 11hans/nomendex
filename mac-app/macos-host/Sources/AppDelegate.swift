@@ -35,7 +35,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             sidecar.waitUntilReady { [weak self] ok in
                 DispatchQueue.main.async {
                     guard let self = self else { return }
-                    let url = self.sidecar.serverURL ?? URL(string: "http://127.0.0.1:17865")!
+                    let fallbackURL = URL(string: "http://localhost:17865")!
+                    let url = self.sidecar.serverURL ?? fallbackURL
+                    if ok {
+                        log("Sidecar ready:", url.absoluteString)
+                    } else {
+                        log("Sidecar health check did not pass in time, loading best-known URL:", url.absoluteString)
+                    }
                     self.windowController = WebViewWindowController(url: url)
                     self.statusBar = StatusBarController(onToggle: { [weak self] in self?.windowController?.toggle() }, onQuit: { NSApp.terminate(nil) })
                     self.windowController?.show()

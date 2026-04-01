@@ -64,11 +64,12 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         todoViewPreferences: {},
     });
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const initialRouteHandledRef = useRef(false);
 
     // Load workspace state from server
     useEffect(() => {
-        fetchWorkspace();
+        void fetchWorkspace();
     }, []);
 
 
@@ -94,25 +95,34 @@ export function useWorkspace(_initialRoute?: RouteParams) {
 
     const fetchWorkspace = async () => {
         console.log("[useWorkspace] Fetching workspace...");
-        const response = await fetch("/api/workspace");
+        setError(null);
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        try {
+            const response = await fetch("/api/workspace");
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+            console.log("[useWorkspace] Raw result from server:", result);
+
+            // Handle Result<WorkspaceState> structure
+            if (!result.success) {
+                throw new Error(result.error || "Failed to fetch workspace");
+            }
+
+            const dataValidated = WorkspaceStateSchema.parse(result.data);
+            console.log("[useWorkspace] Parsed workspace, chatInputEnterToSend:", dataValidated.chatInputEnterToSend);
+
+            setWorkspace(dataValidated);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : "Failed to fetch workspace";
+            console.error("[useWorkspace] Fetch failed:", err);
+            setError(message);
+        } finally {
+            setLoading(false);
         }
-
-        const result = await response.json();
-        console.log("[useWorkspace] Raw result from server:", result);
-
-        // Handle Result<WorkspaceState> structure
-        if (!result.success) {
-            throw new Error(result.error || "Failed to fetch workspace");
-        }
-
-        const dataValidated = WorkspaceStateSchema.parse(result.data);
-        console.log("[useWorkspace] Parsed workspace, chatInputEnterToSend:", dataValidated.chatInputEnterToSend);
-
-        setWorkspace(dataValidated);
-        setLoading(false);
     };
 
     const saveWorkspace = useCallback(async (newWorkspace: WorkspaceState) => {
@@ -1131,6 +1141,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         // State
         workspace,
         loading,
+        error,
         tabs: allTabs,
 
         // Actions

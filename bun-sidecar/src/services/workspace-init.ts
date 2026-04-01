@@ -55,25 +55,30 @@ export async function initializeWorkspaceServices(): Promise<void> {
         throw error;
     }
 
-    // Initialize feature services (only if workspace is active)
+    // Initialize feature services (only if workspace is active).
+    // Each service is individually try/caught so that a transient failure
+    // (e.g. iCloud EPERM) in one service doesn't block the rest.
     if (hasActiveWorkspace()) {
         startupLog.info("Initializing feature services...");
-        try {
-            await initializeTodosService();
-            await initializeNotesService();
-            await initializeProjectsService();
-            await initializeAgentMemoryService();
-            startNotesWatcher();
 
-            // Provision Claude Code hooks for agent editing into the workspace
-            await enableAgentEditing();
-            startupLog.info("Feature services initialized");
-        } catch (error) {
-            startupLog.error("Failed to initialize feature services", {
-                error: error instanceof Error ? error.message : String(error)
-            });
-            throw error;
-        }
+        const initService = async (name: string, fn: () => Promise<unknown> | unknown) => {
+            try {
+                await fn();
+            } catch (error) {
+                startupLog.error(`Failed to initialize ${name}`, {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        };
+
+        await initService("todos", initializeTodosService);
+        await initService("notes", initializeNotesService);
+        await initService("projects", initializeProjectsService);
+        await initService("agent-memory", initializeAgentMemoryService);
+        await initService("notes-watcher", () => startNotesWatcher());
+        await initService("agent-editing", enableAgentEditing);
+
+        startupLog.info("Feature services initialized");
     } else {
         startupLog.info("Skipping feature services (no active workspace)");
         // Tear down services that may have been running for a previous workspace

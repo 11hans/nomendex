@@ -79,12 +79,80 @@ function SkillUpdatesBridge() {
 // Wrapper component that shows onboarding if no workspace is configured
 function WorkspaceGuard({ children }: { children: React.ReactNode }) {
     const { activeWorkspace, loading } = useWorkspaceSwitcher();
+    const [startupError, setStartupError] = React.useState<string | null>(null);
+    const [startupChecked, setStartupChecked] = React.useState(false);
+    const [retrying, setRetrying] = React.useState(false);
 
-    if (loading) {
-        // Show a minimal loading state
+    React.useEffect(() => {
+        let cancelled = false;
+        const checkStatus = () => {
+            fetch("/api/startup-status")
+                .then((r) => r.json())
+                .then((data: { ok: boolean; error?: string }) => {
+                    if (cancelled) return;
+                    if (!data.ok) setStartupError(data.error ?? "Unknown startup error");
+                    setStartupChecked(true);
+                })
+                .catch(() => {
+                    if (cancelled) return;
+                    // Server may still be starting; keep waiting.
+                    setTimeout(checkStatus, 500);
+                });
+        };
+        checkStatus();
+        return () => { cancelled = true; };
+    }, []);
+
+    const handleRetry = async () => {
+        setRetrying(true);
+        try {
+            const r = await fetch("/api/startup-status/retry", { method: "POST" });
+            const data = (await r.json()) as { ok: boolean; error?: string };
+            if (data.ok) {
+                setStartupError(null);
+                window.location.reload();
+            } else {
+                setStartupError(data.error ?? "Retry failed");
+            }
+        } catch {
+            setStartupError("Could not reach server. The sidecar may have crashed — check startup logs.");
+        } finally {
+            setRetrying(false);
+        }
+    };
+
+    if (loading || !startupChecked) {
         return (
             <div className="flex items-center justify-center h-screen">
                 <div className="text-muted-foreground">Loading...</div>
+            </div>
+        );
+    }
+
+    if (startupError) {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen gap-4 p-8 text-center">
+                <div className="text-destructive font-semibold text-lg">Workspace not accessible</div>
+                <div className="text-muted-foreground text-sm font-mono max-w-md break-all">{startupError}</div>
+                <div className="text-muted-foreground text-xs max-w-md space-y-1 text-left">
+                    <p><strong>1. iCloud not yet mounted</strong> — wait a moment then click Retry.</p>
+                    <p><strong>2. macOS revoked file access</strong> — System Settings → Privacy &amp; Security → Files and Folders → enable Nomendex.</p>
+                </div>
+                <div className="flex gap-2 flex-wrap justify-center">
+                    <button
+                        onClick={handleRetry}
+                        disabled={retrying}
+                        className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                    >
+                        {retrying ? "Retrying…" : "Retry"}
+                    </button>
+                    <button
+                        onClick={() => window.open("x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders")}
+                        className="px-4 py-2 rounded border border-border text-sm font-medium hover:bg-accent"
+                    >
+                        Privacy Settings
+                    </button>
+                </div>
             </div>
         );
     }

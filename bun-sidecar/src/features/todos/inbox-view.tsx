@@ -393,13 +393,24 @@ export function InboxListView() {
                 updates: { calendarReminderPreset: todo.calendarReminderPreset },
             });
             if (updated) {
-                setTodoToEdit(updated);
-                await loadTodos();
-                syncTaskToCalendar(updated).catch(() => { });
-                toast.success(todo.calendarReminderPreset === "30-15" ? "Reminders set (30 + 15 min)" : "Reminders removed");
+                setTodos((prev) => prev.map((item) =>
+                    item.id === updated.id
+                        ? { ...item, calendarReminderPreset: updated.calendarReminderPreset }
+                        : item
+                ));
+                const calendarSyncOk = await syncTaskToCalendar(updated);
+                if (calendarSyncOk) {
+                    toast.success(
+                        todo.calendarReminderPreset === "30-15"
+                            ? "Calendar alerts set (30 + 15 min)"
+                            : "Calendar alerts removed"
+                    );
+                } else {
+                    toast("Alert setting saved, but Calendar sync is unavailable");
+                }
             }
         } catch {
-            toast.error("Failed to update reminders");
+            toast.error("Failed to update calendar alerts");
         }
     };
 

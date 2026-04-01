@@ -17,6 +17,7 @@ class ReminderManager {
     private var knownReminderStates: [String: ReminderState] = [:]
     private var ignoredTaskIDs: Set<String> = []
     private var isFetchingReminders = false
+    private var hasPendingReminderRefresh = false
 
     struct ReminderState {
         let title: String
@@ -74,8 +75,12 @@ class ReminderManager {
         guard let list = getOrCreateList(), let webView = webViewRef else { return }
 
         // Prevent concurrent fetches
-        if isFetchingReminders { return }
+        if isFetchingReminders {
+            hasPendingReminderRefresh = true
+            return
+        }
         isFetchingReminders = true
+        hasPendingReminderRefresh = false
 
         let predicate = eventStore.predicateForReminders(in: [list])
         eventStore.fetchReminders(matching: predicate) { [weak self] currentReminders in
@@ -84,6 +89,10 @@ class ReminderManager {
             defer {
                 DispatchQueue.main.async {
                     self.isFetchingReminders = false
+                    if self.hasPendingReminderRefresh {
+                        self.hasPendingReminderRefresh = false
+                        self.detectChanges()
+                    }
                 }
             }
 
@@ -103,8 +112,11 @@ class ReminderManager {
 
             var changesToSend: [[String: Any]] = []
 
-            DispatchQueue.main.sync {
-                for (taskId, oldState) in self.knownReminderStates {
+            let processChanges = {
+                let previousState = self.knownReminderStates
+                let previousKeys = Set(previousState.keys)
+
+                for (taskId, oldState) in previousState {
                     if self.ignoredTaskIDs.contains(taskId) {
                         self.ignoredTaskIDs.remove(taskId)
                         continue
@@ -154,6 +166,13 @@ class ReminderManager {
                 }
                 self.knownReminderStates = nextState
 
+                // Clear one-shot ignore flags for newly created reminders so the next
+                // genuine user edit is not skipped.
+                let ignoredForNewEntries = self.ignoredTaskIDs.filter { taskId in
+                    currentMap[taskId] != nil && !previousKeys.contains(taskId)
+                }
+                self.ignoredTaskIDs.subtract(ignoredForNewEntries)
+
                 // Send to JS
                 if !changesToSend.isEmpty {
                     log("Detected reminder changes for \(changesToSend.count) tasks")
@@ -167,6 +186,12 @@ class ReminderManager {
                         log("Failed to serialize reminder changes: \(error)")
                     }
                 }
+            }
+
+            if Thread.isMainThread {
+                processChanges()
+            } else {
+                DispatchQueue.main.sync(execute: processChanges)
             }
         }
     }
@@ -305,14 +330,15 @@ class ReminderManager {
             }
 
             if let dateStr = targetDateStr, let parsedDate = self.parseISO(dateStr) {
-                let components: Set<Calendar.Component> = dateStr.contains("T") ?
+                let hasTime = dateStr.contains("T")
+                let components: Set<Calendar.Component> = hasTime ?
                     [.year, .month, .day, .hour, .minute] :
                     [.year, .month, .day]
                 let dateComponents = Calendar.current.dateComponents(components, from: parsedDate)
                 reminder.dueDateComponents = dateComponents
 
                 // Re-apply correct alarm based on priority
-                if let priority = taskData["priority"] as? String {
+                if hasTime, let priority = taskData["priority"] as? String {
                     if let alarm = self.alarmForPriority(priority) {
                         reminder.addAlarm(alarm)
                     }
