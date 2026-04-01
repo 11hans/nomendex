@@ -27,11 +27,11 @@ export const AgentMemoryRecordSchema = z.object({
     confidence: z.number().min(0).max(1).default(0.8),
     fingerprint: z.string(),
     sourceType: z.enum(["chat", "note", "todo", "manual", "system"]).optional(),
-    sourceRef: z.string().optional(),
+    sourceRef: z.string().nullish(),
     createdAt: z.string(),
     updatedAt: z.string(),
     lastAccessedAt: z.string(),
-    expiresAt: z.string().optional(),
+    expiresAt: z.string().nullish(),
     archived: z.boolean().optional(),
 });
 export type AgentMemoryRecord = z.infer<typeof AgentMemoryRecordSchema>;
