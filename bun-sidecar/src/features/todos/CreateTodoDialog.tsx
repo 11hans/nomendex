@@ -17,7 +17,9 @@ import {
     DateTimePicker,
     ScheduledDateTimePicker,
     AttachmentPicker,
+    GoalPicker,
 } from "./pickers";
+import type { GoalRecord } from "@/features/goals/goal-types";
 
 interface NewTodo {
     title: string;
@@ -30,6 +32,8 @@ interface NewTodo {
     scheduledEnd?: string;
     priority?: "high" | "medium" | "low" | "none";
     attachments?: Attachment[];
+    /** undefined = inherit from project, [] = no goal, [...] = explicit override */
+    goalRefs?: string[];
 }
 
 interface CreateTodoDialogProps {
@@ -46,6 +50,7 @@ interface CreateTodoDialogProps {
     triggerClassName?: string;
     hideTriggerIcon?: boolean;
     triggerVariant?: React.ComponentProps<typeof Button>["variant"];
+    goals?: GoalRecord[];
 }
 
 export function CreateTodoDialog({
@@ -62,6 +67,7 @@ export function CreateTodoDialog({
     triggerClassName,
     hideTriggerIcon = false,
     triggerVariant = "default",
+    goals = [],
 }: CreateTodoDialogProps) {
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
@@ -248,6 +254,12 @@ export function CreateTodoDialog({
                             <AttachmentPicker
                                 attachments={newTodo.attachments || []}
                                 onChange={(attachments) => onNewTodoChange({ ...newTodo, attachments })}
+                            />
+                            <GoalPicker
+                                mode="multi"
+                                value={newTodo.goalRefs}
+                                onChange={(goalRefs) => onNewTodoChange({ ...newTodo, goalRefs })}
+                                goals={goals}
                             />
                             <div className="flex items-center gap-2">
                                 <ScheduledDateTimePicker

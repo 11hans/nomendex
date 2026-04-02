@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
+import { useGoalsAPI } from "@/hooks/useGoalsAPI";
+import type { GoalRecord } from "@/features/goals/goal-types";
 import { subscribe } from "@/lib/events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,12 +14,10 @@ import { CreateTodoDialog } from "./CreateTodoDialog";
 import { TaskCardEditor } from "./TaskCardEditor";
 import { Todo } from "./todo-types";
 import { useTodoFilterState } from "./useTodoFilterState";
-import { filterAndSortTodos, urgencyComparator } from "./todo-filter-utils";
+import { filterAndSortTodos, isTimeblockTodo, urgencyComparator } from "./todo-filter-utils";
 import { TodoFilterToolbar } from "./TodoFilterToolbar";
 import { BoardConfig, BoardColumn, getDefaultColumns } from "@/features/projects/project-types";
 import { BoardSettingsDialog } from "./BoardSettingsDialog";
-import { syncTaskToCalendar, removeTaskFromCalendar } from "./calendar-bridge";
-import { initCalendarChangeListener } from "./calendar-change-bridge";
 import type { Attachment } from "@/types/attachments";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -55,9 +55,11 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const projectDisplayName = filterProject === "" ? "No Project" : filterProject;
 
     const todosAPI = useTodosAPI();
+    const goalsAPI = useGoalsAPI();
     const [todos, setTodos] = useState<Todo[]>([]);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
+    const [availableGoals, setAvailableGoals] = useState<GoalRecord[]>([]);
     const todoFilter = useTodoFilterState("browser", { defaultSortMode: "urgency" });
     const isManualSort = todoFilter.filterState.sortMode === "manual";
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -85,6 +87,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         priority?: "high" | "medium" | "low" | "none";
         attachments?: Attachment[];
         customColumnId?: string; // Add support for creating in specific column
+        goalRefs?: string[];
     }>({
         title: "",
         description: "",
@@ -97,6 +100,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         priority: undefined,
         attachments: undefined,
         customColumnId: undefined,
+        goalRefs: undefined,
     });
 
     const resetNewTodoDraft = useCallback(() => {
@@ -113,6 +117,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             priority: undefined,
             attachments: undefined,
             customColumnId: undefined,
+            goalRefs: undefined,
         });
     }, [filterProject]);
 
@@ -248,6 +253,18 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         [todosAPI]
     );
 
+    const loadGoals = useMemo(
+        () => async () => {
+            try {
+                const goals = await goalsAPI.listGoals({ status: "active" });
+                setAvailableGoals(goals);
+            } catch {
+                // Goals are optional; silently ignore if unavailable
+            }
+        },
+        [goalsAPI]
+    );
+
     const loadTodos = useMemo(
         () => async () => {
             setLoading(true);
@@ -260,25 +277,22 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
 
                 setTodos(activeTodos);
 
-                // Reload tags and projects after todos change
-                await Promise.all([loadTags(), loadProjects()]);
+                // Reload tags, projects, and goals after todos change
+                await Promise.all([loadTags(), loadProjects(), loadGoals()]);
             } catch (error) {
                 console.error("Failed to load todos:", error);
             } finally {
                 setLoading(false);
             }
         },
-        [todosAPI, setLoading, filterProject, loadTags, loadProjects]
+        [todosAPI, setLoading, filterProject, loadTags, loadProjects, loadGoals]
     );
 
     useEffect(() => {
         loadTodos();
     }, [loadTodos]);
 
-    // Initialize calendar change listener
     useEffect(() => {
-        initCalendarChangeListener(todosAPI);
-
         const handleCalendarSync = () => {
             console.log("Received calendar-sync-update event, reloading todos...");
             loadTodos();
@@ -307,6 +321,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                 priority: newTodo.priority,
                 attachments: newTodo.attachments,
                 customColumnId: newTodo.customColumnId,
+                goalRefs: newTodo.goalRefs,
             });
 
             resetNewTodoDraft();
@@ -315,7 +330,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
 
             if (createdTodo?.id) {
                 setSelectedTodoId(createdTodo.id);
-                syncTaskToCalendar(createdTodo).catch(() => { });
             }
         } catch (error) {
             console.error("Failed to create todo:", error);
@@ -351,13 +365,12 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     attachments: updatedTodo.attachments,
                     customColumnId: updatedTodo.customColumnId,
                     calendarReminderPreset: updatedTodo.calendarReminderPreset,
+                    goalRefs: updatedTodo.goalRefs,
                 },
             });
             setEditDialogOpen(false);
             setTodoToEdit(null);
             await loadTodos();
-            // Sync to calendar (fire-and-forget)
-            syncTaskToCalendar(updatedTodo).catch(() => { });
         } catch (error) {
             console.error("Failed to save todo:", error);
         } finally {
@@ -377,16 +390,11 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                         ? { ...item, calendarReminderPreset: updated.calendarReminderPreset }
                         : item
                 ));
-                const calendarSyncOk = await syncTaskToCalendar(updated);
-                if (calendarSyncOk) {
-                    toast.success(
-                        todo.calendarReminderPreset === "30-15"
-                            ? "Calendar alerts set (30 + 15 min)"
-                            : "Calendar alerts removed"
-                    );
-                } else {
-                    toast("Alert setting saved, but Calendar sync is unavailable");
-                }
+                toast.success(
+                    todo.calendarReminderPreset === "30-15"
+                        ? "Calendar alerts set (30 + 15 min)"
+                        : "Calendar alerts removed"
+                );
             }
         } catch {
             toast.error("Failed to update calendar alerts");
@@ -412,8 +420,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     scheduledEnd: dates.scheduledEnd ?? null,
                 },
             });
-            // Sync to calendar (fire-and-forget)
-            syncTaskToCalendar(updatedTodo).catch(() => { });
         } catch (error) {
             console.error("Failed to update todo date:", error);
             await loadTodos(); // Revert on error
@@ -518,11 +524,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                     ...(newStatus && { status: newStatus }),
                                 },
                             });
-                            // Sync updated status to calendar if status changed
-                            if (newStatus && newStatus !== activeTodo.status) {
-                                const updated = { ...activeTodo, status: newStatus, customColumnId: newColumnId };
-                                syncTaskToCalendar(updated).catch(() => { });
-                            }
                         } catch (error) {
                             console.error("Failed to update todo column:", error);
                             await loadTodos();
@@ -541,9 +542,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                 todoId: activeId,
                                 updates: { status: newStatus },
                             });
-                            // Sync updated status to calendar
-                            const updated = { ...activeTodo, status: newStatus };
-                            syncTaskToCalendar(updated).catch(() => { });
                         } catch (error) {
                             console.error("Failed to update todo status:", error);
                             await loadTodos();
@@ -615,11 +613,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                 },
                             });
                             await todosAPI.reorderTodos({ reorders });
-                            // Sync updated status to calendar if status changed
-                            if (newStatus && newStatus !== activeTodo.status) {
-                                const updated = { ...activeTodo, status: newStatus, customColumnId: overColumnId };
-                                syncTaskToCalendar(updated).catch(() => { });
-                            }
                         } catch (error) {
                             console.error("Failed to move todo:", error);
                             await loadTodos();
@@ -659,9 +652,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                                 updates: { status: targetStatus },
                             });
                             await todosAPI.reorderTodos({ reorders });
-                            // Sync updated status to calendar
-                            const updatedForSync = { ...activeTodo, status: targetStatus };
-                            syncTaskToCalendar(updatedForSync).catch(() => { });
                         } catch (error) {
                             console.error("Failed to move todo:", error);
                             await loadTodos();
@@ -773,12 +763,15 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         return order;
     }, [todosByColumn, displayColumns]);
 
-    const boardCounts = useMemo(() => ({
-        all: todos.length,
-        todo: todos.filter((todo) => todo.status === "todo" || todo.status === "later").length,
-        inProgress: todos.filter((todo) => todo.status === "in_progress").length,
-        done: todos.filter((todo) => todo.status === "done").length,
-    }), [todos]);
+    const boardCounts = useMemo(() => {
+        const actionableTodos = todos.filter((todo) => !isTimeblockTodo(todo));
+        return {
+            all: actionableTodos.length,
+            todo: actionableTodos.filter((todo) => todo.status === "todo" || todo.status === "later").length,
+            inProgress: actionableTodos.filter((todo) => todo.status === "in_progress").length,
+            done: actionableTodos.filter((todo) => todo.status === "done").length,
+        };
+    }, [todos]);
 
     const headerStats = useMemo(() => {
         const stats: Array<{ key: string; label: string; value: number }> = [
@@ -832,8 +825,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
 
         try {
             await todosAPI.deleteTodo({ todoId: todo.id });
-            // Remove from calendar
-            removeTaskFromCalendar(todo.id).catch(() => { });
 
             const truncatedTitle = todo.title.length > 30
                 ? todo.title.slice(0, 30) + "…"
@@ -1678,6 +1669,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                             projectLocked={!!filterProject}
                             availableTags={availableTags}
                             availableProjects={availableProjects}
+                            goals={availableGoals}
                             triggerLabel="+ new"
                             hideTriggerIcon
                             triggerVariant="default"
@@ -1791,7 +1783,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             </div>
 
             {/* Edit Todo Modal */}
-            <TaskCardEditor todo={todoToEdit} open={editDialogOpen} onOpenChange={setEditDialogOpen} onSave={handleSaveTodo} onDelete={deleteTodoWithToast} onToggleCalendarReminder={handleToggleCalendarReminder} saving={editSaving} availableTags={availableTags} availableProjects={availableProjects} />
+            <TaskCardEditor todo={todoToEdit} open={editDialogOpen} onOpenChange={setEditDialogOpen} onSave={handleSaveTodo} onDelete={deleteTodoWithToast} onToggleCalendarReminder={handleToggleCalendarReminder} saving={editSaving} availableTags={availableTags} availableProjects={availableProjects} goals={availableGoals} />
 
             {/* Board Settings Dialog - Show for project views */}
             {filterProject && filterProject !== "" && (

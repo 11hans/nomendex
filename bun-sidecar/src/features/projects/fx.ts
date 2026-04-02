@@ -736,10 +736,14 @@ export async function updateProject(input: {
         color?: string;
         archived?: boolean;
         board?: BoardConfig;
-        goalRef?: string;
+        /** Pass null to explicitly clear the goal link. */
+        goalRef?: string | null;
     };
 }): Promise<ProjectConfig> {
     projectsLogger.info(`Updating project: ${input.projectId}`);
+
+    // Track whether goalRef was explicitly provided (including null → clear).
+    const goalRefExplicitlySet = "goalRef" in input.updates;
 
     const data = await readProjectsFile();
     const index = data.projects.findIndex((project) => project.id === input.projectId);
@@ -762,9 +766,13 @@ export async function updateProject(input: {
         throw new Error(`Project with ID "${input.projectId}" not found`);
     }
 
+    // Build the update payload with goalRef normalized to string | undefined.
+    const { goalRef: rawGoalRef, ...otherUpdates } = input.updates;
+    const normalizedGoalRef: string | undefined = rawGoalRef ?? undefined;
     let updatedProject: ProjectConfig = {
         ...existingProject,
-        ...input.updates,
+        ...otherUpdates,
+        ...(goalRefExplicitlySet ? { goalRef: normalizedGoalRef } : {}),
         updatedAt: new Date().toISOString(),
     };
 
@@ -812,7 +820,7 @@ export async function updateProject(input: {
     // If goalRef changed, recompute resolvedGoalRefs on all OPEN todos in this project.
     // Calling updateTodo with an empty updates object triggers its resolvedGoalRefs
     // recomputation logic, which will pick up the new project goalRef.
-    if (input.updates.goalRef !== undefined && input.updates.goalRef !== existingProject.goalRef) {
+    if (goalRefExplicitlySet && input.updates.goalRef !== existingProject.goalRef) {
         const projectTodos = await getTodos({});
         const openTodosInProject = projectTodos.filter(
             (todo) => todo.project === updatedProject.name

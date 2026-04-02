@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
+import { useGoalsAPI } from "@/hooks/useGoalsAPI";
+import type { GoalRecord } from "@/features/goals/goal-types";
 import { useTheme } from "@/hooks/useTheme";
 import { subscribe } from "@/lib/events";
 import { toast } from "sonner";
@@ -8,10 +10,9 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/componen
 import { CreateTodoDialog } from "./CreateTodoDialog";
 import { TaskCardEditor } from "./TaskCardEditor";
 import { Todo } from "./todo-types";
-import { syncTaskToCalendar, removeTaskFromCalendar } from "./calendar-bridge";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useTodoFilterState } from "./useTodoFilterState";
-import { filterAndSortTodos, fuzzyMatch } from "./todo-filter-utils";
+import { filterAndSortTodos, fuzzyMatch, isTimeblockTodo } from "./todo-filter-utils";
 import { TodoFilterToolbar } from "./TodoFilterToolbar";
 import type { TodoStatusBucket } from "./todo-filter-types";
 import {
@@ -219,9 +220,11 @@ export function InboxListView() {
     const { currentTheme } = useTheme();
 
     const todosAPI = useTodosAPI();
+    const goalsAPI = useGoalsAPI();
     const [todos, setTodos] = useState<Todo[]>([]);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
+    const [availableGoals, setAvailableGoals] = useState<GoalRecord[]>([]);
     const [projectGroups, setProjectGroups] = useState<string[]>([INBOX_PROJECT]);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -251,6 +254,7 @@ export function InboxListView() {
         dueDate?: string;
         priority?: "high" | "medium" | "low" | "none";
         attachments?: Todo["attachments"];
+        goalRefs?: string[];
     }>({
         title: "",
         description: "",
@@ -262,6 +266,7 @@ export function InboxListView() {
         dueDate: undefined,
         priority: undefined,
         attachments: undefined,
+        goalRefs: undefined,
     });
 
     const resetNewTodoDraft = useCallback(() => {
@@ -276,6 +281,7 @@ export function InboxListView() {
             dueDate: undefined,
             priority: undefined,
             attachments: undefined,
+            goalRefs: undefined,
         });
     }, []);
 
@@ -297,12 +303,13 @@ export function InboxListView() {
     const loadTodos = useCallback(async () => {
         setLoading(true);
         try {
-            const [activeTodos, archivedTodos, tags, projectsList, todoProjects] = await Promise.all([
+            const [activeTodos, archivedTodos, tags, projectsList, todoProjects, goals] = await Promise.all([
                 todosAPI.getTodos({}),
                 todosAPI.getArchivedTodos({}),
                 todosAPI.getTags(),
                 todosAPI.getProjectsList().catch(() => []),
                 todosAPI.getProjects().catch(() => []),
+                goalsAPI.listGoals({ status: "active" }).catch(() => []),
             ]);
 
             const allTodos = [
@@ -331,15 +338,27 @@ export function InboxListView() {
             setAvailableTags(tags);
             setAvailableProjects(mergedProjects);
             setProjectGroups(mergedProjects);
+            setAvailableGoals(goals);
         } catch (error) {
             console.error("Failed to load todos:", error);
         } finally {
             setLoading(false);
         }
-    }, [todosAPI, setLoading]);
+    }, [todosAPI, goalsAPI, setLoading]);
 
     useEffect(() => {
         loadTodos();
+    }, [loadTodos]);
+
+    useEffect(() => {
+        const handleCalendarSync = () => {
+            void loadTodos();
+        };
+
+        window.addEventListener("calendar-sync-update", handleCalendarSync);
+        return () => {
+            window.removeEventListener("calendar-sync-update", handleCalendarSync);
+        };
     }, [loadTodos]);
 
     useEffect(() => {
@@ -369,13 +388,13 @@ export function InboxListView() {
                     duration: updatedTodo.duration,
                     attachments: updatedTodo.attachments,
                     calendarReminderPreset: updatedTodo.calendarReminderPreset,
+                    goalRefs: updatedTodo.goalRefs,
                 },
             });
             setEditDialogOpen(false);
             setTodoToEdit(null);
             setSelectedTodoId(updatedTodo.id);
             await loadTodos();
-            syncTaskToCalendar(updatedTodo).catch(() => { });
         } catch (error) {
             console.error("Failed to save todo:", error);
             toast.error("Failed to save changes");
@@ -396,16 +415,11 @@ export function InboxListView() {
                         ? { ...item, calendarReminderPreset: updated.calendarReminderPreset }
                         : item
                 ));
-                const calendarSyncOk = await syncTaskToCalendar(updated);
-                if (calendarSyncOk) {
-                    toast.success(
-                        todo.calendarReminderPreset === "30-15"
-                            ? "Calendar alerts set (30 + 15 min)"
-                            : "Calendar alerts removed"
-                    );
-                } else {
-                    toast("Alert setting saved, but Calendar sync is unavailable");
-                }
+                toast.success(
+                    todo.calendarReminderPreset === "30-15"
+                        ? "Calendar alerts set (30 + 15 min)"
+                        : "Calendar alerts removed"
+                );
             }
         } catch {
             toast.error("Failed to update calendar alerts");
@@ -417,7 +431,7 @@ export function InboxListView() {
 
         setLoading(true);
         try {
-            const createdTodo = await todosAPI.createTodo({
+            await todosAPI.createTodo({
                 title: newTodo.title.trim(),
                 description: newTodo.description,
                 project: newTodo.project.trim() || undefined,
@@ -428,15 +442,12 @@ export function InboxListView() {
                 dueDate: newTodo.dueDate,
                 priority: newTodo.priority,
                 attachments: newTodo.attachments,
+                goalRefs: newTodo.goalRefs,
             });
 
             resetNewTodoDraft();
             setCreateDialogOpen(false);
             await loadTodos();
-
-            if (createdTodo?.id) {
-                syncTaskToCalendar(createdTodo).catch(() => { });
-            }
         } catch (error) {
             console.error("Failed to create todo:", error);
         } finally {
@@ -449,7 +460,6 @@ export function InboxListView() {
 
         try {
             await todosAPI.deleteTodo({ todoId: todo.id });
-            removeTaskFromCalendar(todo.id).catch(() => { });
 
             toast("Deleted task", {
                 action: {
@@ -493,7 +503,6 @@ export function InboxListView() {
         try {
             if (nextArchived) {
                 await todosAPI.archiveTodo({ todoId: todo.id });
-                removeTaskFromCalendar(todo.id).catch(() => { });
                 toast("Archived task", {
                     action: {
                         label: "Undo",
@@ -510,7 +519,6 @@ export function InboxListView() {
                 });
             } else {
                 await todosAPI.unarchiveTodo({ todoId: todo.id });
-                syncTaskToCalendar(todo).catch(() => { });
                 toast("Restored task", {
                     action: {
                         label: "Undo",
@@ -559,8 +567,6 @@ export function InboxListView() {
                 todoId: todo.id,
                 updates: { project: targetProject },
             });
-            const updatedTodo: Todo = { ...todo, project: targetProject, updatedAt: now };
-            syncTaskToCalendar(updatedTodo).catch(() => { });
             toast.success(`Moved to ${targetProject}`);
         } catch (error) {
             console.error("Failed to move task to project:", error);
@@ -618,7 +624,7 @@ export function InboxListView() {
     const groupCounts = useMemo(() => {
         const counts: Record<string, number> = { [ALL_TASKS]: 0 };
         for (const todo of todos) {
-            if (todo.archived || todo.status === "done") continue;
+            if (todo.archived || todo.status === "done" || isTimeblockTodo(todo)) continue;
             counts[ALL_TASKS] = (counts[ALL_TASKS] || 0) + 1;
             const group = getGroupName(todo);
             counts[group] = (counts[group] || 0) + 1;
@@ -638,11 +644,12 @@ export function InboxListView() {
                 || (todo.tags?.some((tag) => fuzzyMatch(query, tag)) ?? false)
             );
         }
+        const scopedWithoutTimeblocks = scoped.filter((todo) => !isTimeblockTodo(todo));
         return {
-            all: scoped.length,
-            active: scoped.filter((todo) => getStatusBucketForTodo(todo) === "active").length,
-            completed: scoped.filter((todo) => getStatusBucketForTodo(todo) === "completed").length,
-            archived: scoped.filter((todo) => getStatusBucketForTodo(todo) === "archived").length,
+            all: scopedWithoutTimeblocks.length,
+            active: scopedWithoutTimeblocks.filter((todo) => getStatusBucketForTodo(todo) === "active").length,
+            completed: scopedWithoutTimeblocks.filter((todo) => getStatusBucketForTodo(todo) === "completed").length,
+            archived: scopedWithoutTimeblocks.filter((todo) => getStatusBucketForTodo(todo) === "archived").length,
         };
     }, [groupScopedTodos, todoFilter.filterState.searchQuery]);
 
@@ -790,6 +797,7 @@ export function InboxListView() {
                                         projectLocked={isProjectLocked}
                                         availableTags={availableTags}
                                         availableProjects={availableProjects}
+                                        goals={availableGoals}
                                         triggerLabel="+ new"
                                         hideTriggerIcon
                                         triggerVariant="default"
@@ -847,6 +855,7 @@ export function InboxListView() {
                 saving={editSaving}
                 availableTags={availableTags}
                 availableProjects={availableProjects}
+                goals={availableGoals}
             />
         </div>
     );

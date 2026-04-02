@@ -13,11 +13,22 @@ import { BoardConfigSchema } from "./board-types";
 // Export the commands function for use in CommandMenu
 export { getTodosCommands } from "./commands";
 
+export const ScheduledOverlapSchema = z.object({
+    start: z.string(),
+    end: z.string(),
+});
+
+export const GetTodosInputSchema = z.object({
+    project: z.string().optional(),
+    tagsAll: z.array(z.string()).optional(),
+    scheduledOverlap: ScheduledOverlapSchema.optional(),
+});
+
+export type GetTodosInput = z.infer<typeof GetTodosInputSchema>;
+
 export const functionStubs = {
     getTodos: {
-        input: z.object({
-            project: z.string().optional(),
-        }),
+        input: GetTodosInputSchema,
         output: z.array(TodoSchema),
     },
     getProjects: {
@@ -43,6 +54,7 @@ export const functionStubs = {
             duration: z.number().optional(),
             attachments: z.array(AttachmentSchema).optional(),
             customColumnId: z.string().optional(),
+            goalRefs: z.array(z.string()).optional(),
         }),
         output: TodoSchema,
     },
@@ -65,6 +77,7 @@ export const functionStubs = {
                 duration: z.number().nullable().optional(),
                 attachments: z.array(AttachmentSchema).optional(),
                 customColumnId: z.string().optional(),
+                goalRefs: z.array(z.string()).optional(),
             }),
         }),
         output: TodoSchema,

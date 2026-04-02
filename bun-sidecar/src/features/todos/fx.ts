@@ -1,5 +1,5 @@
 import { TypedPluginWithFunctions } from "@/types/Plugin";
-import { functionStubs, TodosPluginBase } from "./index";
+import { functionStubs, GetTodosInputSchema, TodosPluginBase } from "./index";
 import { FunctionsFromStubs } from "@/types/Functions";
 import { createServiceLogger } from "@/lib/logger";
 import { Todo } from "./todo-types";
@@ -9,6 +9,8 @@ import { getNomendexPath, getTodosPath, hasActiveWorkspace } from "@/storage/roo
 import type { Attachment } from "@/types/attachments";
 import { BoardConfig } from "./board-types";
 import { mkdir } from "node:fs/promises";
+import { ensureTimeblockingConfig } from "@/features/timeblocking/config";
+import { broadcastTodoEvent } from "@/services/todo-events";
 
 // Create logger for todos plugin
 const todosLogger = createServiceLogger("TODOS");
@@ -17,6 +19,7 @@ const todosLogger = createServiceLogger("TODOS");
 let todosDb: FileDatabase<Todo> | null = null;
 // Lazy-initialized FileDatabase for board configs
 let boardConfigDb: FileDatabase<BoardConfig> | null = null;
+let lastTimeblockHousekeepingDay: string | null = null;
 
 function getBoardConfigPath(): string {
     return path.join(getTodosPath(), "..", "board-configs");
@@ -49,6 +52,8 @@ export async function initializeTodosService(): Promise<void> {
     await runTodosLegacyDateMigrationIfNeeded();
     // One-off migration: rename scheduledStartAt/scheduledEndAt -> scheduledStart/scheduledEnd.
     await runTodosScheduleFieldRenameMigrationIfNeeded();
+    await ensureTimeblockingConfig();
+    await runTimeblockHousekeepingIfNeeded();
     todosLogger.info("Todos service initialized");
 }
 
@@ -185,6 +190,120 @@ function deriveDurationFromSchedule(scheduledStart?: string, scheduledEnd?: stri
 
     const diffMinutes = Math.round((endDate.getTime() - startDate.getTime()) / 60000);
     return diffMinutes > 0 ? diffMinutes : undefined;
+}
+
+export function isTimeblockTags(tags?: string[]): boolean {
+    return tags?.includes("timeblock") ?? false;
+}
+
+function startOfLocalDay(value: Date): Date {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 0, 0, 0, 0);
+}
+
+function formatLocalDayKey(value: Date): string {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+}
+
+export function getScheduleInterval(todo: Pick<Todo, "scheduledStart" | "scheduledEnd">): {
+    start: Date;
+    end: Date;
+} | null {
+    const startValue = todo.scheduledStart ?? todo.scheduledEnd;
+    const endValue = todo.scheduledEnd ?? todo.scheduledStart;
+    if (!startValue || !endValue) {
+        return null;
+    }
+
+    const start = parseLocalScheduleDate(startValue);
+    const end = parseLocalScheduleDate(endValue);
+    if (!start || !end) {
+        return null;
+    }
+
+    return start.getTime() <= end.getTime()
+        ? { start, end }
+        : { start: end, end: start };
+}
+
+export function intervalsOverlap(a: { start: Date; end: Date }, b: { start: Date; end: Date }): boolean {
+    return a.start.getTime() <= b.end.getTime() && b.start.getTime() <= a.end.getTime();
+}
+
+export function matchesScheduledOverlap(
+    todo: Pick<Todo, "scheduledStart" | "scheduledEnd">,
+    overlap: { start: string; end: string },
+): boolean {
+    const overlapStart = parseLocalScheduleDate(overlap.start);
+    const overlapEnd = parseLocalScheduleDate(overlap.end);
+    if (!overlapStart || !overlapEnd) {
+        throw new Error("Invalid scheduledOverlap range");
+    }
+
+    const queryInterval = overlapStart.getTime() <= overlapEnd.getTime()
+        ? { start: overlapStart, end: overlapEnd }
+        : { start: overlapEnd, end: overlapStart };
+    const interval = getScheduleInterval(todo);
+    return interval ? intervalsOverlap(interval, queryInterval) : false;
+}
+
+export function shouldRejectTimeblockCompletionChange(input: {
+    currentTags?: string[];
+    nextTags?: string[];
+    status?: Todo["status"];
+    completedAtProvided: boolean;
+}): boolean {
+    const effectiveTags = input.nextTags ?? input.currentTags;
+    return isTimeblockTags(effectiveTags)
+        && (input.status === "done" || input.completedAtProvided);
+}
+
+export function getExpiredTimeblockIds(
+    todos: readonly Pick<Todo, "id" | "archived" | "tags" | "scheduledStart" | "scheduledEnd">[],
+    now: Date,
+): string[] {
+    const todayStart = startOfLocalDay(now).getTime();
+    return todos
+        .filter((todo) => !todo.archived && isTimeblockTags(todo.tags))
+        .flatMap((todo) => {
+            const interval = getScheduleInterval(todo);
+            if (!interval) return [];
+            return interval.end.getTime() < todayStart ? [todo.id] : [];
+        });
+}
+
+export async function runTimeblockHousekeepingIfNeeded(): Promise<void> {
+    const now = new Date();
+    const todayKey = formatLocalDayKey(now);
+    if (lastTimeblockHousekeepingDay === todayKey) {
+        return;
+    }
+
+    const todos = await getDb().findAll();
+    const archivedAt = now.toISOString();
+    const expiredIds = new Set(getExpiredTimeblockIds(todos, now));
+    const archivedTodos = todos
+        .filter((todo) => expiredIds.has(todo.id))
+        .map((todo) => ({
+            ...todo,
+            archived: true,
+            updatedAt: archivedAt,
+        }));
+
+    if (archivedTodos.length > 0) {
+        await getDb().updateMany(archivedTodos.map((todo) => ({
+            id: todo.id,
+            updates: {
+                archived: true,
+                updatedAt: archivedAt,
+            } satisfies Partial<Todo>,
+        })));
+        for (const todo of archivedTodos) {
+            broadcastTodoEvent({ type: "upsert", todo });
+        }
+        todosLogger.info(`Auto-archived ${archivedTodos.length} expired timeblocks`);
+    }
+
+    lastTimeblockHousekeepingDay = todayKey;
 }
 
 function resolveLegacyScheduleFields(startValue: unknown, dueValue: unknown): {
@@ -362,10 +481,13 @@ async function getProjectGoalRef(projectName: string | undefined): Promise<strin
     }
 }
 
-async function getTodos(input: { project?: string }) {
-    todosLogger.info(`Getting todos${input.project != null ? ` for project: ${input.project || 'No Project'}` : ''}`);
+async function getTodos(rawInput: unknown) {
+    const input = GetTodosInputSchema.parse(rawInput ?? {});
+    todosLogger.info(`Getting todos${input.project != null ? ` for project: ${input.project || "No Project"}` : ""}`);
 
     try {
+        await runTimeblockHousekeepingIfNeeded();
+
         const todos = await getDb().findAll();
 
         let activeTodos = todos.filter(t => !t.archived);
@@ -379,6 +501,14 @@ async function getTodos(input: { project?: string }) {
                 // Filter for specific project
                 activeTodos = activeTodos.filter(t => t.project === input.project);
             }
+        }
+
+        if (input.tagsAll && input.tagsAll.length > 0) {
+            activeTodos = activeTodos.filter((todo) => input.tagsAll!.every((tag) => todo.tags?.includes(tag)));
+        }
+
+        if (input.scheduledOverlap) {
+            activeTodos = activeTodos.filter((todo) => matchesScheduledOverlap(todo, input.scheduledOverlap!));
         }
 
         // Sort todos by order (nulls last)
@@ -443,9 +573,18 @@ async function createTodo(input: {
             }
         }
 
+        const requestedStatus = input.status || "todo";
+        if (shouldRejectTimeblockCompletionChange({
+            nextTags: input.tags,
+            status: requestedStatus,
+            completedAtProvided: false,
+        })) {
+            throw new Error("Timeblocks cannot be created as completed while they still carry the timeblock tag.");
+        }
+
         // Get existing todos to determine next order
         const existingTodos = await getDb().findAll();
-        const status = input.status || "todo";
+        const status = requestedStatus;
 
         // Find max order for this status
         const todosInStatus = existingTodos.filter(t => t.status === status && !t.archived);
@@ -558,10 +697,38 @@ async function updateTodo(input: {
             throw new Error(`Todo with ID ${input.todoId} not found`);
         }
 
+        // Guard: reject goalRefs mutation on a todo that is already closed and stays closed.
+        // Closed todos have a frozen resolvedGoalRefs snapshot; mutating goalRefs would cause drift.
+        const wouldBeClosed = (input.updates.status ?? currentTodo.status) === "done"
+            || (input.updates.archived ?? currentTodo.archived) === true;
+        const isAlreadyClosed = currentTodo.status === "done" || currentTodo.archived === true;
+        if (
+            hasOwnKey(input.updates, "goalRefs") &&
+            isAlreadyClosed &&
+            wouldBeClosed
+        ) {
+            throw Object.assign(
+                new Error("Goal link cannot be changed on a completed or archived todo. The goal link is frozen for historical reporting."),
+                { statusCode: 409 }
+            );
+        }
+
         let updates = {
             ...input.updates,
             updatedAt: new Date().toISOString(),
         } as Partial<Todo>;
+
+        const resultingTags = hasOwnKey(input.updates, "tags")
+            ? (input.updates.tags ?? undefined)
+            : currentTodo.tags;
+        if (shouldRejectTimeblockCompletionChange({
+            currentTags: currentTodo.tags,
+            nextTags: resultingTags,
+            status: input.updates.status,
+            completedAtProvided: hasOwnKey(input.updates, "completedAt"),
+        })) {
+            throw new Error("Timeblocks cannot be marked completed while they still carry the timeblock tag.");
+        }
 
         if (hasOwnKey(input.updates, "scheduledStart")) {
             updates.scheduledStart = normalizeDateField(input.updates.scheduledStart);
@@ -685,10 +852,16 @@ async function deleteTodo(input: { todoId: string }) {
     }
 }
 
+async function restoreTodoSnapshot(todo: Todo): Promise<Todo> {
+    await getDb().create(todo);
+    return todo;
+}
+
 async function getProjects() {
     todosLogger.info(`Getting unique projects`);
 
     try {
+        await runTimeblockHousekeepingIfNeeded();
         const todos = await getDb().findAll();
         const activeTodos = todos.filter(t => !t.archived);
 
@@ -753,46 +926,14 @@ async function reorderTodos(input: {
 
 async function archiveTodo(input: { todoId: string }) {
     todosLogger.info(`Archiving todo: ${input.todoId}`);
-
-    try {
-        const updated = await getDb().update(input.todoId, {
-            archived: true,
-            updatedAt: new Date().toISOString(),
-        });
-
-        if (!updated) {
-            todosLogger.warn(`Todo not found for archiving: ${input.todoId}`);
-            throw new Error(`Todo with ID ${input.todoId} not found`);
-        }
-
-        todosLogger.info(`Archived todo: ${input.todoId}`);
-        return updated;
-    } catch (error) {
-        todosLogger.error(`Failed to archive todo ${input.todoId}`, { error });
-        throw error;
-    }
+    // Route through updateTodo so resolvedGoalRefs freeze/recompute logic stays consistent.
+    return updateTodo({ todoId: input.todoId, updates: { archived: true } });
 }
 
 async function unarchiveTodo(input: { todoId: string }) {
     todosLogger.info(`Unarchiving todo: ${input.todoId}`);
-
-    try {
-        const updated = await getDb().update(input.todoId, {
-            archived: false,
-            updatedAt: new Date().toISOString(),
-        });
-
-        if (!updated) {
-            todosLogger.warn(`Todo not found for unarchiving: ${input.todoId}`);
-            throw new Error(`Todo with ID ${input.todoId} not found`);
-        }
-
-        todosLogger.info(`Unarchived todo: ${input.todoId}`);
-        return updated;
-    } catch (error) {
-        todosLogger.error(`Failed to unarchive todo ${input.todoId}`, { error });
-        throw error;
-    }
+    // Route through updateTodo so resolvedGoalRefs recompute logic stays consistent.
+    return updateTodo({ todoId: input.todoId, updates: { archived: false } });
 }
 
 /**
@@ -907,6 +1048,7 @@ async function getTags() {
     todosLogger.info(`Getting unique tags`);
 
     try {
+        await runTimeblockHousekeepingIfNeeded();
         const todos = await getDb().findAll();
         const activeTodos = todos.filter(t => !t.archived);
 
@@ -1061,5 +1203,5 @@ export const TodosPluginWithFunctions = TodosPlugin;
 export {
     getTodos, createTodo, updateTodo, deleteTodo, getTodoById,
     getProjects, reorderTodos, archiveTodo, unarchiveTodo, getArchivedTodos, getTags,
-    getBoardConfig, saveBoardConfig, deleteColumn
+    getBoardConfig, saveBoardConfig, deleteColumn, restoreTodoSnapshot
 };

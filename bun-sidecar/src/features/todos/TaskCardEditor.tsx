@@ -18,7 +18,9 @@ import {
     DateTimePicker,
     ScheduledDateTimePicker,
     AttachmentPicker,
+    GoalPicker,
 } from "./pickers";
+import type { GoalRecord } from "@/features/goals/goal-types";
 
 interface TaskCardEditorProps {
     todo: Todo | null;
@@ -30,13 +32,14 @@ interface TaskCardEditorProps {
     saving: boolean;
     availableTags: string[];
     availableProjects: string[];
+    goals?: GoalRecord[];
 }
 
 /**
  * TaskCardEditor is the primary popup/dialog component for editing todo details.
  * It is triggered when a user clicks on a todo in the Kanban board or Inbox view.
  */
-export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onToggleCalendarReminder, saving, availableTags, availableProjects }: TaskCardEditorProps) {
+export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onToggleCalendarReminder, saving, availableTags, availableProjects, goals = [] }: TaskCardEditorProps) {
     const [editedTodo, setEditedTodo] = useState<Todo | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -358,6 +361,19 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                                 attachments={editedTodo.attachments || []}
                                 onChange={(attachments) => setEditedTodo({ ...editedTodo, attachments })}
                             />
+                            {(() => {
+                                const isClosed = editedTodo.status === "done" || editedTodo.archived === true;
+                                return (
+                                    <GoalPicker
+                                        mode="multi"
+                                        value={editedTodo.goalRefs}
+                                        onChange={(goalRefs) => setEditedTodo({ ...editedTodo, goalRefs })}
+                                        goals={goals}
+                                        disabled={isClosed}
+                                        disabledReason="Goal link is frozen after completion/archive for historical reporting."
+                                    />
+                                );
+                            })()}
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     <Button

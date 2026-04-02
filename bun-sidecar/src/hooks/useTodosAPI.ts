@@ -1,6 +1,9 @@
 import { Todo } from "@/features/todos/todo-types";
 import type { Attachment } from "@/types/attachments";
 import type { BoardConfig, ProjectConfig } from "@/features/projects/project-types";
+import type { GetTodosInput } from "@/features/todos";
+import type { DayConfig } from "@/features/timeblocking/types";
+import type { TimeblockingApplyResult, TimeblockingPreviewResult } from "@/features/timeblocking/service";
 
 interface CreateTodoInput {
     title: string;
@@ -16,6 +19,7 @@ interface CreateTodoInput {
     attachments?: Attachment[];
     customColumnId?: string;
     calendarReminderPreset?: "30-15" | "none";
+    goalRefs?: string[];
 }
 
 interface UpdateTodoInput {
@@ -35,6 +39,7 @@ interface UpdateTodoInput {
         attachments?: Attachment[];
         customColumnId?: string;
         calendarReminderPreset?: "30-15" | "none";
+        goalRefs?: string[];
     };
 }
 
@@ -45,7 +50,10 @@ interface ReorderInput {
 async function fetchAPI<T>(endpoint: string, body: object = {}): Promise<T> {
     const response = await fetch(`/api/todos/${endpoint}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            "X-Nomendex-Client": "ui",
+        },
         // Convert undefined to null to support explicit field clearing
         // (JSON.stringify drops undefined, preventing backend from receiving cleared fields)
         body: JSON.stringify(body, (key, value) => value === undefined ? null : value),
@@ -70,7 +78,7 @@ async function fetchProjectsAPI<T>(endpoint: string, body: object = {}): Promise
 
 // Standalone API object for use outside React components
 export const todosAPI = {
-    getTodos: (args: { project?: string } = {}) => fetchAPI<Todo[]>("list", args),
+    getTodos: (args: GetTodosInput = {}) => fetchAPI<Todo[]>("list", args),
     getTodoById: (args: { todoId: string }) => fetchAPI<Todo>("get", args),
     createTodo: (args: CreateTodoInput) => fetchAPI<Todo>("create", args),
     updateTodo: (args: UpdateTodoInput) => fetchAPI<Todo>("update", args),
@@ -81,6 +89,10 @@ export const todosAPI = {
     unarchiveTodo: (args: { todoId: string }) => fetchAPI<Todo>("unarchive", args),
     getArchivedTodos: (args: { project?: string } = {}) => fetchAPI<Todo[]>("archived", args),
     getTags: () => fetchAPI<string[]>("tags"),
+    previewTimeblocking: (args: { weekStart: string; days: DayConfig[] }) =>
+        fetchAPI<TimeblockingPreviewResult>("timeblocking/preview", args),
+    applyTimeblocking: (args: { weekStart: string; days: DayConfig[] }) =>
+        fetchAPI<TimeblockingApplyResult>("timeblocking/apply", args),
     // Board config - now uses projects API
     getBoardConfig: (args: { projectId?: string; projectName?: string }) => fetchProjectsAPI<BoardConfig | null>("board/get", args),
     saveBoardConfig: (args: { projectId?: string; projectName?: string; board: BoardConfig }) => fetchProjectsAPI<ProjectConfig>("board/save", args),

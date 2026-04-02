@@ -13,6 +13,7 @@ interface UpdateProjectInput {
         description?: string;
         color?: string;
         archived?: boolean;
+        goalRef?: string | null;
     };
 }
 

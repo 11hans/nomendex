@@ -18,12 +18,17 @@ import {
 } from "lucide-react";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
+import { useProjectsAPI } from "@/hooks/useProjectsAPI";
+import { useGoalsAPI } from "@/hooks/useGoalsAPI";
 import { useTheme } from "@/hooks/useTheme";
+import { GoalPicker } from "@/features/todos/pickers/GoalPicker";
+import type { GoalRecord } from "@/features/goals/goal-types";
+import type { ProjectConfig } from "@/features/projects/project-types";
 import { todosPluginSerial } from "@/features/todos";
 import { notesPluginSerial } from "@/features/notes";
 import { TaskCardEditor } from "@/features/todos/TaskCardEditor";
-import { syncTaskToCalendar, removeTaskFromCalendar } from "@/features/todos/calendar-bridge";
 import type { Todo } from "@/features/todos/todo-types";
+import { isTimeblockTodo } from "@/features/todos/todo-filter-utils";
 import type { Note } from "@/features/notes";
 import { projectsPluginSerial, type ProjectDetailViewProps } from "./index";
 import { toast } from "sonner";
@@ -91,6 +96,8 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
     const placement = getViewSelfPlacement(tabId);
     const todosAPI = useTodosAPI();
     const notesAPI = useNotesAPI();
+    const projectsAPI = useProjectsAPI();
+    const goalsAPI = useGoalsAPI();
 
     const [todos, setTodos] = useState<Todo[]>([]);
     const [notes, setNotes] = useState<Note[]>([]);
@@ -100,6 +107,9 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
     const [editSaving, setEditSaving] = useState(false);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
+    const [projectConfig, setProjectConfig] = useState<ProjectConfig | null>(null);
+    const [availableGoals, setAvailableGoals] = useState<GoalRecord[]>([]);
+    const [goalSaving, setGoalSaving] = useState(false);
     const lastTabNameRef = useRef<string | null>(null);
 
     useEffect(() => {
@@ -118,11 +128,13 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
             setLoading(true);
             setError(null);
 
-            const [todosResult, notesResult, tagsResult, projectsResult] = await Promise.all([
+            const [todosResult, notesResult, tagsResult, projectsResult, projectConfigResult, goalsResult] = await Promise.all([
                 todosAPI.getTodos({ project: projectName }),
                 notesAPI.getNotesByProject({ project: projectName }),
                 todosAPI.getTags(),
                 todosAPI.getProjects(),
+                projectsAPI.getProjectByName({ name: projectName }).catch(() => null),
+                goalsAPI.listGoals({ status: "active" }).catch(() => []),
             ]);
 
             notesResult.sort((a, b) => a.fileName.localeCompare(b.fileName));
@@ -130,16 +142,29 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
             setNotes(notesResult);
             setAvailableTags(tagsResult);
             setAvailableProjects(projectsResult);
+            setProjectConfig(projectConfigResult);
+            setAvailableGoals(goalsResult);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : "Failed to fetch project data";
             setError(errorMessage);
         } finally {
             setLoading(false);
         }
-    }, [projectName, todosAPI, notesAPI, setLoading, setError]);
+    }, [projectName, todosAPI, notesAPI, projectsAPI, goalsAPI, setLoading, setError]);
 
     useEffect(() => {
         loadProjectData();
+    }, [loadProjectData]);
+
+    useEffect(() => {
+        const handleCalendarSync = () => {
+            void loadProjectData();
+        };
+
+        window.addEventListener("calendar-sync-update", handleCalendarSync);
+        return () => {
+            window.removeEventListener("calendar-sync-update", handleCalendarSync);
+        };
     }, [loadProjectData]);
 
     const openInPlacement = useCallback(
@@ -210,12 +235,12 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                         attachments: updatedTodo.attachments,
                         customColumnId: updatedTodo.customColumnId,
                         calendarReminderPreset: updatedTodo.calendarReminderPreset,
+                        goalRefs: updatedTodo.goalRefs,
                     },
                 });
                 setEditDialogOpen(false);
                 setTodoToEdit(null);
                 setTodos(await todosAPI.getTodos({ project: projectName }));
-                syncTaskToCalendar(updatedTodo).catch(() => { });
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : "Failed to save todo";
                 setError(errorMessage);
@@ -226,12 +251,36 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
         [todosAPI, projectName, setError]
     );
 
+    const handleGoalChange = useCallback(
+        async (goalId: string | undefined) => {
+            if (!projectConfig) return;
+            setGoalSaving(true);
+            try {
+                const updated = await projectsAPI.updateProject({
+                    projectId: projectConfig.id,
+                    updates: { goalRef: goalId ?? null },
+                });
+                setProjectConfig(updated);
+                const openTodoCount = todos.filter(t => !t.archived && t.status !== "done").length;
+                if (openTodoCount > 0) {
+                    toast.success(`Goal updated. Will recompute linkage for ${openTodoCount} open todo${openTodoCount !== 1 ? "s" : ""} in this project.`);
+                }
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : "Failed to update goal";
+                setError(msg);
+                toast.error(msg);
+            } finally {
+                setGoalSaving(false);
+            }
+        },
+        [projectConfig, projectsAPI, todos, setError]
+    );
+
     const handleDeleteTodo = useCallback(
         async (todo: Todo) => {
             try {
                 await todosAPI.deleteTodo({ todoId: todo.id });
                 setTodos((prev) => prev.filter((t) => t.id !== todo.id));
-                removeTaskFromCalendar(todo.id).catch(() => { });
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : "Failed to delete todo";
                 setError(errorMessage);
@@ -254,17 +303,11 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                         ? { ...item, calendarReminderPreset: updated.calendarReminderPreset }
                         : item
                 ));
-
-                const calendarSyncOk = await syncTaskToCalendar(updated);
-                if (calendarSyncOk) {
-                    toast.success(
-                        todo.calendarReminderPreset === "30-15"
-                            ? "Calendar alerts set (30 + 15 min)"
-                            : "Calendar alerts removed"
-                    );
-                } else {
-                    toast("Alert setting saved, but Calendar sync is unavailable");
-                }
+                toast.success(
+                    todo.calendarReminderPreset === "30-15"
+                        ? "Calendar alerts set (30 + 15 min)"
+                        : "Calendar alerts removed"
+                );
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : "Failed to update calendar alerts";
                 setError(errorMessage);
@@ -274,7 +317,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
         [todosAPI, projectName, setError]
     );
 
-    const sortedTodos = useMemo(() => sortTodosByUpdatedDesc(todos), [todos]);
+    const sortedTodos = useMemo(() => sortTodosByUpdatedDesc(todos.filter((todo) => !isTimeblockTodo(todo))), [todos]);
     const inProgressTodos = useMemo(
         () => sortedTodos.filter((t) => t.status === "in_progress"),
         [sortedTodos]
@@ -292,8 +335,8 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
         [sortedTodos]
     );
 
-    const totalItems = todos.length + notes.length;
-    const completionRate = todos.length > 0 ? Math.round((doneTodos.length / todos.length) * 100) : 0;
+    const totalItems = sortedTodos.length + notes.length;
+    const completionRate = sortedTodos.length > 0 ? Math.round((doneTodos.length / sortedTodos.length) * 100) : 0;
     const displayedNotes = showAllNotes ? notes : notes.slice(0, INITIAL_NOTES_LIMIT);
     const hasMoreNotes = notes.length > INITIAL_NOTES_LIMIT;
 
@@ -465,6 +508,13 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                     >
                         {completionRate}% done
                     </span>
+                    <GoalPicker
+                        mode="single"
+                        value={projectConfig?.goalRef}
+                        onChange={handleGoalChange}
+                        goals={availableGoals}
+                        disabled={goalSaving || !projectConfig}
+                    />
                 </div>
             </div>
 
@@ -596,6 +646,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                 saving={editSaving}
                 availableTags={availableTags}
                 availableProjects={availableProjects}
+                goals={availableGoals}
             />
         </div>
     );
