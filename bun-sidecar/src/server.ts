@@ -9,6 +9,7 @@ import { gitInstalledRoute, gitInitRoute, gitStatusRoute, gitSetupRemoteRoute, g
 // Feature-specific routes (replacing plugin registry)
 import { todosRoutes } from "./server-routes/todos-routes";
 import { notesRoutes } from "./server-routes/notes-routes";
+import { goalsRoutes } from "./server-routes/goals-routes";
 import { chatRoutes } from "./server-routes/chat-routes";
 import { agentsRoutes } from "./server-routes/agents-routes";
 import { secretsRoutes } from "./server-routes/secrets-routes";
@@ -112,6 +113,7 @@ const server = serve<WSData>({
         // Feature-specific routes
         ...todosRoutes,
         ...notesRoutes,
+        ...goalsRoutes,
         ...chatRoutes,
         ...agentsRoutes,
         ...secretsRoutes,

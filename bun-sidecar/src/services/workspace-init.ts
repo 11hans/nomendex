@@ -3,6 +3,7 @@ import { initializePaths, hasActiveWorkspace, getActiveWorkspacePath } from "@/s
 import { initializeTodosService } from "@/features/todos/fx";
 import { initializeNotesService } from "@/features/notes/fx";
 import { initializeProjectsService } from "@/features/projects/fx";
+import { initializeGoalsService } from "@/features/goals/fx";
 import { initializeAgentMemoryService, disposeAgentMemoryService } from "@/features/agent-memory/fx";
 import { secrets } from "@/lib/secrets";
 import { onStartup } from "@/onStartup";
@@ -74,6 +75,7 @@ export async function initializeWorkspaceServices(): Promise<void> {
         await initService("todos", initializeTodosService);
         await initService("notes", initializeNotesService);
         await initService("projects", initializeProjectsService);
+        await initService("goals", initializeGoalsService);
         await initService("agent-memory", initializeAgentMemoryService);
         await initService("notes-watcher", () => startNotesWatcher());
         await initService("agent-editing", enableAgentEditing);
