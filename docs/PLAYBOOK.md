@@ -131,20 +131,19 @@ Inbox is a **task triage workspace** rather than a flat capture list.
 
 ---
 
-## 🗓️ Apple Calendar & Reminders
+## 🗓️ Apple Calendar
 
-Tasks can sync to **Apple Calendar** and **Apple Reminders** through the native EventKit integration.
+Tasks can sync to **Apple Calendar** through the native EventKit integration.
 
 | Integration | Details |
 |-------------|---------|
 | Apple Calendar | Scheduled tasks sync into **Nomendex Tasks**; project tasks can use project-specific calendars like **Nomendex - ProjectName** |
-| Apple Reminders | High- and medium-priority tasks with a schedule or deadline sync into the **Nomendex Tasks** reminders list |
-| All-day vs timed | Date-only tasks become all-day items; tasks with times become timed events/reminders |
-| Done tasks | Prefixed with ✅ in Calendar and Reminders |
+| All-day vs timed | Date-only tasks become all-day events; tasks with times become timed events |
+| Done tasks | Prefixed with ✅ in Calendar |
 | Sync triggers | Task save, drag-and-drop, delete, and manual **Force Sync All to Calendar** from the command palette |
 | Force sync behavior | Rebuilds Nomendex calendars from task data and preserves existing calendar colors |
 
-> **Note:** macOS will ask for Calendar and Reminders permission on first sync. You can manage this in **System Settings → Privacy & Security → Calendars / Reminders**.
+> **Note:** macOS will ask for Calendar permission on first sync. You can manage this in **System Settings → Privacy & Security → Calendars**.
 
 ---
 
@@ -322,6 +321,6 @@ Access settings from the gear icon at the bottom of the sidebar:
 ## Data & Privacy
 
 - **Local-first** — notes, tasks, uploads, agent configs, and workspace state are stored on your Mac
-- **Optional external integrations** — AI chats, MCP servers, Git sync, Calendar, and Reminders can send selected data outside the app when you use them
+- **Optional external integrations** — AI chats, MCP servers, Git sync, and Calendar can send selected data outside the app when you use them
 - **Portable** — move or back up your workspace folder using any tool (Git, Dropbox, Time Machine, etc.)
 - **Open format** — notes are plain Markdown, tasks use Markdown with YAML frontmatter, and workspace metadata is JSON

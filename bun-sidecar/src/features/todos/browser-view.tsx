@@ -17,7 +17,6 @@ import { TodoFilterToolbar } from "./TodoFilterToolbar";
 import { BoardConfig, BoardColumn, getDefaultColumns } from "@/features/projects/project-types";
 import { BoardSettingsDialog } from "./BoardSettingsDialog";
 import { syncTaskToCalendar, removeTaskFromCalendar } from "./calendar-bridge";
-import { syncTaskToReminders, removeTaskFromReminders } from "./reminder-bridge";
 import { initCalendarChangeListener } from "./calendar-change-bridge";
 import type { Attachment } from "@/types/attachments";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
@@ -317,7 +316,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             if (createdTodo?.id) {
                 setSelectedTodoId(createdTodo.id);
                 syncTaskToCalendar(createdTodo).catch(() => { });
-                syncTaskToReminders(createdTodo).catch(() => { });
             }
         } catch (error) {
             console.error("Failed to create todo:", error);
@@ -360,7 +358,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             await loadTodos();
             // Sync to calendar (fire-and-forget)
             syncTaskToCalendar(updatedTodo).catch(() => { });
-            syncTaskToReminders(updatedTodo).catch(() => { });
         } catch (error) {
             console.error("Failed to save todo:", error);
         } finally {
@@ -417,7 +414,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             });
             // Sync to calendar (fire-and-forget)
             syncTaskToCalendar(updatedTodo).catch(() => { });
-            syncTaskToReminders(updatedTodo).catch(() => { });
         } catch (error) {
             console.error("Failed to update todo date:", error);
             await loadTodos(); // Revert on error
@@ -526,7 +522,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                             if (newStatus && newStatus !== activeTodo.status) {
                                 const updated = { ...activeTodo, status: newStatus, customColumnId: newColumnId };
                                 syncTaskToCalendar(updated).catch(() => { });
-                                syncTaskToReminders(updated).catch(() => { });
                             }
                         } catch (error) {
                             console.error("Failed to update todo column:", error);
@@ -549,7 +544,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                             // Sync updated status to calendar
                             const updated = { ...activeTodo, status: newStatus };
                             syncTaskToCalendar(updated).catch(() => { });
-                            syncTaskToReminders(updated).catch(() => { });
                         } catch (error) {
                             console.error("Failed to update todo status:", error);
                             await loadTodos();
@@ -625,7 +619,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                             if (newStatus && newStatus !== activeTodo.status) {
                                 const updated = { ...activeTodo, status: newStatus, customColumnId: overColumnId };
                                 syncTaskToCalendar(updated).catch(() => { });
-                                syncTaskToReminders(updated).catch(() => { });
                             }
                         } catch (error) {
                             console.error("Failed to move todo:", error);
@@ -669,7 +662,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                             // Sync updated status to calendar
                             const updatedForSync = { ...activeTodo, status: targetStatus };
                             syncTaskToCalendar(updatedForSync).catch(() => { });
-                            syncTaskToReminders(updatedForSync).catch(() => { });
                         } catch (error) {
                             console.error("Failed to move todo:", error);
                             await loadTodos();
@@ -842,7 +834,6 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             await todosAPI.deleteTodo({ todoId: todo.id });
             // Remove from calendar
             removeTaskFromCalendar(todo.id).catch(() => { });
-            removeTaskFromReminders(todo.id).catch(() => { });
 
             const truncatedTitle = todo.title.length > 30
                 ? todo.title.slice(0, 30) + "…"

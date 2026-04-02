@@ -19,9 +19,6 @@ interface WebKitMessageHandlers {
     calendarSync?: {
         postMessage: (data: Record<string, unknown>) => void;
     };
-    reminderSync?: {
-        postMessage: (data: Record<string, unknown>) => void;
-    };
 }
 
 declare global {

@@ -21,7 +21,6 @@ SWIFT_FILES=(
   macos-host/Sources/GlobalHotKey.swift
   macos-host/Sources/SidecarLauncher.swift
   macos-host/Sources/CalendarManager.swift
-  macos-host/Sources/ReminderManager.swift
 )
 
 echo "[host] compiling Swift sources..."

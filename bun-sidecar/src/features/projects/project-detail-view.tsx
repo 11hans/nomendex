@@ -23,7 +23,6 @@ import { todosPluginSerial } from "@/features/todos";
 import { notesPluginSerial } from "@/features/notes";
 import { TaskCardEditor } from "@/features/todos/TaskCardEditor";
 import { syncTaskToCalendar, removeTaskFromCalendar } from "@/features/todos/calendar-bridge";
-import { syncTaskToReminders, removeTaskFromReminders } from "@/features/todos/reminder-bridge";
 import type { Todo } from "@/features/todos/todo-types";
 import type { Note } from "@/features/notes";
 import { projectsPluginSerial, type ProjectDetailViewProps } from "./index";
@@ -217,7 +216,6 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                 setTodoToEdit(null);
                 setTodos(await todosAPI.getTodos({ project: projectName }));
                 syncTaskToCalendar(updatedTodo).catch(() => { });
-                syncTaskToReminders(updatedTodo).catch(() => { });
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : "Failed to save todo";
                 setError(errorMessage);
@@ -234,7 +232,6 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                 await todosAPI.deleteTodo({ todoId: todo.id });
                 setTodos((prev) => prev.filter((t) => t.id !== todo.id));
                 removeTaskFromCalendar(todo.id).catch(() => { });
-                removeTaskFromReminders(todo.id).catch(() => { });
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : "Failed to delete todo";
                 setError(errorMessage);

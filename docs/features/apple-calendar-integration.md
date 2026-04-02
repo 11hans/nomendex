@@ -1,11 +1,10 @@
-# Apple Calendar & Reminders Integration (EventKit)
+# Apple Calendar Integration (EventKit)
 
-Tasks with dates and priorities are automatically synced to Apple Calendar and Apple Reminders via the native EventKit framework.
+Tasks with scheduled dates are automatically synced to Apple Calendar via the native EventKit framework.
 
 ## Overview
 
 1. **Apple Calendar**: When a user saves, moves, or deletes a task that has dates, the app syncs the corresponding event to Apple Calendar under a dedicated **"Nomendex Tasks"** calendar. It also features **Two-Way Sync**, where changes made directly in Calendar.app (e.g. moving or deleting events) are reflected back to Nomendex.
-2. **Apple Reminders**: Tasks with a priority of **high** or **medium** are automatically synced to a dedicated "Nomendex Tasks" list in Apple Reminders, complete with alarms. It also features **Two-Way Sync**, where completing a task in Reminders.app marks it as done in Nomendex, and changing its title or due date updates the markdown file as well.
 
 The integration is macOS-only, using the `WKScriptMessageHandler` bridge pattern for outgoing sync and `evaluateJavaScript` for incoming sync. Outgoing sync builds events from `scheduledStart`/`scheduledEnd`, while `dueDate` is preserved as the deadline metadata (overdue logic lives in Nomendex, not the calendar).
 
@@ -15,13 +14,13 @@ The integration is macOS-only, using the `WKScriptMessageHandler` bridge pattern
 ```
 React UI (browser-view.tsx)
   ↓ save / delete / drag-drop
-calendar-bridge.ts / reminder-bridge.ts
-  ↓ window.webkit.messageHandlers.[calendarSync|reminderSync].postMessage()
+calendar-bridge.ts
+  ↓ window.webkit.messageHandlers.calendarSync.postMessage()
 WebViewWindowController.swift (WKScriptMessageHandler)
   ↓ dispatch
-CalendarManager.swift / ReminderManager.swift (EventKit)
+CalendarManager.swift (EventKit)
   ↓ EKEventStore.save() / .remove()
-Apple Calendar.app / Apple Reminders.app
+Apple Calendar.app
   ↓ callback via evaluateJavaScript
 bridge ts (Promise resolved)
 ```
@@ -82,8 +81,7 @@ This approach avoids the need to read existing events (which requires full calen
 | Time range | `scheduledStart` → event start, `scheduledEnd` → event end |
 | Duration precedence | When `scheduledEnd` is set, it wins; `duration` is derived/ignored for end-time decisions |
 | Duration fallback | If only `scheduledStart` (with time): end = start + duration (default 60 min) |
-| High priority | 🔴 Alarm 15 minutes before |
-| Medium priority | 🟡 Alarm 30 minutes before |
+| Calendar alerts | Optional 30 + 15 minute alerts via `calendarReminderPreset` on timed events |
 | Done tasks | Prefixed with ✅ in calendar title |
 
 ### Event Mapping
@@ -209,16 +207,13 @@ During purge:
 
 ## Permissions
 
-- macOS prompts **"Nomendex would like to access your calendar"** and **"Nomendex would like to access your reminders"** on first sync
-- Configurable in **System Settings → Privacy & Security → Calendars / Reminders**
+- macOS prompts **"Nomendex would like to access your calendar"** on first sync
+- Configurable in **System Settings → Privacy & Security → Calendars**
 - Required entries in `Info.plist`:
   - `NSCalendarsUsageDescription`
   - `NSCalendarsFullAccessUsageDescription`
-  - `NSRemindersUsageDescription`
-  - `NSRemindersFullAccessUsageDescription`
 - Required entitlements: 
   - `com.apple.security.personal-information.calendars`
-  - `com.apple.security.personal-information.reminders`
 
 ## File Structure
 
@@ -227,7 +222,7 @@ During purge:
 ```
 mac-app/macos-host/
 ├── Sources/
-│   ├── CalendarManager.swift           # EventKit integration (new)
+│   ├── CalendarManager.swift           # EventKit integration
 │   └── WebViewWindowController.swift   # calendarSync message handler
 ├── entitlements.plist                   # Calendar entitlement
 ├── Info.plist                           # Calendar usage descriptions

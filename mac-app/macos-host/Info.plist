@@ -35,12 +35,6 @@
   <key>NSCalendarsFullAccessUsageDescription</key>
   <string>Nomendex needs full calendar access to create, update, and delete task events.</string>
 
-  <!-- Reminders access (EventKit) -->
-  <key>NSRemindersUsageDescription</key>
-  <string>Nomendex needs access to your reminders to create reminders for high-priority tasks.</string>
-  <key>NSRemindersFullAccessUsageDescription</key>
-  <string>Nomendex needs full reminders access to create, update, and delete task reminders.</string>
-
   <!-- Sparkle Auto-Update Configuration -->
   <key>SUFeedURL</key>
   <string>https://releases.nomendex.com/appcast.xml</string>

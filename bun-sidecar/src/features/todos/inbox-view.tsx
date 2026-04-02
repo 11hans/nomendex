@@ -9,7 +9,6 @@ import { CreateTodoDialog } from "./CreateTodoDialog";
 import { TaskCardEditor } from "./TaskCardEditor";
 import { Todo } from "./todo-types";
 import { syncTaskToCalendar, removeTaskFromCalendar } from "./calendar-bridge";
-import { syncTaskToReminders, removeTaskFromReminders } from "./reminder-bridge";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useTodoFilterState } from "./useTodoFilterState";
 import { filterAndSortTodos, fuzzyMatch } from "./todo-filter-utils";
@@ -377,7 +376,6 @@ export function InboxListView() {
             setSelectedTodoId(updatedTodo.id);
             await loadTodos();
             syncTaskToCalendar(updatedTodo).catch(() => { });
-            syncTaskToReminders(updatedTodo).catch(() => { });
         } catch (error) {
             console.error("Failed to save todo:", error);
             toast.error("Failed to save changes");
@@ -438,7 +436,6 @@ export function InboxListView() {
 
             if (createdTodo?.id) {
                 syncTaskToCalendar(createdTodo).catch(() => { });
-                syncTaskToReminders(createdTodo).catch(() => { });
             }
         } catch (error) {
             console.error("Failed to create todo:", error);
@@ -453,7 +450,6 @@ export function InboxListView() {
         try {
             await todosAPI.deleteTodo({ todoId: todo.id });
             removeTaskFromCalendar(todo.id).catch(() => { });
-            removeTaskFromReminders(todo.id).catch(() => { });
 
             toast("Deleted task", {
                 action: {
@@ -498,7 +494,6 @@ export function InboxListView() {
             if (nextArchived) {
                 await todosAPI.archiveTodo({ todoId: todo.id });
                 removeTaskFromCalendar(todo.id).catch(() => { });
-                removeTaskFromReminders(todo.id).catch(() => { });
                 toast("Archived task", {
                     action: {
                         label: "Undo",
@@ -516,7 +511,6 @@ export function InboxListView() {
             } else {
                 await todosAPI.unarchiveTodo({ todoId: todo.id });
                 syncTaskToCalendar(todo).catch(() => { });
-                syncTaskToReminders(todo).catch(() => { });
                 toast("Restored task", {
                     action: {
                         label: "Undo",
@@ -567,7 +561,6 @@ export function InboxListView() {
             });
             const updatedTodo: Todo = { ...todo, project: targetProject, updatedAt: now };
             syncTaskToCalendar(updatedTodo).catch(() => { });
-            syncTaskToReminders(updatedTodo).catch(() => { });
             toast.success(`Moved to ${targetProject}`);
         } catch (error) {
             console.error("Failed to move task to project:", error);
