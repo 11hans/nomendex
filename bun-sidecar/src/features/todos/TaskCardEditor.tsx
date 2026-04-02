@@ -260,129 +260,130 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                 </div>
 
                 <div
-                    className="px-6 py-3 flex flex-wrap items-center justify-between gap-2"
+                    className="px-6 py-3 space-y-2"
                     style={{
                         backgroundColor: styles.surfaceSecondary,
                         borderTop: `1px solid ${styles.borderDefault}`,
                     }}
                 >
-                    <div className="flex flex-wrap items-center gap-2">
-                        <StatusPicker
-                            value={editedTodo.status}
-                            onChange={(status) => setEditedTodo({ ...editedTodo, status })}
-                        />
-                        <PriorityPicker
-                            value={editedTodo.priority}
-                            onChange={(priority) => setEditedTodo({ ...editedTodo, priority })}
-                        />
-                        <div className="flex items-center gap-2">
-                            <ScheduledDateTimePicker
-                                scheduledStart={editedTodo.scheduledStart}
-                                scheduledEnd={editedTodo.scheduledEnd}
-                                onChange={handleScheduledDateChange}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <StatusPicker
+                                value={editedTodo.status}
+                                onChange={(status) => setEditedTodo({ ...editedTodo, status })}
                             />
-                            <DateTimePicker
-                                dueDate={editedTodo.dueDate}
-                                onChange={({ dueDate }) => setEditedTodo({ ...editedTodo, dueDate })}
+                            <PriorityPicker
+                                value={editedTodo.priority}
+                                onChange={(priority) => setEditedTodo({ ...editedTodo, priority })}
                             />
-                            {onToggleCalendarReminder && (() => {
-                                const hasTimed = editedTodo.scheduledStart?.includes("T") || editedTodo.scheduledEnd?.includes("T");
-                                const isActive = editedTodo.calendarReminderPreset === "30-15";
-                                const canToggle = hasTimed || isActive;
-                                return (
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-8 px-2 rounded-md"
-                                                disabled={!canToggle}
-                                                onClick={() => {
-                                                    const nextPreset = isActive ? "none" : "30-15";
-                                                    // Optimistic local toggle so editor state isn't overwritten
-                                                    // by stale server data while the dialog is open.
-                                                    setEditedTodo({
-                                                        ...editedTodo,
-                                                        calendarReminderPreset: nextPreset,
-                                                    });
-                                                    if (nextPreset === "30-15") {
-                                                        reminderAutoDisabledRef.current = false;
-                                                    }
-                                                    onToggleCalendarReminder({
-                                                        ...editedTodo,
-                                                        calendarReminderPreset: nextPreset,
-                                                    });
-                                                }}
+                            <div className="flex items-center gap-2">
+                                <ScheduledDateTimePicker
+                                    scheduledStart={editedTodo.scheduledStart}
+                                    scheduledEnd={editedTodo.scheduledEnd}
+                                    onChange={handleScheduledDateChange}
+                                />
+                                <DateTimePicker
+                                    dueDate={editedTodo.dueDate}
+                                    onChange={({ dueDate }) => setEditedTodo({ ...editedTodo, dueDate })}
+                                />
+                                {onToggleCalendarReminder && (() => {
+                                    const hasTimed = editedTodo.scheduledStart?.includes("T") || editedTodo.scheduledEnd?.includes("T");
+                                    const isActive = editedTodo.calendarReminderPreset === "30-15";
+                                    const canToggle = hasTimed || isActive;
+                                    return (
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-8 px-2 rounded-md"
+                                                    disabled={!canToggle}
+                                                    onClick={() => {
+                                                        const nextPreset = isActive ? "none" : "30-15";
+                                                        // Optimistic local toggle so editor state isn't overwritten
+                                                        // by stale server data while the dialog is open.
+                                                        setEditedTodo({
+                                                            ...editedTodo,
+                                                            calendarReminderPreset: nextPreset,
+                                                        });
+                                                        if (nextPreset === "30-15") {
+                                                            reminderAutoDisabledRef.current = false;
+                                                        }
+                                                        onToggleCalendarReminder({
+                                                            ...editedTodo,
+                                                            calendarReminderPreset: nextPreset,
+                                                        });
+                                                    }}
+                                                    style={{
+                                                        color: isActive ? "#fff" : styles.contentSecondary,
+                                                        backgroundColor: isActive ? "#3b82f6" : "transparent",
+                                                        opacity: canToggle ? 1 : 0.4,
+                                                    }}
+                                                >
+                                                    <Bell className="size-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent
+                                                className="z-[100]"
                                                 style={{
-                                                    color: isActive ? "#fff" : styles.contentSecondary,
-                                                    backgroundColor: isActive ? "#3b82f6" : "transparent",
-                                                    opacity: canToggle ? 1 : 0.4,
+                                                    backgroundColor: styles.surfaceTertiary,
+                                                    color: styles.contentPrimary,
+                                                    border: `1px solid ${styles.borderDefault}`,
                                                 }}
                                             >
-                                                <Bell className="size-4" />
-                                            </Button>
-                                        </TooltipTrigger>
-                                        <TooltipContent
-                                            className="z-[100]"
-                                            style={{
-                                                backgroundColor: styles.surfaceTertiary,
-                                                color: styles.contentPrimary,
-                                                border: `1px solid ${styles.borderDefault}`,
-                                            }}
-                                        >
-                                            {!hasTimed && !isActive
-                                                ? "Set a scheduled time to enable calendar alerts"
-                                                : isActive
-                                                    ? "Remove 30/15 min calendar alerts"
-                                                    : "Add 30 + 15 min calendar alerts"}
-                                        </TooltipContent>
-                                    </Tooltip>
-                                );
-                            })()}
+                                                {!hasTimed && !isActive
+                                                    ? "Set a scheduled time to enable calendar alerts"
+                                                    : isActive
+                                                        ? "Remove 30/15 min calendar alerts"
+                                                        : "Add 30 + 15 min calendar alerts"}
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    );
+                                })()}
+                            </div>
+
+                            <div className="h-5 w-px mx-0.5" style={{ backgroundColor: styles.borderDefault }} />
+
+                            <ProjectPicker
+                                value={editedTodo.project}
+                                onChange={(project) => setEditedTodo({ ...editedTodo, project })}
+                                availableProjects={availableProjects}
+                            />
+                            <TagsPicker
+                                value={editedTodo.tags || []}
+                                onChange={(tags) => setEditedTodo({ ...editedTodo, tags })}
+                                availableTags={availableTags}
+                            />
+                            <AttachmentPicker
+                                attachments={editedTodo.attachments || []}
+                                onChange={(attachments) => setEditedTodo({ ...editedTodo, attachments })}
+                            />
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8 px-2"
+                                        onClick={insertChecklistItem}
+                                        style={{ color: styles.contentSecondary }}
+                                    >
+                                        <ListChecks className="size-4" />
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                    className="z-[100]"
+                                    style={{
+                                        backgroundColor: styles.surfaceTertiary,
+                                        color: styles.contentPrimary,
+                                        border: `1px solid ${styles.borderDefault}`,
+                                    }}
+                                >
+                                    Add checklist item
+                                </TooltipContent>
+                            </Tooltip>
                         </div>
 
-                        <div className="h-5 w-px mx-0.5" style={{ backgroundColor: styles.borderDefault }} />
-
-                        <ProjectPicker
-                            value={editedTodo.project}
-                            onChange={(project) => setEditedTodo({ ...editedTodo, project })}
-                            availableProjects={availableProjects}
-                        />
-                        <TagsPicker
-                            value={editedTodo.tags || []}
-                            onChange={(tags) => setEditedTodo({ ...editedTodo, tags })}
-                            availableTags={availableTags}
-                        />
-                        <AttachmentPicker
-                            attachments={editedTodo.attachments || []}
-                            onChange={(attachments) => setEditedTodo({ ...editedTodo, attachments })}
-                        />
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2"
-                                    onClick={insertChecklistItem}
-                                    style={{ color: styles.contentSecondary }}
-                                >
-                                    <ListChecks className="size-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent
-                                className="z-[100]"
-                                style={{
-                                    backgroundColor: styles.surfaceTertiary,
-                                    color: styles.contentPrimary,
-                                    border: `1px solid ${styles.borderDefault}`,
-                                }}
-                            >
-                                Add checklist item
-                            </TooltipContent>
-                        </Tooltip>
-                    </div>
-
-                    <div className="flex items-center gap-2 ml-auto">
+                        <div className="flex items-center gap-2 ml-auto">
                         {onDelete && (
                             <Button
                                 onClick={() => {
@@ -438,6 +439,11 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                                 <KeyboardIndicator keys={["cmd", "enter"]} />
                             </TooltipContent>
                         </Tooltip>
+                        </div>
+                    </div>
+
+                    <div className="text-[11px] leading-4" style={{ color: styles.contentTertiary }}>
+                        Schedule = when you plan to do it. Deadline = when it should be done. Priority only affects task emphasis and filtering. Calendar alerts need a timed schedule.
                     </div>
                 </div>
             </DialogContent >

@@ -215,84 +215,90 @@ export function CreateTodoDialog({
                 </div>
 
                 <div
-                    className="px-6 py-3 flex flex-wrap items-center justify-between gap-2"
+                    className="px-6 py-3 space-y-2"
                     style={{
                         backgroundColor: styles.surfaceSecondary,
                         borderTop: `1px solid ${styles.borderDefault}`,
                     }}
                 >
-                    <div className="flex flex-wrap items-center gap-2">
-                        <StatusPicker
-                            value={newTodo.status}
-                            onChange={(status) => onNewTodoChange({ ...newTodo, status })}
-                        />
-                        <PriorityPicker
-                            value={newTodo.priority}
-                            onChange={(priority) => onNewTodoChange({ ...newTodo, priority })}
-                        />
-
-                        <div className="h-5 w-px mx-0.5" style={{ backgroundColor: styles.borderDefault }} />
-
-                        <ProjectPicker
-                            value={newTodo.project || undefined}
-                            onChange={(project) => onNewTodoChange({ ...newTodo, project })}
-                            availableProjects={availableProjects}
-                            disabled={projectLocked}
-                        />
-                        <TagsPicker
-                            value={newTodo.tags}
-                            onChange={(tags) => onNewTodoChange({ ...newTodo, tags })}
-                            availableTags={availableTags}
-                        />
-                        <AttachmentPicker
-                            attachments={newTodo.attachments || []}
-                            onChange={(attachments) => onNewTodoChange({ ...newTodo, attachments })}
-                        />
-                        <div className="flex items-center gap-2">
-                            <ScheduledDateTimePicker
-                                scheduledStart={newTodo.scheduledStart}
-                                scheduledEnd={newTodo.scheduledEnd}
-                                onChange={(dates) => onNewTodoChange({ ...newTodo, ...dates })}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <StatusPicker
+                                value={newTodo.status}
+                                onChange={(status) => onNewTodoChange({ ...newTodo, status })}
                             />
-                            <DateTimePicker
-                                dueDate={newTodo.dueDate}
-                                onChange={({ dueDate }) => onNewTodoChange({ ...newTodo, dueDate })}
+                            <PriorityPicker
+                                value={newTodo.priority}
+                                onChange={(priority) => onNewTodoChange({ ...newTodo, priority })}
                             />
+
+                            <div className="h-5 w-px mx-0.5" style={{ backgroundColor: styles.borderDefault }} />
+
+                            <ProjectPicker
+                                value={newTodo.project || undefined}
+                                onChange={(project) => onNewTodoChange({ ...newTodo, project })}
+                                availableProjects={availableProjects}
+                                disabled={projectLocked}
+                            />
+                            <TagsPicker
+                                value={newTodo.tags}
+                                onChange={(tags) => onNewTodoChange({ ...newTodo, tags })}
+                                availableTags={availableTags}
+                            />
+                            <AttachmentPicker
+                                attachments={newTodo.attachments || []}
+                                onChange={(attachments) => onNewTodoChange({ ...newTodo, attachments })}
+                            />
+                            <div className="flex items-center gap-2">
+                                <ScheduledDateTimePicker
+                                    scheduledStart={newTodo.scheduledStart}
+                                    scheduledEnd={newTodo.scheduledEnd}
+                                    onChange={(dates) => onNewTodoChange({ ...newTodo, ...dates })}
+                                />
+                                <DateTimePicker
+                                    dueDate={newTodo.dueDate}
+                                    onChange={({ dueDate }) => onNewTodoChange({ ...newTodo, dueDate })}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 ml-auto">
+                            <Button
+                                onClick={() => onOpenChange(false)}
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-3 text-xs"
+                            >
+                                Cancel
+                            </Button>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        onClick={onCreateTodo}
+                                        disabled={loading || !newTodo.title.trim()}
+                                        size="sm"
+                                        className="h-8 px-3 text-xs"
+                                    >
+                                        <Plus className="size-3.5 mr-1.5" />
+                                        {loading ? "Creating..." : "Create"}
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                    className="z-[100]"
+                                    style={{
+                                        backgroundColor: styles.surfaceTertiary,
+                                        color: styles.contentPrimary,
+                                        border: `1px solid ${styles.borderDefault}`,
+                                    }}
+                                >
+                                    <KeyboardIndicator keys={["cmd", "enter"]} />
+                                </TooltipContent>
+                            </Tooltip>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2 ml-auto">
-                        <Button
-                            onClick={() => onOpenChange(false)}
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-3 text-xs"
-                        >
-                            Cancel
-                        </Button>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    onClick={onCreateTodo}
-                                    disabled={loading || !newTodo.title.trim()}
-                                    size="sm"
-                                    className="h-8 px-3 text-xs"
-                                >
-                                    <Plus className="size-3.5 mr-1.5" />
-                                    {loading ? "Creating..." : "Create"}
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent
-                                className="z-[100]"
-                                style={{
-                                    backgroundColor: styles.surfaceTertiary,
-                                    color: styles.contentPrimary,
-                                    border: `1px solid ${styles.borderDefault}`,
-                                }}
-                            >
-                                <KeyboardIndicator keys={["cmd", "enter"]} />
-                            </TooltipContent>
-                        </Tooltip>
+                    <div className="text-[11px] leading-4" style={{ color: styles.contentTertiary }}>
+                        Schedule = when you plan to do it. Deadline = when it should be done. Priority only affects task emphasis and filtering.
                     </div>
                 </div>
             </DialogContent>

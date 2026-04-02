@@ -104,7 +104,9 @@ export function DateTimePicker({ dueDate, onChange, compact }: DateTimePickerPro
     };
 
     const renderDateLabel = () => {
-        if (!dueDate) return null;
+        if (!dueDate) {
+            return compact ? null : <span className="whitespace-nowrap">Deadline</span>;
+        }
 
         return (
             <span className="whitespace-nowrap">
@@ -137,6 +139,7 @@ export function DateTimePicker({ dueDate, onChange, compact }: DateTimePickerPro
                         type="button"
                         className={`flex items-center gap-1 ${compact ? "px-0 py-0 text-caption" : "px-2 py-1 text-sm"} rounded font-medium transition-colors hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-offset-1`}
                         style={{ color: getDateColor() }}
+                        title={dueDate ? "Edit deadline" : "Set deadline (when it should be done)"}
                     >
                         <CalendarCheck className={compact ? "size-3 shrink-0" : "size-4 shrink-0"} />
                         {renderDateLabel()}
@@ -163,7 +166,7 @@ export function DateTimePicker({ dueDate, onChange, compact }: DateTimePickerPro
                         <div className="text-xs text-center py-1" style={{ color: styles.contentSecondary }}>
                             {!localDate
                                 ? "Select a deadline"
-                                : localDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                                : `Due ${localDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`}
                         </div>
 
                         <div className="pt-2 border-t" style={{ borderColor: styles.surfaceTertiary }}>

@@ -152,7 +152,9 @@ export function ScheduledDateTimePicker({ scheduledEnd, scheduledStart, onChange
     };
 
     const renderDateLabel = () => {
-        if (!scheduledStart && !scheduledEnd) return null;
+        if (!scheduledStart && !scheduledEnd) {
+            return compact ? null : <span className="whitespace-nowrap">Schedule</span>;
+        }
 
         if (scheduledStart && !scheduledEnd) {
             return (
@@ -223,6 +225,7 @@ export function ScheduledDateTimePicker({ scheduledEnd, scheduledStart, onChange
                         type="button"
                         className={`flex items-center gap-1 ${compact ? 'px-0 py-0 text-caption' : 'px-2 py-1 text-sm'} rounded font-medium transition-colors hover:bg-black/5 focus:outline-none focus:ring-2 focus:ring-offset-1`}
                         style={{ color: getDateColor() }}
+                        title={(scheduledStart || scheduledEnd) ? "Edit schedule" : "Set schedule (when you plan to work on it)"}
                     >
                         <CalendarClock className={compact ? "size-3 shrink-0" : "size-4 shrink-0"} />
                         {renderDateLabel()}

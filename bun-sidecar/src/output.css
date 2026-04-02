@@ -2323,6 +2323,10 @@
   .text-\[11px\] {
     font-size: 11px;
   }
+  .leading-4 {
+    --tw-leading: calc(var(--spacing) * 4);
+    line-height: calc(var(--spacing) * 4);
+  }
   .leading-none {
     --tw-leading: 1;
     line-height: 1;
