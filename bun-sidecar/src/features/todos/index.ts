@@ -22,6 +22,8 @@ export const GetTodosInputSchema = z.object({
     project: z.string().optional(),
     tagsAll: z.array(z.string()).optional(),
     scheduledOverlap: ScheduledOverlapSchema.optional(),
+    status: z.enum(["todo", "in_progress", "done", "later"]).optional(),
+    statuses: z.array(z.enum(["todo", "in_progress", "done", "later"])).optional(),
 });
 
 export type GetTodosInput = z.infer<typeof GetTodosInputSchema>;

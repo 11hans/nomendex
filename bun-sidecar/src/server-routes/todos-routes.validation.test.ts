@@ -2,6 +2,34 @@ import { describe, expect, test } from "bun:test";
 import { todosRouteSchemasForTests } from "./todos-routes";
 
 describe("todos route schema validation", () => {
+    test("list schema accepts status filters", () => {
+        const parsed = todosRouteSchemasForTests.GetTodosInputSchema.parse({
+            project: "Nomendex",
+            status: "in_progress",
+            statuses: ["todo", "in_progress"],
+        });
+
+        expect(parsed).toEqual({
+            project: "Nomendex",
+            status: "in_progress",
+            statuses: ["todo", "in_progress"],
+        });
+    });
+
+    test("list schema normalizes null status filters to undefined", () => {
+        const parsed = todosRouteSchemasForTests.GetTodosInputSchema.parse({
+            project: "Nomendex",
+            status: null,
+            statuses: null,
+        });
+
+        expect(parsed).toEqual({
+            project: "Nomendex",
+            status: undefined,
+            statuses: undefined,
+        });
+    });
+
     test("create schema accepts null for optional fields and normalizes to undefined where needed", () => {
         const parsed = todosRouteSchemasForTests.CreateTodoInputSchema.parse({
             title: "Test task",
@@ -87,6 +115,9 @@ describe("todos route schema validation", () => {
     });
 
     test("schema still rejects invalid non-null values", () => {
+        expect(() => todosRouteSchemasForTests.GetTodosInputSchema.parse({
+            status: "active",
+        })).toThrow();
         expect(() => todosRouteSchemasForTests.CreateTodoInputSchema.parse({
             title: "Task",
             status: "invalid-status",

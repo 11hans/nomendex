@@ -253,6 +253,22 @@ export function matchesScheduledOverlap(
     return interval ? intervalsOverlap(interval, queryInterval) : false;
 }
 
+export function collectRequestedStatuses(input: {
+    status?: Todo["status"];
+    statuses?: Todo["status"][];
+}): Set<Todo["status"]> {
+    const requestedStatuses = new Set<Todo["status"]>();
+    if (input.status) {
+        requestedStatuses.add(input.status);
+    }
+    if (input.statuses) {
+        for (const status of input.statuses) {
+            requestedStatuses.add(status);
+        }
+    }
+    return requestedStatuses;
+}
+
 export function shouldRejectTimeblockCompletionChange(input: {
     currentTags?: string[];
     nextTags?: string[];
@@ -547,6 +563,11 @@ async function getTodos(rawInput: unknown) {
 
         if (input.scheduledOverlap) {
             activeTodos = activeTodos.filter((todo) => matchesScheduledOverlap(todo, input.scheduledOverlap!));
+        }
+
+        const requestedStatuses = collectRequestedStatuses(input);
+        if (requestedStatuses.size > 0) {
+            activeTodos = activeTodos.filter((todo) => requestedStatuses.has(todo.status));
         }
 
         // Sort todos by order (nulls last)
@@ -1047,6 +1068,40 @@ export async function recomputeAllGoalRefs(): Promise<{
     return { updated, skipped, errors };
 }
 
+async function forceReindexTodos(): Promise<{
+    success: true;
+    scanned: number;
+    normalized: number;
+    reindexedAt: string;
+}> {
+    todosLogger.info("Force reindex requested");
+
+    const todos = await getDb().findAll();
+    let normalized = 0;
+
+    for (const todo of todos) {
+        const sanitized = sanitizeTodoForClient(todo);
+        if (JSON.stringify(sanitized) === JSON.stringify(todo)) {
+            continue;
+        }
+        await getDb().update(todo.id, sanitized as Partial<Todo>);
+        normalized += 1;
+    }
+
+    // Housekeeping is cached per day; reset and force-run as part of manual reindex.
+    lastTimeblockHousekeepingDay = null;
+    await runTimeblockHousekeepingIfNeeded();
+
+    const result = {
+        success: true as const,
+        scanned: todos.length,
+        normalized,
+        reindexedAt: new Date().toISOString(),
+    };
+    todosLogger.info("Force reindex finished", result);
+    return result;
+}
+
 async function getArchivedTodos(input: { project?: string }) {
     todosLogger.info(`Getting archived todos${input.project != null ? ` for project: ${input.project || 'No Project'}` : ''}`);
 
@@ -1246,5 +1301,5 @@ export const TodosPluginWithFunctions = TodosPlugin;
 export {
     getTodos, createTodo, updateTodo, deleteTodo, getTodoById,
     getProjects, reorderTodos, archiveTodo, unarchiveTodo, getArchivedTodos, getTags,
-    getBoardConfig, saveBoardConfig, deleteColumn, restoreTodoSnapshot
+    getBoardConfig, saveBoardConfig, deleteColumn, restoreTodoSnapshot, forceReindexTodos
 };

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+    collectRequestedStatuses,
     getExpiredTimeblockIds,
     matchesScheduledOverlap,
     shouldRejectTimeblockCompletionChange,
@@ -48,6 +49,22 @@ describe("matchesScheduledOverlap", () => {
             start: "2026-04-06T08:30",
             end: "2026-04-06T09:00",
         })).toBe(false);
+    });
+});
+
+describe("collectRequestedStatuses", () => {
+    test("returns empty set when no filters are provided", () => {
+        const statuses = collectRequestedStatuses({});
+        expect(statuses.size).toBe(0);
+    });
+
+    test("merges status and statuses into a de-duplicated set", () => {
+        const statuses = collectRequestedStatuses({
+            status: "in_progress",
+            statuses: ["todo", "in_progress", "done"],
+        });
+
+        expect(Array.from(statuses).sort()).toEqual(["done", "in_progress", "todo"]);
     });
 });
 

@@ -5,12 +5,11 @@ import { StdioServerTransport } from "@socotra/modelcontextprotocol-sdk/server/s
 import { FileDatabase } from "@/storage/FileDatabase";
 import { Todo } from "./todo-types";
 import { createTodo, updateTodo } from "./fx";
-import path from "path";
 import { getTodosPath } from "@/storage/root-path";
 import { z } from "zod";
 
 // Initialize database
-const todosDb = new FileDatabase<Todo>(path.join(getTodosPath(), "items"));
+const todosDb = new FileDatabase<Todo>(getTodosPath());
 await todosDb.initialize();
 
 // Create MCP server with higher-level API

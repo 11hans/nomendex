@@ -18,6 +18,7 @@ import {
     saveBoardConfig,
     deleteColumn,
     recomputeAllGoalRefs,
+    forceReindexTodos,
 } from "@/features/todos/fx";
 import { DayTypeSchema } from "@/features/timeblocking/types";
 import { applyTimeblockingPlan, previewTimeblockingPlan } from "@/features/timeblocking/service";
@@ -32,6 +33,7 @@ const OptionalNumberSchema = z.preprocess(nullToUndefined, z.number().optional()
 const OptionalBooleanSchema = z.preprocess(nullToUndefined, z.boolean().optional());
 const OptionalStringArraySchema = z.preprocess(nullToUndefined, z.array(z.string()).optional());
 const OptionalStatusSchema = z.preprocess(nullToUndefined, TodoStatusSchema.optional());
+const OptionalStatusArraySchema = z.preprocess(nullToUndefined, z.array(TodoStatusSchema).optional());
 const OptionalPrioritySchema = z.preprocess(nullToUndefined, PrioritySchema.optional());
 const OptionalCalendarReminderSchema = z.preprocess(nullToUndefined, CalendarReminderPresetSchema.optional());
 const ScheduledOverlapSchema = z.object({
@@ -43,6 +45,8 @@ const GetTodosInputSchema = z.object({
     project: z.string().optional(),
     tagsAll: z.array(z.string()).optional(),
     scheduledOverlap: ScheduledOverlapSchema.optional(),
+    status: OptionalStatusSchema,
+    statuses: OptionalStatusArraySchema,
 });
 
 const GetTodoByIdInputSchema = z.object({
@@ -128,8 +132,11 @@ const TimeblockingPlanInputSchema = z.object({
     })).length(7),
 });
 
+const EmptyInputSchema = z.object({});
+
 // Exposed for route-schema regression tests.
 export const todosRouteSchemasForTests = {
+    GetTodosInputSchema,
     CreateTodoInputSchema,
     UpdateTodoInputSchema,
 };
@@ -365,6 +372,22 @@ export const todosRoutes = {
         async POST() {
             try {
                 return Response.json(await recomputeAllGoalRefs());
+            } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                return Response.json({ error: msg }, { status: 500 });
+            }
+        },
+    },
+    "/api/todos/reindex": {
+        async POST(req: Request) {
+            try {
+                EmptyInputSchema.parse(await req.json());
+            } catch (error) {
+                return jsonValidationError(error);
+            }
+
+            try {
+                return Response.json(await forceReindexTodos());
             } catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
                 return Response.json({ error: msg }, { status: 500 });
