@@ -4,6 +4,11 @@ import type { BoardConfig, ProjectConfig } from "@/features/projects/project-typ
 import type { GetTodosInput } from "@/features/todos";
 import type { DayConfig } from "@/features/timeblocking/types";
 import type { TimeblockingApplyResult, TimeblockingPreviewResult } from "@/features/timeblocking/service";
+import {
+    sanitizeTodoForClient,
+    sanitizeTodoListForClient,
+    stripUnexpectedNulls,
+} from "@/features/todos/todo-sanitize";
 
 interface CreateTodoInput {
     title: string;
@@ -47,6 +52,9 @@ interface ReorderInput {
     reorders: { todoId: string; order: number }[];
 }
 
+const CREATE_NULLABLE_KEYS = new Set(["scheduledStart", "scheduledEnd", "dueDate"]);
+const UPDATE_NULLABLE_KEYS = new Set(["scheduledStart", "scheduledEnd", "dueDate", "duration"]);
+
 async function fetchAPI<T>(endpoint: string, body: object = {}): Promise<T> {
     const response = await fetch(`/api/todos/${endpoint}`, {
         method: "POST",
@@ -54,12 +62,19 @@ async function fetchAPI<T>(endpoint: string, body: object = {}): Promise<T> {
             "Content-Type": "application/json",
             "X-Nomendex-Client": "ui",
         },
-        // Convert undefined to null to support explicit field clearing
-        // (JSON.stringify drops undefined, preventing backend from receiving cleared fields)
-        body: JSON.stringify(body, (key, value) => value === undefined ? null : value),
+        body: JSON.stringify(body),
     });
     if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        let errorMessage = `API error: ${response.status}`;
+        try {
+            const errorData = await response.json();
+            if (errorData && typeof errorData.error === "string") {
+                errorMessage = errorData.error;
+            }
+        } catch {
+            // Use default message when body parsing fails.
+        }
+        throw new Error(errorMessage);
     }
     return response.json();
 }
@@ -78,16 +93,24 @@ async function fetchProjectsAPI<T>(endpoint: string, body: object = {}): Promise
 
 // Standalone API object for use outside React components
 export const todosAPI = {
-    getTodos: (args: GetTodosInput = {}) => fetchAPI<Todo[]>("list", args),
-    getTodoById: (args: { todoId: string }) => fetchAPI<Todo>("get", args),
-    createTodo: (args: CreateTodoInput) => fetchAPI<Todo>("create", args),
-    updateTodo: (args: UpdateTodoInput) => fetchAPI<Todo>("update", args),
+    getTodos: async (args: GetTodosInput = {}) =>
+        sanitizeTodoListForClient(await fetchAPI<Todo[]>("list", args)),
+    getTodoById: async (args: { todoId: string }) =>
+        sanitizeTodoForClient(await fetchAPI<Todo>("get", args)),
+    createTodo: async (args: CreateTodoInput) =>
+        sanitizeTodoForClient(await fetchAPI<Todo>("create", stripUnexpectedNulls(args, CREATE_NULLABLE_KEYS))),
+    updateTodo: async (args: UpdateTodoInput) => {
+        const sanitizedUpdates = stripUnexpectedNulls(args.updates, UPDATE_NULLABLE_KEYS);
+        const updated = await fetchAPI<Todo>("update", { todoId: args.todoId, updates: sanitizedUpdates });
+        return sanitizeTodoForClient(updated);
+    },
     deleteTodo: (args: { todoId: string }) => fetchAPI<{ success: boolean }>("delete", args),
     getProjects: () => fetchAPI<string[]>("projects"),
     reorderTodos: (args: ReorderInput) => fetchAPI<{ success: boolean }>("reorder", args),
-    archiveTodo: (args: { todoId: string }) => fetchAPI<Todo>("archive", args),
-    unarchiveTodo: (args: { todoId: string }) => fetchAPI<Todo>("unarchive", args),
-    getArchivedTodos: (args: { project?: string } = {}) => fetchAPI<Todo[]>("archived", args),
+    archiveTodo: async (args: { todoId: string }) => sanitizeTodoForClient(await fetchAPI<Todo>("archive", args)),
+    unarchiveTodo: async (args: { todoId: string }) => sanitizeTodoForClient(await fetchAPI<Todo>("unarchive", args)),
+    getArchivedTodos: async (args: { project?: string } = {}) =>
+        sanitizeTodoListForClient(await fetchAPI<Todo[]>("archived", args)),
     getTags: () => fetchAPI<string[]>("tags"),
     previewTimeblocking: (args: { weekStart: string; days: DayConfig[] }) =>
         fetchAPI<TimeblockingPreviewResult>("timeblocking/preview", args),

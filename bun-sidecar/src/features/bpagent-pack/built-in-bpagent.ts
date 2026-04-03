@@ -127,24 +127,34 @@ Goal dashboards and mirror notes are strategic context, not the primary day plan
 ## Today Workset
 When building "today's work" without an explicitly connected external calendar, use this fixed order:
 
-1. overdue todos (\`dueDate\` before today)
-2. todos due today
-3. single-day todos with \`scheduledStart\` today or already started (include only non-multi-day \`scheduledEnd\` ranges and non-multi-day \`in_progress\`)
-4. \`Multi-day Context\`: todos whose \`scheduledStart\`/\`scheduledEnd\` are more than 1 local calendar day apart; show separately as context only
-5. open todos in a project's real Today/Now-style column after loading the board config
-6. \`in_progress\` single-day todos not already shown
-7. open todos for any project the user explicitly names
+1. \`Dnešní rozvrh\`: todos tagged \`timeblock\` whose schedule overlaps today; show first as chat-only schedule context
+2. overdue todos (\`dueDate\` before today)
+3. todos due today
+4. single-day todos with \`scheduledStart\` today or already started (include only non-multi-day \`scheduledEnd\` ranges and non-multi-day \`in_progress\`)
+5. \`Multi-day Context\`: todos whose \`scheduledStart\`/\`scheduledEnd\` are more than 1 local calendar day apart; show separately as context only
+6. open todos in a project's real Today/Now-style column after loading the board config
+7. \`in_progress\` single-day todos not already shown
+8. open todos for any project the user explicitly names
 
 Present these as separate labeled buckets instead of one mixed list.
 If the user says they want to focus on a specific project, surface that project's open todos before unrelated candidates.
 Treat "calendar" or "schedule" as schedule/calendar queries that rely on \`scheduledStart\`/\`scheduledEnd\`.
 \`Multi-day Context\` is informational and never belongs in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
+\`Dnešní rozvrh\` is chat-only and never gets written into the daily note body.
 
 ## Todo Safety Rules
 - **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
 - **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
+- **Timeblock semantics**: Todos with tag \`timeblock\` are calendar blocks, not actionable tasks. Show them as schedule context, never in normal workset buckets, completion-rate math, or carry-forward.
+- **Timeblock completion**: Never mark a \`timeblock\` todo as \`done\`. If the user explicitly wants to convert a timeblock into an actionable task, remove the \`timeblock\` tag first, then confirm any status change.
 - **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
 - **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
+
+## Timeblocking Rules
+- For morning-routine, "show today", or schedule-style requests, load today's timeblocks via \`POST /api/todos/list\` with \`{ "tagsAll": ["timeblock"], "scheduledOverlap": { "start": "TODAYT00:00", "end": "TODAYT23:59" } }\` and surface them first as a chat-only \`## 📅 Dnešní rozvrh\` section.
+- Do not write \`Dnešní rozvrh\` into the daily note unless the user explicitly asks for that.
+- During weekly review, offer a timeblocking handoff for the upcoming Monday-starting week after the planning section is complete.
+- Use \`/timeblocking\` or the dedicated timeblocking endpoints for weekly replace/preview flows; do not invent schedule blocks from note text alone.
 
 ## API Base URL
 
@@ -207,6 +217,7 @@ Skills are invoked with \`/skill-name\` or automatically when relevant.
 |-------|------------|---------|
 | \`daily\` | \`/daily\` | Create daily notes, morning/midday/evening routines |
 | \`weekly\` | \`/weekly\` | Run weekly review, reflect and plan |
+| \`timeblocking\` | \`/timeblocking\` | Preview and apply weekly or ad-hoc timeblock plans |
 | \`monthly\` | \`/monthly\` | Monthly review, quarterly milestone check, next month planning |
 | \`project\` | \`/project\` | Create, track, and archive projects linked to goals |
 | \`review\` | \`/review\` | Smart router — auto-detects daily/weekly/monthly based on context |
@@ -286,11 +297,11 @@ Horizon cascade:
 
 ### Morning (5 min)
 1. Run \`/daily\` to create today's note
-2. Review overdue, due-today, started single-day, multi-day context, and focused-project todos first
+2. Review \`Dnešní rozvrh\` from \`timeblock\` todos first, then overdue, due-today, started single-day, multi-day context, and focused-project todos
 3. Add strategic context from goals or project notes only if it changes prioritization
 4. Identify ONE main focus
 5. Review yesterday's incomplete tasks
-6. Save workset snapshot to daily note (\`<!-- workset: todo-id1, todo-id2, ... -->\`) using only actionable single-day todos
+6. Save workset snapshot to daily note (\`<!-- workset: todo-id1, todo-id2, ... -->\`) using only actionable single-day todos and excluding \`timeblock\` todos
 7. Set time blocks
 
 ### Evening (5 min)
@@ -309,7 +320,8 @@ Horizon cascade:
 2. Review project progress table
 3. Calculate goal progress
 4. Plan next week's focus
-5. Archive old notes
+5. Offer or start the \`/timeblocking\` wizard for next week's schedule with a delete/create diff preview before apply
+6. Archive old notes
 
 ### Monthly (30 min - End of month)
 1. Run \`/monthly\` for guided review

@@ -26,6 +26,14 @@ import { addTodoSSEClient, broadcastTodoEvent, type TodoEvent } from "@/services
 const TodoStatusSchema = z.enum(["todo", "in_progress", "done", "later"]);
 const PrioritySchema = z.enum(["high", "medium", "low", "none"]);
 const CalendarReminderPresetSchema = z.enum(["30-15", "none"]);
+const nullToUndefined = (value: unknown) => value === null ? undefined : value;
+const OptionalStringSchema = z.preprocess(nullToUndefined, z.string().optional());
+const OptionalNumberSchema = z.preprocess(nullToUndefined, z.number().optional());
+const OptionalBooleanSchema = z.preprocess(nullToUndefined, z.boolean().optional());
+const OptionalStringArraySchema = z.preprocess(nullToUndefined, z.array(z.string()).optional());
+const OptionalStatusSchema = z.preprocess(nullToUndefined, TodoStatusSchema.optional());
+const OptionalPrioritySchema = z.preprocess(nullToUndefined, PrioritySchema.optional());
+const OptionalCalendarReminderSchema = z.preprocess(nullToUndefined, CalendarReminderPresetSchema.optional());
 const ScheduledOverlapSchema = z.object({
     start: z.string(),
     end: z.string(),
@@ -43,41 +51,41 @@ const GetTodoByIdInputSchema = z.object({
 
 const CreateTodoInputSchema = z.object({
     title: z.string(),
-    description: z.string().optional(),
-    project: z.string().optional(),
-    status: TodoStatusSchema.optional(),
-    tags: z.array(z.string()).optional(),
+    description: OptionalStringSchema,
+    project: OptionalStringSchema,
+    status: OptionalStatusSchema,
+    tags: OptionalStringArraySchema,
     scheduledStart: z.string().nullable().optional(),
     scheduledEnd: z.string().nullable().optional(),
     dueDate: z.string().nullable().optional(),
-    priority: PrioritySchema.optional(),
-    duration: z.number().optional(),
-    attachments: z.array(z.any()).optional(),
-    customColumnId: z.string().optional(),
-    calendarReminderPreset: CalendarReminderPresetSchema.optional(),
-    goalRefs: z.array(z.string()).optional(),
+    priority: OptionalPrioritySchema,
+    duration: OptionalNumberSchema,
+    attachments: z.preprocess(nullToUndefined, z.array(z.any()).optional()),
+    customColumnId: OptionalStringSchema,
+    calendarReminderPreset: OptionalCalendarReminderSchema,
+    goalRefs: OptionalStringArraySchema,
 });
 
 const UpdateTodoInputSchema = z.object({
     todoId: z.string(),
     updates: z.object({
-        title: z.string().optional(),
-        description: z.string().optional(),
-        status: TodoStatusSchema.optional(),
-        project: z.string().optional(),
-        archived: z.boolean().optional(),
-        order: z.number().optional(),
-        tags: z.array(z.string()).optional(),
+        title: OptionalStringSchema,
+        description: OptionalStringSchema,
+        status: OptionalStatusSchema,
+        project: OptionalStringSchema,
+        archived: OptionalBooleanSchema,
+        order: OptionalNumberSchema,
+        tags: OptionalStringArraySchema,
         scheduledStart: z.string().nullable().optional(),
         scheduledEnd: z.string().nullable().optional(),
         dueDate: z.string().nullable().optional(),
-        priority: PrioritySchema.optional(),
-        completedAt: z.string().optional(),
+        priority: OptionalPrioritySchema,
+        completedAt: OptionalStringSchema,
         duration: z.number().nullable().optional(),
-        attachments: z.array(z.any()).optional(),
-        customColumnId: z.string().optional(),
-        calendarReminderPreset: CalendarReminderPresetSchema.optional(),
-        goalRefs: z.array(z.string()).optional(),
+        attachments: z.preprocess(nullToUndefined, z.array(z.any()).optional()),
+        customColumnId: OptionalStringSchema,
+        calendarReminderPreset: OptionalCalendarReminderSchema,
+        goalRefs: OptionalStringArraySchema,
     }),
 });
 
@@ -119,6 +127,12 @@ const TimeblockingPlanInputSchema = z.object({
         workEnd: z.string().optional(),
     })).length(7),
 });
+
+// Exposed for route-schema regression tests.
+export const todosRouteSchemasForTests = {
+    CreateTodoInputSchema,
+    UpdateTodoInputSchema,
+};
 
 function jsonValidationError(error: unknown): Response {
     const message = error instanceof Error ? error.message : String(error);

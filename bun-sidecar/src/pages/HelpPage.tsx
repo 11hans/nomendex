@@ -367,7 +367,7 @@ function HelpContent() {
                         <CardContent>
                             <Accordion type="multiple" className="w-full">
                                 <AccordionItem value="user-invoked">
-                                    <AccordionTrigger>User-Invoked Skills <Badge variant="secondary" className="ml-auto text-caption">8</Badge></AccordionTrigger>
+                                    <AccordionTrigger>User-Invoked Skills <Badge variant="secondary" className="ml-auto text-caption">9</Badge></AccordionTrigger>
                                     <AccordionContent>
                                         <div className="rounded-lg p-4 bg-surface-elevated">
                                             <div className="grid grid-cols-[1fr_2fr] gap-x-6 gap-y-1.5 text-sm">
@@ -375,6 +375,8 @@ function HelpContent() {
                                                 <span className="text-muted-foreground">Create daily notes, morning/midday/evening routines</span>
                                                 <code>/weekly</code>
                                                 <span className="text-muted-foreground">Weekly review — reflect, align with goals, plan next week</span>
+                                                <code>/timeblocking</code>
+                                                <span className="text-muted-foreground">Preview and apply weekly or ad-hoc timeblock schedules</span>
                                                 <code>/monthly</code>
                                                 <span className="text-muted-foreground">Monthly review — roll up weeks, check quarterly milestones, plan next month</span>
                                                 <code>/project</code>

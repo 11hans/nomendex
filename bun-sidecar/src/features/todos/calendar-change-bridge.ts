@@ -9,7 +9,13 @@ interface CalendarChange {
     completed?: boolean;
 }
 
-export function initCalendarChangeListener(todosAPI: any) {
+interface CalendarTodosAPI {
+    deleteTodo(args: { todoId: string }): Promise<unknown>;
+    getTodoById(args: { todoId: string }): Promise<{ tags?: string[] } | null>;
+    updateTodo(args: { todoId: string; updates: Record<string, unknown> }): Promise<unknown>;
+}
+
+export function initCalendarChangeListener(todosAPI: CalendarTodosAPI) {
     // Register the global handler that Swift will call
     (window as any).__onCalendarChange = async (changes: CalendarChange[]) => {
         let hasChangesToApply = false;
@@ -23,11 +29,16 @@ export function initCalendarChangeListener(todosAPI: any) {
                     });
                     hasChangesToApply = true;
                 } else {
+                    const currentTodo = await todosAPI.getTodoById({
+                        todoId: change.taskId,
+                    }).catch(() => null);
                     const updates: Record<string, any> = {};
                     if (change.title !== undefined) updates.title = change.title;
                     if (change.scheduledStart !== undefined) updates.scheduledStart = change.scheduledStart;
                     if (change.scheduledEnd !== undefined) updates.scheduledEnd = change.scheduledEnd;
-                    if (change.completed !== undefined) updates.status = change.completed ? "done" : "todo";
+                    if (change.completed !== undefined && !(currentTodo?.tags?.includes("timeblock"))) {
+                        updates.status = change.completed ? "done" : "todo";
+                    }
 
                     if (Object.keys(updates).length > 0) {
                         await todosAPI.updateTodo({

@@ -24,7 +24,7 @@ interface GoalPickerMultiProps {
      * []         → explicit no-goal
      * ["id", …]  → explicit override
      */
-    value: string[] | undefined;
+    value: string[] | null | undefined;
     onChange: (value: string[] | undefined) => void;
     goals: GoalRecord[];
     disabled?: boolean;
@@ -36,8 +36,8 @@ type GoalPickerProps = GoalPickerSingleProps | GoalPickerMultiProps;
 
 type MultiMode = "inherit" | "override" | "no-goal";
 
-function getMultiMode(value: string[] | undefined): MultiMode {
-    if (value === undefined) return "inherit";
+function getMultiMode(value: string[] | null | undefined): MultiMode {
+    if (!Array.isArray(value)) return "inherit";
     if (value.length === 0) return "no-goal";
     return "override";
 }
@@ -181,8 +181,9 @@ export function GoalPicker(props: GoalPickerProps) {
     } else if (currentMode === "no-goal") {
         triggerLabel = "No goal";
     } else {
-        const first = goals.find(g => g.id === (value as string[])[0]);
-        const rest = (value as string[]).length - 1;
+        const selectedIds = Array.isArray(value) ? value : [];
+        const first = goals.find(g => g.id === selectedIds[0]);
+        const rest = selectedIds.length - 1;
         triggerLabel = first
             ? first.title + (rest > 0 ? ` +${rest}` : "")
             : "Override";
@@ -207,7 +208,7 @@ export function GoalPicker(props: GoalPickerProps) {
     };
 
     const handleToggleGoal = (goalId: string) => {
-        const current = value as string[] ?? [];
+        const current = Array.isArray(value) ? value : [];
         const next = current.includes(goalId)
             ? current.filter(id => id !== goalId)
             : [...current, goalId];

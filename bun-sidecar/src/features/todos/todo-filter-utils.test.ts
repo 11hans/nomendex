@@ -177,6 +177,10 @@ describe("needsAttention", () => {
         expect(needsAttention(makeTodo({ archived: true, dueDate: daysFromNow(-1) }))).toBe(false);
     });
 
+    test("timeblock todo does NOT need attention", () => {
+        expect(needsAttention(makeTodo({ tags: ["timeblock"], dueDate: todayStr() }))).toBe(false);
+    });
+
     test("todo with no date, no priority, status todo does NOT need attention", () => {
         expect(needsAttention(makeTodo({ priority: "none" }))).toBe(false);
     });

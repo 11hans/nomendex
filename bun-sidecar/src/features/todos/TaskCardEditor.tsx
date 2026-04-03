@@ -58,7 +58,16 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
     });
 
     useEffect(() => {
-        setEditedTodo(todo);
+        if (!todo) {
+            setEditedTodo(null);
+            reminderAutoDisabledRef.current = false;
+            return;
+        }
+
+        setEditedTodo({
+            ...todo,
+            goalRefs: Array.isArray(todo.goalRefs) ? todo.goalRefs : undefined,
+        });
         reminderAutoDisabledRef.current = false;
     }, [todo]);
 

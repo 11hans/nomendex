@@ -22,7 +22,7 @@ const DEFAULT_SKILLS: DefaultSkill[] = [
       "SKILL.md": `---
 name: todos
 description: "Manages project todos via REST API. BEFORE using this skill, you must THINK: 'Does the user mention a project? Does the user imply a specific column like Today?'. Use when the user asks to create, view, update, or delete todos."
-version: 11
+version: 12
 source: nomendex
 ---
 
@@ -169,6 +169,8 @@ Use this workflow for read-only requests such as:
 ### Todo Safety Rules
 - **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
 - **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
+- **Timeblock semantics**: Todos with tag \`timeblock\` are calendar blocks, not actionable tasks. Show them as schedule context, never in normal workset buckets, completion-rate math, carry-forward, or batch reschedule.
+- **Timeblock completion**: Never mark a \`timeblock\` todo as \`done\`. If the user explicitly wants to convert a timeblock into an actionable task, first remove the \`timeblock\` tag, then confirm any status change.
 - **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
 - **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
 
@@ -227,6 +229,7 @@ Follow this checklist exactly for mutating requests:
 *   ❌ **DO NOT batch-reschedule multi-day todos**: Show them as \`Multi-day context\` only.
 *   ❌ **DO NOT hide duplicate titles**: When titles repeat, show visible plain-text ID + \`scheduledStart\`-\`scheduledEnd\`.
 *   ❌ **DO NOT invent streak arithmetic**: Use the latest relevant daily note verbatim, or say \`streak neuveden\`.
+*   ❌ **DO NOT treat timeblocks as normal tasks**: Keep todos tagged \`timeblock\` out of workset math, carry-forward, and done/completion actions unless the user explicitly converts them first.
 
 ## Golden Example (Few-Shot)
 
@@ -1358,7 +1361,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 8
+version: 9
 source: nomendex
 ---
 
@@ -1420,8 +1423,27 @@ Morning planning is **read-only by default**. Summarize and propose a plan first
 ### Todo Safety Rules
 - **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
 - **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
+- **Timeblock semantics**: Todos with tag \`timeblock\` are calendar blocks, not actionable tasks. Show them in a separate \`Dnešní rozvrh\` section, never in the workset snapshot, completion-rate math, or batch reschedule.
+- **Timeblock completion**: Never mark a \`timeblock\` todo as \`done\`. If the user explicitly wants to convert a timeblock into an actionable task, first remove the \`timeblock\` tag, then confirm any status change.
 - **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
 - **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
+
+### Dnešní rozvrh (chat-only)
+Before building the actionable workset, load today's timeblocks via \`POST /api/todos/list\` with:
+
+\`\`\`json
+{
+  "tagsAll": ["timeblock"],
+  "scheduledOverlap": { "start": "TODAYT00:00", "end": "TODAYT23:59" }
+}
+\`\`\`
+
+Rules:
+- Sort by \`scheduledStart\` ascending.
+- Render this as a separate top section named \`## 📅 Dnešní rozvrh\` in the chat response.
+- This section is **chat-only**. Do not write it into today's daily note.
+- If there are no timeblocks today, say that explicitly and continue with the regular workset.
+- Ask whether anything in the schedule needs moving only if the user signals a change or wants replanning.
 
 ### Today Workset Algorithm
 Build today's workset via \`/todos\` using these buckets:
@@ -1442,16 +1464,19 @@ Rules:
 
 ### Automated Steps
 1. Detect today's real daily-note path and open it only if it already exists or the user explicitly asked to create/open it
-2. Pull incomplete tasks from yesterday's real daily note if one exists
-3. Build today's actionable single-day todo workset using the bucket order above
-4. Surface \`Multi-day Context\` separately and keep it out of the actionable workset snapshot
-5. If the user names a focus project, surface that project's open todos before unrelated work
-6. **Save workset snapshot** — after the workset is finalized, write only the actionable single-day todo list with \`[[todo:id|Title]]\` wiki-links into today's daily note under \`## Today's Workset\`, plus a hidden HTML comment listing the todo IDs: \`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`. Never include \`Multi-day Context\` items in this snapshot. This snapshot is the evening flow's baseline for completion rate. Place it right after the \`## Today's Workset\` heading (or at the top of the note if the section doesn't exist). If the daily note hasn't been created yet, include both when creating it.
-7. Read typed goal progress from Goals API first; use weekly/monthly notes only as strategic narrative context
-8. Ask focus questions and propose a plan before editing anything
+2. Load today's \`timeblock\` todos and show them first as chat-only \`## 📅 Dnešní rozvrh\`
+3. Pull incomplete tasks from yesterday's real daily note if one exists
+4. Build today's actionable single-day todo workset using the bucket order above
+5. Surface \`Multi-day Context\` separately and keep it out of the actionable workset snapshot
+6. Keep \`timeblock\` todos out of the actionable workset snapshot even if they are scheduled today
+7. If the user names a focus project, surface that project's open todos before unrelated work
+8. **Save workset snapshot** — after the workset is finalized, write only the actionable single-day todo list with \`[[todo:id|Title]]\` wiki-links into today's daily note under \`## Today's Workset\`, plus a hidden HTML comment listing the todo IDs: \`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`. Never include \`Multi-day Context\` or \`timeblock\` items in this snapshot. This snapshot is the evening flow's baseline for completion rate. Place it right after the \`## Today's Workset\` heading (or at the top of the note if the section doesn't exist). If the daily note hasn't been created yet, include both when creating it.
+9. Read typed goal progress from Goals API first; use weekly/monthly notes only as strategic narrative context
+10. Ask focus questions and propose a plan before editing anything
 
 ### Context Surfacing
 Before interactive prompts, automatically surface:
+- **Dnešní rozvrh** from todos tagged \`timeblock\` that overlap today
 - **Overdue** todos
 - **Due Today** todos
 - **Started / In Progress** todos
@@ -1463,6 +1488,12 @@ Before interactive prompts, automatically surface:
 
 Display as a brief context block at the top of the morning routine using \`[[todo:id|Title]]\` wiki-links (never checkboxes):
 \`\`\`markdown
+## 📅 Dnešní rozvrh
+| Čas | Blok | Délka |
+|-----|------|-------|
+| 07:00 | 📓 Morning Review | 15 min |
+| 19:30 | 🔵 Deep Work | 2h |
+
 ### Today's Context
 - **Overdue:**
   - [[todo:abc-123|Fix bug from yesterday]] · [ProjectA] · high · due 3/25
@@ -1503,6 +1534,7 @@ Create all? (or specify which ones)
 
 ### Morning Checklist
 - Daily note path detected
+- Today's timeblock schedule surfaced in chat only
 - Today workset reviewed (overdue, due today, started, multi-day context, focused project, other candidates)
 - Read-only single-day workset with \`[[todo:id|Title]]\` wiki-links written to daily note
 - Workset snapshot saved (\`<!-- workset: ... -->\`)
@@ -1539,6 +1571,7 @@ Read the morning workset snapshot from today's daily note:
 \`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`
 If the snapshot exists, those IDs are the baseline ("planned today"). Before computing completion, reclassify any snapshot todo whose \`scheduledStart\`/\`scheduledEnd\` are more than 1 local calendar day apart into \`Multi-day Context\` and remove it from the planned set.
 If no snapshot exists (morning flow was skipped), fall back to an API-based heuristic: single-day todos with \`dueDate\` today, \`scheduledStart\` covering today, or in a Today/Now custom column. Note in the output that the morning workset was not recorded and the completion rate may be less precise. Show multi-day scheduled todos separately as \`Multi-day Context\`.
+Always exclude todos tagged \`timeblock\` from both the planned set and the fallback heuristic.
 
 #### Step 2: Fetch completion data
 - Fetch active todos via \`/api/todos/list\`.
@@ -1548,13 +1581,14 @@ If no snapshot exists (morning flow was skipped), fall back to an API-based heur
 
 #### Step 3: Classify ongoing vs planned
 - **Planned today**: todos whose IDs appear in the morning workset snapshot, after removing anything reclassified into \`Multi-day Context\`.
+- Exclude todos tagged \`timeblock\` even if they accidentally appear in the snapshot or fallback set.
 - **Ongoing**: \`in_progress\` todos whose IDs are NOT in the morning workset. These are multi-day work items carried forward.
 - **Multi-day Context**: todos whose \`scheduledStart\`/\`scheduledEnd\` are more than 1 local calendar day apart, regardless of whether they were previously shown in the morning snapshot.
-- Ongoing todos and \`Multi-day Context\` do NOT enter the completion rate denominator or numerator. Show them in separate sections.
+- Ongoing todos, \`Multi-day Context\`, and \`timeblock\` todos do NOT enter the completion rate denominator or numerator. Show them in separate sections when relevant.
 
 #### Step 4: Calculate completion rate
 \`completion_rate = completed_today ∩ planned_today / |planned_today|\`
-Only todos from the planned single-day workset count. Bonus completions (todos not in the morning workset but completed today) are shown separately as "Extra wins". \`Multi-day Context\` and \`Ongoing\` items never count toward the denominator or numerator.
+Only todos from the planned single-day workset count. Bonus completions (todos not in the morning workset but completed today) are shown separately as "Extra wins". \`Multi-day Context\`, \`Ongoing\`, and \`timeblock\` items never count toward the denominator or numerator.
 
 #### Step 5: Double-check and batch actions
 Present a single batch summary comparing morning workset with current API state:
@@ -2503,7 +2537,7 @@ Works with:
       "SKILL.md": `---
 name: review
 description: Smart review router. Detects context (morning, Sunday, end of month) and launches the appropriate review workflow. Use anytime for the right review at the right time.
-version: 2
+version: 3
 source: nomendex
 ---
 
@@ -2544,7 +2578,7 @@ DAY_OF_WEEK=$(date +%u)  # 1=Monday, 7=Sunday
 
 - **Sunday (7) or Monday (1):** Weekly review — delegate to \`/weekly\`
   - Override time-of-day detection
-  - Ask: "Ready for your weekly review?" before proceeding
+  - Ask: "Ready for your weekly review? I can also help you set up next week's timeblocking at the end." before proceeding
 
 ### 3. Check the Day of Month
 
@@ -2620,6 +2654,7 @@ Launching weekly review...
 Works with:
 - \`/daily\` — Morning, midday, and evening routines
 - \`/weekly\` — Full weekly review process
+- \`/timeblocking\` — Weekly or ad-hoc timeblock planning after review
 - \`/monthly\` — Monthly review and planning
 - Session init hook — Staleness data already calculated
 `,
@@ -2736,12 +2771,121 @@ If no matches are found:
     },
   },
   {
+    name: "timeblocking",
+    files: {
+      "SKILL.md": `---
+name: timeblocking
+description: Create, preview, and re-plan weekly calendar blocks stored as todos tagged timeblock. Use after weekly review or when the user wants ad-hoc replanning.
+version: 1
+source: nomendex
+---
+
+# Timeblocking Skill
+
+Create, preview, and re-plan weekly calendar blocks stored as todos tagged \`timeblock\`.
+
+## Usage
+
+\`\`\`
+/timeblocking
+\`\`\`
+
+Use this skill when the user wants to:
+- plan next week's schedule after weekly review
+- re-plan the current week after changes
+- inspect, move, replace, or preview timeblocks
+
+## Core Concept
+
+Timeblocks are normal todos with tag \`timeblock\`.
+
+- They are calendar blocks, not actionable tasks.
+- Never mark them as \`done\`.
+- Keep them out of workset snapshots, completion-rate math, and carry-forward.
+- Show them as schedule context first, then discuss changes.
+
+## Planning Flow
+
+### Phase 1: Load current state
+1. Detect the target week (default: next Monday-starting week unless the user says otherwise)
+2. Load existing timeblocks for that week with \`POST /api/todos/list\`
+3. Use:
+
+\`\`\`json
+{
+  "tagsAll": ["timeblock"],
+  "scheduledOverlap": { "start": "WEEK_STARTT00:00", "end": "WEEK_ENDT23:59" }
+}
+\`\`\`
+
+### Phase 2: Gather inputs
+Ask for a day type for each day:
+- \`work_full\`
+- \`work_early\`
+- \`pohotovost\`
+- \`free\`
+
+Rules:
+- If the user leaves a day blank, use the config default.
+- For each \`work_early\` day, ask for \`workEnd\` in \`HH:mm\`.
+- If the user wants only partial replanning, confirm the target days before applying changes.
+
+### Phase 3: Preview
+Use the timeblocking generator/validator to produce:
+- proposed timeblocks to create
+- existing timeblocks that would be deleted
+- blocking conflicts
+- coverage warnings
+
+Render a diff preview before any mutation:
+
+\`\`\`markdown
+## Timeblocking Preview
+
+### Smazat
+- Tue 2026-04-07 · 19:30-21:30 · [[todo:old-123|🔵 Deep Work]]
+
+### Vytvořit
+- Tue 2026-04-07 · 18:30-20:30 · 🔵 Deep Work
+- Tue 2026-04-07 · 21:00-21:15 · 📓 Evening Review
+
+### Coverage
+- ✅ Pohyb: 4x (cíl 3x)
+- ⚠️ Renovace: 0x (cíl 1x)
+\`\`\`
+
+Rules:
+- If blocking conflicts exist, do not apply changes.
+- Coverage warnings are advisory, not blockers.
+- Explain clearly what will be deleted vs created.
+
+### Phase 4: Apply
+After explicit confirmation:
+1. Replace the target week's existing \`timeblock\` todos
+2. If any create/update step fails, restore the prior week's timeblocks
+3. Summarize the final applied schedule
+
+## Safety Rules
+- Never mark a \`timeblock\` todo as \`done\`.
+- Before updating or moving an existing timeblock, re-fetch it via \`POST /api/todos/get\`.
+- If the refreshed schedule differs from what was previewed, stop and show the latest state.
+- Treat timeblocks as schedule context, not carry-forward tasks.
+
+## Integration
+
+- \`/weekly\` should offer this skill at the end of planning
+- \`/daily\` should read the resulting schedule into the chat-only \`Dnešní rozvrh\` section
+- Use \`/todos\` only for live API operations; do not infer timeblocks from note text
+`,
+    },
+  },
+  {
     name: "weekly",
     files: {
       "SKILL.md": `---
 name: weekly
-description: Facilitate weekly review process with reflection, goal alignment, and planning. Create review notes, analyze past week, plan next week. Use on Sundays or whenever doing weekly planning.
-version: 8
+description: Facilitate weekly review process with reflection, goal alignment, planning, and timeblocking handoff. Create review notes, analyze past week, plan next week. Use on Sundays or whenever doing weekly planning.
+version: 9
 source: nomendex
 ---
 
@@ -2771,7 +2915,12 @@ Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
    - Plans upcoming week
    - Aligns with typed goals (monthly/quarterly/yearly) via Goals API
 
-3. **Automates Housekeeping**
+3. **Adds Timeblocking Handoff**
+   - Offers weekly timeblocking at the end of planning
+   - Shows preview as delete/create diff before any mutation
+   - Treats coverage shortfall as warning and conflicts as blockers
+
+4. **Automates Housekeeping**
    - Archives old daily notes
    - Updates project statuses
    - Cleans up completed and stale todos
@@ -2779,6 +2928,8 @@ Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
 ## Todo Safety Rules
 - **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
 - **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
+- **Timeblock semantics**: Todos with tag \`timeblock\` are calendar blocks, not actionable tasks. Keep them out of carry-forward, completion-rate math, weekly completion tables, and batch reschedule.
+- **Timeblock completion**: Never mark a \`timeblock\` todo as \`done\`. If the user explicitly wants to convert a timeblock into an actionable task, first remove the \`timeblock\` tag, then confirm any status change.
 - **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
 - **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
 
@@ -2787,7 +2938,7 @@ Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
 ### Step 1: Reflection (10 minutes)
 - Review daily notes from past week
 - Fetch all todos via \`/todos\` skill (project, status, \`scheduledStart\`/\`scheduledEnd\`, dueDate, priority)
-- Calculate todo completion rate by project while keeping \`Multi-day Context\` separate from day-level completion math
+- Calculate todo completion rate by project while keeping \`Multi-day Context\` and \`timeblock\` todos out of day-level completion math
 - Identify wins and challenges
 - Capture lessons learned
 - Copy any explicit streak wording from the latest relevant daily note verbatim
@@ -2804,10 +2955,48 @@ Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
 ### Step 3: Planning (10 minutes)
 - Set ONE big thing for the week
 - Review and triage uncompleted single-day todos (archive/delete/carry over) while showing multi-day scheduled todos as context only
+- Explicitly exclude \`timeblock\` todos from carry-forward and completion summaries
 - Plan todo distribution for next week by day
 - Include project next-actions when planning week
 - Schedule important tasks
-- Block time for deep work
+
+### Phase 4: Timeblocking Wizard (5-10 minutes)
+At the end of planning, always offer timeblocking for the target week.
+
+1. Load existing weekly timeblocks via \`POST /api/todos/list\` with:
+
+\`\`\`json
+{
+  "tagsAll": ["timeblock"],
+  "scheduledOverlap": { "start": "WEEK_STARTT00:00", "end": "WEEK_ENDT23:59" }
+}
+\`\`\`
+
+2. Gather day types for Monday-Sunday
+3. For \`work_early\`, ask for \`workEnd\`
+4. Generate preview and show a diff:
+
+\`\`\`markdown
+## Timeblocking Preview
+
+### Smazat
+- Tue 2026-04-07 · 19:30-21:30 · [[todo:old-123|🔵 Deep Work]]
+
+### Vytvořit
+- Tue 2026-04-07 · 18:30-20:30 · 🔵 Deep Work
+- Tue 2026-04-07 · 21:00-21:15 · 📓 Evening Review
+
+### Coverage
+- ✅ Pohyb: 4x (cíl 3x)
+- ⚠️ Renovace: 0x (cíl 1x)
+\`\`\`
+
+Rules:
+- Show exactly what will be deleted vs created
+- Coverage warnings are advisory
+- Conflicts block apply
+- Apply only after explicit confirmation
+- If the user wants to skip this step, acknowledge it and finish the weekly review normally
 
 ## Interactive Prompts
 
@@ -2835,6 +3024,7 @@ The skill guides you through:
 - Calculate todo completion rates by project
 - Identify overdue and blocked todos
 - Keep multi-day scheduled todos in a separate context section, not carry-forward or daily-rate math
+- Keep \`timeblock\` todos out of carry-forward, completion tables, and weekly completion math
 - Process inbox items
 - Update project statuses
 - Check upcoming scheduled todos via \`scheduledStart\`/\`scheduledEnd\` (and external calendar only if explicitly available)
@@ -2842,7 +3032,7 @@ The skill guides you through:
 - Copy streak values from the latest relevant daily note verbatim; do not derive them from todo text or checkbox arithmetic
 - Plan next week's priorities
 - Propose new todos and todo distribution for next week (batch confirm with user, then create/update via API)
-- Block time for important work
+- Offer the timeblocking wizard and show its diff preview before any apply step
 - Clean digital workspace
 - Archive completed todos via API (batch confirm with user)
 - Commit changes to Git
@@ -2879,6 +3069,10 @@ All todo references use \`[[todo:id|Title]]\` wiki-links. Never write \`[ ]\`/\`
 
 ### Multi-day Context
 - [[todo:mno-345|Morava]] · id: mno-345 · 2026-03-11 → 2026-03-14 · [ProjectB] · context only
+
+### Timeblocks
+- Excluded from completion math and carry-forward
+- Reviewed separately in weekly timeblocking preview
 
 ### Today Column Patterns
 - Average "Today" todos: 8/day
@@ -2936,11 +3130,8 @@ Distribution of existing + new todos across the week (agent sets \`scheduledStar
 - [[todo:id|Specific next step]] · [ProjectB]
 
 ### Time Blocks
-- Monday:
-- Tuesday:
-- Wednesday:
-- Thursday:
-- Friday:
+- Use weekly timeblocking preview diff before applying any replace
+- Keep deleted vs created blocks explicit
 
 ### Todo Housekeeping
 Actions executed via API after user confirms batch:
@@ -2965,7 +3156,7 @@ Fetch and analyze todos from Nomendex API:
 - **Completion metrics**: Calculate completion rate by project
 - **Overdue detection**: Identify todos past their due date
 - **Blocker identification**: Surface todos marked as blocked
-- **Pattern analysis**: Track "Today" column usage and completion while keeping multi-day context out of day-level completion-rate math
+- **Pattern analysis**: Track "Today" column usage and completion while keeping multi-day context and \`timeblock\` todos out of day-level completion-rate math
 - **Goal mapping**: Connect completed todos to typed goals via \`resolvedGoalRefs\`
 - **Disambiguation**: When titles repeat, show visible plain-text ID + \`scheduledStart\`-\`scheduledEnd\`
 
@@ -2974,7 +3165,7 @@ Example usage in weekly review:
 Use /todos skill to:
 1. Fetch all todos from past week
 2. Group by project and status
-3. Calculate completion rates (exclude multi-day context from daily-rate math)
+3. Calculate completion rates (exclude multi-day context and \`timeblock\` todos from daily-rate math)
 4. Identify overdue items
 5. Analyze daily "Today" column patterns
 6. Render duplicate titles with visible IDs and scheduled ranges
@@ -3018,7 +3209,7 @@ Calculate habit success rates from daily notes:
 
 ## Task-Based Progress Tracking
 
-The weekly skill uses session tasks to show progress through the 3-phase review.
+The weekly skill uses session tasks to show progress through the 4-phase review.
 
 ### Phase Tasks
 
@@ -3039,6 +3230,11 @@ TaskCreate:
   subject: "Phase 3: Plan"
   description: "Identify ONE Big Thing, triage todos, plan daily focus areas for next week"
   activeForm: "Planning next week's focus and todo distribution..."
+
+TaskCreate:
+  subject: "Phase 4: Timeblocking Wizard"
+  description: "Preview weekly timeblocks, coverage, and diff before apply"
+  activeForm: "Preparing weekly timeblocking preview..."
 \`\`\`
 
 ### Dependencies
@@ -3047,9 +3243,10 @@ Phases must run in order:
 \`\`\`
 TaskUpdate: "Phase 2: Reflect", addBlockedBy: [phase-1-collect-id]
 TaskUpdate: "Phase 3: Plan", addBlockedBy: [phase-2-reflect-id]
+TaskUpdate: "Phase 4: Timeblocking Wizard", addBlockedBy: [phase-3-plan-id]
 \`\`\`
 
-Reflect is blocked until Collect completes. Plan is blocked until Reflect completes. This provides visibility into the 30-minute review process.
+Reflect is blocked until Collect completes. Plan is blocked until Reflect completes. Timeblocking Wizard is blocked until Plan completes. This provides visibility into the weekly review process.
 
 Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
 

@@ -13,6 +13,7 @@ import type { ProjectInfo } from "./index";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { RenameProjectDialog } from "./RenameProjectDialog";
+import { isTimeblockTodo } from "@/features/todos/todo-filter-utils";
 
 export function ProjectsBrowserView({ tabId }: { tabId: string }) {
     if (!tabId) {
@@ -43,7 +44,7 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
         ]);
 
         const projectInfos = projectConfigs.map((config) => {
-            const projectTodos = allTodos.filter((t) => t.project === config.name);
+            const projectTodos = allTodos.filter((t) => t.project === config.name && !isTimeblockTodo(t));
             const projectNotes = allNotes.filter((n) => n.frontMatter?.project === config.name);
 
             return {
@@ -123,6 +124,17 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
             console.error("Failed to refresh projects:", err);
         }
     }, [buildProjectInfos]);
+
+    useEffect(() => {
+        const handleCalendarSync = () => {
+            void refreshProjects();
+        };
+
+        window.addEventListener("calendar-sync-update", handleCalendarSync);
+        return () => {
+            window.removeEventListener("calendar-sync-update", handleCalendarSync);
+        };
+    }, [refreshProjects]);
 
     // Handle opening rename dialog
     const handleOpenRename = useCallback((project: { id: string; name: string }, e: React.MouseEvent) => {

@@ -17,7 +17,6 @@ import { NotesFileTree } from "./NotesFileTree";
 import { CreateFolderDialog, RenameFolderDialog, MoveToFolderDialog } from "./NotesFolderDialogs";
 import { toast } from "sonner";
 import { useCommandDialog } from "@/components/CommandDialogProvider";
-import { CreateNoteDialog } from "./create-note-dialog";
 import { DeleteNoteDialog } from "./delete-note-dialog";
 import { DeleteFolderDialog } from "./delete-folder-dialog";
 import { RenameNoteDialog } from "./rename-note-dialog";
@@ -53,6 +52,12 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
 
     // API hook
     const notesAPI = useNotesAPI();
+
+    const normalizeNoteFileName = useCallback((rawName: string): string => {
+        const sanitized = rawName.trim().replace(/[/\\]/g, "-");
+        if (!sanitized) return "";
+        return sanitized.toLowerCase().endsWith(".md") ? sanitized : `${sanitized}.md`;
+    }, []);
 
     // Set tab name for browser view - only once when this tab is active
     useEffect(() => {
@@ -112,16 +117,17 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     }, [notesAPI, setLoading, setError, loadFolders, showHiddenFiles]);
 
     const handleCreateNote = async () => {
-        const finalNoteId = newNoteName.trim();
-        if (!finalNoteId) return;
+        const finalFileName = normalizeNoteFileName(newNoteName);
+        if (!finalFileName) return;
+        const noteTitle = finalFileName.replace(/\.md$/i, "");
 
         try {
             setLoading(true);
-            await notesAPI.saveNote({ fileName: finalNoteId, content: `# ${finalNoteId}\n\n` });
+            await notesAPI.saveNote({ fileName: finalFileName, content: `# ${noteTitle}\n\n` });
 
             // If creating in a folder, move the note there
             if (createNoteInFolderPath) {
-                await notesAPI.moveNoteToFolder({ fileName: finalNoteId, targetFolder: createNoteInFolderPath });
+                await notesAPI.moveNoteToFolder({ fileName: finalFileName, targetFolder: createNoteInFolderPath });
             }
 
             const result = await notesAPI.getNotes({ showHiddenFiles });
@@ -440,13 +446,16 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                                 </span>
                             </div>
                             <div className="flex items-center gap-0.5 shrink-0">
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
-                                    openDialog({
-                                        title: "Create New Note",
-                                        description: "Enter a name for your new note",
-                                        content: <CreateNoteDialog />,
-                                    });
-                                }} title="New note">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    onClick={() => {
+                                        setCreateNoteInFolderPath(null);
+                                        setCreateDialogOpen(true);
+                                    }}
+                                    title="New note"
+                                >
                                     <FilePlus className="h-4 w-4" />
                                 </Button>
                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleCreateFolder(null)} title="New folder">

@@ -7,7 +7,9 @@
       "Bash(osascript -e 'tell application \"\"Finder\"\" to get POSIX path of \\(\\(POSIX file \"\"/Users/honza/Desktop/TheVault\"\" as alias\\) as text\\)')",
       "Bash(mdls -name kMDItemKind -name kMDItemPath /Users/honza/Desktop/TheVault)",
       "Bash(bun test:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(bun eslint:*)",
+      "Bash(echo \"EXIT:$?\")"
     ]
   }
 }

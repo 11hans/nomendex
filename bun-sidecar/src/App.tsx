@@ -28,6 +28,7 @@ import { useWorkspaceSwitcher } from "./hooks/useWorkspaceSwitcher";
 import { WorkspaceOnboarding } from "./components/WorkspaceOnboarding";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useNoteEvents } from "./hooks/useNoteEvents";
+import { useTodoEvents } from "./hooks/useTodoEvents";
 
 // Bridge component for native Mac app keyboard handling
 function NativeKeyboardBridge() {
@@ -67,6 +68,12 @@ function UpdateNotificationBridge() {
 // Bridge component for real-time note file events (lock/unlock, changes)
 function NoteEventsBridge() {
     useNoteEvents();
+    return null;
+}
+
+// Bridge component for todo mutation events and calendar sync propagation
+function TodoEventsBridge() {
+    useTodoEvents();
     return null;
 }
 
@@ -172,6 +179,7 @@ export function App() {
                 <NativeKeyboardBridge />
                 <UpdateNotificationBridge />
                 <NoteEventsBridge />
+                <TodoEventsBridge />
                 <BrowserRouter>
                     <RoutingProvider>
                         <WorkspaceGuard>

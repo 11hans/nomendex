@@ -5,6 +5,7 @@ import { useProjectsAPI } from "@/hooks/useProjectsAPI";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useTheme } from "@/hooks/useTheme";
 import { Todo } from "./todo-types";
+import { isTimeblockTodo } from "./todo-filter-utils";
 import type { ProjectConfig } from "@/features/projects/project-types";
 import { Input } from "@/components/ui/input";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
@@ -142,6 +143,17 @@ export function ProjectBrowserView() {
         loadData();
     }, [loadData]);
 
+    useEffect(() => {
+        const handleCalendarSync = () => {
+            void loadData();
+        };
+
+        window.addEventListener("calendar-sync-update", handleCalendarSync);
+        return () => {
+            window.removeEventListener("calendar-sync-update", handleCalendarSync);
+        };
+    }, [loadData]);
+
     const projectStats: ProjectStats[] = useMemo(() => {
         const today = new Date();
         const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
@@ -178,13 +190,14 @@ export function ProjectBrowserView() {
 
         const buildStats = (name: string, projectKey: string, config?: ProjectConfig, isNoProject = false): ProjectStats => {
             const todos = todosByProject.get(projectKey) ?? [];
-            const activeTodos = todos.filter((todo) => !todo.archived);
+            const trackedTodos = todos.filter((todo) => !isTimeblockTodo(todo));
+            const activeTodos = trackedTodos.filter((todo) => !todo.archived);
 
             const todoCount = activeTodos.filter((todo) => todo.status === "todo").length;
             const laterCount = activeTodos.filter((todo) => todo.status === "later").length;
             const inProgressCount = activeTodos.filter((todo) => todo.status === "in_progress").length;
             const doneCount = activeTodos.filter((todo) => todo.status === "done").length;
-            const archivedTodoCount = todos.filter((todo) => Boolean(todo.archived)).length;
+            const archivedTodoCount = trackedTodos.filter((todo) => Boolean(todo.archived)).length;
             const highPriorityCount = activeTodos.filter((todo) => todo.priority === "high" && todo.status !== "done").length;
             const overdueCount = activeTodos.filter((todo) => {
                 if (!todo.dueDate || todo.status === "done") return false;
@@ -218,7 +231,7 @@ export function ProjectBrowserView() {
                 archivedTodoCount,
                 highPriorityCount,
                 overdueCount,
-                totalCount: todos.length,
+                totalCount: trackedTodos.length,
             };
         };
 

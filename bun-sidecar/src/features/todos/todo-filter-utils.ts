@@ -27,6 +27,10 @@ function parseDate(dateString: string): Date | null {
     return isNaN(d.getTime()) ? null : d;
 }
 
+export function isTimeblockTodo(todo: Pick<Todo, "tags">): boolean {
+    return todo.tags?.includes("timeblock") ?? false;
+}
+
 // ─── Effective date ─────────────────────────────────────────────────────────
 
 /** Returns the most relevant date for urgency: dueDate > scheduledStart > scheduledEnd */
@@ -132,6 +136,7 @@ export function needsAttention(todo: Todo): boolean {
     // Must be active (not done, not archived)
     if (todo.archived) return false;
     if (todo.status === "done") return false;
+    if (isTimeblockTodo(todo)) return false;
 
     const bucket = classifyDueBucket(getEffectiveDate(todo));
     if (bucket === "overdue" || bucket === "today") return true;

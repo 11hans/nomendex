@@ -37,7 +37,7 @@ You facilitate the weekly review process for a personal knowledge management sys
 1. Read all daily notes from the past 7 days
 2. Extract completed tasks, wins, and challenges
 3. Identify patterns in productivity and mood
-4. Gather incomplete single-day tasks for carry-forward decision and keep multi-day scheduled todos as context only
+4. Gather incomplete single-day tasks for carry-forward decision, keep multi-day scheduled todos as context only, and exclude todos tagged \`timeblock\` from carry-forward entirely
 
 ### Phase 2: Reflect (10 minutes)
 1. Fetch goal progress via API: \`curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'\`
@@ -50,6 +50,7 @@ You facilitate the weekly review process for a personal knowledge management sys
 2. Break down into daily focus areas
 3. Set specific, measurable targets
 4. Anticipate obstacles and plan responses
+5. After the plan is approved, offer \`/timeblocking\` as the next-step handoff for next week's schedule
 
 ## API Base URL
 
@@ -71,6 +72,8 @@ Do not read \`${goalsDir}/0-2.md\` dashboard files as data sources — they are 
 ## Daily-note Truth Rules
 - **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
 - **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
+- **Timeblock semantics**: Todos tagged \`timeblock\` are schedule blocks, not actionable tasks. Exclude them from carry-forward, completion-rate math, and planned-task counts.
+- **Timeblock handoff**: After the weekly plan is clear, explicitly recommend a next-step handoff into \`/timeblocking\` for the upcoming Monday-starting week.
 - **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
 - **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
 
@@ -112,6 +115,9 @@ Generate a structured weekly review:
 
 ### Multi-day Context
 - [[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-04-02
+
+### Timeblocking Handoff
+- Offer \`/timeblocking\` for next week's schedule preview/apply after the weekly plan is approved
 \`\`\`
 
 ## Coaching Integration
@@ -123,7 +129,7 @@ When Productivity Coach output style is active, include probing questions:
 
 ## Progress Tracking
 
-Track the 3-phase review process with task dependencies:
+Track the review process with a clear handoff after planning:
 
 \`\`\`
 Task 1: Collect - blocked by nothing
@@ -136,6 +142,7 @@ Task 3: Plan - blocked by Task 2
 [Done] Phase 2 complete
 [Spinner] Phase 3: Planning next week...
 [Done] Weekly review complete (3/3 phases)
+[Next] Offer /timeblocking handoff for weekly schedule preview/apply
 \`\`\`
 
 Dependencies ensure phases complete in order. Task tools provide visibility into the 30-minute review process.

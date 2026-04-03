@@ -11,6 +11,7 @@ import { BoardConfig } from "./board-types";
 import { mkdir } from "node:fs/promises";
 import { ensureTimeblockingConfig } from "@/features/timeblocking/config";
 import { broadcastTodoEvent } from "@/services/todo-events";
+import { sanitizeTodoForClient, sanitizeTodoListForClient } from "./todo-sanitize";
 
 // Create logger for todos plugin
 const todosLogger = createServiceLogger("TODOS");
@@ -33,6 +34,10 @@ function getTodosScheduleFieldRenameMigrationMarkerPath(): string {
     return path.join(getNomendexPath(), "migrations", "todos-schedule-fields-v2.done");
 }
 
+function getTodosNullNormalizationMigrationMarkerPath(): string {
+    return path.join(getNomendexPath(), "migrations", "todos-null-normalization-v3.done");
+}
+
 /**
  * Initialize the todos service. Must be called after initializePaths().
  */
@@ -52,6 +57,8 @@ export async function initializeTodosService(): Promise<void> {
     await runTodosLegacyDateMigrationIfNeeded();
     // One-off migration: rename scheduledStartAt/scheduledEndAt -> scheduledStart/scheduledEnd.
     await runTodosScheduleFieldRenameMigrationIfNeeded();
+    // One-off migration: normalize legacy nulls and malformed optional fields.
+    await runTodosNullNormalizationMigrationIfNeeded();
     await ensureTimeblockingConfig();
     await runTimeblockHousekeepingIfNeeded();
     todosLogger.info("Todos service initialized");
@@ -452,6 +459,37 @@ async function runTodosScheduleFieldRenameMigrationIfNeeded(): Promise<void> {
     todosLogger.info(`Todos schedule field rename migration complete (${migratedCount} records migrated)`);
 }
 
+async function runTodosNullNormalizationMigrationIfNeeded(): Promise<void> {
+    const markerPath = getTodosNullNormalizationMigrationMarkerPath();
+    const markerFile = Bun.file(markerPath);
+
+    if (await markerFile.exists()) {
+        todosLogger.info("Todos null normalization migration already applied, skipping");
+        return;
+    }
+
+    const todos = await getDb().findAll();
+    let migratedCount = 0;
+
+    for (const todo of todos) {
+        const normalized = sanitizeTodoForClient(todo);
+        if (JSON.stringify(normalized) === JSON.stringify(todo)) {
+            continue;
+        }
+
+        await getDb().update(todo.id, normalized as Partial<Todo>);
+        migratedCount += 1;
+    }
+
+    await mkdir(path.dirname(markerPath), { recursive: true });
+    await Bun.write(markerPath, JSON.stringify({
+        migratedAt: new Date().toISOString(),
+        migratedCount,
+    }, null, 2));
+
+    todosLogger.info(`Todos null normalization migration complete (${migratedCount} records migrated)`);
+}
+
 /**
  * Compute resolvedGoalRefs for a todo.
  * If the todo has explicit goalRefs, use those.
@@ -518,8 +556,9 @@ async function getTodos(rawInput: unknown) {
             return orderA - orderB;
         });
 
-        todosLogger.info(`Retrieved ${activeTodos.length} todos`);
-        return activeTodos;
+        const sanitized = sanitizeTodoListForClient(activeTodos);
+        todosLogger.info(`Retrieved ${sanitized.length} todos`);
+        return sanitized;
     } catch (error) {
         todosLogger.error(`Failed to get todos`, { error });
         throw error;
@@ -537,8 +576,9 @@ async function getTodoById(input: { todoId: string }) {
             throw new Error(`Todo with ID ${input.todoId} not found`);
         }
 
+        const sanitized = sanitizeTodoForClient(todo);
         todosLogger.info(`Retrieved todo: ${input.todoId}`);
-        return todo;
+        return sanitized;
     } catch (error) {
         todosLogger.error(`Failed to get todo ${input.todoId}`, { error });
         throw error;
@@ -649,8 +689,9 @@ async function createTodo(input: {
 
         const created = await getDb().create(newTodo);
 
-        todosLogger.info(`Created todo: ${created.id} with order ${created.order}`);
-        return created;
+        const sanitized = sanitizeTodoForClient(created);
+        todosLogger.info(`Created todo: ${sanitized.id} with order ${sanitized.order}`);
+        return sanitized;
     } catch (error) {
         todosLogger.error(`Failed to create todo`, { error });
         throw error;
@@ -825,8 +866,9 @@ async function updateTodo(input: {
             throw new Error(`Todo with ID ${input.todoId} not found`);
         }
 
+        const sanitized = sanitizeTodoForClient(updated);
         todosLogger.info(`Updated todo: ${input.todoId}`);
-        return updated;
+        return sanitized;
     } catch (error) {
         todosLogger.error(`Failed to update todo ${input.todoId}`, { error });
         throw error;
@@ -1035,9 +1077,10 @@ async function getArchivedTodos(input: { project?: string }) {
             return orderA - orderB;
         });
 
-        todosLogger.info(`Retrieved ${archivedTodos.length} archived todos`);
-        console.log("Final archived todos:", archivedTodos);
-        return archivedTodos;
+        const sanitized = sanitizeTodoListForClient(archivedTodos);
+        todosLogger.info(`Retrieved ${sanitized.length} archived todos`);
+        console.log("Final archived todos:", sanitized);
+        return sanitized;
     } catch (error) {
         todosLogger.error(`Failed to get archived todos`, { error });
         throw error;
