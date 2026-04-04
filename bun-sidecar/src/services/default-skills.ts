@@ -1361,7 +1361,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 9
+version: 10
 source: nomendex
 ---
 
@@ -1427,6 +1427,40 @@ Morning planning is **read-only by default**. Summarize and propose a plan first
 - **Timeblock completion**: Never mark a \`timeblock\` todo as \`done\`. If the user explicitly wants to convert a timeblock into an actionable task, first remove the \`timeblock\` tag, then confirm any status change.
 - **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
 - **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
+
+### Scheduling Semantics
+
+In Nomendex, both actionable work and calendar reservations are stored as todos. The distinction is semantic:
+
+- **Actionable todo**: a concrete piece of work the user wants to track or complete
+- **Timeblock**: a todo tagged \`timeblock\` that represents reserved calendar time, not a completion item
+
+Rules:
+- If one concrete task maps to one concrete time slot, you may use a single scheduled actionable todo.
+- If multiple concrete tasks share one planned time window, create separate actionable todos for the tasks and create one separate \`timeblock\` todo for the shared calendar reservation.
+- Never merge multiple actionable tasks into one actionable todo solely to make the calendar look cleaner.
+- If the user wants a cleaner calendar, prefer keeping detailed actionable todos and adding one summary \`timeblock\`.
+- Do not assign exact times to every actionable todo by default when a summary timeblock would express the schedule more cleanly.
+- Keep \`timeblock\` todos out of workset snapshots, carry-forward logic, completion-rate math, and done/reschedule flows unless the user explicitly wants to edit the schedule itself.
+
+### Scheduling Decision Guide
+
+- **One concrete thing, one concrete time** -> use one scheduled actionable todo
+- **Multiple concrete tasks in one planned window** -> create separate actionable todos plus one summary \`timeblock\`
+- **Pure time reservation without granular tracking** -> create a \`timeblock\` only
+- **Deep work block with one clear deliverable** -> propose both options (\`A\` scheduled actionable todo, \`B\` actionable todo + summary \`timeblock\`) and let the user choose before mutating
+
+### Non-Obvious Scheduling Confirmation
+
+Before creating or updating todos when timing, grouping, or block structure is inferred by the agent, first present a short proposal and wait for confirmation.
+
+This includes:
+- grouping several chores into one block
+- choosing exact start/end times
+- deciding whether to use one scheduled task vs detailed tasks + one timeblock
+- splitting or replacing an existing block after partial progress
+
+Do not mutate immediately unless the user explicitly gave exact timing and structure.
 
 ### Dnešní rozvrh (chat-only)
 Before building the actionable workset, load today's timeblocks via \`POST /api/todos/list\` with:
@@ -1561,6 +1595,22 @@ Create all? (or specify which ones)
 - "How's your energy right now?"
 - "What's the most important thing for this afternoon?"
 - "What can you let go of today?"
+
+### Partial Progress Replanning
+
+If a user reports that only part of a planned block was completed:
+
+- first confirm exactly which actionable tasks were completed and which remain
+- mark completed actionable todos individually
+- leave incomplete actionable todos open
+- preserve the original timeblock as historical schedule context
+- create a new timeblock for the remaining work if more scheduled time is needed
+- never repurpose a previously scheduled item so that it stops representing what actually happened earlier in the day
+
+If the earlier block was incorrectly represented by one combined actionable todo, correct the model by:
+- extracting completed work into explicit completed actionable items when needed
+- creating new actionable items for remaining distinct work
+- creating a separate remainder timeblock for the new time slot
 
 ## Evening Shutdown (5 minutes)
 
@@ -2776,7 +2826,7 @@ If no matches are found:
       "SKILL.md": `---
 name: timeblocking
 description: Create, preview, and re-plan weekly calendar blocks stored as todos tagged timeblock. Use after weekly review or when the user wants ad-hoc replanning.
-version: 1
+version: 2
 source: nomendex
 ---
 
@@ -2803,6 +2853,15 @@ Timeblocks are normal todos with tag \`timeblock\`.
 - Never mark them as \`done\`.
 - Keep them out of workset snapshots, completion-rate math, and carry-forward.
 - Show them as schedule context first, then discuss changes.
+
+### Relationship to Actionable Work
+
+Timeblocks are schedule containers, not completion containers.
+
+When a block represents several pieces of work:
+- keep the timeblock as calendar context
+- track completion on separate actionable todos
+- do not collapse several work outcomes into one non-timeblock todo just because the calendar should stay compact
 
 ## Planning Flow
 
