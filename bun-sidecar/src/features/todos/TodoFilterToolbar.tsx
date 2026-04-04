@@ -40,6 +40,8 @@ interface TodoFilterToolbarProps {
     statusBucketCounts?: Record<TodoStatusBucket, number>;
     onStatusBucketChange?: (bucket: TodoStatusBucket) => void;
     allowedSortModes: TodoSortMode[];
+    showQuickPresets?: boolean;
+    showDueFilter?: boolean;
 
     // Chips
     activeFilterChips: FilterChip[];
@@ -69,6 +71,8 @@ export function TodoFilterToolbar({
     statusBucketCounts,
     onStatusBucketChange,
     allowedSortModes,
+    showQuickPresets = true,
+    showDueFilter = true,
     activeFilterChips,
     hasActiveFilters,
     trailingActions,
@@ -79,6 +83,12 @@ export function TodoFilterToolbar({
 
     const hasAnyActiveFilter = hasActiveFilters || filterState.selectedTags.length > 0
         || filterState.selectedPriority !== null || filterState.dueFilter !== "any";
+
+    const visibleFilterChips = activeFilterChips.filter((chip) => {
+        if (!showDueFilter && chip.type === "due") return false;
+        if (!showQuickPresets && chip.type === "preset") return false;
+        return true;
+    });
 
     return (
         <div className="flex flex-col gap-2">
@@ -177,6 +187,7 @@ export function TodoFilterToolbar({
                             onPriorityChange={(p) => onFilterChange({ selectedPriority: p })}
                             dueFilter={filterState.dueFilter}
                             onDueFilterChange={(d) => onFilterChange({ dueFilter: d })}
+                            showDueFilter={showDueFilter}
                             availableTags={availableTags}
                             selectedTags={filterState.selectedTags}
                             onTagToggle={(tag) => {
@@ -245,36 +256,38 @@ export function TodoFilterToolbar({
                 <div className="flex-1" />
 
                 {/* Quick presets */}
-                <div className="flex items-center gap-1">
-                    {PRESET_CONFIG.map((preset) => {
-                        const isActive = filterState.quickPreset === preset.value;
-                        const Icon = preset.icon;
-                        return (
-                            <button
-                                key={preset.value}
-                                onClick={() => onActivatePreset(preset.value)}
-                                className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors"
-                                style={{
-                                    backgroundColor: isActive ? currentTheme.styles.surfaceAccent : 'transparent',
-                                    color: isActive ? currentTheme.styles.contentPrimary : currentTheme.styles.contentTertiary,
-                                    border: isActive ? 'none' : `1px solid transparent`,
-                                }}
-                            >
-                                <Icon className="size-3" />
-                                {preset.label}
-                            </button>
-                        );
-                    })}
-                </div>
+                {showQuickPresets && (
+                    <div className="flex items-center gap-1">
+                        {PRESET_CONFIG.map((preset) => {
+                            const isActive = filterState.quickPreset === preset.value;
+                            const Icon = preset.icon;
+                            return (
+                                <button
+                                    key={preset.value}
+                                    onClick={() => onActivatePreset(preset.value)}
+                                    className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-colors"
+                                    style={{
+                                        backgroundColor: isActive ? currentTheme.styles.surfaceAccent : 'transparent',
+                                        color: isActive ? currentTheme.styles.contentPrimary : currentTheme.styles.contentTertiary,
+                                        border: isActive ? 'none' : `1px solid transparent`,
+                                    }}
+                                >
+                                    <Icon className="size-3" />
+                                    {preset.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* Trailing actions */}
                 {trailingActions}
             </div>
 
             {/* Row 2: Active filter chips (conditional) */}
-            {activeFilterChips.length > 0 && (
+            {visibleFilterChips.length > 0 && (
                 <div className="flex items-center gap-1.5 flex-wrap">
-                    {activeFilterChips.map((chip, i) => (
+                    {visibleFilterChips.map((chip, i) => (
                         <span
                             key={`${chip.type}-${i}`}
                             className="flex items-center gap-1 px-2 py-0.5 rounded-md text-xs"

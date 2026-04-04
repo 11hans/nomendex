@@ -1011,6 +1011,8 @@ export function InboxListView() {
                                     todoFilter.setStatusBucket(statusBucket);
                                 }}
                                 allowedSortModes={["urgency", "recent"]}
+                                showQuickPresets={false}
+                                showDueFilter={false}
                                 activeFilterChips={todoFilter.activeFilterChips}
                                 hasActiveFilters={todoFilter.hasActiveFilters}
                                 trailingActions={

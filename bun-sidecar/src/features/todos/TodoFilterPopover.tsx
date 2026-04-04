@@ -32,6 +32,8 @@ interface TodoFilterPopoverProps {
     onProjectChange?: (project: string | null) => void;
     // Close
     onClose?: () => void;
+    // Visibility
+    showDueFilter?: boolean;
 }
 
 export function TodoFilterPopover({
@@ -47,6 +49,7 @@ export function TodoFilterPopover({
     selectedProject,
     onProjectChange,
     onClose,
+    showDueFilter = true,
 }: TodoFilterPopoverProps) {
     const { currentTheme } = useTheme();
 
@@ -70,36 +73,40 @@ export function TodoFilterPopover({
 
             <div style={{ borderTop: `1px solid ${currentTheme.styles.borderDefault}` }} />
 
-            {/* Due */}
-            <div>
-                <div className="flex items-center gap-1.5 px-2 mb-1.5 text-xs font-medium uppercase tracking-wider" style={sectionLabelStyle}>
-                    <Calendar className="size-3" />
-                    Due Date
-                </div>
-                <div className="flex flex-col gap-0.5">
-                    {DUE_FILTER_OPTIONS.map((option) => {
-                        const isActive = dueFilter === option.value;
-                        return (
-                            <button
-                                key={option.value}
-                                type="button"
-                                onClick={() => {
-                                    onDueFilterChange(isActive ? "any" : option.value);
-                                }}
-                                className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded text-sm transition-colors text-left"
-                                style={{
-                                    backgroundColor: isActive ? currentTheme.styles.surfaceTertiary : 'transparent',
-                                    color: currentTheme.styles.contentPrimary,
-                                }}
-                            >
-                                {option.label}
-                            </button>
-                        );
-                    })}
-                </div>
-            </div>
+            {showDueFilter && (
+                <>
+                    {/* Due */}
+                    <div>
+                        <div className="flex items-center gap-1.5 px-2 mb-1.5 text-xs font-medium uppercase tracking-wider" style={sectionLabelStyle}>
+                            <Calendar className="size-3" />
+                            Due Date
+                        </div>
+                        <div className="flex flex-col gap-0.5">
+                            {DUE_FILTER_OPTIONS.map((option) => {
+                                const isActive = dueFilter === option.value;
+                                return (
+                                    <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => {
+                                            onDueFilterChange(isActive ? "any" : option.value);
+                                        }}
+                                        className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded text-sm transition-colors text-left"
+                                        style={{
+                                            backgroundColor: isActive ? currentTheme.styles.surfaceTertiary : 'transparent',
+                                            color: currentTheme.styles.contentPrimary,
+                                        }}
+                                    >
+                                        {option.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
 
-            <div style={{ borderTop: `1px solid ${currentTheme.styles.borderDefault}` }} />
+                    <div style={{ borderTop: `1px solid ${currentTheme.styles.borderDefault}` }} />
+                </>
+            )}
 
             {/* Tags */}
             <div>

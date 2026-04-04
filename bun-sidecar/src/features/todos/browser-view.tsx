@@ -1728,6 +1728,8 @@ export function TodosBrowserView({
                         onClearAllFilters={todoFilter.clearAllFilters}
                         availableTags={availableTags}
                         allowedSortModes={["urgency", "manual"]}
+                        showQuickPresets={!embedded}
+                        showDueFilter={!embedded}
                         activeFilterChips={todoFilter.activeFilterChips}
                         hasActiveFilters={todoFilter.hasActiveFilters}
                         trailingActions={
