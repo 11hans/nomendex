@@ -499,10 +499,7 @@ export function TodosBrowserView({
     const handleDragStart = useCallback((event: DragStartEvent) => {
         const todo = todos.find(t => t.id === event.active.id);
         setDraggedTodo(todo || null);
-        if (!isManualSort) {
-            todoFilter.setSortMode("manual");
-        }
-    }, [todos, isManualSort, todoFilter]);
+    }, [todos]);
 
     const handleDragOver = useCallback((_event: DragOverEvent) => {
         // We handle drag over for cross-column drops
@@ -687,8 +684,8 @@ export function TodosBrowserView({
                         }
                     }
                 } else {
-                    // Same column reorder
-                    if (activeIndex !== overIndex) {
+                    // Same column reorder - only in manual sort mode
+                    if (isManualSort && activeIndex !== overIndex) {
                         const columnTodos = todos.filter(t => getColumnForTodo(t) === activeColumnId);
                         const reorderedTodos = arrayMove(
                             columnTodos,
@@ -723,7 +720,7 @@ export function TodosBrowserView({
             console.error("Error in drag end handler:", error);
             await loadTodos();
         }
-    }, [todos, todosAPI, loadTodos, boardConfig, getColumnForTodo]);
+    }, [todos, todosAPI, loadTodos, boardConfig, getColumnForTodo, isManualSort]);
 
     // Convenience
     // --- Dynamic Columns Logic ---
@@ -1502,7 +1499,7 @@ export function TodosBrowserView({
             transform,
             transition,
             isDragging,
-        } = useSortable({ id: todo.id, disabled: !isManualSort });
+        } = useSortable({ id: todo.id });
 
         const style = {
             transform: CSS.Transform.toString(transform),
