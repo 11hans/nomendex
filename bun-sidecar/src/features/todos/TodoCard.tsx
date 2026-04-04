@@ -78,7 +78,7 @@ function formatScheduleDisplay(start?: string, end?: string): string | null {
 export function TodoCard({
     todo,
     selected,
-    onEdit,
+    onEdit: _onEdit,
     onDelete,
     onArchive,
     hideProject,

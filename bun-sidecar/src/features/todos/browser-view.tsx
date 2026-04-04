@@ -349,6 +349,16 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const handleSaveTodo = async (updatedTodo: Todo) => {
         setEditSaving(true);
         try {
+            // If status changed in custom board mode, recalculate customColumnId to match new status
+            let resolvedCustomColumnId = updatedTodo.customColumnId;
+            if (boardConfig && todoToEdit && updatedTodo.status !== todoToEdit.status) {
+                const targetColumn = boardConfig.columns.find(c => c.status === updatedTodo.status);
+                resolvedCustomColumnId = targetColumn?.id
+                    ?? (updatedTodo.status === "done"
+                        ? boardConfig.columns[boardConfig.columns.length - 1].id
+                        : boardConfig.columns[0].id);
+            }
+
             await todosAPI.updateTodo({
                 todoId: updatedTodo.id,
                 updates: {
@@ -363,7 +373,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                     priority: updatedTodo.priority,
                     duration: updatedTodo.duration ?? null,
                     attachments: updatedTodo.attachments,
-                    customColumnId: updatedTodo.customColumnId,
+                    customColumnId: resolvedCustomColumnId,
                     calendarReminderPreset: updatedTodo.calendarReminderPreset,
                     goalRefs: updatedTodo.goalRefs,
                 },
@@ -917,8 +927,14 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
         const newStatus = todo.status === "done" ? "todo" : "done";
 
         // Find target column with matching status (if in custom board mode)
+        // Fall back to last column for "done", first column for everything else
         const targetColumn = boardConfig?.columns.find(c => c.status === newStatus);
-        const newColumnId = targetColumn?.id;
+        const newColumnId = targetColumn?.id
+            ?? (boardConfig
+                ? (newStatus === "done"
+                    ? boardConfig.columns[boardConfig.columns.length - 1].id
+                    : boardConfig.columns[0].id)
+                : undefined);
 
         // Optimistic update
         setTodos(prev => prev.map(t =>
