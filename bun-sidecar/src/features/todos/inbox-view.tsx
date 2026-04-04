@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useGoalsAPI } from "@/hooks/useGoalsAPI";
@@ -14,7 +14,8 @@ import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useTodoFilterState } from "./useTodoFilterState";
 import { filterAndSortTodos, fuzzyMatch, isTimeblockTodo } from "./todo-filter-utils";
 import { TodoFilterToolbar } from "./TodoFilterToolbar";
-import type { TodoStatusBucket } from "./todo-filter-types";
+import { createDefaultFilterState } from "./todo-filter-types";
+import type { TodoFilterCriteria, TodoStatusBucket } from "./todo-filter-types";
 import {
     DndContext,
     DragCancelEvent,
@@ -36,6 +37,83 @@ import {
 
 const INBOX_PROJECT = "Inbox";
 const ALL_TASKS = "__all__";
+const WAITING_TAG = "waiting";
+
+type SystemListId = "today" | "upcoming" | "overdue" | "no_due" | "waiting";
+
+interface SystemListDefinition {
+    id: SystemListId;
+    label: string;
+    criteria: TodoFilterCriteria;
+}
+
+const BASE_SYSTEM_CRITERIA: TodoFilterCriteria = {
+    statusBucket: "active",
+    selectedTags: [],
+    selectedPriority: null,
+    dueFilter: "any",
+    selectedProject: null,
+    quickPreset: "none",
+};
+
+const SYSTEM_LISTS: SystemListDefinition[] = [
+    {
+        id: "today",
+        label: "Today",
+        criteria: { ...BASE_SYSTEM_CRITERIA, dueFilter: "today_or_overdue" },
+    },
+    {
+        id: "upcoming",
+        label: "Upcoming",
+        criteria: { ...BASE_SYSTEM_CRITERIA, dueFilter: "next_7_days" },
+    },
+    {
+        id: "overdue",
+        label: "Overdue",
+        criteria: { ...BASE_SYSTEM_CRITERIA, dueFilter: "overdue" },
+    },
+    {
+        id: "no_due",
+        label: "No Due Date",
+        criteria: { ...BASE_SYSTEM_CRITERIA, dueFilter: "no_due" },
+    },
+    {
+        id: "waiting",
+        label: "Waiting",
+        criteria: { ...BASE_SYSTEM_CRITERIA, selectedTags: [WAITING_TAG] },
+    },
+];
+
+function SidebarSection({
+    title,
+    children,
+    contentTertiary,
+    borderDefault,
+    sectionSurface,
+}: {
+    title: string;
+    children: ReactNode;
+    contentTertiary: string;
+    borderDefault: string;
+    sectionSurface: string;
+}) {
+    return (
+        <section className="px-1.5">
+            <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: contentTertiary }}>
+                {title}
+            </div>
+            <div
+                className="rounded-lg border p-1.5 space-y-0.5"
+                style={{
+                    borderColor: borderDefault,
+                    backgroundColor: sectionSurface,
+                }}
+            >
+                {children}
+            </div>
+        </section>
+    );
+}
 
 function normalizeProjectName(project?: string): string {
     const normalized = project?.trim();
@@ -85,6 +163,7 @@ function DroppableProjectItem({
     contentPrimary,
     contentTertiary,
     surfaceAccent,
+    surfaceTertiary,
     borderDefault,
     isDragging,
 }: {
@@ -96,6 +175,7 @@ function DroppableProjectItem({
     contentPrimary: string;
     contentTertiary: string;
     surfaceAccent: string;
+    surfaceTertiary: string;
     borderDefault: string;
     isDragging: boolean;
 }) {
@@ -107,7 +187,7 @@ function DroppableProjectItem({
         <button
             ref={setNodeRef}
             onClick={onClick}
-            className="w-full px-3 py-1.5 flex items-center gap-2 text-left text-xs rounded-md transition-colors"
+            className="w-full px-3 py-1.5 flex items-center gap-2 text-left text-xs rounded-md transition-colors hover:bg-surface-elevated"
             style={{
                 backgroundColor: isOver
                     ? surfaceAccent
@@ -127,7 +207,53 @@ function DroppableProjectItem({
                 className="ml-auto text-caption tabular-nums shrink-0 px-1.5 py-0.5 rounded-full"
                 style={{
                     color: contentTertiary,
-                    backgroundColor: count > 0 ? surfaceAccent : undefined,
+                    backgroundColor: isSelected ? surfaceAccent : surfaceTertiary,
+                    opacity: count > 0 ? 1 : 0.65,
+                }}
+            >
+                {count}
+            </span>
+        </button>
+    );
+}
+
+function SidebarListItem({
+    label,
+    isSelected,
+    count,
+    onClick,
+    contentPrimary,
+    contentTertiary,
+    surfaceAccent,
+    surfaceTertiary,
+}: {
+    label: string;
+    isSelected: boolean;
+    count: number;
+    onClick: () => void;
+    contentPrimary: string;
+    contentTertiary: string;
+    surfaceAccent: string;
+    surfaceTertiary: string;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            className="w-full px-3 py-1.5 flex items-center gap-2 text-left text-xs rounded-md transition-colors hover:bg-surface-elevated"
+            style={{
+                backgroundColor: isSelected ? surfaceAccent : undefined,
+                color: isSelected ? contentPrimary : contentTertiary,
+            }}
+        >
+            <span className="truncate font-medium" style={{ color: isSelected ? contentPrimary : contentTertiary }}>
+                {label}
+            </span>
+            <span
+                className="ml-auto text-caption tabular-nums shrink-0 px-1.5 py-0.5 rounded-full"
+                style={{
+                    color: contentTertiary,
+                    backgroundColor: isSelected ? surfaceAccent : surfaceTertiary,
+                    opacity: count > 0 ? 1 : 0.65,
                 }}
             >
                 {count}
@@ -234,6 +360,7 @@ export function InboxListView() {
     const todoFilter = useTodoFilterState("inbox", { defaultSortMode: "urgency", defaultStatusBucket: "all" });
     const [draggedTodoId, setDraggedTodoId] = useState<string | null>(null);
     const [selectedGroup, setSelectedGroup] = useState<string>(ALL_TASKS);
+    const [activeSystemListId, setActiveSystemListId] = useState<SystemListId | null>(null);
     const hasSetTabNameRef = useRef<boolean>(false);
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -283,6 +410,31 @@ export function InboxListView() {
             attachments: undefined,
             goalRefs: undefined,
         });
+    }, []);
+
+    const applyListCriteria = useCallback(
+        (criteria: TodoFilterCriteria) => {
+            todoFilter.applyFilterCriteria(criteria, { clearSearch: true });
+            setSelectedGroup(ALL_TASKS);
+        },
+        [todoFilter.applyFilterCriteria],
+    );
+
+    const handleSelectGroup = useCallback((groupName: string) => {
+        setSelectedGroup(groupName);
+        setActiveSystemListId(null);
+    }, []);
+
+    const handleSelectSystemList = useCallback(
+        (systemList: SystemListDefinition) => {
+            setActiveSystemListId(systemList.id);
+            applyListCriteria(systemList.criteria);
+        },
+        [applyListCriteria],
+    );
+
+    const clearActiveSidebarListSelection = useCallback(() => {
+        setActiveSystemListId(null);
     }, []);
 
     useEffect(() => {
@@ -616,6 +768,21 @@ export function InboxListView() {
         return todos.filter((todo) => getGroupName(todo) === selectedGroup);
     }, [todos, selectedGroup]);
 
+    const filterTodosWithCriteria = useCallback(
+        (
+            sourceTodos: Todo[],
+            criteria: TodoFilterCriteria,
+        ): Todo[] => {
+            const baseState = createDefaultFilterState({
+                ...criteria,
+                searchQuery: "",
+                sortMode: todoFilter.filterState.sortMode,
+            });
+            return filterAndSortTodos(sourceTodos, baseState);
+        },
+        [todoFilter.filterState.sortMode],
+    );
+
     const filteredTodos = useMemo(() => {
         return filterAndSortTodos(groupScopedTodos, todoFilter.filterState);
     }, [groupScopedTodos, todoFilter.filterState]);
@@ -631,6 +798,22 @@ export function InboxListView() {
         }
         return counts;
     }, [todos]);
+
+    const systemListCounts = useMemo(() => {
+        const counts: Record<SystemListId, number> = {
+            today: 0,
+            upcoming: 0,
+            overdue: 0,
+            no_due: 0,
+            waiting: 0,
+        };
+
+        for (const systemList of SYSTEM_LISTS) {
+            counts[systemList.id] = filterTodosWithCriteria(todos, systemList.criteria).length;
+        }
+
+        return counts;
+    }, [filterTodosWithCriteria, todos]);
 
     // Counts for status bucket buttons (scoped to current group + search)
     const statusBucketCounts = useMemo(() => {
@@ -692,68 +875,99 @@ export function InboxListView() {
                     {/* Left Panel — Sidebar */}
                     <ResizablePanel defaultSize={20} minSize={12} maxSize={35} className="flex flex-col min-h-0" style={{ backgroundColor: styles.surfaceSecondary }}>
                         {/* Sidebar header */}
-                        <div className="shrink-0 p-2.5 pb-1.5">
-                            <div className="px-3 py-1 text-[10px] font-medium uppercase tracking-[0.12em]" style={{ color: styles.contentTertiary }}>
-                                Groups
+                        <div className="shrink-0 px-3 pt-2.5 pb-1.5">
+                            <div className="px-1 py-0.5 text-[11px] font-semibold tracking-[0.01em]" style={{ color: styles.contentPrimary }}>
+                                Inbox Navigation
+                            </div>
+                            <div className="px-1 text-[10px]" style={{ color: styles.contentTertiary }}>
+                                Views and projects
                             </div>
                         </div>
 
-                        {/* Fixed items */}
-                        <div className="shrink-0 px-1.5 pb-1">
-                            <DroppableProjectItem
-                                groupName={ALL_TASKS}
-                                label="All Tasks"
-                                isSelected={selectedGroup === ALL_TASKS}
-                                count={groupCounts[ALL_TASKS] || 0}
-                                onClick={() => setSelectedGroup(ALL_TASKS)}
-                                contentPrimary={styles.contentPrimary}
+                        <div className="flex-1 overflow-y-auto px-0.5 pb-2 space-y-2.5">
+                            <SidebarSection
+                                title="Groups"
                                 contentTertiary={styles.contentTertiary}
-                                surfaceAccent={styles.surfaceAccent}
                                 borderDefault={styles.borderDefault}
-                                isDragging={!!draggedTodoId}
-                            />
-                            <DroppableProjectItem
-                                groupName={INBOX_PROJECT}
-                                label="Inbox"
-                                isSelected={selectedGroup === INBOX_PROJECT}
-                                count={groupCounts[INBOX_PROJECT] || 0}
-                                onClick={() => setSelectedGroup(INBOX_PROJECT)}
-                                contentPrimary={styles.contentPrimary}
-                                contentTertiary={styles.contentTertiary}
-                                surfaceAccent={styles.surfaceAccent}
-                                borderDefault={styles.borderDefault}
-                                isDragging={!!draggedTodoId}
-                            />
-                        </div>
-
-                        {/* Separator */}
-                        <div className="shrink-0 mx-2.5 mb-1" style={{ borderTop: `1px solid ${styles.borderDefault}` }} />
-
-                        {/* Projects list */}
-                        <div className="flex-1 overflow-y-auto px-1.5 pb-2">
-                            <div className="px-3 py-1 text-[10px] font-medium uppercase tracking-[0.12em]" style={{ color: styles.contentTertiary }}>
-                                Projects
-                            </div>
-                            {sidebarProjects.map((groupName) => (
+                                sectionSurface={styles.surfacePrimary}
+                            >
                                 <DroppableProjectItem
-                                    key={groupName}
-                                    groupName={groupName}
-                                    label={groupName}
-                                    isSelected={selectedGroup === groupName}
-                                    count={groupCounts[groupName] || 0}
-                                    onClick={() => setSelectedGroup(groupName)}
+                                    groupName={ALL_TASKS}
+                                    label="All Tasks"
+                                    isSelected={selectedGroup === ALL_TASKS && !activeSystemListId}
+                                    count={groupCounts[ALL_TASKS] || 0}
+                                    onClick={() => handleSelectGroup(ALL_TASKS)}
                                     contentPrimary={styles.contentPrimary}
                                     contentTertiary={styles.contentTertiary}
                                     surfaceAccent={styles.surfaceAccent}
+                                    surfaceTertiary={styles.surfaceTertiary}
                                     borderDefault={styles.borderDefault}
                                     isDragging={!!draggedTodoId}
                                 />
-                            ))}
-                            {sidebarProjects.length === 0 && (
-                                <div className="px-3 py-2 text-[10px]" style={{ color: styles.contentTertiary }}>
-                                    no projects yet
-                                </div>
-                            )}
+                                <DroppableProjectItem
+                                    groupName={INBOX_PROJECT}
+                                    label="Inbox"
+                                    isSelected={selectedGroup === INBOX_PROJECT && !activeSystemListId}
+                                    count={groupCounts[INBOX_PROJECT] || 0}
+                                    onClick={() => handleSelectGroup(INBOX_PROJECT)}
+                                    contentPrimary={styles.contentPrimary}
+                                    contentTertiary={styles.contentTertiary}
+                                    surfaceAccent={styles.surfaceAccent}
+                                    surfaceTertiary={styles.surfaceTertiary}
+                                    borderDefault={styles.borderDefault}
+                                    isDragging={!!draggedTodoId}
+                                />
+                            </SidebarSection>
+
+                            <SidebarSection
+                                title="System Lists"
+                                contentTertiary={styles.contentTertiary}
+                                borderDefault={styles.borderDefault}
+                                sectionSurface={styles.surfacePrimary}
+                            >
+                                {SYSTEM_LISTS.map((systemList) => (
+                                    <SidebarListItem
+                                        key={systemList.id}
+                                        label={systemList.label}
+                                        isSelected={activeSystemListId === systemList.id}
+                                        count={systemListCounts[systemList.id]}
+                                        onClick={() => handleSelectSystemList(systemList)}
+                                        contentPrimary={styles.contentPrimary}
+                                        contentTertiary={styles.contentTertiary}
+                                        surfaceAccent={styles.surfaceAccent}
+                                        surfaceTertiary={styles.surfaceTertiary}
+                                    />
+                                ))}
+                            </SidebarSection>
+
+                            <SidebarSection
+                                title="Projects"
+                                contentTertiary={styles.contentTertiary}
+                                borderDefault={styles.borderDefault}
+                                sectionSurface={styles.surfacePrimary}
+                            >
+                                {sidebarProjects.map((groupName) => (
+                                    <DroppableProjectItem
+                                        key={groupName}
+                                        groupName={groupName}
+                                        label={groupName}
+                                        isSelected={selectedGroup === groupName && !activeSystemListId}
+                                        count={groupCounts[groupName] || 0}
+                                        onClick={() => handleSelectGroup(groupName)}
+                                        contentPrimary={styles.contentPrimary}
+                                        contentTertiary={styles.contentTertiary}
+                                        surfaceAccent={styles.surfaceAccent}
+                                        surfaceTertiary={styles.surfaceTertiary}
+                                        borderDefault={styles.borderDefault}
+                                        isDragging={!!draggedTodoId}
+                                    />
+                                ))}
+                                {sidebarProjects.length === 0 && (
+                                    <div className="px-3 py-2 text-[10px]" style={{ color: styles.contentTertiary }}>
+                                        no projects yet
+                                    </div>
+                                )}
+                            </SidebarSection>
                         </div>
                     </ResizablePanel>
 
@@ -768,21 +982,34 @@ export function InboxListView() {
                         >
                             <TodoFilterToolbar
                                 filterState={todoFilter.filterState}
-                                onSearchChange={todoFilter.setSearchQuery}
+                                onSearchChange={(query) => {
+                                    clearActiveSidebarListSelection();
+                                    todoFilter.setSearchQuery(query);
+                                }}
                                 onSortModeChange={todoFilter.setSortMode}
-                                onActivatePreset={todoFilter.activatePreset}
+                                onActivatePreset={(preset) => {
+                                    clearActiveSidebarListSelection();
+                                    todoFilter.activatePreset(preset);
+                                }}
                                 onFilterChange={(partial) => {
+                                    clearActiveSidebarListSelection();
                                     if (partial.selectedPriority !== undefined) todoFilter.setSelectedPriority(partial.selectedPriority);
                                     if (partial.dueFilter !== undefined) todoFilter.setDueFilter(partial.dueFilter);
                                     if (partial.selectedTags !== undefined) todoFilter.setSelectedTags(partial.selectedTags);
                                     if (partial.selectedProject !== undefined) todoFilter.setSelectedProject(partial.selectedProject);
                                 }}
-                                onClearAllFilters={todoFilter.clearAllFilters}
+                                onClearAllFilters={() => {
+                                    clearActiveSidebarListSelection();
+                                    todoFilter.clearAllFilters();
+                                }}
                                 availableTags={availableTags}
                                 availableProjects={isProjectLocked ? undefined : availableProjects}
                                 showStatusBucket
                                 statusBucketCounts={statusBucketCounts}
-                                onStatusBucketChange={todoFilter.setStatusBucket}
+                                onStatusBucketChange={(statusBucket) => {
+                                    clearActiveSidebarListSelection();
+                                    todoFilter.setStatusBucket(statusBucket);
+                                }}
                                 allowedSortModes={["urgency", "recent"]}
                                 activeFilterChips={todoFilter.activeFilterChips}
                                 hasActiveFilters={todoFilter.hasActiveFilters}

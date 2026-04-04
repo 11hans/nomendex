@@ -16,6 +16,7 @@ import { Todo } from "./todo-types";
 import { useTodoFilterState } from "./useTodoFilterState";
 import { filterAndSortTodos, isTimeblockTodo, urgencyComparator } from "./todo-filter-utils";
 import { TodoFilterToolbar } from "./TodoFilterToolbar";
+import type { TodoFilterCriteria } from "./todo-filter-types";
 import { BoardConfig, BoardColumn, getDefaultColumns } from "@/features/projects/project-types";
 import { BoardSettingsDialog } from "./BoardSettingsDialog";
 import type { Attachment } from "@/types/attachments";
@@ -45,7 +46,17 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
-export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoId, embedded }: { project?: string | null; selectedTodoId?: string | null; embedded?: boolean } = {}) {
+export function TodosBrowserView({
+    project,
+    selectedTodoId: initialSelectedTodoId,
+    embedded,
+    externalFilterCriteria,
+}: {
+    project?: string | null;
+    selectedTodoId?: string | null;
+    embedded?: boolean;
+    externalFilterCriteria?: TodoFilterCriteria | null;
+} = {}) {
     // Support both 'project' and 'filterProject' prop names for backward compatibility
     const filterProject = project;
     const { loading, setLoading } = usePlugin();
@@ -142,6 +153,11 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             },
         })
     );
+
+    useEffect(() => {
+        if (!externalFilterCriteria) return;
+        todoFilter.applyFilterCriteria(externalFilterCriteria, { clearSearch: true });
+    }, [externalFilterCriteria, todoFilter.applyFilterCriteria]);
 
 
 
@@ -483,7 +499,10 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
     const handleDragStart = useCallback((event: DragStartEvent) => {
         const todo = todos.find(t => t.id === event.active.id);
         setDraggedTodo(todo || null);
-    }, [todos]);
+        if (!isManualSort) {
+            todoFilter.setSortMode("manual");
+        }
+    }, [todos, isManualSort, todoFilter]);
 
     const handleDragOver = useCallback((_event: DragOverEvent) => {
         // We handle drag over for cross-column drops
@@ -668,8 +687,8 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
                         }
                     }
                 } else {
-                    // Same column reorder (only in manual sort mode)
-                    if (activeIndex !== overIndex && isManualSort) {
+                    // Same column reorder
+                    if (activeIndex !== overIndex) {
                         const columnTodos = todos.filter(t => getColumnForTodo(t) === activeColumnId);
                         const reorderedTodos = arrayMove(
                             columnTodos,
@@ -704,7 +723,7 @@ export function TodosBrowserView({ project, selectedTodoId: initialSelectedTodoI
             console.error("Error in drag end handler:", error);
             await loadTodos();
         }
-    }, [todos, todosAPI, loadTodos, boardConfig, getColumnForTodo, isManualSort]);
+    }, [todos, todosAPI, loadTodos, boardConfig, getColumnForTodo]);
 
     // Convenience
     // --- Dynamic Columns Logic ---

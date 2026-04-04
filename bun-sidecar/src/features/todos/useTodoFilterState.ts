@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import type {
+    TodoFilterCriteria,
     TodoFilterState,
     TodoQuickPreset,
     TodoDueFilter,
@@ -20,6 +21,7 @@ const DUE_FILTER_LABELS: Record<TodoDueFilter, string> = {
     any: "Any",
     overdue: "Overdue",
     today: "Today",
+    today_or_overdue: "Today + Overdue",
     next_7_days: "Next 7 Days",
     no_due: "No Due Date",
 };
@@ -193,6 +195,25 @@ export function useTodoFilterState(
         [updateFilter, defaults],
     );
 
+    const applyFilterCriteria = useCallback(
+        (
+            criteria: TodoFilterCriteria,
+            options?: {
+                clearSearch?: boolean;
+            },
+        ) => updateFilter((prev) => ({
+            ...prev,
+            statusBucket: criteria.statusBucket,
+            selectedTags: criteria.selectedTags,
+            selectedPriority: criteria.selectedPriority,
+            dueFilter: criteria.dueFilter,
+            selectedProject: criteria.selectedProject,
+            quickPreset: criteria.quickPreset,
+            searchQuery: options?.clearSearch ? "" : prev.searchQuery,
+        })),
+        [updateFilter],
+    );
+
     // --- Derived state ---
 
     const hasActiveFilters = useMemo(() => {
@@ -272,5 +293,6 @@ export function useTodoFilterState(
         hasActiveFilters,
         activeFilterChips,
         clearAllFilters,
+        applyFilterCriteria,
     };
 }

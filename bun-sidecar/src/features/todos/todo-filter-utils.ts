@@ -159,6 +159,8 @@ export function matchesDueFilter(todo: Todo, filter: TodoDueFilter): boolean {
             return bucket === "overdue";
         case "today":
             return bucket === "today";
+        case "today_or_overdue":
+            return bucket === "today" || bucket === "overdue";
         case "next_7_days":
             return bucket === "next_7_days";
         case "no_due":

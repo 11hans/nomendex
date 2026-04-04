@@ -204,6 +204,12 @@ describe("matchesDueFilter", () => {
         expect(matchesDueFilter(makeTodo({ dueDate: daysFromNow(1) }), "today")).toBe(false);
     });
 
+    test("today_or_overdue matches both buckets", () => {
+        expect(matchesDueFilter(makeTodo({ dueDate: daysFromNow(-1) }), "today_or_overdue")).toBe(true);
+        expect(matchesDueFilter(makeTodo({ dueDate: todayStr() }), "today_or_overdue")).toBe(true);
+        expect(matchesDueFilter(makeTodo({ dueDate: daysFromNow(1) }), "today_or_overdue")).toBe(false);
+    });
+
     test("next_7_days matches tomorrow through 7 days", () => {
         expect(matchesDueFilter(makeTodo({ dueDate: daysFromNow(1) }), "next_7_days")).toBe(true);
         expect(matchesDueFilter(makeTodo({ dueDate: daysFromNow(7) }), "next_7_days")).toBe(true);

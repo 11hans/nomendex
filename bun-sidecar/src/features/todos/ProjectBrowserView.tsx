@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useProjectsAPI } from "@/hooks/useProjectsAPI";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useTheme } from "@/hooks/useTheme";
 import { Todo } from "./todo-types";
-import { isTimeblockTodo } from "./todo-filter-utils";
+import { filterAndSortTodos, isTimeblockTodo } from "./todo-filter-utils";
+import { createDefaultFilterState } from "./todo-filter-types";
+import type { TodoFilterCriteria } from "./todo-filter-types";
 import type { ProjectConfig } from "@/features/projects/project-types";
 import { Input } from "@/components/ui/input";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
@@ -17,8 +19,52 @@ import {
 } from "lucide-react";
 
 type ProjectFilter = "all" | "active" | "completed" | "archived";
+type SystemListId = "today" | "upcoming" | "overdue" | "no_due" | "waiting";
 
 const ALL_PROJECTS = "__all__";
+const WAITING_TAG = "waiting";
+
+const BASE_BOARD_CRITERIA: TodoFilterCriteria = {
+    statusBucket: "all",
+    selectedTags: [],
+    selectedPriority: null,
+    dueFilter: "any",
+    selectedProject: null,
+    quickPreset: "none",
+};
+
+const BASE_SYSTEM_CRITERIA: TodoFilterCriteria = {
+    ...BASE_BOARD_CRITERIA,
+    statusBucket: "active",
+};
+
+const SYSTEM_LISTS: Array<{ id: SystemListId; label: string; criteria: TodoFilterCriteria }> = [
+    {
+        id: "today",
+        label: "Today",
+        criteria: { ...BASE_SYSTEM_CRITERIA, dueFilter: "today_or_overdue" },
+    },
+    {
+        id: "upcoming",
+        label: "Upcoming",
+        criteria: { ...BASE_SYSTEM_CRITERIA, dueFilter: "next_7_days" },
+    },
+    {
+        id: "overdue",
+        label: "Overdue",
+        criteria: { ...BASE_SYSTEM_CRITERIA, dueFilter: "overdue" },
+    },
+    {
+        id: "no_due",
+        label: "No Due Date",
+        criteria: { ...BASE_SYSTEM_CRITERIA, dueFilter: "no_due" },
+    },
+    {
+        id: "waiting",
+        label: "Waiting",
+        criteria: { ...BASE_SYSTEM_CRITERIA, selectedTags: [WAITING_TAG] },
+    },
+];
 
 interface ProjectStats {
     id: string;
@@ -96,6 +142,85 @@ function sortProjects(a: ProjectStats, b: ProjectStats): number {
     return a.name.localeCompare(b.name);
 }
 
+function SidebarSection({
+    title,
+    children,
+    contentTertiary,
+    borderDefault,
+    sectionSurface,
+}: {
+    title: string;
+    children: ReactNode;
+    contentTertiary: string;
+    borderDefault: string;
+    sectionSurface: string;
+}) {
+    return (
+        <section>
+            <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: contentTertiary }}>
+                {title}
+            </div>
+            <div
+                className="rounded-lg border p-1.5 space-y-0.5"
+                style={{
+                    borderColor: borderDefault,
+                    backgroundColor: sectionSurface,
+                }}
+            >
+                {children}
+            </div>
+        </section>
+    );
+}
+
+function SidebarItem({
+    label,
+    count,
+    isSelected,
+    onClick,
+    leading,
+    contentPrimary,
+    contentTertiary,
+    surfaceAccent,
+    surfaceTertiary,
+}: {
+    label: string;
+    count: number;
+    isSelected: boolean;
+    onClick: () => void;
+    leading?: ReactNode;
+    contentPrimary: string;
+    contentTertiary: string;
+    surfaceAccent: string;
+    surfaceTertiary: string;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            className="w-full px-3 py-1.5 flex items-center gap-2 text-left text-xs rounded-md transition-colors hover:bg-surface-elevated"
+            style={{
+                backgroundColor: isSelected ? surfaceAccent : undefined,
+                color: isSelected ? contentPrimary : contentTertiary,
+            }}
+        >
+            {leading}
+            <span className="truncate font-medium" style={{ color: isSelected ? contentPrimary : contentTertiary }}>
+                {label}
+            </span>
+            <span
+                className="ml-auto text-caption tabular-nums shrink-0 px-1.5 py-0.5 rounded-full"
+                style={{
+                    color: contentTertiary,
+                    backgroundColor: isSelected ? surfaceAccent : surfaceTertiary,
+                    opacity: count > 0 ? 1 : 0.65,
+                }}
+            >
+                {count}
+            </span>
+        </button>
+    );
+}
+
 export function ProjectBrowserView() {
     const { loading, setLoading } = usePlugin();
     const { activeTab, setTabName } = useWorkspaceContext();
@@ -108,6 +233,7 @@ export function ProjectBrowserView() {
     const [searchQuery, setSearchQuery] = useState("");
     const [projectFilter, setProjectFilter] = useState<ProjectFilter>("all");
     const [selectedProjectKey, setSelectedProjectKey] = useState<string>(ALL_PROJECTS);
+    const [selectedSystemListId, setSelectedSystemListId] = useState<SystemListId | null>(null);
     const hasSetTabNameRef = useRef<boolean>(false);
     const listContainerRef = useRef<HTMLDivElement>(null);
 
@@ -280,9 +406,82 @@ export function ProjectBrowserView() {
         archived: projectStats.filter((project) => getFilterForProject(project) === "archived").length,
     }), [projectStats]);
 
+    const projectItems = useMemo(
+        () => filteredSidebarProjects.filter((project) => !project.isNoProject),
+        [filteredSidebarProjects],
+    );
+
+    const inboxStats = useMemo(
+        () => projectStats.find((project) => project.isNoProject),
+        [projectStats],
+    );
+
+    const allActiveCount = useMemo(
+        () => allTodos.filter((todo) => !todo.archived && todo.status !== "done" && !isTimeblockTodo(todo)).length,
+        [allTodos],
+    );
+
+    const filterTodosWithCriteria = useCallback(
+        (criteria: TodoFilterCriteria): Todo[] => {
+            const state = createDefaultFilterState({
+                ...criteria,
+                searchQuery: "",
+                sortMode: "urgency",
+            });
+            return filterAndSortTodos(allTodos, state);
+        },
+        [allTodos],
+    );
+
+    const systemListCounts = useMemo(() => {
+        const counts: Record<SystemListId, number> = {
+            today: 0,
+            upcoming: 0,
+            overdue: 0,
+            no_due: 0,
+            waiting: 0,
+        };
+
+        for (const systemList of SYSTEM_LISTS) {
+            counts[systemList.id] = filterTodosWithCriteria(systemList.criteria).length;
+        }
+
+        return counts;
+    }, [filterTodosWithCriteria]);
+
+    const selectedSystemList = useMemo(
+        () => SYSTEM_LISTS.find((item) => item.id === selectedSystemListId) ?? null,
+        [selectedSystemListId],
+    );
+
+    const boardFilterCriteria = useMemo<TodoFilterCriteria>(() => {
+        if (selectedSystemList) {
+            return selectedSystemList.criteria;
+        }
+
+        if (selectedProjectKey === ALL_PROJECTS) {
+            return BASE_BOARD_CRITERIA;
+        }
+
+        return {
+            ...BASE_BOARD_CRITERIA,
+            selectedProject: selectedProjectKey,
+        };
+    }, [selectedProjectKey, selectedSystemList]);
+
+    const handleSelectProject = useCallback((projectKey: string) => {
+        setSelectedSystemListId(null);
+        setSelectedProjectKey(projectKey);
+    }, []);
+
+    const handleSelectSystemList = useCallback((systemListId: SystemListId) => {
+        setSelectedSystemListId(systemListId);
+        setSelectedProjectKey(ALL_PROJECTS);
+    }, []);
+
     // Derive the project prop for TodosBrowserView
-    // ALL_PROJECTS → no project filter (undefined), "" → Inbox/no-project, else → project name
-    const boardProject = selectedProjectKey === ALL_PROJECTS ? undefined : selectedProjectKey;
+    // System list selection always runs across all projects.
+    const boardProject = selectedSystemListId ? undefined : selectedProjectKey === ALL_PROJECTS ? undefined : selectedProjectKey;
 
     if (loading) {
         return (
@@ -300,7 +499,7 @@ export function ProjectBrowserView() {
                 {/* Left Panel — Project Sidebar */}
                 <ResizablePanel defaultSize={20} minSize={12} maxSize={35} className="flex flex-col min-h-0" style={{ backgroundColor: styles.surfaceSecondary }}>
                     {/* Search */}
-                    <div className="shrink-0 p-2.5 pb-1.5">
+                    <div className="shrink-0 px-2.5 pt-2.5 pb-1.5">
                         <div className="relative">
                             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3" style={{ color: styles.contentTertiary }} />
                             <Input
@@ -333,79 +532,105 @@ export function ProjectBrowserView() {
                         ))}
                     </div>
 
-                    {/* All Tasks item */}
-                    <div className="shrink-0 px-1.5 pb-0.5">
-                        <button
-                            onClick={() => setSelectedProjectKey(ALL_PROJECTS)}
-                            className="w-full px-3 py-1.5 flex items-center gap-2 text-left text-xs rounded-md transition-colors"
-                            style={{
-                                backgroundColor: selectedProjectKey === ALL_PROJECTS ? styles.surfaceAccent : undefined,
-                                color: selectedProjectKey === ALL_PROJECTS ? styles.contentPrimary : styles.contentTertiary,
-                            }}
+                    <div ref={listContainerRef} className="flex-1 overflow-y-auto px-2.5 pb-2 space-y-2.5" tabIndex={0}>
+                        <SidebarSection
+                            title="Groups"
+                            contentTertiary={styles.contentTertiary}
+                            borderDefault={styles.borderDefault}
+                            sectionSurface={styles.surfacePrimary}
                         >
-                            <ListTodo className="size-3.5 shrink-0" />
-                            <span className="truncate font-medium">All Tasks</span>
-                            <span
-                                className="ml-auto text-caption tabular-nums shrink-0 px-1.5 py-0.5 rounded-full"
-                                style={{
-                                    color: styles.contentTertiary,
-                                    backgroundColor: styles.surfaceAccent,
-                                }}
-                            >
-                                {allTodos.filter((t) => !t.archived && t.status !== "done").length}
-                            </span>
-                        </button>
-                    </div>
+                            <SidebarItem
+                                label="All Tasks"
+                                count={allActiveCount}
+                                isSelected={selectedProjectKey === ALL_PROJECTS && !selectedSystemListId}
+                                onClick={() => handleSelectProject(ALL_PROJECTS)}
+                                leading={<ListTodo className="size-3.5 shrink-0" />}
+                                contentPrimary={styles.contentPrimary}
+                                contentTertiary={styles.contentTertiary}
+                                surfaceAccent={styles.surfaceAccent}
+                                surfaceTertiary={styles.surfaceTertiary}
+                            />
+                            <SidebarItem
+                                label="Inbox"
+                                count={(inboxStats?.todoCount ?? 0) + (inboxStats?.inProgressCount ?? 0)}
+                                isSelected={selectedProjectKey === "" && !selectedSystemListId}
+                                onClick={() => handleSelectProject("")}
+                                leading={<Inbox className="size-3.5 shrink-0" />}
+                                contentPrimary={styles.contentPrimary}
+                                contentTertiary={styles.contentTertiary}
+                                surfaceAccent={styles.surfaceAccent}
+                                surfaceTertiary={styles.surfaceTertiary}
+                            />
+                        </SidebarSection>
 
-                    {/* Separator */}
-                    <div className="shrink-0 mx-2.5 mb-1" style={{ borderTop: `1px solid ${styles.borderDefault}` }} />
+                        <SidebarSection
+                            title="System Lists"
+                            contentTertiary={styles.contentTertiary}
+                            borderDefault={styles.borderDefault}
+                            sectionSurface={styles.surfacePrimary}
+                        >
+                            {SYSTEM_LISTS.map((systemList) => (
+                                <SidebarItem
+                                    key={systemList.id}
+                                    label={systemList.label}
+                                    count={systemListCounts[systemList.id]}
+                                    isSelected={selectedSystemListId === systemList.id}
+                                    onClick={() => handleSelectSystemList(systemList.id)}
+                                    contentPrimary={styles.contentPrimary}
+                                    contentTertiary={styles.contentTertiary}
+                                    surfaceAccent={styles.surfaceAccent}
+                                    surfaceTertiary={styles.surfaceTertiary}
+                                />
+                            ))}
+                        </SidebarSection>
 
-                    {/* Projects list */}
-                    <div ref={listContainerRef} className="flex-1 overflow-y-auto px-1.5 pb-2" tabIndex={0}>
-                        {filteredSidebarProjects.length === 0 && (
-                            <div className="px-3 py-2 text-[10px]" style={{ color: styles.contentTertiary }}>
-                                no projects match filters
-                            </div>
-                        )}
-                        {filteredSidebarProjects.map((project) => {
-                            const isSelected = selectedProjectKey === project.projectKey;
-                            const dotColor = project.color || (project.isNoProject
-                                ? styles.contentTertiary
-                                : styles.contentAccent);
-                            const activeCount = project.todoCount + project.inProgressCount;
+                        <SidebarSection
+                            title="Projects"
+                            contentTertiary={styles.contentTertiary}
+                            borderDefault={styles.borderDefault}
+                            sectionSurface={styles.surfacePrimary}
+                        >
+                            {projectItems.length === 0 && (
+                                <div className="px-3 py-2 text-[10px]" style={{ color: styles.contentTertiary }}>
+                                    no projects match filters
+                                </div>
+                            )}
+                            {projectItems.map((project) => {
+                                const isSelected = selectedProjectKey === project.projectKey && !selectedSystemListId;
+                                const dotColor = project.color || styles.contentAccent;
+                                const activeCount = project.todoCount + project.inProgressCount;
 
-                            return (
-                                <button
-                                    key={project.id}
-                                    onClick={() => setSelectedProjectKey(project.projectKey)}
-                                    className="w-full px-3 py-1.5 flex items-center gap-2 text-left text-xs rounded-md transition-colors"
-                                    style={{
-                                        backgroundColor: isSelected ? styles.surfaceAccent : undefined,
-                                        color: isSelected ? styles.contentPrimary : styles.contentTertiary,
-                                    }}
-                                >
-                                    {project.isNoProject
-                                        ? <Inbox className="size-3.5 shrink-0" />
-                                        : <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
-                                    }
-                                    <span className="truncate font-medium" style={{ color: isSelected ? styles.contentPrimary : styles.contentTertiary }}>
-                                        {project.name}
-                                    </span>
-                                    {project.isArchived && (
-                                        <span className="text-[9px] uppercase tracking-[0.06em] opacity-60">arc</span>
-                                    )}
-                                    <span
-                                        className="ml-auto text-caption tabular-nums shrink-0 px-1.5 py-0.5 rounded-full"
+                                return (
+                                    <button
+                                        key={project.id}
+                                        onClick={() => handleSelectProject(project.projectKey)}
+                                        className="w-full px-3 py-1.5 flex items-center gap-2 text-left text-xs rounded-md transition-colors hover:bg-surface-elevated"
                                         style={{
-                                            color: styles.contentTertiary,
-                                            backgroundColor: activeCount > 0 ? styles.surfaceAccent : undefined,
+                                            backgroundColor: isSelected ? styles.surfaceAccent : undefined,
+                                            color: isSelected ? styles.contentPrimary : styles.contentTertiary,
                                         }}
                                     >
-                                        {activeCount}
-                                    </span>
-                                </button>
-                            );
-                        })}
+                                        <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} />
+                                        <span className="truncate font-medium" style={{ color: isSelected ? styles.contentPrimary : styles.contentTertiary }}>
+                                            {project.name}
+                                        </span>
+                                        {project.isArchived && (
+                                            <span className="text-[9px] uppercase tracking-[0.06em] opacity-60">arc</span>
+                                        )}
+                                        <span
+                                            className="ml-auto text-caption tabular-nums shrink-0 px-1.5 py-0.5 rounded-full"
+                                            style={{
+                                                color: styles.contentTertiary,
+                                                backgroundColor: isSelected ? styles.surfaceAccent : styles.surfaceTertiary,
+                                                opacity: activeCount > 0 ? 1 : 0.65,
+                                            }}
+                                        >
+                                            {activeCount}
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </SidebarSection>
                     </div>
                 </ResizablePanel>
 
@@ -414,9 +639,10 @@ export function ProjectBrowserView() {
                 {/* Right Panel — Kanban Board */}
                 <ResizablePanel className="flex flex-col min-w-0 min-h-0">
                     <TodosBrowserView
-                        key={selectedProjectKey}
+                        key={`${selectedProjectKey}:${selectedSystemListId ?? "none"}`}
                         project={boardProject}
                         embedded
+                        externalFilterCriteria={boardFilterCriteria}
                     />
                 </ResizablePanel>
             </ResizablePanelGroup>

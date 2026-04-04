@@ -9,6 +9,7 @@ const DUE_FILTER_OPTIONS: { value: TodoDueFilter; label: string }[] = [
     { value: "any", label: "Any" },
     { value: "overdue", label: "Overdue" },
     { value: "today", label: "Today" },
+    { value: "today_or_overdue", label: "Today + Overdue" },
     { value: "next_7_days", label: "Next 7 Days" },
     { value: "no_due", label: "No Due Date" },
 ];

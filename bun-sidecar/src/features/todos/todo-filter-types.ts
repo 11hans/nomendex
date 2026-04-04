@@ -4,7 +4,7 @@ import { z } from "zod";
 export const TodoQuickPresetSchema = z.enum(["none", "needs_attention", "due_today", "overdue"]);
 export type TodoQuickPreset = z.infer<typeof TodoQuickPresetSchema>;
 
-export const TodoDueFilterSchema = z.enum(["any", "overdue", "today", "next_7_days", "no_due"]);
+export const TodoDueFilterSchema = z.enum(["any", "overdue", "today", "today_or_overdue", "next_7_days", "no_due"]);
 export type TodoDueFilter = z.infer<typeof TodoDueFilterSchema>;
 
 export const TodoStatusBucketSchema = z.enum(["all", "active", "completed", "archived"]);
@@ -41,6 +41,19 @@ export const TodoViewPreferencesSchema = z.object({
 });
 
 export type TodoViewPreferences = z.infer<typeof TodoViewPreferencesSchema>;
+
+// --- Reusable filter criteria (subset without search/sort) ---
+
+export const TodoFilterCriteriaSchema = TodoFilterStateSchema.pick({
+    statusBucket: true,
+    selectedTags: true,
+    selectedPriority: true,
+    dueFilter: true,
+    selectedProject: true,
+    quickPreset: true,
+});
+
+export type TodoFilterCriteria = z.infer<typeof TodoFilterCriteriaSchema>;
 
 // --- Filter chip (UI helper) ---
 
