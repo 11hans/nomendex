@@ -975,7 +975,6 @@ async function reorderTodos(input: {
         for (const reorder of input.reorders) {
             await getDb().update(reorder.todoId, {
                 order: reorder.order,
-                updatedAt: new Date().toISOString(),
             });
         }
 

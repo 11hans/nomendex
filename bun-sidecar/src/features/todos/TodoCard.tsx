@@ -1,4 +1,4 @@
-import { Settings, Trash2, Archive, ArchiveRestore, CalendarDays, Bell, AlertCircle } from "lucide-react";
+import { Trash2, Archive, ArchiveRestore, CalendarDays, Bell, AlertCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Todo, PRIORITY_CONFIG } from "./todo-types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -267,19 +267,7 @@ export function TodoCard({
                 </div>
                 {/* Actions - show when selected */}
                 <div className={`shrink-0 flex items-center gap-0.5 transition-opacity duration-150 ${selected ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100'}`}>
-                    <button
-                        type="button"
-                        className="inline-flex items-center justify-center size-6 rounded hover:bg-surface-elevated"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit?.(todo);
-                        }}
-                        title="Edit"
-                        aria-label="Edit todo"
-                        style={{ color: currentTheme.styles.contentTertiary }}
-                    >
-                        <Settings className="size-3" />
-                    </button>
+
                     <button
                         type="button"
                         className="inline-flex items-center justify-center size-6 rounded hover:bg-surface-elevated"
