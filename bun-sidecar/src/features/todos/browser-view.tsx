@@ -969,7 +969,8 @@ export function TodosBrowserView({
             });
         } catch (error) {
             console.error("Failed to toggle todo status:", error);
-            toast.error("Failed to update status");
+            const message = error instanceof Error ? error.message : "Failed to update status";
+            toast.error(message);
             await loadTodos();
         }
     }, [todosAPI, loadTodos, boardConfig]);
