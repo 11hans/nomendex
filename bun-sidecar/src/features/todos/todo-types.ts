@@ -19,7 +19,6 @@ export const TodoSchema = z.object({
     updatedAt: z.string(),
     archived: z.boolean().optional(),
     project: z.string().optional(),
-    order: z.number().optional(),
     tags: z.array(z.string()).optional(),
     scheduledStart: z.string().optional(),
     scheduledEnd: z.string().optional(),

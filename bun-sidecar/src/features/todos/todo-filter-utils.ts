@@ -1,5 +1,6 @@
 import type { Todo } from "./todo-types";
 import { isTaskTodo } from "./todo-kind-utils";
+import { canonicalizeTodoProject } from "@/features/projects/inbox-project";
 import type {
     DueBucket,
     TodoDueFilter,
@@ -279,7 +280,7 @@ export function filterAndSortTodos(
 
         // 6. Project
         if (effectiveState.selectedProject !== null) {
-            if ((todo.project ?? "") !== effectiveState.selectedProject) return false;
+            if (canonicalizeTodoProject(todo.project) !== canonicalizeTodoProject(effectiveState.selectedProject)) return false;
         }
 
         // 7. Needs attention preset (additional predicate)

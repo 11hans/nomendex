@@ -14,6 +14,7 @@ import { createDefaultFilterState } from "./todo-filter-types";
 import { applyQuickPreset } from "./todo-filter-utils";
 import type { PriorityValue } from "./todo-types";
 import { PRIORITY_CONFIG } from "./todo-types";
+import { canonicalizeTodoProject } from "@/features/projects/inbox-project";
 
 type TodoViewKey = keyof TodoViewPreferences;
 
@@ -271,7 +272,7 @@ export function useTodoFilterState(
         if (filterState.selectedProject !== null) {
             chips.push({
                 type: "project",
-                label: `Project: ${filterState.selectedProject || "No Project"}`,
+                label: `Project: ${canonicalizeTodoProject(filterState.selectedProject)}`,
                 onRemove: () => setSelectedProject(null),
             });
         }

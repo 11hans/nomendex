@@ -423,9 +423,9 @@ describe("filterAndSortTodos", () => {
 
     test("manual sort mode preserves original order", () => {
         const ordered = [
-            makeTodo({ id: "x", title: "Third", order: 3 }),
-            makeTodo({ id: "y", title: "First", order: 1 }),
-            makeTodo({ id: "z", title: "Second", order: 2 }),
+            makeTodo({ id: "x", title: "Third" }),
+            makeTodo({ id: "y", title: "First" }),
+            makeTodo({ id: "z", title: "Second" }),
         ];
         const result = filterAndSortTodos(ordered, createDefaultFilterState({ sortMode: "manual" }));
         expect(result.map((t) => t.id)).toEqual(["x", "y", "z"]); // original order preserved

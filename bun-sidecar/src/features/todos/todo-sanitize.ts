@@ -20,6 +20,8 @@ function toOptionalStringArray(value: unknown, keepExplicitEmpty = false): strin
 
 export function sanitizeTodoForClient(todo: Todo): Todo {
     const raw = todo as unknown as Record<string, unknown>;
+    const withoutLegacyOrder = { ...todo } as Record<string, unknown>;
+    delete withoutLegacyOrder.order;
 
     const maybeKind = raw.kind;
     const maybeSource = raw.source;
@@ -44,7 +46,7 @@ export function sanitizeTodoForClient(todo: Todo): Todo {
         : undefined;
 
     return {
-        ...todo,
+        ...(withoutLegacyOrder as Todo),
         kind,
         source,
         status,
