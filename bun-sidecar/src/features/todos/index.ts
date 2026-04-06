@@ -2,7 +2,6 @@ import { PluginBase, SerializablePlugin } from "@/types/Plugin";
 import { z } from "zod";
 import { TodosView } from "./view";
 import { TodosBrowserView } from "./browser-view";
-import { ProjectBrowserView } from "./ProjectBrowserView";
 import { ArchivedBrowserView } from "./archived-view";
 import { InboxListView } from "./inbox-view";
 import { FunctionStubs } from "@/types/Functions";
@@ -88,7 +87,7 @@ export const functionStubs = {
                 attachments: z.array(AttachmentSchema).optional(),
                 customColumnId: z.string().optional(),
                 goalRefs: z.array(z.string()).optional(),
-            }),
+            }).strict(),
         }),
         output: TodoSchema,
     },
@@ -155,11 +154,6 @@ export const todosBrowserViewPropsSchema = z.object({
 export type TodosBrowserViewProps = z.infer<typeof todosBrowserViewPropsSchema>;
 
 const views = {
-    default: {
-        id: "default",
-        name: "Projects",
-        component: ProjectBrowserView,
-    },
     browser: {
         id: "browser",
         name: "Todos",
@@ -176,11 +170,6 @@ const views = {
         id: "inbox",
         name: "Inbox",
         component: InboxListView,
-    },
-    projects: {
-        id: "projects",
-        name: "Projects",
-        component: ProjectBrowserView,
     },
     editor: {
         id: "editor",
@@ -201,7 +190,7 @@ export const TodosPluginBase: PluginBase = {
         {
             id: "todos.open",
             name: "Open Todos",
-            description: "Open the todos kanban board",
+            description: "Open the all-project todos board",
             icon: "CheckSquare",
             callback: () => {
                 // This will be handled by CommandMenu
