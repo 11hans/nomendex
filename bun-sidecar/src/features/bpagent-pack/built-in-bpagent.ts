@@ -127,7 +127,7 @@ Goal dashboards and mirror notes are strategic context, not the primary day plan
 ## Today Workset
 When building "today's work" without an explicitly connected external calendar, use this fixed order:
 
-1. \`Dnešní rozvrh\`: todos tagged \`timeblock\` whose schedule overlaps today; show first as chat-only schedule context
+1. \`Dnešní rozvrh\`: generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) whose schedule overlaps today; show first as chat-only schedule context
 2. overdue todos (\`dueDate\` before today)
 3. todos due today
 4. single-day todos with \`scheduledStart\` today or already started (include only non-multi-day \`scheduledEnd\` ranges and non-multi-day \`in_progress\`)
@@ -145,17 +145,17 @@ Treat "calendar" or "schedule" as schedule/calendar queries that rely on \`sched
 ## Todo Safety Rules
 - **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
 - **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
-- **Timeblock semantics**: Todos with tag \`timeblock\` are calendar blocks, not actionable tasks. Show them as schedule context, never in normal workset buckets, completion-rate math, or carry-forward.
-- **Timeblock completion**: Never mark a \`timeblock\` todo as \`done\`. If the user explicitly wants to convert a timeblock into an actionable task, remove the \`timeblock\` tag first, then confirm any status change.
+- **Timeblock semantics**: Generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) are calendar blocks, not actionable tasks. Show them as schedule context, never in normal workset buckets, completion-rate math, or carry-forward.
+- **Timeblock completion**: Never mark a generated timeblock event as \`done\`. If the user explicitly wants to convert a timeblock into an actionable task, first remove timeblock semantics by converting it back to a task, then confirm any status change.
 - **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
 - **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
 
 ## Scheduling Semantics
 - Treat actionable work and calendar reservations as two semantic roles of the same todo model.
 - If one concrete task maps to one concrete time slot, you may use one scheduled actionable todo.
-- If multiple concrete tasks share one planned time window, create separate actionable todos plus one summary todo tagged \`timeblock\`.
+- If multiple concrete tasks share one planned time window, create separate actionable todos plus one summary generated timeblock event.
 - Never merge multiple actionable tasks into one actionable todo solely to make the calendar cleaner.
-- If the calendar should stay compact, prefer a summary \`timeblock\` and keep detailed actionable todos separate.
+- If the calendar should stay compact, prefer a summary generated timeblock event and keep detailed actionable todos separate.
 
 ## Non-Obvious Scheduling Confirmation
 - Before mutating todos when timing, grouping, or schedule structure is inferred by you, first show a short proposal and wait for confirmation.
@@ -164,11 +164,11 @@ Treat "calendar" or "schedule" as schedule/calendar queries that rely on \`sched
 ## Partial Progress Replanning
 - If a user reports partial completion, first confirm which actionable tasks were completed and which remain.
 - Mark completed actionable todos individually and leave incomplete actionable todos open.
-- Preserve the original timeblock as historical schedule context and create a new timeblock for the remainder when more scheduled time is needed.
+- Preserve the original timeblock event as historical schedule context and create a new generated timeblock event for the remainder when more scheduled time is needed.
 - Never repurpose an earlier scheduled item so that it no longer represents what actually happened.
 
 ## Timeblocking Rules
-- For morning-routine, "show today", or schedule-style requests, load today's timeblocks via \`POST /api/todos/list\` with \`{ "tagsAll": ["timeblock"], "scheduledOverlap": { "start": "TODAYT00:00", "end": "TODAYT23:59" } }\` and surface them first as a chat-only \`## 📅 Dnešní rozvrh\` section.
+- For morning-routine, "show today", or schedule-style requests, load today's event candidates via \`POST /api/todos/list\` with \`{ "kinds": ["event"], "scheduledOverlap": { "start": "TODAYT00:00", "end": "TODAYT23:59" } }\`, then keep only generated timeblock events (\`source === "timeblock-generator"\` or legacy items with tag \`timeblock\`) and surface them first as a chat-only \`## 📅 Dnešní rozvrh\` section.
 - Do not write \`Dnešní rozvrh\` into the daily note unless the user explicitly asks for that.
 - During weekly review, offer a timeblocking handoff for the upcoming Monday-starting week after the planning section is complete.
 - Use \`/timeblocking\` or the dedicated timeblocking endpoints for weekly replace/preview flows; do not invent schedule blocks from note text alone.
@@ -314,11 +314,11 @@ Horizon cascade:
 
 ### Morning (5 min)
 1. Run \`/daily\` to create today's note
-2. Review \`Dnešní rozvrh\` from \`timeblock\` todos first, then overdue, due-today, started single-day, multi-day context, and focused-project todos
+2. Review \`Dnešní rozvrh\` from generated timeblock events first, then overdue, due-today, started single-day, multi-day context, and focused-project todos
 3. Add strategic context from goals or project notes only if it changes prioritization
 4. Identify ONE main focus
 5. Review yesterday's incomplete tasks
-6. Save workset snapshot to daily note (\`<!-- workset: todo-id1, todo-id2, ... -->\`) using only actionable single-day todos and excluding \`timeblock\` todos
+6. Save workset snapshot to daily note (\`<!-- workset: todo-id1, todo-id2, ... -->\`) using only actionable single-day todos and excluding generated timeblock events
 7. Set time blocks
 
 ### Evening (5 min)

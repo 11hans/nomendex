@@ -24,6 +24,8 @@ import {
     deleteExplicitTag,
     isExplicitTag,
     getExplicitTags,
+    removeTagFromIndex,
+    removeTagFromAllNotes,
 } from "@/features/notes/tags-service";
 import { addSSEClient, type NoteEvent } from "@/services/notes-watcher";
 import {
@@ -209,6 +211,20 @@ export const notesRoutes = {
     "/api/notes/tags/rebuild": {
         async POST() {
             const result = await rebuildTagsIndex();
+            return Response.json(result);
+        },
+    },
+    "/api/notes/tags/remove-from-index": {
+        async POST(req: Request) {
+            const args = (await req.json()) as { tagName: string; sourcePrefix?: string };
+            await removeTagFromIndex(args);
+            return Response.json({ success: true });
+        },
+    },
+    "/api/notes/tags/remove-from-all-notes": {
+        async POST(req: Request) {
+            const args = (await req.json()) as { tagName: string };
+            const result = await removeTagFromAllNotes(args);
             return Response.json(result);
         },
     },

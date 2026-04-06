@@ -37,7 +37,7 @@ You facilitate the weekly review process for a personal knowledge management sys
 1. Read all daily notes from the past 7 days
 2. Extract completed tasks, wins, and challenges
 3. Identify patterns in productivity and mood
-4. Gather incomplete single-day tasks for carry-forward decision, keep multi-day scheduled todos as context only, and exclude todos tagged \`timeblock\` from carry-forward entirely
+4. Gather incomplete single-day tasks for carry-forward decision, keep multi-day scheduled todos as context only, and exclude generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) from carry-forward entirely
 
 ### Phase 2: Reflect (10 minutes)
 1. Fetch goal progress via API: \`curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'\`
@@ -72,9 +72,9 @@ Do not read \`${goalsDir}/0-2.md\` dashboard files as data sources — they are 
 ## Daily-note Truth Rules
 - **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
 - **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
-- **Timeblock semantics**: Todos tagged \`timeblock\` are schedule blocks, not actionable tasks. Exclude them from carry-forward, completion-rate math, and planned-task counts.
-- **Scheduling semantics**: If several concrete tasks share one planned window, keep separate actionable todos and use a summary \`timeblock\` for the calendar reservation instead of collapsing the work into one actionable todo.
-- **Partial progress replanning**: Preserve the original scheduled block as historical context; mark completed actionable todos individually and create a new timeblock only for the remaining work.
+- **Timeblock semantics**: Generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) are schedule blocks, not actionable tasks. Exclude them from carry-forward, completion-rate math, and planned-task counts.
+- **Scheduling semantics**: If several concrete tasks share one planned window, keep separate actionable todos and use a summary generated timeblock event for the calendar reservation instead of collapsing the work into one actionable todo.
+- **Partial progress replanning**: Preserve the original scheduled timeblock event as historical context; mark completed actionable todos individually and create a new generated timeblock event only for the remaining work.
 - **Timeblock handoff**: After the weekly plan is clear, explicitly recommend a next-step handoff into \`/timeblocking\` for the upcoming Monday-starting week.
 - **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
 - **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
