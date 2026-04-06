@@ -52,6 +52,8 @@ export interface GeneratedTimeblock {
     title: string;
     project: string;
     tags: string[];
+    kind: "event";
+    source: "timeblock-generator";
     scheduledStart: string;
     scheduledEnd: string;
     status: "todo";

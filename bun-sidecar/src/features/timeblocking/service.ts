@@ -1,4 +1,5 @@
 import { createTodo, deleteTodo, getProjects, getTodos, restoreTodoSnapshot } from "@/features/todos/fx";
+import { isTimeblockTodo } from "@/features/todos/todo-kind-utils";
 import type { Todo } from "@/features/todos/todo-types";
 import { ensureTimeblockingConfig } from "./config";
 import { addDays, formatLocalDate, formatLocalDateTime, generateTimeblocks } from "./generate";
@@ -69,10 +70,11 @@ export async function previewTimeblockingPlan(input: TimeblockingPlanInput): Pro
     const weekStart = parseWeekStart(input.weekStart);
     const config = await ensureTimeblockingConfig();
     const { start, end } = getWeekWindow(weekStart);
-    const existingBlocks = await getTodos({
-        tagsAll: ["timeblock"],
+    const existingCandidates = await getTodos({
+        kinds: ["event"],
         scheduledOverlap: { start, end },
     });
+    const existingBlocks = existingCandidates.filter((todo) => isTimeblockTodo(todo));
 
     let generatedBlocks: GeneratedTimeblock[] = [];
     let conflicts: TimeblockingConflict[] = [];

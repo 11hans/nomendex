@@ -22,6 +22,9 @@ describe("generateTimeblocks", () => {
         expect(blocks.length).toBeGreaterThan(0);
         expect(blocks[0]?.scheduledStart).toBe("2026-04-06T07:00");
         expect(blocks[0]?.scheduledEnd).toBe("2026-04-06T07:15");
+        expect(blocks[0]?.kind).toBe("event");
+        expect(blocks[0]?.source).toBe("timeblock-generator");
+        expect(blocks[0]?.tags.includes("timeblock")).toBe(false);
         expect(blocks.some((block) => block.scheduledStart === "2026-04-07T13:30")).toBe(true);
     });
 
