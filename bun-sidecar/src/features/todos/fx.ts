@@ -13,6 +13,22 @@ import { ensureTimeblockingConfig } from "@/features/timeblocking/config";
 import { broadcastTodoEvent } from "@/services/todo-events";
 import { sanitizeTodoForClient, sanitizeTodoListForClient } from "./todo-sanitize";
 import { getTodoKind, getTodoSource, isTimeblockTodo } from "./todo-kind-utils";
+import {
+    appendTodoToLayout,
+    applyTodoReorders,
+    getTodoLayoutColumnKey,
+    loadTodoLayout,
+    moveTodoInLayout,
+    removeTodoFromLayout,
+    saveTodoLayout,
+    sortTodosByLayout,
+    type TodoLayoutState,
+} from "./todo-layout";
+import {
+    canonicalizeProjectFilter,
+    canonicalizeTodoProject,
+    INBOX_PROJECT_NAME,
+} from "@/features/projects/inbox-project";
 
 // Create logger for todos plugin
 const todosLogger = createServiceLogger("TODOS");
@@ -47,6 +63,14 @@ function getTodosLegacyTimeblockBackfillMigrationMarkerPath(): string {
     return path.join(getNomendexPath(), "migrations", "todos-timeblock-backfill-v5.done");
 }
 
+function getTodosInboxCanonicalMigrationMarkerPath(): string {
+    return path.join(getNomendexPath(), "migrations", "todos-inbox-canonical-v6.done");
+}
+
+function getTodosOrderLayoutMigrationMarkerPath(): string {
+    return path.join(getNomendexPath(), "migrations", "todos-order-layout-v7.done");
+}
+
 /**
  * Initialize the todos service. Must be called after initializePaths().
  */
@@ -72,6 +96,10 @@ export async function initializeTodosService(): Promise<void> {
     await runTodosKindSourceMigrationIfNeeded();
     // One-off migration: backfill legacy `timeblock` tags into canonical generated-event semantics.
     await runTodosLegacyTimeblockBackfillMigrationIfNeeded();
+    // One-off migration: canonicalize todo.project to reserved "Inbox".
+    await runTodosInboxCanonicalMigrationIfNeeded();
+    // One-off migration: move legacy todo.order into standalone layout storage.
+    await runTodosOrderLayoutMigrationIfNeeded();
     await ensureTimeblockingConfig();
     await runTimeblockHousekeepingIfNeeded();
     todosLogger.info("Todos service initialized");
@@ -86,6 +114,28 @@ function getDb(): FileDatabase<Todo> {
 
 function hasOwnKey(obj: object, key: string): boolean {
     return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+function logNonCanonicalProjectValues(todos: readonly Todo[], context: string): void {
+    const allNonCanonical = todos
+        .filter((todo) => canonicalizeTodoProject(todo.project) !== todo.project)
+        .map((todo) => ({
+            todoId: todo.id,
+            project: todo.project ?? null,
+            canonicalProject: canonicalizeTodoProject(todo.project),
+        }));
+
+    if (allNonCanonical.length === 0) {
+        return;
+    }
+
+    const sample = allNonCanonical.slice(0, 20);
+
+    todosLogger.warn("Detected non-canonical todo project values in storage", {
+        context,
+        count: allNonCanonical.length,
+        sample,
+    });
 }
 
 function formatDateValue(value: Date): string {
@@ -719,6 +769,141 @@ async function runTodosLegacyTimeblockBackfillMigrationIfNeeded(): Promise<void>
     todosLogger.info(`Todos legacy timeblock backfill migration complete (${migratedCount} records migrated)`);
 }
 
+async function runTodosInboxCanonicalMigrationIfNeeded(): Promise<void> {
+    const markerPath = getTodosInboxCanonicalMigrationMarkerPath();
+    const markerFile = Bun.file(markerPath);
+
+    if (await markerFile.exists()) {
+        todosLogger.info("Todos Inbox canonical migration already applied, skipping");
+        return;
+    }
+
+    const todos = await getDb().findAll();
+    const migrations = todos
+        .map((todo) => {
+            const canonicalProject = canonicalizeTodoProject(todo.project);
+            if (todo.project === canonicalProject) {
+                return null;
+            }
+            return {
+                todoId: todo.id,
+                originalTodo: todo,
+                canonicalProject,
+            };
+        })
+        .filter((migration): migration is { todoId: string; originalTodo: Todo; canonicalProject: string } => migration !== null);
+
+    let backupPath: string | null = null;
+
+    if (migrations.length > 0) {
+        const backupDir = path.join(getNomendexPath(), "backups");
+        await mkdir(backupDir, { recursive: true });
+        backupPath = path.join(backupDir, `todos-inbox-canonical-v6-${Date.now()}.json`);
+
+        await Bun.write(
+            backupPath,
+            JSON.stringify({
+                createdAt: new Date().toISOString(),
+                migration: "todos-inbox-canonical-v6",
+                todos: migrations.map((migration) => ({
+                    todoId: migration.todoId,
+                    canonicalProject: migration.canonicalProject,
+                    originalTodo: migration.originalTodo,
+                })),
+            }, null, 2),
+        );
+
+        for (const migration of migrations) {
+            await getDb().update(migration.todoId, {
+                project: migration.canonicalProject,
+            });
+        }
+    }
+
+    await mkdir(path.dirname(markerPath), { recursive: true });
+    await Bun.write(markerPath, JSON.stringify({
+        migratedAt: new Date().toISOString(),
+        migratedCount: migrations.length,
+        backupPath,
+    }, null, 2));
+
+    todosLogger.info(`Todos Inbox canonical migration complete (${migrations.length} records migrated)`);
+}
+
+function getLegacyTodoOrder(todo: Todo): number | undefined {
+    const raw = todo as unknown as Record<string, unknown>;
+    const maybeOrder = raw.order;
+    return typeof maybeOrder === "number" && Number.isFinite(maybeOrder)
+        ? maybeOrder
+        : undefined;
+}
+
+function compareTodosForLegacyLayout(left: Todo, right: Todo): number {
+    const leftOrder = getLegacyTodoOrder(left);
+    const rightOrder = getLegacyTodoOrder(right);
+    const leftRank = leftOrder ?? Number.MAX_SAFE_INTEGER;
+    const rightRank = rightOrder ?? Number.MAX_SAFE_INTEGER;
+    if (leftRank !== rightRank) {
+        return leftRank - rightRank;
+    }
+    const leftCreated = Date.parse(left.createdAt);
+    const rightCreated = Date.parse(right.createdAt);
+    if (Number.isFinite(leftCreated) && Number.isFinite(rightCreated) && leftCreated !== rightCreated) {
+        return leftCreated - rightCreated;
+    }
+    return left.id.localeCompare(right.id);
+}
+
+function buildTodoLayoutFromLegacyOrder(todos: readonly Todo[]): TodoLayoutState {
+    const columns = new Map<string, Todo[]>();
+    for (const todo of todos) {
+        const key = getTodoLayoutColumnKey(todo);
+        const bucket = columns.get(key) ?? [];
+        bucket.push(todo);
+        columns.set(key, bucket);
+    }
+
+    const serialized: Record<string, string[]> = {};
+    for (const [columnKey, columnTodos] of columns.entries()) {
+        serialized[columnKey] = [...columnTodos]
+            .sort(compareTodosForLegacyLayout)
+            .map((todo) => todo.id);
+    }
+
+    return {
+        version: 1,
+        columns: serialized,
+    };
+}
+
+async function runTodosOrderLayoutMigrationIfNeeded(): Promise<void> {
+    const markerPath = getTodosOrderLayoutMigrationMarkerPath();
+    const markerFile = Bun.file(markerPath);
+    if (await markerFile.exists()) {
+        todosLogger.info("Todos order->layout migration already applied, skipping");
+        return;
+    }
+
+    const todos = await getDb().findAll();
+    const migratedTodos = todos.filter((todo) => getLegacyTodoOrder(todo) !== undefined);
+
+    const layout = buildTodoLayoutFromLegacyOrder(todos);
+    await saveTodoLayout(layout);
+
+    for (const todo of migratedTodos) {
+        await getDb().update(todo.id, { order: undefined } as Partial<Todo>);
+    }
+
+    await mkdir(path.dirname(markerPath), { recursive: true });
+    await Bun.write(markerPath, JSON.stringify({
+        migratedAt: new Date().toISOString(),
+        migratedCount: migratedTodos.length,
+        layoutColumns: Object.keys(layout.columns).length,
+    }, null, 2));
+
+    todosLogger.info(`Todos order->layout migration complete (${migratedTodos.length} records migrated)`);
+}
+
 /**
  * Compute resolvedGoalRefs for a todo.
  * If the todo has explicit goalRefs, use those.
@@ -738,10 +923,11 @@ function computeResolvedGoalRefs(
  * Returns undefined if project not found or has no goalRef.
  */
 async function getProjectGoalRef(projectName: string | undefined): Promise<string | undefined> {
-    if (!projectName || projectName.trim() === "") return undefined;
+    const normalizedProjectName = canonicalizeProjectFilter(projectName);
+    if (!normalizedProjectName) return undefined;
     try {
         const { getProjectByName } = await import("@/features/projects/fx");
-        const project = await getProjectByName({ name: projectName });
+        const project = await getProjectByName({ name: normalizedProjectName });
         return project?.goalRef ?? undefined;
     } catch {
         return undefined;
@@ -750,7 +936,8 @@ async function getProjectGoalRef(projectName: string | undefined): Promise<strin
 
 async function getTodos(rawInput: unknown) {
     const input = GetTodosInputSchema.parse(rawInput ?? {});
-    todosLogger.info(`Getting todos${input.project != null ? ` for project: ${input.project || "No Project"}` : ""}`);
+    const projectFilter = canonicalizeProjectFilter(input.project);
+    todosLogger.info(`Getting todos${projectFilter ? ` for project: ${projectFilter}` : ""}`);
 
     try {
         await runTimeblockHousekeepingIfNeeded();
@@ -758,16 +945,11 @@ async function getTodos(rawInput: unknown) {
         const todos = await getDb().findAll();
 
         let activeTodos = todos.filter(t => !t.archived);
+        logNonCanonicalProjectValues(activeTodos, "getTodos");
 
-        // Filter by project if specified
-        if (input.project != null) {
-            if (input.project === "") {
-                // Empty string means "no project" - filter for todos without a project (exclude items with any project)
-                activeTodos = activeTodos.filter(t => !t.project || t.project.trim() === "");
-            } else {
-                // Filter for specific project
-                activeTodos = activeTodos.filter(t => t.project === input.project);
-            }
+        // Filter by project if specified (legacy aliases map to canonical Inbox)
+        if (projectFilter) {
+            activeTodos = activeTodos.filter((todo) => canonicalizeTodoProject(todo.project) === projectFilter);
         }
 
         if (input.tagsAll && input.tagsAll.length > 0) {
@@ -793,12 +975,8 @@ async function getTodos(rawInput: unknown) {
             activeTodos = activeTodos.filter((todo) => requestedStatuses.has(todo.status));
         }
 
-        // Sort todos by order (nulls last)
-        activeTodos.sort((a, b) => {
-            const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
-            const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
-            return orderA - orderB;
-        });
+        const layout = await loadTodoLayout();
+        activeTodos = sortTodosByLayout(activeTodos, layout);
 
         const sanitized = sanitizeTodoListForClient(activeTodos);
         todosLogger.info(`Retrieved ${sanitized.length} todos`);
@@ -819,6 +997,7 @@ async function getTodoById(input: { todoId: string }) {
             todosLogger.warn(`Todo not found: ${input.todoId}`);
             throw new Error(`Todo with ID ${input.todoId} not found`);
         }
+        logNonCanonicalProjectValues([todo], "getTodoById");
 
         const sanitized = sanitizeTodoForClient(todo);
         todosLogger.info(`Retrieved todo: ${input.todoId}`);
@@ -850,12 +1029,15 @@ async function createTodo(input: {
     todosLogger.info(`Creating new todo: ${input.title}`);
 
     try {
-        // Validate that the project exists BEFORE creating the todo
-        if (input.project && input.project.trim() !== "") {
+        const canonicalProject = canonicalizeTodoProject(input.project);
+
+        // Validate that the project exists BEFORE creating the todo.
+        // Inbox is a reserved system project and is always allowed.
+        if (canonicalProject !== INBOX_PROJECT_NAME) {
             const { getProjectByName } = await import("@/features/projects/fx");
-            const project = await getProjectByName({ name: input.project });
+            const project = await getProjectByName({ name: canonicalProject });
             if (!project) {
-                throw new Error(`Project '${input.project}' does not exist. Please ask the user to create it manually: Open the 'Projects' view from the sidebar and click 'New Project'.`);
+                throw new Error(`Project '${canonicalProject}' does not exist. Please ask the user to create it manually: Open the 'Projects' view from the sidebar and click 'New Project'.`);
             }
         }
 
@@ -872,15 +1054,7 @@ async function createTodo(input: {
             throw new Error("Events can only be active or archived. Create them with status 'todo'.");
         }
 
-        // Get existing todos to determine next order
-        const existingTodos = await getDb().findAll();
         const status = requestedStatus;
-
-        // Find max order for this status
-        const todosInStatus = existingTodos.filter(t => t.status === status && !t.archived);
-        const maxOrder = todosInStatus.reduce((max, todo) => {
-            return Math.max(max, todo.order || 0);
-        }, 0);
 
         // Generate a slug from the title (lowercase, no special chars, hyphens instead of spaces)
         let slug = input.title
@@ -909,7 +1083,7 @@ async function createTodo(input: {
         const duration = derived ?? requestedDuration;
 
         // Compute resolvedGoalRefs
-        const projectGoalRef = await getProjectGoalRef(input.project);
+        const projectGoalRef = await getProjectGoalRef(canonicalProject);
         const resolvedGoalRefs = computeResolvedGoalRefs(input.goalRefs, projectGoalRef);
 
         const now = new Date().toISOString();
@@ -923,8 +1097,7 @@ async function createTodo(input: {
             createdAt: now,
             updatedAt: now,
             archived: false,
-            project: input.project,
-            order: maxOrder + 1,
+            project: canonicalProject,
             tags: input.tags,
             scheduledStart,
             scheduledEnd,
@@ -940,9 +1113,11 @@ async function createTodo(input: {
         };
 
         const created = await getDb().create(newTodo);
+        const allTodos = await getDb().findAll();
+        await appendTodoToLayout(created, new Set(allTodos.map((todo) => todo.id)));
 
         const sanitized = sanitizeTodoForClient(created);
-        todosLogger.info(`Created todo: ${sanitized.id} with order ${sanitized.order}`);
+        todosLogger.info(`Created todo: ${sanitized.id}`);
         return sanitized;
     } catch (error) {
         todosLogger.error(`Failed to create todo`, { error });
@@ -960,7 +1135,6 @@ async function updateTodo(input: {
         status?: "todo" | "in_progress" | "done" | "later";
         project?: string;
         archived?: boolean;
-        order?: number;
         tags?: string[];
         scheduledStart?: string | null;
         scheduledEnd?: string | null;
@@ -977,12 +1151,18 @@ async function updateTodo(input: {
     todosLogger.info(`Updating todo: ${input.todoId}`);
 
     try {
-        // Validate that the project exists if it's being updated
-        if (input.updates.project && input.updates.project.trim() !== "") {
+        const projectUpdateProvided = hasOwnKey(input.updates, "project");
+        const canonicalProjectUpdate = projectUpdateProvided
+            ? canonicalizeTodoProject(input.updates.project)
+            : undefined;
+
+        // Validate that the project exists if it's being updated.
+        // Inbox is a reserved system project and is always allowed.
+        if (projectUpdateProvided && canonicalProjectUpdate && canonicalProjectUpdate !== INBOX_PROJECT_NAME) {
             const { getProjectByName } = await import("@/features/projects/fx");
-            const project = await getProjectByName({ name: input.updates.project });
+            const project = await getProjectByName({ name: canonicalProjectUpdate });
             if (!project) {
-                throw new Error(`Project '${input.updates.project}' does not exist. Please ask the user to create it manually: Open the 'Projects' view from the sidebar and click 'New Project'.`);
+                throw new Error(`Project '${canonicalProjectUpdate}' does not exist. Please ask the user to create it manually: Open the 'Projects' view from the sidebar and click 'New Project'.`);
             }
         }
 
@@ -1012,6 +1192,16 @@ async function updateTodo(input: {
             ...input.updates,
             updatedAt: new Date().toISOString(),
         } as Partial<Todo>;
+
+        if (projectUpdateProvided) {
+            updates.project = canonicalProjectUpdate;
+        } else {
+            delete updates.project;
+            const invariantProject = canonicalizeTodoProject(currentTodo.project);
+            if (currentTodo.project !== invariantProject) {
+                updates.project = invariantProject;
+            }
+        }
 
         const wantsKindUpdate = hasOwnKey(input.updates, "kind") && input.updates.kind !== undefined;
         const wantsSourceUpdate = hasOwnKey(input.updates, "source") && input.updates.source !== undefined;
@@ -1094,27 +1284,12 @@ async function updateTodo(input: {
             }
         }
 
-        // If status is changing, assign new order for the target status
-        if (wantsStatusUpdate) {
-            if (currentTodo.status !== input.updates.status) {
-                // Get existing todos to determine next order for new status
-                const existingTodos = await getDb().findAll();
-                const todosInNewStatus = existingTodos.filter(t =>
-                    t.status === input.updates.status && !t.archived && t.id !== input.todoId
-                );
-                const maxOrder = todosInNewStatus.reduce((max, todo) => {
-                    return Math.max(max, todo.order || 0);
-                }, 0);
-
-                updates.order = maxOrder + 1;
-                todosLogger.info(`Status changed, assigning new order: ${updates.order}`);
-
-                // Auto-set completedAt when status changes to/from done
-                if (nextKind === "task" && input.updates.status === "done") {
-                    updates.completedAt = new Date().toISOString();
-                } else if (currentTodo.status === "done") {
-                    updates.completedAt = undefined;
-                }
+        // Auto-set completedAt when status changes to/from done
+        if (wantsStatusUpdate && currentTodo.status !== input.updates.status) {
+            if (nextKind === "task" && input.updates.status === "done") {
+                updates.completedAt = new Date().toISOString();
+            } else if (currentTodo.status === "done") {
+                updates.completedAt = undefined;
             }
         }
 
@@ -1129,14 +1304,14 @@ async function updateTodo(input: {
         if (isClosing) {
             // Freezing: compute and set resolvedGoalRefs as a snapshot
             const effectiveGoalRefs = input.updates.goalRefs ?? currentTodo.goalRefs;
-            const effectiveProject = input.updates.project ?? currentTodo.project;
+            const effectiveProject = updates.project ?? currentTodo.project;
             const projectGoalRef = await getProjectGoalRef(effectiveProject);
             const resolved = computeResolvedGoalRefs(effectiveGoalRefs, projectGoalRef);
             updates.resolvedGoalRefs = resolved.length > 0 ? resolved : undefined;
         } else if (!isClosed) {
             // Open todo: recompute resolvedGoalRefs
             const effectiveGoalRefs = input.updates.goalRefs ?? currentTodo.goalRefs;
-            const effectiveProject = input.updates.project ?? currentTodo.project;
+            const effectiveProject = updates.project ?? currentTodo.project;
             const projectGoalRef = await getProjectGoalRef(effectiveProject);
             const resolved = computeResolvedGoalRefs(effectiveGoalRefs, projectGoalRef);
             updates.resolvedGoalRefs = resolved.length > 0 ? resolved : undefined;
@@ -1148,6 +1323,13 @@ async function updateTodo(input: {
         if (!updated) {
             todosLogger.warn(`Todo not found for update after write: ${input.todoId}`);
             throw new Error(`Todo with ID ${input.todoId} not found`);
+        }
+
+        const previousColumnKey = getTodoLayoutColumnKey(currentTodo);
+        const nextColumnKey = getTodoLayoutColumnKey(updated);
+        if (previousColumnKey !== nextColumnKey) {
+            const allTodos = await getDb().findAll();
+            await moveTodoInLayout(updated.id, updated, new Set(allTodos.map((todo) => todo.id)));
         }
 
         const sanitized = sanitizeTodoForClient(updated);
@@ -1169,6 +1351,9 @@ async function deleteTodo(input: { todoId: string }) {
             todosLogger.warn(`Todo not found for deletion: ${input.todoId}`);
             throw new Error(`Todo with ID ${input.todoId} not found`);
         }
+
+        const allTodos = await getDb().findAll();
+        await removeTodoFromLayout(input.todoId, new Set(allTodos.map((todo) => todo.id)));
 
         todosLogger.info(`Deleted todo: ${input.todoId}`);
         return { success: true };
@@ -1194,10 +1379,7 @@ async function getProjects() {
         // Extract unique projects from active todos
         const projectSet = new Set<string>();
         for (const todo of activeTodos) {
-            const projectName = todo.project?.trim();
-            if (projectName) {
-                projectSet.add(projectName);
-            }
+            projectSet.add(canonicalizeTodoProject(todo.project));
         }
 
         // Include projects from projects.json so newly created projects
@@ -1206,16 +1388,17 @@ async function getProjects() {
             const { listProjects } = await import("@/features/projects/fx");
             const configuredProjects = await listProjects({ includeArchived: false });
             for (const project of configuredProjects) {
-                const projectName = project.name?.trim();
-                if (projectName) {
-                    projectSet.add(projectName);
-                }
+                projectSet.add(canonicalizeTodoProject(project.name));
             }
         } catch (error) {
             todosLogger.warn("Failed to load projects from projects service, falling back to todo-derived projects", { error });
         }
 
-        const projects = Array.from(projectSet).sort();
+        const projects = Array.from(projectSet).sort((left, right) => {
+            if (left === INBOX_PROJECT_NAME && right !== INBOX_PROJECT_NAME) return -1;
+            if (left !== INBOX_PROJECT_NAME && right === INBOX_PROJECT_NAME) return 1;
+            return left.localeCompare(right);
+        });
         todosLogger.info(`Found ${projects.length} unique projects`);
         return projects;
     } catch (error) {
@@ -1234,14 +1417,11 @@ async function reorderTodos(input: {
     todosLogger.info(`Reordering ${input.reorders.length} todos`);
 
     try {
-        // Update each todo with its new order
-        for (const reorder of input.reorders) {
-            await getDb().update(reorder.todoId, {
-                order: reorder.order,
-            });
-        }
+        const todos = await getDb().findAll();
+        const todoById = new Map(todos.map((todo) => [todo.id, todo]));
+        const { changed, movedIds } = await applyTodoReorders(input.reorders, todoById);
 
-        todosLogger.info(`Successfully reordered todos`);
+        todosLogger.info(`Successfully reordered todos`, { changed, movedIds });
         return { success: true };
     } catch (error) {
         todosLogger.error(`Failed to reorder todos`, { error });
@@ -1282,7 +1462,7 @@ export async function recomputeAllGoalRefs(): Promise<{
         const projects = await listProjects({ includeArchived: false });
         for (const p of projects) {
             if (p.name && p.goalRef) {
-                projectGoalRefMap.set(p.name.trim().toLowerCase(), p.goalRef);
+                projectGoalRefMap.set(canonicalizeTodoProject(p.name).toLowerCase(), p.goalRef);
             }
         }
     } catch {
@@ -1304,7 +1484,7 @@ export async function recomputeAllGoalRefs(): Promise<{
             } else {
                 // Open: always recompute
                 const projectGoalRef = todo.project
-                    ? projectGoalRefMap.get(todo.project.trim().toLowerCase())
+                    ? projectGoalRefMap.get(canonicalizeTodoProject(todo.project).toLowerCase())
                     : undefined;
                 const resolved = computeResolvedGoalRefs(todo.goalRefs, projectGoalRef);
                 const current = todo.resolvedGoalRefs ?? [];
@@ -1365,38 +1545,25 @@ async function forceReindexTodos(): Promise<{
 }
 
 async function getArchivedTodos(input: { project?: string }) {
-    todosLogger.info(`Getting archived todos${input.project != null ? ` for project: ${input.project || 'No Project'}` : ''}`);
+    const projectFilter = canonicalizeProjectFilter(input.project);
+    todosLogger.info(`Getting archived todos${projectFilter ? ` for project: ${projectFilter}` : ""}`);
 
     try {
         const todos = await getDb().findAll();
-        console.log("All todos found:", todos.length);
 
         let archivedTodos = todos.filter(t => t.archived);
-        console.log("Archived todos before project filter:", archivedTodos.length, archivedTodos.map(t => ({ id: t.id, title: t.title, project: t.project, archived: t.archived })));
+        logNonCanonicalProjectValues(archivedTodos, "getArchivedTodos");
 
-        // Filter by project if specified
-        if (input.project != null) {
-            console.log("Filtering by project:", input.project);
-            if (input.project === "") {
-                // Empty string means "no project" - filter for todos without a project
-                archivedTodos = archivedTodos.filter(t => !t.project || t.project.trim() === "");
-            } else {
-                // Filter for specific project
-                archivedTodos = archivedTodos.filter(t => t.project === input.project);
-            }
-            console.log("Archived todos after project filter:", archivedTodos.length);
+        // Filter by project if specified (legacy aliases map to canonical Inbox)
+        if (projectFilter) {
+            archivedTodos = archivedTodos.filter((todo) => canonicalizeTodoProject(todo.project) === projectFilter);
         }
 
-        // Sort todos by order (nulls last)
-        archivedTodos.sort((a, b) => {
-            const orderA = a.order ?? Number.MAX_SAFE_INTEGER;
-            const orderB = b.order ?? Number.MAX_SAFE_INTEGER;
-            return orderA - orderB;
-        });
+        const layout = await loadTodoLayout();
+        archivedTodos = sortTodosByLayout(archivedTodos, layout);
 
         const sanitized = sanitizeTodoListForClient(archivedTodos);
         todosLogger.info(`Retrieved ${sanitized.length} archived todos`);
-        console.log("Final archived todos:", sanitized);
         return sanitized;
     } catch (error) {
         todosLogger.error(`Failed to get archived todos`, { error });
@@ -1508,6 +1675,7 @@ async function deleteColumn(input: { projectId: string; columnId: string }): Pro
     todosLogger.info(`Deleting column ${input.columnId} from project ${input.projectId}`);
 
     try {
+        const normalizedProjectName = canonicalizeTodoProject(input.projectId);
         const config = await getBoardConfig({ projectId: input.projectId });
         if (!config) throw new Error("Board config not found");
 
@@ -1519,8 +1687,8 @@ async function deleteColumn(input: { projectId: string; columnId: string }): Pro
         // Migrate todos from deleted column
         const todos = await getDb().findAll();
         const orphanTodos = todos.filter(t => {
-            const todoProject = t.project || "";
-            return todoProject === input.projectId && t.customColumnId === input.columnId;
+            const todoProject = canonicalizeTodoProject(t.project);
+            return todoProject === normalizedProjectName && t.customColumnId === input.columnId;
         });
 
         for (const todo of orphanTodos) {
