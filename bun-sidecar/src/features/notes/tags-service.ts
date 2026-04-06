@@ -671,6 +671,114 @@ export async function onNoteRenamedTags(params: {
 }
 
 /**
+ * Directly remove a tag from the in-memory index and persist to disk.
+ * Only removes entries whose file ref starts with a given prefix (e.g. "todos:").
+ * Pass prefix="" to remove the tag from all sources.
+ */
+export async function removeTagFromIndex(params: { tagName: string; sourcePrefix?: string }): Promise<void> {
+    if (!index) return;
+    const tag = params.tagName.toLowerCase();
+    const prefix = params.sourcePrefix ?? "";
+
+    const tagEntry = index.tags[tag];
+    if (!tagEntry) return;
+
+    const fileRefs = StringSet.toArray(tagEntry);
+    for (const fileRef of fileRefs) {
+        if (prefix && !fileRef.startsWith(prefix)) continue;
+
+        // Remove tag from fileTags for this file
+        if (index.fileTags[fileRef]) {
+            StringSet.remove(index.fileTags[fileRef], tag);
+            if (StringSet.isEmpty(index.fileTags[fileRef])) {
+                delete index.fileTags[fileRef];
+            }
+        }
+
+        // Remove file from the tag's file set
+        StringSet.remove(tagEntry, fileRef);
+    }
+
+    // If the tag has no files left, delete it entirely
+    if (StringSet.isEmpty(tagEntry)) {
+        delete index.tags[tag];
+    }
+
+    await saveIndexToDisk(index);
+}
+
+/**
+ * Remove a specific tag from all note files (frontmatter + inline hashtags) and update the index.
+ * Returns the number of note files modified.
+ */
+export async function removeTagFromAllNotes(params: { tagName: string }): Promise<{ notesUpdated: number }> {
+    if (!index || !hasActiveWorkspace()) return { notesUpdated: 0 };
+    const tag = params.tagName.toLowerCase();
+
+    const tagEntry = index.tags[tag];
+    const fileRefs = tagEntry ? StringSet.toArray(tagEntry) : [];
+    const noteRefs = fileRefs.filter(ref => ref.startsWith("notes:"));
+
+    let notesUpdated = 0;
+
+    for (const fileRef of noteRefs) {
+        const filePath = getFullPath(fileRef);
+        const file = Bun.file(filePath);
+        if (!(await file.exists())) continue;
+
+        let content = await file.text();
+        let changed = false;
+
+        // 1. Remove from frontmatter tags array
+        const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n/);
+        if (fmMatch) {
+            try {
+                const fm = yaml.load(fmMatch[1]) as Record<string, unknown>;
+                if (fm && Array.isArray(fm.tags)) {
+                    const tagsBefore = fm.tags as unknown[];
+                    const tagsAfter = tagsBefore.filter((t: unknown) => typeof t !== "string" || (t as string).toLowerCase() !== tag);
+                    if (tagsAfter.length !== tagsBefore.length) {
+                        if (tagsAfter.length === 0) {
+                            delete fm.tags;
+                        } else {
+                            fm.tags = tagsAfter;
+                        }
+                        const yamlStr = yaml.dump(fm, { lineWidth: -1 });
+                        content = content.replace(fmMatch[0], () => `---\n${yamlStr}---\n`);
+                        changed = true;
+                    }
+                }
+            } catch { /* malformed frontmatter, skip */ }
+        }
+
+        // 2. Remove inline #tagname occurrences from body
+        // Matches #tag preceded by start/space/[/( and followed by non-word or end
+        const inlineRegex = new RegExp(`(^|[\\s\\[\\(]) ?#${tag.replace(/[-]/g, "\\-")}(?=[\\s\\]\\).,!?;:]|$)`, "gim");
+        const updated = content.replace(inlineRegex, "$1");
+        if (updated !== content) {
+            content = updated;
+            changed = true;
+        }
+
+        if (changed) {
+            await Bun.write(filePath, content);
+            notesUpdated++;
+
+            // Re-extract tags from updated content and update the index
+            updateFileInIndex({ indexRef: index, fileName: fileRef, content });
+            const newMtime = await getFileMtime(fileRef);
+            index.mtimes[fileRef] = newMtime;
+        }
+    }
+
+    // Also remove todos: entries for this tag from the index (todo files were updated on disk by the caller)
+    await removeTagFromIndex({ tagName: params.tagName, sourcePrefix: "todos:" });
+
+    await saveIndexToDisk(index);
+    return { notesUpdated };
+}
+
+/**
  * Force rebuild the entire index
  */
 export async function rebuildTagsIndex(): Promise<{ tagCount: number }> {
