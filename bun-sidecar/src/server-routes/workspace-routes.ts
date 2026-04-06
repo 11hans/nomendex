@@ -1,12 +1,162 @@
 import { z } from "zod";
 import { Result, ErrorCodes } from "../types/Result";
-import { WorkspaceState, WorkspaceStateSchema } from "../types/Workspace";
+import { WorkspaceState, WorkspaceStateSchema, WorkspaceTab } from "../types/Workspace";
 import { getNomendexPath, getRootPath, getNotesPath, getTodosPath, getUploadsPath, getSkillsPath, hasActiveWorkspace, initializePaths } from "../storage/root-path";
 import { initializeNotesService } from "@/features/notes/fx";
+import path from "path";
+import { copyFile, mkdir } from "node:fs/promises";
+import { INBOX_PROJECT_NAME } from "@/features/projects/inbox-project";
 
 const ThemeRequestSchema = z.object({
     themeName: z.string(),
 });
+
+const LEGACY_NO_PROJECT_PREFERENCE_KEY = "__none__";
+
+function getWorkspaceMigrationMarkerPath(): string {
+    return path.join(getNomendexPath(), "migrations", "workspace-inbox-consolidation-v1.done");
+}
+
+function remapLegacyTab(tab: WorkspaceTab): { tab: WorkspaceTab; changed: boolean } {
+    const pluginId = tab.pluginInstance.plugin.id;
+    const viewId = tab.pluginInstance.viewId;
+
+    const isLegacyTodosProjectsTab = pluginId === "todos" && (viewId === "default" || viewId === "projects");
+    if (!isLegacyTodosProjectsTab) {
+        return { tab, changed: false };
+    }
+
+    return {
+        tab: {
+            ...tab,
+            title: "Projects",
+            pluginInstance: {
+                ...tab.pluginInstance,
+                plugin: {
+                    id: "projects",
+                    name: "Projects",
+                    icon: "workflow",
+                },
+                viewId: "browser",
+                instanceProps: {},
+            },
+        },
+        changed: true,
+    };
+}
+
+function normalizeWorkspaceStateForInboxConsolidation(workspace: WorkspaceState): {
+    workspace: WorkspaceState;
+    changed: boolean;
+    remappedTabCount: number;
+    migratedProjectPreference: boolean;
+} {
+    let changed = false;
+    let remappedTabCount = 0;
+
+    const migratedProjectPreference = Object.prototype.hasOwnProperty.call(workspace.projectPreferences, LEGACY_NO_PROJECT_PREFERENCE_KEY);
+    const nextProjectPreferences = { ...workspace.projectPreferences };
+
+    if (migratedProjectPreference) {
+        const legacyPreference = nextProjectPreferences[LEGACY_NO_PROJECT_PREFERENCE_KEY];
+        const inboxPreference = nextProjectPreferences[INBOX_PROJECT_NAME];
+        nextProjectPreferences[INBOX_PROJECT_NAME] = {
+            hideLaterColumn: Boolean(legacyPreference?.hideLaterColumn || inboxPreference?.hideLaterColumn),
+            sortByDate: Boolean(legacyPreference?.sortByDate || inboxPreference?.sortByDate),
+        };
+        delete nextProjectPreferences[LEGACY_NO_PROJECT_PREFERENCE_KEY];
+        changed = true;
+    }
+
+    const nextTabs = workspace.tabs.map((tab) => {
+        const remapped = remapLegacyTab(tab);
+        if (remapped.changed) {
+            changed = true;
+            remappedTabCount += 1;
+        }
+        return remapped.tab;
+    });
+
+    const nextPanes = workspace.panes.map((pane) => {
+        let paneChanged = false;
+        const remappedTabs = pane.tabs.map((tab) => {
+            const remapped = remapLegacyTab(tab);
+            if (remapped.changed) {
+                paneChanged = true;
+                changed = true;
+                remappedTabCount += 1;
+            }
+            return remapped.tab;
+        });
+
+        return paneChanged
+            ? { ...pane, tabs: remappedTabs }
+            : pane;
+    });
+
+    if (!changed) {
+        return {
+            workspace,
+            changed: false,
+            remappedTabCount: 0,
+            migratedProjectPreference: false,
+        };
+    }
+
+    return {
+        workspace: {
+            ...workspace,
+            projectPreferences: nextProjectPreferences,
+            tabs: nextTabs,
+            panes: nextPanes,
+        },
+        changed: true,
+        remappedTabCount,
+        migratedProjectPreference,
+    };
+}
+
+async function migrateWorkspaceFileIfNeeded(workspace: WorkspaceState): Promise<WorkspaceState> {
+    const normalized = normalizeWorkspaceStateForInboxConsolidation(workspace);
+    const markerPath = getWorkspaceMigrationMarkerPath();
+    const markerFile = Bun.file(markerPath);
+    const markerExists = await markerFile.exists();
+
+    if (!normalized.changed) {
+        if (!markerExists) {
+            await mkdir(path.dirname(markerPath), { recursive: true });
+            await Bun.write(markerPath, JSON.stringify({
+                migratedAt: new Date().toISOString(),
+                remappedTabCount: 0,
+                migratedProjectPreference: false,
+                backupPath: null,
+            }, null, 2));
+        }
+        return workspace;
+    }
+
+    const workspacePath = `${getNomendexPath()}/workspace.json`;
+    let backupPath: string | null = null;
+
+    if (!markerExists) {
+        const backupDir = path.join(getNomendexPath(), "backups");
+        await mkdir(backupDir, { recursive: true });
+        backupPath = path.join(backupDir, `workspace-inbox-consolidation-v1-${Date.now()}.json`);
+        await copyFile(workspacePath, backupPath);
+    }
+
+    await Bun.write(workspacePath, JSON.stringify(normalized.workspace, null, 2));
+
+    await mkdir(path.dirname(markerPath), { recursive: true });
+    await Bun.write(markerPath, JSON.stringify({
+        migratedAt: new Date().toISOString(),
+        remappedTabCount: normalized.remappedTabCount,
+        migratedProjectPreference: normalized.migratedProjectPreference,
+        backupPath,
+    }, null, 2));
+
+    return normalized.workspace;
+}
 
 export const workspaceRoutes = {
     "/api/workspace": {
@@ -45,10 +195,11 @@ export const workspaceRoutes = {
 
                 const workspaceRaw = await file.json();
                 const workspaceValidated = WorkspaceStateSchema.parse(workspaceRaw);
+                const migratedWorkspace = await migrateWorkspaceFileIfNeeded(workspaceValidated);
 
                 const response: Result<WorkspaceState> = {
                     success: true,
-                    data: workspaceValidated,
+                    data: migratedWorkspace,
                 };
 
                 return Response.json(response);
@@ -68,7 +219,8 @@ export const workspaceRoutes = {
             try {
                 const workspace = await req.json();
                 const workspaceValidated = WorkspaceStateSchema.parse(workspace);
-                await Bun.write(`${getNomendexPath()}/workspace.json`, JSON.stringify(workspaceValidated, null, 2));
+                const normalizedWorkspace = normalizeWorkspaceStateForInboxConsolidation(workspaceValidated).workspace;
+                await Bun.write(`${getNomendexPath()}/workspace.json`, JSON.stringify(normalizedWorkspace, null, 2));
 
                 const response: Result<{ success: boolean }> = {
                     success: true,
