@@ -91,7 +91,6 @@ const UpdateTodoInputSchema = z.object({
         status: OptionalStatusSchema,
         project: OptionalStringSchema,
         archived: OptionalBooleanSchema,
-        order: OptionalNumberSchema,
         tags: OptionalStringArraySchema,
         scheduledStart: z.string().nullable().optional(),
         scheduledEnd: z.string().nullable().optional(),
@@ -103,7 +102,7 @@ const UpdateTodoInputSchema = z.object({
         customColumnId: OptionalStringSchema,
         calendarReminderPreset: OptionalCalendarReminderSchema,
         goalRefs: OptionalStringArraySchema,
-    }),
+    }).strict(),
 });
 
 const DeleteTodoInputSchema = z.object({

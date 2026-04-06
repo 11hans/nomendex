@@ -97,7 +97,6 @@ describe("todos route schema validation", () => {
                 status: null,
                 project: null,
                 archived: null,
-                order: null,
                 tags: null,
                 scheduledStart: null,
                 scheduledEnd: null,
@@ -122,7 +121,6 @@ describe("todos route schema validation", () => {
                 status: undefined,
                 project: undefined,
                 archived: undefined,
-                order: undefined,
                 tags: undefined,
                 scheduledStart: null,
                 scheduledEnd: null,
@@ -160,6 +158,12 @@ describe("todos route schema validation", () => {
             todoId: "todo-1",
             updates: {
                 priority: "urgent",
+            },
+        })).toThrow();
+        expect(() => todosRouteSchemasForTests.UpdateTodoInputSchema.parse({
+            todoId: "todo-1",
+            updates: {
+                order: 123,
             },
         })).toThrow();
     });
