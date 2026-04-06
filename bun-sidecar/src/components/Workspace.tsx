@@ -31,7 +31,7 @@ export function Workspace() {
         const viewId = tab.pluginInstance.viewId || "default";
 
         if (pluginId === "chat" && viewId === "chat") return true;
-        if (pluginId === "todos" && (viewId === "default" || viewId === "projects" || viewId === "inbox")) return true;
+        if (pluginId === "todos" && viewId === "inbox") return true;
         if (pluginId === "notes") return true;
         return false;
     };

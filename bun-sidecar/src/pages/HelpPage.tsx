@@ -273,11 +273,11 @@ function HelpContent() {
                                         <div className="rounded-lg p-4 bg-surface-elevated">
                                             <div className="grid grid-cols-[1fr_2fr] gap-x-6 gap-y-1.5 text-sm">
                                                 <code>Open Todos</code>
-                                                <span className="text-muted-foreground">Open the todos default view (projects)</span>
+                                                <span className="text-muted-foreground">Open the all-project todos board (default)</span>
                                                 <code>Open All Todos</code>
-                                                <span className="text-muted-foreground">Open the todos browser view</span>
-                                                <code>Open Projects View</code>
-                                                <span className="text-muted-foreground">Open the todos projects view</span>
+                                                <span className="text-muted-foreground">Open the all-project todos board</span>
+                                                <code>Open Projects</code>
+                                                <span className="text-muted-foreground">Open the projects browser</span>
                                                 <code>Create New Todo</code>
                                                 <span className="text-muted-foreground">Create a new todo item</span>
                                                 <code>Force Sync All to Calendar</code>

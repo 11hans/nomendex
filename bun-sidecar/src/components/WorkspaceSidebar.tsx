@@ -61,7 +61,10 @@ export function WorkspaceSidebar() {
         if (currentPath != "/") {
             navigate("/");
         }
-        openTab({ pluginMeta: plugin, view: "default", props: {} });
+        const view = plugin.id === "todos" || plugin.id === "projects"
+            ? "browser"
+            : "default";
+        openTab({ pluginMeta: plugin, view, props: {} });
     };
 
     const handleNavigate = (path: string) => {
@@ -79,7 +82,7 @@ export function WorkspaceSidebar() {
         openTab({
             pluginMeta: plugins.find(p => p.id === "todos") || plugins[0],
             view: "inbox",
-            props: { project: "Inbox" },
+            props: {},
         });
     };
 
