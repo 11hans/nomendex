@@ -10,6 +10,7 @@ import {
     fuzzyMatch,
     filterAndSortTodos,
 } from "./todo-filter-utils";
+import { applyTodoKindToDraft, isEventTodo, isTaskTodo, isTimeblockTodo } from "./todo-kind-utils";
 import { createDefaultFilterState } from "./todo-filter-types";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -18,6 +19,8 @@ function makeTodo(overrides: Partial<Todo> = {}): Todo {
     return {
         id: "t-" + Math.random().toString(36).slice(2, 8),
         title: "Test todo",
+        kind: "task",
+        source: "user",
         status: "todo",
         createdAt: "2026-01-01T00:00",
         updatedAt: "2026-01-01T00:00",
@@ -178,11 +181,65 @@ describe("needsAttention", () => {
     });
 
     test("timeblock todo does NOT need attention", () => {
-        expect(needsAttention(makeTodo({ tags: ["timeblock"], dueDate: todayStr() }))).toBe(false);
+        expect(needsAttention(makeTodo({
+            kind: "event",
+            source: "timeblock-generator",
+            tags: ["timeblock"],
+            dueDate: todayStr(),
+        }))).toBe(false);
+    });
+
+    test("user event does NOT need attention", () => {
+        expect(needsAttention(makeTodo({
+            kind: "event",
+            source: "user",
+            dueDate: todayStr(),
+        }))).toBe(false);
     });
 
     test("todo with no date, no priority, status todo does NOT need attention", () => {
         expect(needsAttention(makeTodo({ priority: "none" }))).toBe(false);
+    });
+});
+
+// ─── kind/source helpers ───────────────────────────────────────────────────
+
+describe("todo kind helpers", () => {
+    test("detects task vs event", () => {
+        expect(isTaskTodo(makeTodo({ kind: "task" }))).toBe(true);
+        expect(isTaskTodo(makeTodo({ kind: "event" }))).toBe(false);
+        expect(isEventTodo(makeTodo({ kind: "event" }))).toBe(true);
+    });
+
+    test("detects generated timeblocks by source", () => {
+        expect(isTimeblockTodo(makeTodo({
+            kind: "event",
+            source: "timeblock-generator",
+        }))).toBe(true);
+    });
+
+    test("keeps legacy timeblock tag as fallback", () => {
+        expect(isTimeblockTodo(makeTodo({
+            kind: "task",
+            source: "user",
+            tags: ["timeblock"],
+        }))).toBe(true);
+    });
+
+    test("switching draft to event clears task-only fields", () => {
+        expect(applyTodoKindToDraft(makeTodo({
+            kind: "task",
+            source: "user",
+            status: "done",
+            dueDate: "2026-04-09",
+            priority: "high",
+        }), "event")).toMatchObject({
+            kind: "event",
+            source: "user",
+            status: "todo",
+            dueDate: undefined,
+            priority: undefined,
+        });
     });
 });
 

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Hash, Trash2 } from "lucide-react";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
+import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useTheme } from "@/hooks/useTheme";
 import { useIndexedListNavigation } from "@/hooks/useIndexedListNavigation";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
@@ -25,6 +26,8 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
     const [newTagName, setNewTagName] = useState("");
     const [createError, setCreateError] = useState<string | null>(null);
     const [creating, setCreating] = useState(false);
+    const [confirmDeleteTag, setConfirmDeleteTag] = useState<TagSuggestion | null>(null);
+    const [deleting, setDeleting] = useState(false);
     const { currentTheme } = useTheme();
     const placement = getViewSelfPlacement(tabId);
 
@@ -33,6 +36,7 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
     const hasSetTabNameRef = useRef<boolean>(false);
 
     const notesAPI = useNotesAPI();
+    const todosAPI = useTodosAPI();
 
     // Set tab name
     useEffect(() => {
@@ -142,24 +146,36 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
         }
     }, [newTagName, notesAPI]);
 
-    // Handle deleting an explicit tag
-    const handleDeleteTag = useCallback(async (tagName: string) => {
+    // Handle delete — show confirmation if tag has usages, otherwise delete immediately
+    const handleDeleteTag = useCallback((tagItem: TagSuggestion) => {
+        setConfirmDeleteTag(tagItem);
+    }, []);
+
+    const handleConfirmDelete = useCallback(async () => {
+        if (!confirmDeleteTag) return;
+        const { tag: tagName } = confirmDeleteTag;
         try {
+            setDeleting(true);
+            // Remove tag from all todos and notes
+            await Promise.all([
+                todosAPI.deleteTag({ tagName }),
+                notesAPI.removeTagFromAllNotes({ tagName }),
+            ]);
+            // Clean up explicit tag definition if applicable
             const { isExplicit } = await notesAPI.isExplicitTag({ tagName });
-            if (!isExplicit) {
-                return; // Only delete explicit tags
+            if (isExplicit) {
+                await notesAPI.deleteExplicitTag({ tagName });
             }
-
-            await notesAPI.deleteExplicitTag({ tagName });
-
-            // Reload tags
-            const result = await notesAPI.getAllTags();
-            setTags(result);
+            // Remove tag from displayed list directly
+            setTags(prev => prev.filter(t => t.tag !== tagName));
+            setConfirmDeleteTag(null);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : "Failed to delete tag";
             setError(errorMessage);
+        } finally {
+            setDeleting(false);
         }
-    }, [notesAPI, setError]);
+    }, [confirmDeleteTag, todosAPI, notesAPI, setError]);
 
     // Hook for Cmd+Enter in create dialog
     useNativeSubmit(() => {
@@ -244,24 +260,57 @@ export function TagsBrowserView({ tabId }: { tabId: string }) {
                                     </span>
                                 </div>
                             </button>
-                            {tagItem.count === 0 && (
-                                <button
-                                    onClick={() => {
-                                        void handleDeleteTag(tagItem.tag);
-                                    }}
-                                    className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 transition-opacity hover:bg-surface-elevated group-hover:opacity-100"
-                                    title="Delete explicit tag"
-                                >
-                                    <Trash2
-                                        className="size-3"
-                                        style={{ color: currentTheme.styles.semanticDestructive }}
-                                    />
-                                </button>
-                            )}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteTag(tagItem);
+                                }}
+                                className="absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded opacity-0 transition-opacity hover:bg-surface-elevated group-hover:opacity-100"
+                                title="Delete tag"
+                            >
+                                <Trash2
+                                    className="size-3"
+                                    style={{ color: currentTheme.styles.semanticDestructive }}
+                                />
+                            </button>
                         </div>
                     ))}
                 </BrowserListCard>
             </BrowserViewShell>
+
+            {/* Confirm Delete Tag Dialog */}
+            <Dialog open={!!confirmDeleteTag} onOpenChange={(open) => { if (!open) setConfirmDeleteTag(null); }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete tag</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <p className="text-sm" style={{ color: currentTheme.styles.contentPrimary }}>
+                            Delete tag <strong>#{confirmDeleteTag?.tag}</strong>?
+                            {confirmDeleteTag && confirmDeleteTag.count > 0 && (
+                                <> It will be removed from all todos and notes that use it.</>
+                            )}
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="ghost"
+                            onClick={() => setConfirmDeleteTag(null)}
+                            disabled={deleting}
+                            autoFocus
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => { void handleConfirmDelete(); }}
+                            disabled={deleting}
+                        >
+                            {deleting ? "Deleting..." : "Delete"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Create Tag Dialog */}
             <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>

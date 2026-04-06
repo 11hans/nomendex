@@ -6,6 +6,8 @@ function makeTodo(overrides: Record<string, unknown> = {}): Todo {
     return {
         id: "todo-1",
         title: "Test",
+        kind: "task",
+        source: "user",
         status: "todo",
         createdAt: "2026-04-02T10:00:00.000Z",
         updatedAt: "2026-04-02T10:00:00.000Z",

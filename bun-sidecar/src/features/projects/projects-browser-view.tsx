@@ -13,7 +13,7 @@ import type { ProjectInfo } from "./index";
 import { CreateProjectDialog } from "./CreateProjectDialog";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { RenameProjectDialog } from "./RenameProjectDialog";
-import { isTimeblockTodo } from "@/features/todos/todo-filter-utils";
+import { isTaskTodo } from "@/features/todos/todo-kind-utils";
 
 export function ProjectsBrowserView({ tabId }: { tabId: string }) {
     if (!tabId) {
@@ -44,7 +44,7 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
         ]);
 
         const projectInfos = projectConfigs.map((config) => {
-            const projectTodos = allTodos.filter((t) => t.project === config.name && !isTimeblockTodo(t));
+            const projectTodos = allTodos.filter((t) => t.project === config.name && isTaskTodo(t));
             const projectNotes = allNotes.filter((n) => n.frontMatter?.project === config.name);
 
             return {

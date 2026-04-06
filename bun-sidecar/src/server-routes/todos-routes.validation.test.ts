@@ -5,12 +5,20 @@ describe("todos route schema validation", () => {
     test("list schema accepts status filters", () => {
         const parsed = todosRouteSchemasForTests.GetTodosInputSchema.parse({
             project: "Nomendex",
+            kind: "task",
+            kinds: ["task", "event"],
+            source: "user",
+            sources: ["user", "timeblock-generator"],
             status: "in_progress",
             statuses: ["todo", "in_progress"],
         });
 
         expect(parsed).toEqual({
             project: "Nomendex",
+            kind: "task",
+            kinds: ["task", "event"],
+            source: "user",
+            sources: ["user", "timeblock-generator"],
             status: "in_progress",
             statuses: ["todo", "in_progress"],
         });
@@ -19,12 +27,20 @@ describe("todos route schema validation", () => {
     test("list schema normalizes null status filters to undefined", () => {
         const parsed = todosRouteSchemasForTests.GetTodosInputSchema.parse({
             project: "Nomendex",
+            kind: null,
+            kinds: null,
+            source: null,
+            sources: null,
             status: null,
             statuses: null,
         });
 
         expect(parsed).toEqual({
             project: "Nomendex",
+            kind: undefined,
+            kinds: undefined,
+            source: undefined,
+            sources: undefined,
             status: undefined,
             statuses: undefined,
         });
@@ -35,6 +51,8 @@ describe("todos route schema validation", () => {
             title: "Test task",
             description: null,
             project: null,
+            kind: null,
+            source: null,
             status: null,
             tags: null,
             scheduledStart: null,
@@ -52,6 +70,8 @@ describe("todos route schema validation", () => {
             title: "Test task",
             description: undefined,
             project: undefined,
+            kind: undefined,
+            source: undefined,
             status: undefined,
             tags: undefined,
             scheduledStart: null,
@@ -72,6 +92,8 @@ describe("todos route schema validation", () => {
             updates: {
                 title: null,
                 description: null,
+                kind: null,
+                source: null,
                 status: null,
                 project: null,
                 archived: null,
@@ -95,6 +117,8 @@ describe("todos route schema validation", () => {
             updates: {
                 title: undefined,
                 description: undefined,
+                kind: undefined,
+                source: undefined,
                 status: undefined,
                 project: undefined,
                 archived: undefined,
@@ -117,6 +141,16 @@ describe("todos route schema validation", () => {
     test("schema still rejects invalid non-null values", () => {
         expect(() => todosRouteSchemasForTests.GetTodosInputSchema.parse({
             status: "active",
+        })).toThrow();
+        expect(() => todosRouteSchemasForTests.GetTodosInputSchema.parse({
+            kind: "timeblock",
+        })).toThrow();
+        expect(() => todosRouteSchemasForTests.GetTodosInputSchema.parse({
+            source: "robot",
+        })).toThrow();
+        expect(() => todosRouteSchemasForTests.CreateTodoInputSchema.parse({
+            title: "Task",
+            source: "robot",
         })).toThrow();
         expect(() => todosRouteSchemasForTests.CreateTodoInputSchema.parse({
             title: "Task",

@@ -153,6 +153,8 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
                             await todosAPI.createTodo({
                                 title: todo.title,
                                 description: todo.description,
+                                kind: todo.kind,
+                                source: todo.source,
                                 status: todo.status,
                                 project: todo.project,
                                 tags: todo.tags,
@@ -235,6 +237,7 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
                 updates: {
                     title: updatedTodo.title,
                     description: updatedTodo.description,
+                    kind: updatedTodo.kind,
                     status: updatedTodo.status,
                     project: updatedTodo.project,
                     archived: updatedTodo.archived,

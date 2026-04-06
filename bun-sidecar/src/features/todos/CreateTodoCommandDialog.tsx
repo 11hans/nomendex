@@ -12,6 +12,9 @@ import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { todosPluginSerial } from "./index";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
+import { KindPicker } from "./pickers";
+import type { TodoKind, TodoSource } from "./todo-types";
+import { applyTodoKindToDraft, getTodoKindLabel } from "./todo-kind-utils";
 
 interface CreateTodoCommandDialogProps {
     onSuccess?: (todoId: string) => void;
@@ -28,6 +31,8 @@ export function CreateTodoCommandDialog({ onSuccess }: CreateTodoCommandDialogPr
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [project, setProject] = useState("");
+    const [kind, setKind] = useState<TodoKind>("task");
+    const [source, setSource] = useState<TodoSource>("user");
     const [status, setStatus] = useState<"todo" | "in_progress" | "done" | "later">("todo");
     const [tags, setTags] = useState<string[]>([]);
     const [isCreating, setIsCreating] = useState(false);
@@ -52,6 +57,8 @@ export function CreateTodoCommandDialog({ onSuccess }: CreateTodoCommandDialogPr
     const api = useTodosAPI();
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
+    const isEventDraft = kind === "event";
+    const itemLabel = getTodoKindLabel(kind);
 
     // Handle Cmd+Enter from native Mac app
     useNativeSubmit(() => {
@@ -194,6 +201,13 @@ export function CreateTodoCommandDialog({ onSuccess }: CreateTodoCommandDialogPr
         setTags(tags.filter(t => t !== tagToRemove));
     };
 
+    const handleKindChange = (nextKind: TodoKind) => {
+        const nextDraft = applyTodoKindToDraft({ kind, source, status }, nextKind);
+        setKind(nextDraft.kind ?? nextKind);
+        setSource(nextDraft.source ?? "user");
+        setStatus(nextDraft.status);
+    };
+
     const handleSubmit = async () => {
         if (!title.trim()) return;
 
@@ -203,6 +217,8 @@ export function CreateTodoCommandDialog({ onSuccess }: CreateTodoCommandDialogPr
                 title: title.trim(),
                 description: description.trim() || undefined,
                 project: project.trim() || undefined,
+                kind,
+                source,
                 status,
                 tags: tags.length > 0 ? tags : undefined,
             });
@@ -242,11 +258,15 @@ export function CreateTodoCommandDialog({ onSuccess }: CreateTodoCommandDialogPr
         >
             {/* Content Area */}
             <div className="px-6 pt-6 pb-4 space-y-4">
+                <div>
+                    <KindPicker value={kind} onChange={handleKindChange} />
+                </div>
+
                 {/* Title */}
                 <Input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Task title"
+                    placeholder={`${itemLabel} title`}
                     className="text-xl font-semibold border-0 px-0 h-auto focus-visible:ring-0 placeholder:font-normal placeholder:text-muted-foreground/40"
                     style={{
                         color: styles.contentPrimary,
@@ -308,61 +328,62 @@ export function CreateTodoCommandDialog({ onSuccess }: CreateTodoCommandDialogPr
             >
                 {/* Metadata Pills */}
                 <div className="flex items-center gap-2">
-                    {/* Status Pill */}
-                    <Popover open={statusOpen} onOpenChange={handleStatusOpenChange}>
-                        <PopoverTrigger asChild>
-                            <button
-                                ref={statusTriggerRef}
-                                type="button"
-                                className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1"
+                    {!isEventDraft && (
+                        <Popover open={statusOpen} onOpenChange={handleStatusOpenChange}>
+                            <PopoverTrigger asChild>
+                                <button
+                                    ref={statusTriggerRef}
+                                    type="button"
+                                    className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors hover:opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-1"
+                                    style={{
+                                        backgroundColor: styles.surfaceTertiary,
+                                        color: styles.contentPrimary,
+                                        minWidth: '110px',
+                                    }}
+                                    onKeyDown={handleStatusKeyDown}
+                                    disabled={isCreating}
+                                >
+                                    <StatusIcon className="size-4 shrink-0" />
+                                    <span className="whitespace-nowrap">{currentStatus.label}</span>
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                                className="w-40 p-1"
+                                align="start"
                                 style={{
-                                    backgroundColor: styles.surfaceTertiary,
-                                    color: styles.contentPrimary,
-                                    minWidth: '110px',
+                                    backgroundColor: styles.surfacePrimary,
+                                    borderColor: styles.borderDefault,
                                 }}
                                 onKeyDown={handleStatusKeyDown}
-                                disabled={isCreating}
                             >
-                                <StatusIcon className="size-4 shrink-0" />
-                                <span className="whitespace-nowrap">{currentStatus.label}</span>
-                            </button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                            className="w-40 p-1"
-                            align="start"
-                            style={{
-                                backgroundColor: styles.surfacePrimary,
-                                borderColor: styles.borderDefault,
-                            }}
-                            onKeyDown={handleStatusKeyDown}
-                        >
-                            {statusConfig.map((statusItem, index) => {
-                                const Icon = statusItem.icon;
-                                const isActive = status === statusItem.value;
-                                const isHighlighted = index === statusHighlightIndex;
-                                return (
-                                    <button
-                                        key={statusItem.value}
-                                        type="button"
-                                        onClick={() => {
-                                            setStatus(statusItem.value);
-                                            setStatusOpen(false);
-                                            statusTriggerRef.current?.focus();
-                                        }}
-                                        className="flex items-center gap-2 w-full px-2.5 py-2 rounded text-sm transition-colors text-left"
-                                        style={{
-                                            backgroundColor: isHighlighted ? styles.surfaceTertiary : isActive ? styles.surfaceTertiary : 'transparent',
-                                            color: styles.contentPrimary,
-                                            outline: isHighlighted ? `2px solid ${styles.borderDefault}` : 'none',
-                                        }}
-                                    >
-                                        <Icon className="size-4" />
-                                        {statusItem.label}
-                                    </button>
-                                );
-                            })}
-                        </PopoverContent>
-                    </Popover>
+                                {statusConfig.map((statusItem, index) => {
+                                    const Icon = statusItem.icon;
+                                    const isActive = status === statusItem.value;
+                                    const isHighlighted = index === statusHighlightIndex;
+                                    return (
+                                        <button
+                                            key={statusItem.value}
+                                            type="button"
+                                            onClick={() => {
+                                                setStatus(statusItem.value);
+                                                setStatusOpen(false);
+                                                statusTriggerRef.current?.focus();
+                                            }}
+                                            className="flex items-center gap-2 w-full px-2.5 py-2 rounded text-sm transition-colors text-left"
+                                            style={{
+                                                backgroundColor: isHighlighted ? styles.surfaceTertiary : isActive ? styles.surfaceTertiary : 'transparent',
+                                                color: styles.contentPrimary,
+                                                outline: isHighlighted ? `2px solid ${styles.borderDefault}` : 'none',
+                                            }}
+                                        >
+                                            <Icon className="size-4" />
+                                            {statusItem.label}
+                                        </button>
+                                    );
+                                })}
+                            </PopoverContent>
+                        </Popover>
+                    )}
 
                     {/* Project Pill */}
                     <Popover open={projectOpen} onOpenChange={handleProjectOpenChange}>

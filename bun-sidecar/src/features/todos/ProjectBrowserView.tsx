@@ -5,7 +5,8 @@ import { useProjectsAPI } from "@/hooks/useProjectsAPI";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useTheme } from "@/hooks/useTheme";
 import { Todo } from "./todo-types";
-import { filterAndSortTodos, isTimeblockTodo } from "./todo-filter-utils";
+import { isTaskTodo } from "./todo-kind-utils";
+import { filterAndSortTodos } from "./todo-filter-utils";
 import { createDefaultFilterState } from "./todo-filter-types";
 import type { TodoFilterCriteria } from "./todo-filter-types";
 import type { ProjectConfig } from "@/features/projects/project-types";
@@ -19,7 +20,7 @@ import {
 } from "lucide-react";
 
 type ProjectFilter = "all" | "active" | "completed" | "archived";
-type SystemListId = "today" | "upcoming" | "overdue" | "no_due" | "waiting";
+type SystemListId = "today" | "upcoming" | "overdue" | "no_due" | "waiting" | "events";
 
 const ALL_PROJECTS = "__all__";
 const WAITING_TAG = "waiting";
@@ -38,7 +39,7 @@ const BASE_SYSTEM_CRITERIA: TodoFilterCriteria = {
     statusBucket: "active",
 };
 
-const SYSTEM_LISTS: Array<{ id: SystemListId; label: string; criteria: TodoFilterCriteria }> = [
+const SYSTEM_LISTS: Array<{ id: SystemListId; label: string; criteria: TodoFilterCriteria; kindFilter?: Todo["kind"] }> = [
     {
         id: "today",
         label: "Today",
@@ -63,6 +64,12 @@ const SYSTEM_LISTS: Array<{ id: SystemListId; label: string; criteria: TodoFilte
         id: "waiting",
         label: "Waiting",
         criteria: { ...BASE_SYSTEM_CRITERIA, selectedTags: [WAITING_TAG] },
+    },
+    {
+        id: "events",
+        label: "Events",
+        criteria: { ...BASE_SYSTEM_CRITERIA },
+        kindFilter: "event",
     },
 ];
 
@@ -316,7 +323,7 @@ export function ProjectBrowserView() {
 
         const buildStats = (name: string, projectKey: string, config?: ProjectConfig, isNoProject = false): ProjectStats => {
             const todos = todosByProject.get(projectKey) ?? [];
-            const trackedTodos = todos.filter((todo) => !isTimeblockTodo(todo));
+            const trackedTodos = todos.filter((todo) => isTaskTodo(todo));
             const activeTodos = trackedTodos.filter((todo) => !todo.archived);
 
             const todoCount = activeTodos.filter((todo) => todo.status === "todo").length;
@@ -417,18 +424,20 @@ export function ProjectBrowserView() {
     );
 
     const allActiveCount = useMemo(
-        () => allTodos.filter((todo) => !todo.archived && todo.status !== "done" && !isTimeblockTodo(todo)).length,
+        () => allTodos.filter((todo) => !todo.archived && todo.status !== "done" && isTaskTodo(todo)).length,
         [allTodos],
     );
 
     const filterTodosWithCriteria = useCallback(
-        (criteria: TodoFilterCriteria): Todo[] => {
+        (criteria: TodoFilterCriteria, kindFilter?: Todo["kind"]): Todo[] => {
             const state = createDefaultFilterState({
                 ...criteria,
                 searchQuery: "",
                 sortMode: "urgency",
             });
-            return filterAndSortTodos(allTodos, state);
+            const filtered = filterAndSortTodos(allTodos, state);
+            if (!kindFilter) return filtered;
+            return filtered.filter((todo) => todo.kind === kindFilter);
         },
         [allTodos],
     );
@@ -440,10 +449,11 @@ export function ProjectBrowserView() {
             overdue: 0,
             no_due: 0,
             waiting: 0,
+            events: 0,
         };
 
         for (const systemList of SYSTEM_LISTS) {
-            counts[systemList.id] = filterTodosWithCriteria(systemList.criteria).length;
+            counts[systemList.id] = filterTodosWithCriteria(systemList.criteria, systemList.kindFilter).length;
         }
 
         return counts;
@@ -482,6 +492,7 @@ export function ProjectBrowserView() {
     // Derive the project prop for TodosBrowserView
     // System list selection always runs across all projects.
     const boardProject = selectedSystemListId ? undefined : selectedProjectKey === ALL_PROJECTS ? undefined : selectedProjectKey;
+    const boardKindFilter = selectedSystemList?.kindFilter;
 
     if (loading) {
         return (
@@ -643,6 +654,7 @@ export function ProjectBrowserView() {
                         project={boardProject}
                         embedded
                         externalFilterCriteria={boardFilterCriteria}
+                        kindFilter={boardKindFilter}
                     />
                 </ResizablePanel>
             </ResizablePanelGroup>

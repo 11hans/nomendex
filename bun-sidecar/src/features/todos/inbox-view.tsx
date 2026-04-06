@@ -12,7 +12,7 @@ import { TaskCardEditor } from "./TaskCardEditor";
 import { Todo } from "./todo-types";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useTodoFilterState } from "./useTodoFilterState";
-import { filterAndSortTodos, fuzzyMatch, isTimeblockTodo } from "./todo-filter-utils";
+import { filterAndSortTodos, fuzzyMatch } from "./todo-filter-utils";
 import { TodoFilterToolbar } from "./TodoFilterToolbar";
 import { createDefaultFilterState } from "./todo-filter-types";
 import type { TodoFilterCriteria, TodoStatusBucket } from "./todo-filter-types";
@@ -34,17 +34,19 @@ import {
     ChevronRight,
     ListTodo,
 } from "lucide-react";
+import { isEventTodo, isTaskTodo } from "./todo-kind-utils";
 
 const INBOX_PROJECT = "Inbox";
 const ALL_TASKS = "__all__";
 const WAITING_TAG = "waiting";
 
-type SystemListId = "today" | "upcoming" | "overdue" | "no_due" | "waiting";
+type SystemListId = "today" | "upcoming" | "overdue" | "no_due" | "waiting" | "events";
 
 interface SystemListDefinition {
     id: SystemListId;
     label: string;
     criteria: TodoFilterCriteria;
+    kindFilter?: Todo["kind"];
 }
 
 const BASE_SYSTEM_CRITERIA: TodoFilterCriteria = {
@@ -81,6 +83,12 @@ const SYSTEM_LISTS: SystemListDefinition[] = [
         id: "waiting",
         label: "Waiting",
         criteria: { ...BASE_SYSTEM_CRITERIA, selectedTags: [WAITING_TAG] },
+    },
+    {
+        id: "events",
+        label: "Events",
+        criteria: { ...BASE_SYSTEM_CRITERIA },
+        kindFilter: "event",
     },
 ];
 
@@ -289,6 +297,7 @@ function DraggableTodoRow({
     const statusType = getStatusBucketForTodo(todo);
     const dateLabel = formatRelativeDateLabel(todo.updatedAt);
     const leadTag = todo.tags?.[0];
+    const isEvent = isEventTodo(todo);
 
     return (
         <div
@@ -320,6 +329,7 @@ function DraggableTodoRow({
                 <span className="truncate text-xs" style={{ color: contentPrimary }}>{todo.title}</span>
 
                 <span className="ml-auto flex items-center gap-2 shrink-0" style={{ color: contentTertiary }}>
+                    {isEvent && <span className="text-[10px] uppercase tracking-[0.08em]">event</span>}
                     {leadTag && <span className="text-[10px]">#{leadTag}</span>}
                     {dateLabel && <span className="text-[10px]">{dateLabel}</span>}
                     <ChevronRight className="size-3 opacity-60" />
@@ -374,6 +384,8 @@ export function InboxListView() {
         title: string;
         description: string;
         project: string;
+        kind: Todo["kind"];
+        source: Todo["source"];
         status: "todo" | "in_progress" | "done" | "later";
         tags: string[];
         scheduledStart?: string;
@@ -386,6 +398,8 @@ export function InboxListView() {
         title: "",
         description: "",
         project: "Inbox",
+        kind: "task",
+        source: "user",
         status: "todo",
         tags: [],
         scheduledStart: undefined,
@@ -401,6 +415,8 @@ export function InboxListView() {
             title: "",
             description: "",
             project: "Inbox",
+            kind: "task",
+            source: "user",
             status: "todo",
             tags: [],
             scheduledStart: undefined,
@@ -529,6 +545,7 @@ export function InboxListView() {
                 updates: {
                     title: updatedTodo.title,
                     description: updatedTodo.description,
+                    kind: updatedTodo.kind,
                     status: updatedTodo.status,
                     project: updatedTodo.project === "" ? "Inbox" : updatedTodo.project,
                     archived: updatedTodo.archived,
@@ -587,6 +604,8 @@ export function InboxListView() {
                 title: newTodo.title.trim(),
                 description: newTodo.description,
                 project: newTodo.project.trim() || undefined,
+                kind: newTodo.kind,
+                source: newTodo.source,
                 status: newTodo.status,
                 tags: newTodo.tags,
                 scheduledStart: newTodo.scheduledStart ?? null,
@@ -613,7 +632,7 @@ export function InboxListView() {
         try {
             await todosAPI.deleteTodo({ todoId: todo.id });
 
-            toast("Deleted task", {
+            toast("Deleted item", {
                 action: {
                     label: "Undo",
                     onClick: async () => {
@@ -621,6 +640,8 @@ export function InboxListView() {
                             await todosAPI.createTodo({
                                 title: todo.title,
                                 description: todo.description,
+                                kind: todo.kind,
+                                source: todo.source,
                                 status: todo.status,
                                 project: todo.project,
                                 tags: todo.tags,
@@ -655,7 +676,7 @@ export function InboxListView() {
         try {
             if (nextArchived) {
                 await todosAPI.archiveTodo({ todoId: todo.id });
-                toast("Archived task", {
+                toast("Archived item", {
                     action: {
                         label: "Undo",
                         onClick: async () => {
@@ -671,7 +692,7 @@ export function InboxListView() {
                 });
             } else {
                 await todosAPI.unarchiveTodo({ todoId: todo.id });
-                toast("Restored task", {
+                toast("Restored item", {
                     action: {
                         label: "Undo",
                         onClick: async () => {
@@ -772,26 +793,34 @@ export function InboxListView() {
         (
             sourceTodos: Todo[],
             criteria: TodoFilterCriteria,
+            kindFilter?: Todo["kind"],
         ): Todo[] => {
             const baseState = createDefaultFilterState({
                 ...criteria,
                 searchQuery: "",
                 sortMode: todoFilter.filterState.sortMode,
             });
-            return filterAndSortTodos(sourceTodos, baseState);
+            const filtered = filterAndSortTodos(sourceTodos, baseState);
+            if (!kindFilter) return filtered;
+            return filtered.filter((todo) => todo.kind === kindFilter);
         },
         [todoFilter.filterState.sortMode],
     );
 
     const filteredTodos = useMemo(() => {
-        return filterAndSortTodos(groupScopedTodos, todoFilter.filterState);
-    }, [groupScopedTodos, todoFilter.filterState]);
+        const filtered = filterAndSortTodos(groupScopedTodos, todoFilter.filterState);
+        const activeSystemList = activeSystemListId
+            ? SYSTEM_LISTS.find((item) => item.id === activeSystemListId)
+            : null;
+        if (!activeSystemList?.kindFilter) return filtered;
+        return filtered.filter((todo) => todo.kind === activeSystemList.kindFilter);
+    }, [groupScopedTodos, todoFilter.filterState, activeSystemListId]);
 
     // Counts per group (active tasks only, for sidebar badges)
     const groupCounts = useMemo(() => {
         const counts: Record<string, number> = { [ALL_TASKS]: 0 };
         for (const todo of todos) {
-            if (todo.archived || todo.status === "done" || isTimeblockTodo(todo)) continue;
+            if (todo.archived || todo.status === "done" || !isTaskTodo(todo)) continue;
             counts[ALL_TASKS] = (counts[ALL_TASKS] || 0) + 1;
             const group = getGroupName(todo);
             counts[group] = (counts[group] || 0) + 1;
@@ -806,10 +835,11 @@ export function InboxListView() {
             overdue: 0,
             no_due: 0,
             waiting: 0,
+            events: 0,
         };
 
         for (const systemList of SYSTEM_LISTS) {
-            counts[systemList.id] = filterTodosWithCriteria(todos, systemList.criteria).length;
+            counts[systemList.id] = filterTodosWithCriteria(todos, systemList.criteria, systemList.kindFilter).length;
         }
 
         return counts;
@@ -827,7 +857,7 @@ export function InboxListView() {
                 || (todo.tags?.some((tag) => fuzzyMatch(query, tag)) ?? false)
             );
         }
-        const scopedWithoutTimeblocks = scoped.filter((todo) => !isTimeblockTodo(todo));
+        const scopedWithoutTimeblocks = scoped.filter((todo) => isTaskTodo(todo));
         return {
             all: scopedWithoutTimeblocks.length,
             active: scopedWithoutTimeblocks.filter((todo) => getStatusBucketForTodo(todo) === "active").length,
@@ -1043,8 +1073,8 @@ export function InboxListView() {
                                     <ListTodo className="size-10 opacity-20" style={{ color: styles.contentTertiary }} />
                                     <span className="text-xs" style={{ color: styles.contentTertiary }}>
                                         {todoFilter.filterState.searchQuery.trim() || todoFilter.hasActiveFilters
-                                            ? "no tasks match current filters"
-                                            : "no tasks yet"}
+                                            ? "no items match current filters"
+                                            : "no items yet"}
                                     </span>
                                 </div>
                             ) : (

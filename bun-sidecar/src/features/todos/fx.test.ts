@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import {
+    collectRequestedKinds,
+    collectRequestedSources,
     collectRequestedStatuses,
     getExpiredTimeblockIds,
+    getLegacyTimeblockBackfillUpdates,
     matchesScheduledOverlap,
-    shouldRejectTimeblockCompletionChange,
+    shouldRejectEventLifecycleChange,
 } from "./fx";
 import type { Todo } from "./todo-types";
 
@@ -11,6 +14,8 @@ function makeTodo(overrides: Partial<Todo> = {}): Todo {
     return {
         id: "todo-1",
         title: "Test todo",
+        kind: "task",
+        source: "user",
         status: "todo",
         createdAt: "2026-04-01T10:00:00.000Z",
         updatedAt: "2026-04-01T10:00:00.000Z",
@@ -68,22 +73,72 @@ describe("collectRequestedStatuses", () => {
     });
 });
 
-describe("shouldRejectTimeblockCompletionChange", () => {
-    test("rejects completion when the todo remains a timeblock", () => {
-        expect(shouldRejectTimeblockCompletionChange({
-            currentTags: ["timeblock", "movement"],
-            nextTags: ["timeblock", "movement"],
-            status: "done",
+describe("collectRequestedKinds", () => {
+    test("returns empty set when no kind filters are provided", () => {
+        const kinds = collectRequestedKinds({});
+        expect(kinds.size).toBe(0);
+    });
+
+    test("merges kind and kinds into a de-duplicated set", () => {
+        const kinds = collectRequestedKinds({
+            kind: "task",
+            kinds: ["event", "task"],
+        });
+
+        expect(Array.from(kinds).sort()).toEqual(["event", "task"]);
+    });
+});
+
+describe("collectRequestedSources", () => {
+    test("returns empty set when no source filters are provided", () => {
+        const sources = collectRequestedSources({});
+        expect(sources.size).toBe(0);
+    });
+
+    test("merges source and sources into a de-duplicated set", () => {
+        const sources = collectRequestedSources({
+            source: "user",
+            sources: ["timeblock-generator", "user"],
+        });
+
+        expect(Array.from(sources).sort()).toEqual(["timeblock-generator", "user"]);
+    });
+});
+
+describe("shouldRejectEventLifecycleChange", () => {
+    test("rejects completion when an event is moved to done", () => {
+        expect(shouldRejectEventLifecycleChange({
+            currentKind: "event",
+            nextKind: "event",
+            currentStatus: "todo",
+            nextStatus: "done",
             completedAtProvided: false,
+            kindChanged: false,
+            statusChanged: true,
         })).toBe(true);
     });
 
-    test("allows completion when the same update removes the timeblock tag", () => {
-        expect(shouldRejectTimeblockCompletionChange({
-            currentTags: ["timeblock", "movement"],
-            nextTags: ["movement"],
-            status: "done",
+    test("rejects converting a done task into an event without resetting status", () => {
+        expect(shouldRejectEventLifecycleChange({
+            currentKind: "task",
+            nextKind: "event",
+            currentStatus: "done",
+            nextStatus: undefined,
             completedAtProvided: false,
+            kindChanged: true,
+            statusChanged: false,
+        })).toBe(true);
+    });
+
+    test("allows active event updates that keep status todo", () => {
+        expect(shouldRejectEventLifecycleChange({
+            currentKind: "event",
+            nextKind: "event",
+            currentStatus: "todo",
+            nextStatus: "todo",
+            completedAtProvided: false,
+            kindChanged: false,
+            statusChanged: true,
         })).toBe(false);
     });
 });
@@ -94,18 +149,21 @@ describe("getExpiredTimeblockIds", () => {
         const ids = getExpiredTimeblockIds([
             makeTodo({
                 id: "expired",
+                kind: "event",
                 tags: ["timeblock"],
                 scheduledStart: "2026-04-06T18:00",
                 scheduledEnd: "2026-04-06T19:00",
             }),
             makeTodo({
                 id: "today",
+                kind: "event",
                 tags: ["timeblock"],
                 scheduledStart: "2026-04-07T07:00",
                 scheduledEnd: "2026-04-07T07:15",
             }),
             makeTodo({
                 id: "future",
+                kind: "event",
                 tags: ["timeblock"],
                 scheduledStart: "2026-04-08T19:30",
                 scheduledEnd: "2026-04-08T21:30",
@@ -113,6 +171,7 @@ describe("getExpiredTimeblockIds", () => {
             makeTodo({
                 id: "archived",
                 archived: true,
+                kind: "event",
                 tags: ["timeblock"],
                 scheduledStart: "2026-04-06T09:00",
                 scheduledEnd: "2026-04-06T10:00",
@@ -126,5 +185,88 @@ describe("getExpiredTimeblockIds", () => {
         ], now);
 
         expect(ids).toEqual(["expired"]);
+    });
+
+    test("detects generated events by source without legacy timeblock tag", () => {
+        const now = new Date(2026, 3, 7, 8, 0, 0, 0);
+        const ids = getExpiredTimeblockIds([
+            makeTodo({
+                id: "expired-by-source",
+                kind: "event",
+                source: "timeblock-generator",
+                tags: [],
+                scheduledStart: "2026-04-06T14:00",
+                scheduledEnd: "2026-04-06T15:00",
+            }),
+            makeTodo({
+                id: "future-by-source",
+                kind: "event",
+                source: "timeblock-generator",
+                tags: [],
+                scheduledStart: "2026-04-08T10:00",
+                scheduledEnd: "2026-04-08T11:00",
+            }),
+            makeTodo({
+                id: "user-event",
+                kind: "event",
+                source: "user",
+                tags: [],
+                scheduledStart: "2026-04-06T14:00",
+                scheduledEnd: "2026-04-06T15:00",
+            }),
+        ], now);
+
+        expect(ids).toEqual(["expired-by-source"]);
+    });
+
+    test("keeps legacy tag fallback even when a legacy item still says task/user", () => {
+        const now = new Date(2026, 3, 7, 8, 0, 0, 0);
+        const ids = getExpiredTimeblockIds([
+            makeTodo({
+                id: "legacy-task-tag",
+                kind: "task",
+                source: "user",
+                tags: ["timeblock"],
+                scheduledStart: "2026-04-06T07:00",
+                scheduledEnd: "2026-04-06T07:30",
+            }),
+        ], now);
+
+        expect(ids).toEqual(["legacy-task-tag"]);
+    });
+});
+
+describe("getLegacyTimeblockBackfillUpdates", () => {
+    test("returns null for non-timeblock todos", () => {
+        expect(getLegacyTimeblockBackfillUpdates({
+            kind: "task",
+            source: "user",
+            status: "todo",
+            tags: ["movement"],
+        })).toBeNull();
+    });
+
+    test("backfills legacy tagged items to canonical generated event semantics", () => {
+        expect(getLegacyTimeblockBackfillUpdates({
+            kind: "task",
+            source: "user",
+            status: "in_progress",
+            completedAt: "2026-04-01T10:00:00.000Z",
+            tags: ["timeblock", "movement"],
+        })).toEqual({
+            kind: "event",
+            source: "timeblock-generator",
+            status: "todo",
+            completedAt: undefined,
+        });
+    });
+
+    test("skips already canonical generated timeblock events", () => {
+        expect(getLegacyTimeblockBackfillUpdates({
+            kind: "event",
+            source: "timeblock-generator",
+            status: "todo",
+            tags: ["timeblock"],
+        })).toBeNull();
     });
 });

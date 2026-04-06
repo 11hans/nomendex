@@ -10,6 +10,7 @@ import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
 import type { Attachment } from "@/types/attachments";
 import { AttachmentThumbnail } from "@/components/AttachmentThumbnail";
 import {
+    KindPicker,
     StatusPicker,
     PriorityPicker,
     ProjectPicker,
@@ -20,11 +21,15 @@ import {
     GoalPicker,
 } from "./pickers";
 import type { GoalRecord } from "@/features/goals/goal-types";
+import type { TodoKind, TodoSource } from "./todo-types";
+import { applyTodoKindToDraft, getTodoKindLabel } from "./todo-kind-utils";
 
 interface NewTodo {
     title: string;
     description: string;
     project: string;
+    kind: TodoKind;
+    source: TodoSource;
     status: "todo" | "in_progress" | "done" | "later";
     tags: string[];
     dueDate?: string;
@@ -71,6 +76,8 @@ export function CreateTodoDialog({
 }: CreateTodoDialogProps) {
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
+    const isEventDraft = newTodo.kind === "event";
+    const itemLabel = getTodoKindLabel(newTodo.kind);
 
     // Handle Cmd+Enter from native Mac app
     useNativeSubmit(() => {
@@ -84,6 +91,10 @@ export function CreateTodoDialog({
             e.preventDefault();
             onCreateTodo();
         }
+    };
+
+    const handleKindChange = (kind: TodoKind) => {
+        onNewTodoChange(applyTodoKindToDraft(newTodo, kind));
     };
 
     const removeTag = (tagToRemove: string) => {
@@ -125,7 +136,7 @@ export function CreateTodoDialog({
                     }}
                 >
                     <span className="text-xs font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
-                        Create Task
+                        Create {itemLabel}
                     </span>
                     <span className="text-caption" style={{ color: styles.contentTertiary }}>
                         Cmd+Enter to save
@@ -135,12 +146,19 @@ export function CreateTodoDialog({
                 <div className="px-6 pt-5 pb-4 space-y-4">
                     <div>
                         <div className="mb-1 text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                            Type
+                        </div>
+                        <KindPicker value={newTodo.kind} onChange={handleKindChange} />
+                    </div>
+
+                    <div>
+                        <div className="mb-1 text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
                             Title
                         </div>
                         <Input
                             value={newTodo.title}
                             onChange={(e) => onNewTodoChange({ ...newTodo, title: e.target.value })}
-                            placeholder="Task title"
+                            placeholder={`${itemLabel} title`}
                             className="h-10 text-title font-semibold border rounded-md px-3 focus-visible:ring-0 placeholder:font-normal"
                             style={{
                                 color: styles.contentPrimary,
@@ -229,14 +247,18 @@ export function CreateTodoDialog({
                 >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-2">
-                            <StatusPicker
-                                value={newTodo.status}
-                                onChange={(status) => onNewTodoChange({ ...newTodo, status })}
-                            />
-                            <PriorityPicker
-                                value={newTodo.priority}
-                                onChange={(priority) => onNewTodoChange({ ...newTodo, priority })}
-                            />
+                            {!isEventDraft && (
+                                <>
+                                    <StatusPicker
+                                        value={newTodo.status}
+                                        onChange={(status) => onNewTodoChange({ ...newTodo, status })}
+                                    />
+                                    <PriorityPicker
+                                        value={newTodo.priority}
+                                        onChange={(priority) => onNewTodoChange({ ...newTodo, priority })}
+                                    />
+                                </>
+                            )}
 
                             <div className="h-5 w-px mx-0.5" style={{ backgroundColor: styles.borderDefault }} />
 
@@ -267,10 +289,12 @@ export function CreateTodoDialog({
                                     scheduledEnd={newTodo.scheduledEnd}
                                     onChange={(dates) => onNewTodoChange({ ...newTodo, ...dates })}
                                 />
-                                <DateTimePicker
-                                    dueDate={newTodo.dueDate}
-                                    onChange={({ dueDate }) => onNewTodoChange({ ...newTodo, dueDate })}
-                                />
+                                {!isEventDraft && (
+                                    <DateTimePicker
+                                        dueDate={newTodo.dueDate}
+                                        onChange={({ dueDate }) => onNewTodoChange({ ...newTodo, dueDate })}
+                                    />
+                                )}
                             </div>
                         </div>
 
@@ -310,7 +334,9 @@ export function CreateTodoDialog({
                     </div>
 
                     <div className="text-[11px] leading-4" style={{ color: styles.contentTertiary }}>
-                        Schedule = when you plan to do it. Deadline = when it should be done. Priority only affects task emphasis and filtering.
+                        {isEventDraft
+                            ? "Schedule = when it happens. Events stay active until archived or deleted."
+                            : "Schedule = when you plan to do it. Deadline = when it should be done. Priority only affects task emphasis and filtering."}
                     </div>
                 </div>
             </DialogContent>

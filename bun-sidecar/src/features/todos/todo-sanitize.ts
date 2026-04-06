@@ -1,5 +1,7 @@
 import type { Todo } from "./todo-types";
 
+const TODO_KINDS = new Set(["task", "event"]);
+const TODO_SOURCES = new Set(["user", "timeblock-generator"]);
 const TODO_STATUSES = new Set(["todo", "in_progress", "done", "later"]);
 const TODO_PRIORITIES = new Set(["high", "medium", "low", "none"]);
 const TODO_CALENDAR_PRESETS = new Set(["30-15", "none"]);
@@ -19,10 +21,18 @@ function toOptionalStringArray(value: unknown, keepExplicitEmpty = false): strin
 export function sanitizeTodoForClient(todo: Todo): Todo {
     const raw = todo as unknown as Record<string, unknown>;
 
+    const maybeKind = raw.kind;
+    const maybeSource = raw.source;
     const maybeStatus = raw.status;
     const maybePriority = raw.priority;
     const maybeReminder = raw.calendarReminderPreset;
 
+    const kind = typeof maybeKind === "string" && TODO_KINDS.has(maybeKind)
+        ? maybeKind as Todo["kind"]
+        : "task";
+    const source = typeof maybeSource === "string" && TODO_SOURCES.has(maybeSource)
+        ? maybeSource as Todo["source"]
+        : "user";
     const status = typeof maybeStatus === "string" && TODO_STATUSES.has(maybeStatus)
         ? maybeStatus as Todo["status"]
         : "todo";
@@ -35,6 +45,8 @@ export function sanitizeTodoForClient(todo: Todo): Todo {
 
     return {
         ...todo,
+        kind,
+        source,
         status,
         description: toOptionalString(raw.description),
         project: toOptionalString(raw.project),

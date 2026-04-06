@@ -1,5 +1,6 @@
 export { StatusPicker } from "./StatusPicker";
 export type { StatusValue } from "./StatusPicker";
+export { KindPicker } from "./KindPicker";
 export { PriorityPicker } from "./PriorityPicker";
 export type { PriorityValue } from "./PriorityPicker";
 export { ProjectPicker } from "./ProjectPicker";

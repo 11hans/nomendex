@@ -37,7 +37,7 @@ async function fetchTodosAPI<T>(endpoint: string, body: object): Promise<T> {
 
 const calendarTodosAPI = {
     deleteTodo: (args: { todoId: string }) => fetchTodosAPI("delete", args),
-    getTodoById: (args: { todoId: string }) => fetchTodosAPI<{ tags?: string[] } | null>("get", args),
+    getTodoById: (args: { todoId: string }) => fetchTodosAPI<Todo | null>("get", args),
     updateTodo: (args: { todoId: string; updates: Record<string, unknown> }) => {
         const sanitizedUpdates = stripUnexpectedNulls(args.updates, UPDATE_NULLABLE_KEYS);
         return fetchTodosAPI("update", { todoId: args.todoId, updates: sanitizedUpdates });

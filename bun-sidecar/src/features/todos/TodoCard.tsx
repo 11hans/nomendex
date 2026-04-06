@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { parseLocalDateString } from "@/features/notes/date-utils";
 import { ScheduledDateTimePicker } from "./pickers";
 import { useTheme } from "@/hooks/useTheme";
+import { isEventTodo } from "./todo-kind-utils";
 
 function parseChecklistLines(description: string) {
     return description.split('\n')
@@ -99,6 +100,7 @@ export function TodoCard({
     onChecklistToggle?: (todo: Todo, newDescription: string) => void;
 }) {
     const { currentTheme } = useTheme();
+    const isEvent = isEventTodo(todo);
 
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -126,6 +128,14 @@ export function TodoCard({
                         {todo.title}
                     </CardTitle>
                     <div className="flex items-center gap-1.5 shrink-0">
+                        {isEvent && (
+                            <span
+                                className="text-caption px-1 rounded"
+                                style={{ color: currentTheme.styles.contentAccent, backgroundColor: currentTheme.styles.surfaceSecondary }}
+                            >
+                                Event
+                            </span>
+                        )}
                         {todo.archived && (
                             <span
                                 className="text-caption px-1 rounded"
@@ -134,7 +144,7 @@ export function TodoCard({
                                 Archived
                             </span>
                         )}
-                        {!hideStatusIcon && (
+                        {!hideStatusIcon && !isEvent && (
                             <Checkbox
                                 checked={todo.status === "done"}
                                 onCheckedChange={(checked) => {

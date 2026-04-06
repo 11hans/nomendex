@@ -13,8 +13,9 @@ import { TodoCard } from "./TodoCard";
 import { CreateTodoDialog } from "./CreateTodoDialog";
 import { TaskCardEditor } from "./TaskCardEditor";
 import { Todo } from "./todo-types";
+import { isEventTodo, isTaskTodo } from "./todo-kind-utils";
 import { useTodoFilterState } from "./useTodoFilterState";
-import { filterAndSortTodos, isTimeblockTodo, urgencyComparator } from "./todo-filter-utils";
+import { filterAndSortTodos, urgencyComparator } from "./todo-filter-utils";
 import { TodoFilterToolbar } from "./TodoFilterToolbar";
 import type { TodoFilterCriteria } from "./todo-filter-types";
 import { BoardConfig, BoardColumn, getDefaultColumns } from "@/features/projects/project-types";
@@ -51,11 +52,13 @@ export function TodosBrowserView({
     selectedTodoId: initialSelectedTodoId,
     embedded,
     externalFilterCriteria,
+    kindFilter,
 }: {
     project?: string | null;
     selectedTodoId?: string | null;
     embedded?: boolean;
     externalFilterCriteria?: TodoFilterCriteria | null;
+    kindFilter?: Todo["kind"];
 } = {}) {
     // Support both 'project' and 'filterProject' prop names for backward compatibility
     const filterProject = project;
@@ -90,6 +93,8 @@ export function TodosBrowserView({
         title: string;
         description: string;
         project: string;
+        kind: Todo["kind"];
+        source: Todo["source"];
         status: "todo" | "in_progress" | "done" | "later";
         tags: string[];
         scheduledStart?: string;
@@ -103,6 +108,8 @@ export function TodosBrowserView({
         title: "",
         description: "",
         project: filterProject && filterProject !== "" ? filterProject : "",
+        kind: "task",
+        source: "user",
         status: "todo",
         tags: [],
         scheduledStart: undefined,
@@ -120,6 +127,8 @@ export function TodosBrowserView({
             title: "",
             description: "",
             project: projectValue,
+            kind: "task",
+            source: "user",
             status: "todo",
             tags: [],
             scheduledStart: undefined,
@@ -140,7 +149,13 @@ export function TodosBrowserView({
 
     // Helper to open create dialog with specific status OR column
     const openCreateDialogWithStatus = useCallback((status: "todo" | "in_progress" | "done" | "later", columnId?: string) => {
-        setNewTodo(prev => ({ ...prev, status, customColumnId: columnId }));
+        setNewTodo(prev => ({
+            ...prev,
+            kind: status === "todo" ? prev.kind : "task",
+            source: "user",
+            status,
+            customColumnId: columnId,
+        }));
         setCreateDialogOpen(true);
     }, []);
 
@@ -329,6 +344,8 @@ export function TodosBrowserView({
                 title: newTodo.title,
                 description: newTodo.description || undefined,
                 project: newTodo.project || undefined,
+                kind: newTodo.kind,
+                source: newTodo.source,
                 status: newTodo.status,
                 tags: newTodo.tags.length > 0 ? newTodo.tags : undefined,
                 scheduledStart: newTodo.scheduledStart ?? null,
@@ -380,6 +397,7 @@ export function TodosBrowserView({
                 updates: {
                     title: updatedTodo.title,
                     description: updatedTodo.description,
+                    kind: updatedTodo.kind,
                     status: updatedTodo.status,
                     project: updatedTodo.project,
                     tags: updatedTodo.tags,
@@ -481,7 +499,7 @@ export function TodosBrowserView({
     }, [activeTabId, replaceTabWithNewView]);
 
     const archiveAllDone = async () => {
-        const doneTodos = todos.filter(t => t.status === "done");
+        const doneTodos = todos.filter((todo) => isTaskTodo(todo) && todo.status === "done");
         if (doneTodos.length === 0) return;
 
         setLoading(true);
@@ -500,6 +518,10 @@ export function TodosBrowserView({
         const todo = todos.find(t => t.id === event.active.id);
         setDraggedTodo(todo || null);
     }, [todos]);
+
+    const rejectEventStatusMove = useCallback(() => {
+        toast.error("Events stay active. Move them by schedule or archive them.");
+    }, []);
 
     const handleDragOver = useCallback((_event: DragOverEvent) => {
         // We handle drag over for cross-column drops
@@ -535,6 +557,11 @@ export function TodosBrowserView({
                         const targetColumn = boardConfig.columns.find(c => c.id === newColumnId);
                         const newStatus = targetColumn?.status;
 
+                        if (isEventTodo(activeTodo) && newStatus && newStatus !== "todo") {
+                            rejectEventStatusMove();
+                            return;
+                        }
+
                         // Optimistic update
                         setTodos(prev => prev.map(t =>
                             t.id === activeId
@@ -559,6 +586,11 @@ export function TodosBrowserView({
                     // Legacy mode - update status
                     const newStatus = newColumnId as "todo" | "in_progress" | "done" | "later";
                     if (newStatus !== activeTodo.status) {
+                        if (isEventTodo(activeTodo) && newStatus !== "todo") {
+                            rejectEventStatusMove();
+                            return;
+                        }
+
                         setTodos(prev => prev.map(t =>
                             t.id === activeId ? { ...t, status: newStatus } : t
                         ));
@@ -597,6 +629,11 @@ export function TodosBrowserView({
                         // Find the target column to check if it has a status mapping
                         const targetColumn = boardConfig.columns.find(c => c.id === overColumnId);
                         const newStatus = targetColumn?.status;
+
+                        if (isEventTodo(activeTodo) && newStatus && newStatus !== "todo") {
+                            rejectEventStatusMove();
+                            return;
+                        }
 
                         const newColumnTodos = [...targetColumnTodos];
                         newColumnTodos.splice(overIndexInColumn, 0, {
@@ -646,6 +683,10 @@ export function TodosBrowserView({
                     } else {
                         // Legacy mode - update status AND position
                         const targetStatus = overTodo.status;
+                        if (isEventTodo(activeTodo) && targetStatus !== "todo") {
+                            rejectEventStatusMove();
+                            return;
+                        }
                         const targetColumnTodos = todos.filter(t => t.status === targetStatus);
                         const overIndexInColumn = targetColumnTodos.findIndex(t => t.id === overId);
 
@@ -720,7 +761,7 @@ export function TodosBrowserView({
             console.error("Error in drag end handler:", error);
             await loadTodos();
         }
-    }, [todos, todosAPI, loadTodos, boardConfig, getColumnForTodo, isManualSort]);
+    }, [todos, todosAPI, loadTodos, boardConfig, getColumnForTodo, isManualSort, rejectEventStatusMove]);
 
     // Convenience
     // --- Dynamic Columns Logic ---
@@ -750,9 +791,14 @@ export function TodosBrowserView({
         }
     }, [boardConfig, showLaterColumn]);
 
+    const kindScopedTodos = useMemo(() => {
+        if (!kindFilter) return todos;
+        return todos.filter((todo) => todo.kind === kindFilter);
+    }, [todos, kindFilter]);
+
     const todosByColumn = useMemo(() => {
         // Filter todos using shared pipeline (skip status filter since columns handle it)
-        const filteredTodos = filterAndSortTodos(todos, todoFilter.filterState, { skipStatusFilter: true });
+        const filteredTodos = filterAndSortTodos(kindScopedTodos, todoFilter.filterState, { skipStatusFilter: true });
 
         // Group by column
         const grouped: Record<string, Todo[]> = {};
@@ -777,7 +823,7 @@ export function TodosBrowserView({
         }
 
         return grouped;
-    }, [todos, todoFilter.filterState, displayColumns, getColumnForTodo, isManualSort]);
+    }, [kindScopedTodos, todoFilter.filterState, displayColumns, getColumnForTodo, isManualSort]);
 
 
     // Flattened list of all visible todos for keyboard navigation
@@ -790,18 +836,21 @@ export function TodosBrowserView({
     }, [todosByColumn, displayColumns]);
 
     const boardCounts = useMemo(() => {
-        const actionableTodos = todos.filter((todo) => !isTimeblockTodo(todo));
+        const actionableTodos = kindFilter === "event"
+            ? kindScopedTodos
+            : kindScopedTodos.filter((todo) => isTaskTodo(todo));
         return {
             all: actionableTodos.length,
             todo: actionableTodos.filter((todo) => todo.status === "todo" || todo.status === "later").length,
             inProgress: actionableTodos.filter((todo) => todo.status === "in_progress").length,
             done: actionableTodos.filter((todo) => todo.status === "done").length,
         };
-    }, [todos]);
+    }, [kindScopedTodos, kindFilter]);
 
     const headerStats = useMemo(() => {
+        const entityLabel = kindFilter === "event" ? "events" : "tasks";
         const stats: Array<{ key: string; label: string; value: number }> = [
-            { key: "all", label: "tasks", value: boardCounts.all },
+            { key: "all", label: entityLabel, value: boardCounts.all },
             { key: "todo", label: "todo", value: boardCounts.todo },
             { key: "visible", label: "visible", value: flattenedTodos.length },
         ];
@@ -814,7 +863,7 @@ export function TodosBrowserView({
         }
 
         return stats;
-    }, [boardCounts, flattenedTodos.length]);
+    }, [boardCounts, flattenedTodos.length, kindFilter]);
 
     // Get column and index for a given todo
     const getTodoPosition = useCallback((todoId: string | null): { columnId: string; index: number } | null => {
@@ -864,12 +913,15 @@ export function TodosBrowserView({
                             await todosAPI.createTodo({
                                 title: todo.title,
                                 description: todo.description,
+                                kind: todo.kind,
+                                source: todo.source,
                                 status: todo.status,
                                 project: todo.project,
                                 tags: todo.tags,
                                 scheduledStart: todo.scheduledStart ?? null,
                                 scheduledEnd: todo.scheduledEnd ?? null,
                                 dueDate: todo.dueDate,
+                                priority: todo.priority,
                                 attachments: todo.attachments,
                             });
                             await loadTodos();
@@ -940,6 +992,11 @@ export function TodosBrowserView({
 
     // Toggle done status and move to matching column if in custom board mode
     const toggleDoneWithToast = useCallback(async (todo: Todo) => {
+        if (isEventTodo(todo)) {
+            toast.error("Events stay active. Archive them when they are over.");
+            return;
+        }
+
         const newStatus = todo.status === "done" ? "todo" : "done";
 
         // Find target column with matching status (if in custom board mode)
@@ -1145,6 +1202,8 @@ export function TodosBrowserView({
         if (!selectedTodoId) return;
         const pos = getTodoPosition(selectedTodoId);
         if (!pos) return;
+        const selectedTodo = todos.find((todo) => todo.id === selectedTodoId);
+        if (!selectedTodo) return;
 
         const currentColIndex = displayColumns.findIndex(c => c.id === pos.columnId);
         if (currentColIndex >= displayColumns.length - 1) return; // Can't move right if at rightmost
@@ -1156,6 +1215,10 @@ export function TodosBrowserView({
         if (boardConfig) {
             // Custom mode - change customColumnId and optionally status
             const newStatus = nextCol.status;
+            if (isEventTodo(selectedTodo) && newStatus && newStatus !== "todo") {
+                rejectEventStatusMove();
+                return;
+            }
             setTodos(prev => prev.map(t =>
                 t.id === selectedTodoId
                     ? { ...t, customColumnId: nextCol.id, ...(newStatus && { status: newStatus }) }
@@ -1176,6 +1239,10 @@ export function TodosBrowserView({
         } else {
             // Legacy mode - change status
             const newStatus = nextCol.id as "todo" | "in_progress" | "done" | "later";
+            if (isEventTodo(selectedTodo) && newStatus !== "todo") {
+                rejectEventStatusMove();
+                return;
+            }
             setTodos(prev => prev.map(t =>
                 t.id === selectedTodoId ? { ...t, status: newStatus } : t
             ));
@@ -1189,12 +1256,14 @@ export function TodosBrowserView({
                 await loadTodos();
             }
         }
-    }, [selectedTodoId, getTodoPosition, displayColumns, todosAPI, loadTodos, boardConfig]);
+    }, [selectedTodoId, getTodoPosition, displayColumns, todos, todosAPI, loadTodos, boardConfig, rejectEventStatusMove]);
 
     const moveLeft = useCallback(async () => {
         if (!selectedTodoId) return;
         const pos = getTodoPosition(selectedTodoId);
         if (!pos) return;
+        const selectedTodo = todos.find((todo) => todo.id === selectedTodoId);
+        if (!selectedTodo) return;
 
         const currentColIndex = displayColumns.findIndex(c => c.id === pos.columnId);
         if (currentColIndex <= 0) return; // Can't move left if at leftmost
@@ -1205,6 +1274,10 @@ export function TodosBrowserView({
         if (boardConfig) {
             // Custom mode - change customColumnId and optionally status
             const newStatus = prevCol.status;
+            if (isEventTodo(selectedTodo) && newStatus && newStatus !== "todo") {
+                rejectEventStatusMove();
+                return;
+            }
             setTodos(prev => prev.map(t =>
                 t.id === selectedTodoId
                     ? { ...t, customColumnId: prevCol.id, ...(newStatus && { status: newStatus }) }
@@ -1225,6 +1298,10 @@ export function TodosBrowserView({
         } else {
             // Legacy mode - change status
             const newStatus = prevCol.id as "todo" | "in_progress" | "done" | "later";
+            if (isEventTodo(selectedTodo) && newStatus !== "todo") {
+                rejectEventStatusMove();
+                return;
+            }
             setTodos(prev => prev.map(t =>
                 t.id === selectedTodoId ? { ...t, status: newStatus } : t
             ));
@@ -1238,7 +1315,7 @@ export function TodosBrowserView({
                 await loadTodos();
             }
         }
-    }, [selectedTodoId, getTodoPosition, displayColumns, todosAPI, loadTodos, boardConfig]);
+    }, [selectedTodoId, getTodoPosition, displayColumns, todos, todosAPI, loadTodos, boardConfig, rejectEventStatusMove]);
 
     // Archive selected todo (keyboard shortcut handler - uses shared function)
     const archiveSelected = useCallback(async () => {

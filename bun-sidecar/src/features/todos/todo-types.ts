@@ -1,10 +1,18 @@
 import { z } from "zod";
 import { AttachmentSchema } from "@/types/attachments";
 
+export const TodoKindSchema = z.enum(["task", "event"]);
+export const TodoSourceSchema = z.enum(["user", "timeblock-generator"]);
+
+export type TodoKind = z.infer<typeof TodoKindSchema>;
+export type TodoSource = z.infer<typeof TodoSourceSchema>;
+
 export const TodoSchema = z.object({
     id: z.string(),
     title: z.string(),
     description: z.string().optional(),
+    kind: TodoKindSchema,
+    source: TodoSourceSchema,
     status: z.enum(["todo", "in_progress", "done", "later"]),
     customColumnId: z.string().optional(), // ID sloupce z BoardConfig
     createdAt: z.string(),

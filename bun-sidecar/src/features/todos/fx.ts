@@ -2,7 +2,7 @@ import { TypedPluginWithFunctions } from "@/types/Plugin";
 import { functionStubs, GetTodosInputSchema, TodosPluginBase } from "./index";
 import { FunctionsFromStubs } from "@/types/Functions";
 import { createServiceLogger } from "@/lib/logger";
-import { Todo } from "./todo-types";
+import type { Todo, TodoKind, TodoSource } from "./todo-types";
 import { FileDatabase } from "@/storage/FileDatabase";
 import path from "path";
 import { getNomendexPath, getTodosPath, hasActiveWorkspace } from "@/storage/root-path";
@@ -12,6 +12,7 @@ import { mkdir } from "node:fs/promises";
 import { ensureTimeblockingConfig } from "@/features/timeblocking/config";
 import { broadcastTodoEvent } from "@/services/todo-events";
 import { sanitizeTodoForClient, sanitizeTodoListForClient } from "./todo-sanitize";
+import { getTodoKind, getTodoSource, isTimeblockTodo } from "./todo-kind-utils";
 
 // Create logger for todos plugin
 const todosLogger = createServiceLogger("TODOS");
@@ -38,6 +39,14 @@ function getTodosNullNormalizationMigrationMarkerPath(): string {
     return path.join(getNomendexPath(), "migrations", "todos-null-normalization-v3.done");
 }
 
+function getTodosKindSourceMigrationMarkerPath(): string {
+    return path.join(getNomendexPath(), "migrations", "todos-kind-source-v4.done");
+}
+
+function getTodosLegacyTimeblockBackfillMigrationMarkerPath(): string {
+    return path.join(getNomendexPath(), "migrations", "todos-timeblock-backfill-v5.done");
+}
+
 /**
  * Initialize the todos service. Must be called after initializePaths().
  */
@@ -59,6 +68,10 @@ export async function initializeTodosService(): Promise<void> {
     await runTodosScheduleFieldRenameMigrationIfNeeded();
     // One-off migration: normalize legacy nulls and malformed optional fields.
     await runTodosNullNormalizationMigrationIfNeeded();
+    // One-off migration: introduce explicit kind/source semantics for todos.
+    await runTodosKindSourceMigrationIfNeeded();
+    // One-off migration: backfill legacy `timeblock` tags into canonical generated-event semantics.
+    await runTodosLegacyTimeblockBackfillMigrationIfNeeded();
     await ensureTimeblockingConfig();
     await runTimeblockHousekeepingIfNeeded();
     todosLogger.info("Todos service initialized");
@@ -125,6 +138,20 @@ function normalizeDurationField(value: unknown): number | undefined {
     const rounded = Math.round(value);
     return rounded > 0 ? rounded : undefined;
 }
+
+function normalizeKindField(value: unknown): TodoKind | undefined {
+    return value === "task" || value === "event"
+        ? value
+        : undefined;
+}
+
+function normalizeSourceField(value: unknown): TodoSource | undefined {
+    return value === "user" || value === "timeblock-generator"
+        ? value
+        : undefined;
+}
+
+// getTodoKind, getTodoSource, isEventTodo, isTimeblockTodo — imported from ./todo-kind-utils
 
 function parseLocalScheduleDate(value: string): Date | undefined {
     const dateTimeMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
@@ -199,7 +226,8 @@ function deriveDurationFromSchedule(scheduledStart?: string, scheduledEnd?: stri
     return diffMinutes > 0 ? diffMinutes : undefined;
 }
 
-export function isTimeblockTags(tags?: string[]): boolean {
+/** Legacy tag check — used only by migration code. Prefer isTimeblockTodo from todo-kind-utils. */
+function hasTimeblockTag(tags?: string[]): boolean {
     return tags?.includes("timeblock") ?? false;
 }
 
@@ -269,24 +297,74 @@ export function collectRequestedStatuses(input: {
     return requestedStatuses;
 }
 
-export function shouldRejectTimeblockCompletionChange(input: {
-    currentTags?: string[];
-    nextTags?: string[];
-    status?: Todo["status"];
+export function collectRequestedKinds(input: {
+    kind?: TodoKind;
+    kinds?: TodoKind[];
+}): Set<TodoKind> {
+    const requestedKinds = new Set<TodoKind>();
+    if (input.kind) {
+        requestedKinds.add(input.kind);
+    }
+    if (input.kinds) {
+        for (const kind of input.kinds) {
+            requestedKinds.add(kind);
+        }
+    }
+    return requestedKinds;
+}
+
+export function collectRequestedSources(input: {
+    source?: TodoSource;
+    sources?: TodoSource[];
+}): Set<TodoSource> {
+    const requestedSources = new Set<TodoSource>();
+    if (input.source) {
+        requestedSources.add(input.source);
+    }
+    if (input.sources) {
+        for (const source of input.sources) {
+            requestedSources.add(source);
+        }
+    }
+    return requestedSources;
+}
+
+export function shouldRejectEventLifecycleChange(input: {
+    currentKind?: TodoKind;
+    nextKind?: TodoKind;
+    currentStatus?: Todo["status"];
+    nextStatus?: Todo["status"];
     completedAtProvided: boolean;
+    kindChanged: boolean;
+    statusChanged: boolean;
 }): boolean {
-    const effectiveTags = input.nextTags ?? input.currentTags;
-    return isTimeblockTags(effectiveTags)
-        && (input.status === "done" || input.completedAtProvided);
+    const effectiveKind = input.nextKind ?? input.currentKind ?? "task";
+    if (effectiveKind !== "event") {
+        return false;
+    }
+
+    if (input.completedAtProvided) {
+        return true;
+    }
+
+    if (input.statusChanged) {
+        return (input.nextStatus ?? "todo") !== "todo";
+    }
+
+    if (input.kindChanged) {
+        return (input.nextStatus ?? input.currentStatus ?? "todo") !== "todo";
+    }
+
+    return false;
 }
 
 export function getExpiredTimeblockIds(
-    todos: readonly Pick<Todo, "id" | "archived" | "tags" | "scheduledStart" | "scheduledEnd">[],
+    todos: readonly Pick<Todo, "id" | "archived" | "kind" | "source" | "tags" | "scheduledStart" | "scheduledEnd">[],
     now: Date,
 ): string[] {
     const todayStart = startOfLocalDay(now).getTime();
     return todos
-        .filter((todo) => !todo.archived && isTimeblockTags(todo.tags))
+        .filter((todo) => !todo.archived && isTimeblockTodo(todo))
         .flatMap((todo) => {
             const interval = getScheduleInterval(todo);
             if (!interval) return [];
@@ -506,6 +584,141 @@ async function runTodosNullNormalizationMigrationIfNeeded(): Promise<void> {
     todosLogger.info(`Todos null normalization migration complete (${migratedCount} records migrated)`);
 }
 
+function inferMigratedKindSource(rawTodo: Record<string, unknown>): {
+    kind: TodoKind;
+    source: TodoSource;
+} {
+    const normalizedKind = normalizeKindField(rawTodo.kind);
+    const normalizedSource = normalizeSourceField(rawTodo.source);
+
+    if (normalizedKind && normalizedSource) {
+        return {
+            kind: normalizedKind,
+            source: normalizedSource,
+        };
+    }
+
+    if (hasTimeblockTag(Array.isArray(rawTodo.tags) ? rawTodo.tags.filter((tag): tag is string => typeof tag === "string") : undefined)) {
+        return {
+            kind: "event",
+            // Keep the source conservative for legacy items. Timeblocking phase can
+            // set explicit generator provenance for newly generated events.
+            source: normalizedSource ?? "user",
+        };
+    }
+
+    return {
+        kind: normalizedKind ?? "task",
+        source: normalizedSource ?? "user",
+    };
+}
+
+export function getLegacyTimeblockBackfillUpdates(rawTodo: Record<string, unknown>): Partial<Todo> | null {
+    const tags = Array.isArray(rawTodo.tags)
+        ? rawTodo.tags.filter((tag): tag is string => typeof tag === "string")
+        : undefined;
+
+    if (!hasTimeblockTag(tags)) {
+        return null;
+    }
+
+    const updates: Partial<Todo> = {};
+
+    if (normalizeKindField(rawTodo.kind) !== "event") {
+        updates.kind = "event";
+    }
+
+    if (normalizeSourceField(rawTodo.source) !== "timeblock-generator") {
+        updates.source = "timeblock-generator";
+    }
+
+    if (rawTodo.status !== "todo") {
+        updates.status = "todo";
+    }
+
+    if (hasOwnKey(rawTodo, "completedAt") && rawTodo.completedAt != null) {
+        updates.completedAt = undefined;
+    }
+
+    return Object.keys(updates).length > 0 ? updates : null;
+}
+
+async function runTodosKindSourceMigrationIfNeeded(): Promise<void> {
+    const markerPath = getTodosKindSourceMigrationMarkerPath();
+    const markerFile = Bun.file(markerPath);
+
+    if (await markerFile.exists()) {
+        todosLogger.info("Todos kind/source migration already applied, skipping");
+        return;
+    }
+
+    const todos = await getDb().findAll();
+    let migratedCount = 0;
+
+    for (const todo of todos) {
+        const rawTodo = todo as unknown as Record<string, unknown>;
+        const hasKind = hasOwnKey(rawTodo, "kind");
+        const hasSource = hasOwnKey(rawTodo, "source");
+        const normalizedKind = normalizeKindField(rawTodo.kind);
+        const normalizedSource = normalizeSourceField(rawTodo.source);
+
+        if (hasKind && hasSource && normalizedKind && normalizedSource) {
+            continue;
+        }
+
+        const inferred = inferMigratedKindSource(rawTodo);
+        await getDb().update(todo.id, {
+            kind: inferred.kind,
+            source: inferred.source,
+            updatedAt: new Date().toISOString(),
+        });
+        migratedCount += 1;
+    }
+
+    await mkdir(path.dirname(markerPath), { recursive: true });
+    await Bun.write(markerPath, JSON.stringify({
+        migratedAt: new Date().toISOString(),
+        migratedCount,
+    }, null, 2));
+
+    todosLogger.info(`Todos kind/source migration complete (${migratedCount} records migrated)`);
+}
+
+async function runTodosLegacyTimeblockBackfillMigrationIfNeeded(): Promise<void> {
+    const markerPath = getTodosLegacyTimeblockBackfillMigrationMarkerPath();
+    const markerFile = Bun.file(markerPath);
+
+    if (await markerFile.exists()) {
+        todosLogger.info("Todos legacy timeblock backfill migration already applied, skipping");
+        return;
+    }
+
+    const todos = await getDb().findAll();
+    let migratedCount = 0;
+
+    for (const todo of todos) {
+        const rawTodo = todo as unknown as Record<string, unknown>;
+        const updates = getLegacyTimeblockBackfillUpdates(rawTodo);
+        if (!updates) {
+            continue;
+        }
+
+        await getDb().update(todo.id, {
+            ...updates,
+            updatedAt: new Date().toISOString(),
+        });
+        migratedCount += 1;
+    }
+
+    await mkdir(path.dirname(markerPath), { recursive: true });
+    await Bun.write(markerPath, JSON.stringify({
+        migratedAt: new Date().toISOString(),
+        migratedCount,
+    }, null, 2));
+
+    todosLogger.info(`Todos legacy timeblock backfill migration complete (${migratedCount} records migrated)`);
+}
+
 /**
  * Compute resolvedGoalRefs for a todo.
  * If the todo has explicit goalRefs, use those.
@@ -565,6 +778,16 @@ async function getTodos(rawInput: unknown) {
             activeTodos = activeTodos.filter((todo) => matchesScheduledOverlap(todo, input.scheduledOverlap!));
         }
 
+        const requestedKinds = collectRequestedKinds(input);
+        if (requestedKinds.size > 0) {
+            activeTodos = activeTodos.filter((todo) => requestedKinds.has(getTodoKind(todo)));
+        }
+
+        const requestedSources = collectRequestedSources(input);
+        if (requestedSources.size > 0) {
+            activeTodos = activeTodos.filter((todo) => requestedSources.has(getTodoSource(todo)));
+        }
+
         const requestedStatuses = collectRequestedStatuses(input);
         if (requestedStatuses.size > 0) {
             activeTodos = activeTodos.filter((todo) => requestedStatuses.has(todo.status));
@@ -610,6 +833,8 @@ async function createTodo(input: {
     title: string;
     description?: string;
     project?: string;
+    kind?: TodoKind;
+    source?: TodoSource;
     status?: "todo" | "in_progress" | "done" | "later";
     tags?: string[];
     scheduledStart?: string | null;
@@ -634,13 +859,17 @@ async function createTodo(input: {
             }
         }
 
+        const kind = normalizeKindField(input.kind) ?? "task";
+        const source = normalizeSourceField(input.source) ?? "user";
         const requestedStatus = input.status || "todo";
-        if (shouldRejectTimeblockCompletionChange({
-            nextTags: input.tags,
-            status: requestedStatus,
+        if (shouldRejectEventLifecycleChange({
+            nextKind: kind,
+            nextStatus: requestedStatus,
             completedAtProvided: false,
+            kindChanged: true,
+            statusChanged: input.status !== undefined,
         })) {
-            throw new Error("Timeblocks cannot be created as completed while they still carry the timeblock tag.");
+            throw new Error("Events can only be active or archived. Create them with status 'todo'.");
         }
 
         // Get existing todos to determine next order
@@ -688,6 +917,8 @@ async function createTodo(input: {
             id: `todo-${slug}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
             title: input.title,
             description: input.description,
+            kind,
+            source,
             status: status,
             createdAt: now,
             updatedAt: now,
@@ -699,7 +930,7 @@ async function createTodo(input: {
             scheduledEnd,
             dueDate: deadlineDueDate,
             priority: input.priority,
-            completedAt: status === "done" ? now : undefined,
+            completedAt: kind === "task" && status === "done" ? now : undefined,
             duration,
             attachments: input.attachments,
             customColumnId: input.customColumnId,
@@ -724,6 +955,8 @@ async function updateTodo(input: {
     updates: {
         title?: string;
         description?: string;
+        kind?: TodoKind;
+        source?: TodoSource;
         status?: "todo" | "in_progress" | "done" | "later";
         project?: string;
         archived?: boolean;
@@ -780,16 +1013,46 @@ async function updateTodo(input: {
             updatedAt: new Date().toISOString(),
         } as Partial<Todo>;
 
-        const resultingTags = hasOwnKey(input.updates, "tags")
-            ? (input.updates.tags ?? undefined)
-            : currentTodo.tags;
-        if (shouldRejectTimeblockCompletionChange({
-            currentTags: currentTodo.tags,
-            nextTags: resultingTags,
-            status: input.updates.status,
-            completedAtProvided: hasOwnKey(input.updates, "completedAt"),
+        const wantsKindUpdate = hasOwnKey(input.updates, "kind") && input.updates.kind !== undefined;
+        const wantsSourceUpdate = hasOwnKey(input.updates, "source") && input.updates.source !== undefined;
+        const wantsStatusUpdate = hasOwnKey(input.updates, "status") && input.updates.status !== undefined;
+        const completedAtProvided = hasOwnKey(input.updates, "completedAt") && input.updates.completedAt !== undefined;
+
+        if (!wantsKindUpdate) {
+            delete updates.kind;
+        }
+        if (!wantsSourceUpdate) {
+            delete updates.source;
+        }
+        if (!wantsStatusUpdate) {
+            delete updates.status;
+        }
+        if (!completedAtProvided) {
+            delete updates.completedAt;
+        }
+
+        if (wantsKindUpdate) {
+            updates.kind = normalizeKindField(input.updates.kind);
+        }
+
+        if (wantsSourceUpdate) {
+            updates.source = normalizeSourceField(input.updates.source);
+        }
+
+        const currentKind = getTodoKind(currentTodo);
+        const nextKind = wantsKindUpdate
+            ? (updates.kind ?? "task")
+            : currentKind;
+        if (shouldRejectEventLifecycleChange({
+            currentKind,
+            nextKind,
+            currentStatus: currentTodo.status,
+            nextStatus: input.updates.status,
+            completedAtProvided,
+            kindChanged: wantsKindUpdate,
+            statusChanged: wantsStatusUpdate,
         })) {
-            throw new Error("Timeblocks cannot be marked completed while they still carry the timeblock tag.");
+            throw new Error("Events can only be active or archived. Use status 'todo' for active events.");
         }
 
         if (hasOwnKey(input.updates, "scheduledStart")) {
@@ -832,7 +1095,7 @@ async function updateTodo(input: {
         }
 
         // If status is changing, assign new order for the target status
-        if (input.updates.status) {
+        if (wantsStatusUpdate) {
             if (currentTodo.status !== input.updates.status) {
                 // Get existing todos to determine next order for new status
                 const existingTodos = await getDb().findAll();
@@ -847,7 +1110,7 @@ async function updateTodo(input: {
                 todosLogger.info(`Status changed, assigning new order: ${updates.order}`);
 
                 // Auto-set completedAt when status changes to/from done
-                if (input.updates.status === "done") {
+                if (nextKind === "task" && input.updates.status === "done") {
                     updates.completedAt = new Date().toISOString();
                 } else if (currentTodo.status === "done") {
                     updates.completedAt = undefined;
@@ -1168,6 +1431,28 @@ async function getTags() {
     }
 }
 
+async function deleteTag({ tagName }: { tagName: string }): Promise<{ deletedFromCount: number }> {
+    todosLogger.info(`Deleting tag: ${tagName}`);
+
+    try {
+        const todos = await getDb().findAll();
+        const tagLower = tagName.toLowerCase();
+        const affected = todos.filter(t => t.tags?.some(t2 => t2.toLowerCase() === tagLower));
+
+        for (const todo of affected) {
+            const newTags = (todo.tags ?? []).filter(t => t.toLowerCase() !== tagLower);
+            const updated = await updateTodo({ todoId: todo.id, updates: { tags: newTags } });
+            broadcastTodoEvent({ type: "upsert", todo: updated });
+        }
+
+        todosLogger.info(`Deleted tag "${tagName}" from ${affected.length} todos`);
+        return { deletedFromCount: affected.length };
+    } catch (error) {
+        todosLogger.error(`Failed to delete tag`, { error });
+        throw error;
+    }
+}
+
 function getBoardConfigDb(): FileDatabase<BoardConfig> {
     if (!boardConfigDb) {
         throw new Error("Board config service not initialized.");
@@ -1299,6 +1584,6 @@ export const TodosPluginWithFunctions = TodosPlugin;
 // Export individual functions for MCP
 export {
     getTodos, createTodo, updateTodo, deleteTodo, getTodoById,
-    getProjects, reorderTodos, archiveTodo, unarchiveTodo, getArchivedTodos, getTags,
+    getProjects, reorderTodos, archiveTodo, unarchiveTodo, getArchivedTodos, getTags, deleteTag,
     getBoardConfig, saveBoardConfig, deleteColumn, restoreTodoSnapshot, forceReindexTodos
 };

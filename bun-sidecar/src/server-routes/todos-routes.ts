@@ -14,6 +14,7 @@ import {
     unarchiveTodo,
     getArchivedTodos,
     getTags,
+    deleteTag,
     getBoardConfig,
     saveBoardConfig,
     deleteColumn,
@@ -23,6 +24,7 @@ import {
 import { DayTypeSchema } from "@/features/timeblocking/types";
 import { applyTimeblockingPlan, previewTimeblockingPlan } from "@/features/timeblocking/service";
 import { addTodoSSEClient, broadcastTodoEvent, type TodoEvent } from "@/services/todo-events";
+import { TodoKindSchema, TodoSourceSchema } from "@/features/todos/todo-types";
 
 const TodoStatusSchema = z.enum(["todo", "in_progress", "done", "later"]);
 const PrioritySchema = z.enum(["high", "medium", "low", "none"]);
@@ -32,6 +34,9 @@ const OptionalStringSchema = z.preprocess(nullToUndefined, z.string().optional()
 const OptionalNumberSchema = z.preprocess(nullToUndefined, z.number().optional());
 const OptionalBooleanSchema = z.preprocess(nullToUndefined, z.boolean().optional());
 const OptionalStringArraySchema = z.preprocess(nullToUndefined, z.array(z.string()).optional());
+const OptionalKindSchema = z.preprocess(nullToUndefined, TodoKindSchema.optional());
+const OptionalKindArraySchema = z.preprocess(nullToUndefined, z.array(TodoKindSchema).optional());
+const OptionalSourceSchema = z.preprocess(nullToUndefined, TodoSourceSchema.optional());
 const OptionalStatusSchema = z.preprocess(nullToUndefined, TodoStatusSchema.optional());
 const OptionalStatusArraySchema = z.preprocess(nullToUndefined, z.array(TodoStatusSchema).optional());
 const OptionalPrioritySchema = z.preprocess(nullToUndefined, PrioritySchema.optional());
@@ -45,6 +50,10 @@ const GetTodosInputSchema = z.object({
     project: z.string().optional(),
     tagsAll: z.array(z.string()).optional(),
     scheduledOverlap: ScheduledOverlapSchema.optional(),
+    kind: OptionalKindSchema,
+    kinds: OptionalKindArraySchema,
+    source: OptionalSourceSchema,
+    sources: z.preprocess(nullToUndefined, z.array(TodoSourceSchema).optional()),
     status: OptionalStatusSchema,
     statuses: OptionalStatusArraySchema,
 });
@@ -57,6 +66,8 @@ const CreateTodoInputSchema = z.object({
     title: z.string(),
     description: OptionalStringSchema,
     project: OptionalStringSchema,
+    kind: OptionalKindSchema,
+    source: OptionalSourceSchema,
     status: OptionalStatusSchema,
     tags: OptionalStringArraySchema,
     scheduledStart: z.string().nullable().optional(),
@@ -75,6 +86,8 @@ const UpdateTodoInputSchema = z.object({
     updates: z.object({
         title: OptionalStringSchema,
         description: OptionalStringSchema,
+        kind: OptionalKindSchema,
+        source: OptionalSourceSchema,
         status: OptionalStatusSchema,
         project: OptionalStringSchema,
         archived: OptionalBooleanSchema,
@@ -133,6 +146,7 @@ const TimeblockingPlanInputSchema = z.object({
 });
 
 const EmptyInputSchema = z.object({});
+const DeleteTagInputSchema = z.object({ tagName: z.string() });
 
 // Exposed for route-schema regression tests.
 export const todosRouteSchemasForTests = {
@@ -333,6 +347,22 @@ export const todosRoutes = {
         async POST() {
             const result = await getTags();
             return Response.json(result);
+        },
+    },
+    "/api/todos/tags/delete": {
+        async POST(req: Request) {
+            let args;
+            try {
+                args = DeleteTagInputSchema.parse(await req.json());
+            } catch (error) {
+                return jsonValidationError(error);
+            }
+            try {
+                const result = await deleteTag(args);
+                return Response.json(result);
+            } catch (error) {
+                return jsonError(error);
+            }
         },
     },
     "/api/todos/board-config/get": {

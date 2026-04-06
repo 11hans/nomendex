@@ -5,6 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
     ArrowLeft,
+    CalendarDays,
     CheckCircle2,
     CheckSquare,
     ChevronDown,
@@ -28,7 +29,7 @@ import { todosPluginSerial } from "@/features/todos";
 import { notesPluginSerial } from "@/features/notes";
 import { TaskCardEditor } from "@/features/todos/TaskCardEditor";
 import type { Todo } from "@/features/todos/todo-types";
-import { isTimeblockTodo } from "@/features/todos/todo-filter-utils";
+import { isEventTodo, isTaskTodo, isTimeblockTodo } from "@/features/todos/todo-kind-utils";
 import type { Note } from "@/features/notes";
 import { projectsPluginSerial, type ProjectDetailViewProps } from "./index";
 import { toast } from "sonner";
@@ -224,6 +225,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                     updates: {
                         title: updatedTodo.title,
                         description: updatedTodo.description,
+                        kind: updatedTodo.kind,
                         status: updatedTodo.status,
                         project: updatedTodo.project,
                         tags: updatedTodo.tags,
@@ -261,7 +263,7 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                     updates: { goalRef: goalId ?? null },
                 });
                 setProjectConfig(updated);
-                const openTodoCount = todos.filter(t => !t.archived && t.status !== "done").length;
+                const openTodoCount = todos.filter(t => !t.archived && t.status !== "done" && isTaskTodo(t)).length;
                 if (openTodoCount > 0) {
                     toast.success(`Goal updated. Will recompute linkage for ${openTodoCount} open todo${openTodoCount !== 1 ? "s" : ""} in this project.`);
                 }
@@ -318,25 +320,33 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
     );
 
     const sortedTodos = useMemo(() => sortTodosByUpdatedDesc(todos.filter((todo) => !isTimeblockTodo(todo))), [todos]);
-    const inProgressTodos = useMemo(
-        () => sortedTodos.filter((t) => t.status === "in_progress"),
+    const taskTodos = useMemo(
+        () => sortedTodos.filter((todo) => isTaskTodo(todo)),
         [sortedTodos]
+    );
+    const eventTodos = useMemo(
+        () => sortedTodos.filter((todo) => isEventTodo(todo)),
+        [sortedTodos]
+    );
+    const inProgressTodos = useMemo(
+        () => taskTodos.filter((t) => t.status === "in_progress"),
+        [taskTodos]
     );
     const todoTodos = useMemo(
-        () => sortedTodos.filter((t) => t.status === "todo" || t.status === "later"),
-        [sortedTodos]
+        () => taskTodos.filter((t) => t.status === "todo" || t.status === "later"),
+        [taskTodos]
     );
     const doneTodos = useMemo(
-        () => sortedTodos.filter((t) => t.status === "done"),
-        [sortedTodos]
+        () => taskTodos.filter((t) => t.status === "done"),
+        [taskTodos]
     );
     const otherTodos = useMemo(
-        () => sortedTodos.filter((t) => !["in_progress", "todo", "later", "done"].includes(t.status)),
-        [sortedTodos]
+        () => taskTodos.filter((t) => !["in_progress", "todo", "later", "done"].includes(t.status)),
+        [taskTodos]
     );
 
     const totalItems = sortedTodos.length + notes.length;
-    const completionRate = sortedTodos.length > 0 ? Math.round((doneTodos.length / sortedTodos.length) * 100) : 0;
+    const completionRate = taskTodos.length > 0 ? Math.round((doneTodos.length / taskTodos.length) * 100) : 0;
     const displayedNotes = showAllNotes ? notes : notes.slice(0, INITIAL_NOTES_LIMIT);
     const hasMoreNotes = notes.length > INITIAL_NOTES_LIMIT;
 
@@ -619,6 +629,12 @@ export function ProjectDetailView({ tabId, projectName }: { tabId: string } & Pr
                             todoTodos,
                             Circle,
                             currentTheme.styles.contentSecondary
+                        )}
+                        {renderTodoSection(
+                            "Events",
+                            eventTodos,
+                            CalendarDays,
+                            currentTheme.styles.contentAccent
                         )}
                         {renderTodoSection(
                             "Done",

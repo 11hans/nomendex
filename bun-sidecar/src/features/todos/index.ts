@@ -6,7 +6,7 @@ import { ProjectBrowserView } from "./ProjectBrowserView";
 import { ArchivedBrowserView } from "./archived-view";
 import { InboxListView } from "./inbox-view";
 import { FunctionStubs } from "@/types/Functions";
-import { TodoSchema } from "./todo-types";
+import { TodoKindSchema, TodoSchema, TodoSourceSchema } from "./todo-types";
 import { AttachmentSchema } from "@/types/attachments";
 import { BoardConfigSchema } from "./board-types";
 
@@ -22,6 +22,10 @@ export const GetTodosInputSchema = z.object({
     project: z.string().optional(),
     tagsAll: z.array(z.string()).optional(),
     scheduledOverlap: ScheduledOverlapSchema.optional(),
+    kind: TodoKindSchema.optional(),
+    kinds: z.array(TodoKindSchema).optional(),
+    source: TodoSourceSchema.optional(),
+    sources: z.array(TodoSourceSchema).optional(),
     status: z.enum(["todo", "in_progress", "done", "later"]).optional(),
     statuses: z.array(z.enum(["todo", "in_progress", "done", "later"])).optional(),
 });
@@ -46,6 +50,8 @@ export const functionStubs = {
             title: z.string(),
             description: z.string().optional(),
             project: z.string().optional(),
+            kind: TodoKindSchema.optional(),
+            source: TodoSourceSchema.optional(),
             status: z.enum(["todo", "in_progress", "done", "later"]).optional(),
             tags: z.array(z.string()).optional(),
             scheduledStart: z.string().nullable().optional(),
@@ -66,6 +72,8 @@ export const functionStubs = {
             updates: z.object({
                 title: z.string().optional(),
                 description: z.string().optional(),
+                kind: TodoKindSchema.optional(),
+                source: TodoSourceSchema.optional(),
                 status: z.enum(["todo", "in_progress", "done", "later"]).optional(),
                 project: z.string().optional(),
                 archived: z.boolean().optional(),

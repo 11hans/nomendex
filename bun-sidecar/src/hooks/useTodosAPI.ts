@@ -1,4 +1,4 @@
-import { Todo } from "@/features/todos/todo-types";
+import { Todo, type TodoKind, type TodoSource } from "@/features/todos/todo-types";
 import type { Attachment } from "@/types/attachments";
 import type { BoardConfig, ProjectConfig } from "@/features/projects/project-types";
 import type { GetTodosInput } from "@/features/todos";
@@ -14,6 +14,8 @@ interface CreateTodoInput {
     title: string;
     description?: string;
     project?: string;
+    kind?: TodoKind;
+    source?: TodoSource;
     status?: "todo" | "in_progress" | "done" | "later";
     tags?: string[];
     scheduledStart?: string | null;
@@ -32,6 +34,8 @@ interface UpdateTodoInput {
     updates: {
         title?: string;
         description?: string;
+        kind?: TodoKind;
+        source?: TodoSource;
         status?: "todo" | "in_progress" | "done" | "later";
         project?: string;
         archived?: boolean;
@@ -112,6 +116,7 @@ export const todosAPI = {
     getArchivedTodos: async (args: { project?: string } = {}) =>
         sanitizeTodoListForClient(await fetchAPI<Todo[]>("archived", args)),
     getTags: () => fetchAPI<string[]>("tags"),
+    deleteTag: (args: { tagName: string }) => fetchAPI<{ deletedFromCount: number }>("tags/delete", args),
     previewTimeblocking: (args: { weekStart: string; days: DayConfig[] }) =>
         fetchAPI<TimeblockingPreviewResult>("timeblocking/preview", args),
     applyTimeblocking: (args: { weekStart: string; days: DayConfig[] }) =>

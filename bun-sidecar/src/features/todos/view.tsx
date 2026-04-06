@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, CheckSquare, Clock, Save } from "lucide-react";
+import { ArrowLeft, CalendarDays, CheckSquare, Clock, Save } from "lucide-react";
 import type { Todo } from "./todo-types";
+import { getTodoKindLabel, isEventTodo } from "./todo-kind-utils";
 
 const STATUS_OPTIONS = [
     { value: "todo", label: "To Do" },
@@ -24,6 +25,7 @@ type TodoStatus = (typeof STATUS_OPTIONS)[number]["value"];
 interface TodoDraft {
     title: string;
     description: string;
+    kind: Todo["kind"];
     status: TodoStatus;
     project: string;
 }
@@ -32,6 +34,7 @@ function toDraft(todo: Todo): TodoDraft {
     return {
         title: todo.title,
         description: todo.description ?? "",
+        kind: todo.kind,
         status: todo.status,
         project: todo.project ?? "",
     };
@@ -172,6 +175,8 @@ export function TodosView({ todoId, tabId }: { todoId: string; tabId: string }) 
 
     const statusLabel = STATUS_OPTIONS.find((option) => option.value === draft.status)?.label ?? draft.status;
     const projectListId = `todo-projects-${tabId}`;
+    const isEvent = isEventTodo(draft);
+    const detailLabel = getTodoKindLabel(draft.kind);
 
     return (
         <div
@@ -196,12 +201,16 @@ export function TodosView({ todoId, tabId }: { todoId: string; tabId: string }) 
                         >
                             <ArrowLeft size={14} />
                         </Button>
-                        <CheckSquare size={16} style={{ color: currentTheme.styles.contentAccent }} />
+                        {isEvent ? (
+                            <CalendarDays size={16} style={{ color: currentTheme.styles.contentAccent }} />
+                        ) : (
+                            <CheckSquare size={16} style={{ color: currentTheme.styles.contentAccent }} />
+                        )}
                         <h2
                             className="text-xs font-medium uppercase tracking-[0.14em] truncate"
                             style={{ color: currentTheme.styles.contentPrimary }}
                         >
-                            Todo Detail
+                            {detailLabel} Detail
                         </h2>
                         <span
                             className="text-caption px-2 py-0.5 rounded-full"
@@ -256,7 +265,7 @@ export function TodosView({ todoId, tabId }: { todoId: string; tabId: string }) 
                         <Input
                             value={draft.title}
                             onChange={(e) => setDraft((prev) => (prev ? { ...prev, title: e.target.value } : prev))}
-                            placeholder="What needs to be done?"
+                            placeholder={isEvent ? "What is happening?" : "What needs to be done?"}
                             className="text-sm"
                             style={{
                                 backgroundColor: currentTheme.styles.surfaceSecondary,
@@ -292,33 +301,51 @@ export function TodosView({ todoId, tabId }: { todoId: string; tabId: string }) 
                     }}
                 >
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                            <Label className="text-xs uppercase tracking-[0.12em]" style={{ color: currentTheme.styles.contentSecondary }}>
-                                Status
-                            </Label>
-                            <Select
-                                value={draft.status}
-                                onValueChange={(value: TodoStatus) => setDraft((prev) => (prev ? { ...prev, status: value } : prev))}
-                            >
-                                <SelectTrigger
-                                    className="text-sm"
+                        {isEvent ? (
+                            <div className="space-y-1">
+                                <Label className="text-xs uppercase tracking-[0.12em]" style={{ color: currentTheme.styles.contentSecondary }}>
+                                    Lifecycle
+                                </Label>
+                                <div
+                                    className="h-10 rounded-md border px-3 flex items-center text-sm"
                                     style={{
                                         backgroundColor: currentTheme.styles.surfaceSecondary,
                                         borderColor: currentTheme.styles.borderDefault,
-                                        color: currentTheme.styles.contentPrimary,
+                                        color: currentTheme.styles.contentSecondary,
                                     }}
                                 >
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {STATUS_OPTIONS.map((option) => (
-                                        <SelectItem key={option.value} value={option.value}>
-                                            {option.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                                    Events stay active until archived or deleted.
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-1">
+                                <Label className="text-xs uppercase tracking-[0.12em]" style={{ color: currentTheme.styles.contentSecondary }}>
+                                    Status
+                                </Label>
+                                <Select
+                                    value={draft.status}
+                                    onValueChange={(value: TodoStatus) => setDraft((prev) => (prev ? { ...prev, status: value } : prev))}
+                                >
+                                    <SelectTrigger
+                                        className="text-sm"
+                                        style={{
+                                            backgroundColor: currentTheme.styles.surfaceSecondary,
+                                            borderColor: currentTheme.styles.borderDefault,
+                                            color: currentTheme.styles.contentPrimary,
+                                        }}
+                                    >
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {STATUS_OPTIONS.map((option) => (
+                                            <SelectItem key={option.value} value={option.value}>
+                                                {option.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
 
                         <div className="space-y-1">
                             <Label className="text-xs uppercase tracking-[0.12em]" style={{ color: currentTheme.styles.contentSecondary }}>

@@ -11,6 +11,7 @@ import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
 import { Todo } from "./todo-types";
 import { AttachmentThumbnail } from "@/components/AttachmentThumbnail";
 import {
+    KindPicker,
     StatusPicker,
     PriorityPicker,
     ProjectPicker,
@@ -21,6 +22,7 @@ import {
     GoalPicker,
 } from "./pickers";
 import type { GoalRecord } from "@/features/goals/goal-types";
+import { applyTodoKindToDraft, getTodoKindLabel } from "./todo-kind-utils";
 
 interface TaskCardEditorProps {
     todo: Todo | null;
@@ -158,6 +160,14 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
         return null;
     }
 
+    const isEventDraft = editedTodo.kind === "event";
+    const itemLabel = getTodoKindLabel(editedTodo.kind);
+    const canChangeKind = editedTodo.source === "user";
+
+    const handleKindChange = (kind: Todo["kind"]) => {
+        setEditedTodo((prev) => (prev ? applyTodoKindToDraft(prev, kind) : prev));
+    };
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
@@ -177,7 +187,7 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                     }}
                 >
                     <span className="text-xs font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
-                        Edit Task
+                        Edit {itemLabel}
                     </span>
                     <span className="text-caption" style={{ color: styles.contentTertiary }}>
                         Cmd+Enter to save
@@ -187,12 +197,23 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                 <div className="px-6 pt-5 pb-4 space-y-4">
                     <div>
                         <div className="mb-1 text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                            Type
+                        </div>
+                        <KindPicker
+                            value={editedTodo.kind}
+                            onChange={handleKindChange}
+                            disabled={!canChangeKind}
+                        />
+                    </div>
+
+                    <div>
+                        <div className="mb-1 text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
                             Title
                         </div>
                         <Input
                             value={editedTodo.title}
                             onChange={(e) => setEditedTodo({ ...editedTodo, title: e.target.value })}
-                            placeholder="Task title"
+                            placeholder={`${itemLabel} title`}
                             className="h-10 text-title font-semibold border rounded-md px-3 focus-visible:ring-0 placeholder:font-normal"
                             style={{
                                 color: styles.contentPrimary,
@@ -280,24 +301,30 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                 >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-2">
-                            <StatusPicker
-                                value={editedTodo.status}
-                                onChange={(status) => setEditedTodo({ ...editedTodo, status })}
-                            />
-                            <PriorityPicker
-                                value={editedTodo.priority}
-                                onChange={(priority) => setEditedTodo({ ...editedTodo, priority })}
-                            />
+                            {!isEventDraft && (
+                                <>
+                                    <StatusPicker
+                                        value={editedTodo.status}
+                                        onChange={(status) => setEditedTodo({ ...editedTodo, status })}
+                                    />
+                                    <PriorityPicker
+                                        value={editedTodo.priority}
+                                        onChange={(priority) => setEditedTodo({ ...editedTodo, priority })}
+                                    />
+                                </>
+                            )}
                             <div className="flex items-center gap-2">
                                 <ScheduledDateTimePicker
                                     scheduledStart={editedTodo.scheduledStart}
                                     scheduledEnd={editedTodo.scheduledEnd}
                                     onChange={handleScheduledDateChange}
                                 />
-                                <DateTimePicker
-                                    dueDate={editedTodo.dueDate}
-                                    onChange={({ dueDate }) => setEditedTodo({ ...editedTodo, dueDate })}
-                                />
+                                {!isEventDraft && (
+                                    <DateTimePicker
+                                        dueDate={editedTodo.dueDate}
+                                        onChange={({ dueDate }) => setEditedTodo({ ...editedTodo, dueDate })}
+                                    />
+                                )}
                                 {onToggleCalendarReminder && (() => {
                                     const hasTimed = editedTodo.scheduledStart?.includes("T") || editedTodo.scheduledEnd?.includes("T");
                                     const isActive = editedTodo.calendarReminderPreset === "30-15";
@@ -468,7 +495,9 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                     </div>
 
                     <div className="text-[11px] leading-4" style={{ color: styles.contentTertiary }}>
-                        Schedule = when you plan to do it. Deadline = when it should be done. Priority only affects task emphasis and filtering. Calendar alerts need a timed schedule.
+                        {isEventDraft
+                            ? "Schedule = when it happens. Events stay active until archived or deleted. Calendar alerts need a timed schedule."
+                            : "Schedule = when you plan to do it. Deadline = when it should be done. Priority only affects task emphasis and filtering. Calendar alerts need a timed schedule."}
                     </div>
                 </div>
             </DialogContent >
