@@ -7,6 +7,7 @@ import { Todo } from "./todo-types";
 import { createTodo, updateTodo } from "./fx";
 import { getTodosPath } from "@/storage/root-path";
 import { z } from "zod";
+import { canonicalizeProjectFilter, canonicalizeTodoProject, isInboxProjectName } from "@/features/projects/inbox-project";
 
 // Initialize database
 const todosDb = new FileDatabase<Todo>(getTodosPath());
@@ -76,7 +77,7 @@ function buildTodosHtml(todos: Todo[], project?: string): string {
 
     const rows = todos
         .map((todo) => {
-            const projectLabel = todo.project?.trim() ? escapeHtml(todo.project) : "No project";
+            const projectLabel = escapeHtml(canonicalizeTodoProject(todo.project));
             const description = todo.description?.trim() ? escapeHtml(todo.description) : "";
             const scheduledStart = todo.scheduledStart?.trim() ? escapeHtml(todo.scheduledStart) : "";
             const scheduledEnd = todo.scheduledEnd?.trim() ? escapeHtml(todo.scheduledEnd) : "";
@@ -191,8 +192,9 @@ server.registerTool(
     async (input) => {
         const todos = await todosDb.findAll();
         const activeTodos = todos.filter(t => !t.archived);
-        const filteredTodos = input.project
-            ? activeTodos.filter(t => t.project === input.project)
+        const projectFilter = canonicalizeProjectFilter(input.project);
+        const filteredTodos = input.project != null
+            ? activeTodos.filter((todo) => canonicalizeTodoProject(todo.project) === projectFilter)
             : activeTodos;
 
         const structuredData = {
@@ -201,7 +203,7 @@ server.registerTool(
                 id: t.id,
                 title: t.title,
                 status: t.status,
-                project: t.project ?? null,
+                project: canonicalizeTodoProject(t.project),
                 scheduledStart: t.scheduledStart ?? null,
                 scheduledEnd: t.scheduledEnd ?? null,
                 dueDate: t.dueDate ?? null,
@@ -216,7 +218,7 @@ server.registerTool(
                     type: "text" as const,
                     text: JSON.stringify({
                         __noetect_ui: true,
-                        html: buildTodosHtml(filteredTodos, input.project),
+                        html: buildTodosHtml(filteredTodos, projectFilter),
                         title: "Todos",
                         height: 420,
                     }),
@@ -242,9 +244,13 @@ server.registerTool(
         const todos = await todosDb.findAll();
         const projects = [...new Set(
             todos
-                .map((todo) => todo.project)
-                .filter((project): project is string => Boolean(project))
-        )];
+                .map((todo) => canonicalizeTodoProject(todo.project))
+        )]
+            .sort((left, right) => {
+                if (isInboxProjectName(left) && !isInboxProjectName(right)) return -1;
+                if (!isInboxProjectName(left) && isInboxProjectName(right)) return 1;
+                return left.localeCompare(right);
+            });
         return renderUI({
             html: buildProjectsHtml(projects),
             title: "Todo Projects",

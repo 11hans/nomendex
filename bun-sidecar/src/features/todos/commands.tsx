@@ -35,13 +35,13 @@ export async function getTodosCommands(context: CommandContext): Promise<Command
         {
             id: "todos.open",
             name: "Open Todos",
-            description: "Open the todos default view (projects)",
+            description: "Open the all-project todos board",
             icon: "ListTodo",
             callback: () => {
                 context.closeCommandMenu();
                 context.openTab({
                     pluginMeta: todosPluginSerial,
-                    view: "default",
+                    view: "browser",
                     props: {},
                 });
 
@@ -72,14 +72,18 @@ export async function getTodosCommands(context: CommandContext): Promise<Command
         },
         {
             id: "todos.openProjects",
-            name: "Open Projects View",
-            description: "Open the todos projects view",
+            name: "Open Projects",
+            description: "Open the projects browser",
             icon: "FolderOpen",
             callback: () => {
                 context.closeCommandMenu();
                 context.openTab({
-                    pluginMeta: todosPluginSerial,
-                    view: "projects",
+                    pluginMeta: {
+                        id: "projects",
+                        name: "Projects",
+                        icon: "workflow",
+                    },
+                    view: "browser",
                     props: {},
                 });
 

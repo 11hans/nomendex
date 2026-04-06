@@ -9,10 +9,12 @@ import { TaskCardEditor } from "./TaskCardEditor";
 import { Todo } from "./todo-types";
 import { useTodoFilterState } from "./useTodoFilterState";
 import { filterAndSortTodos, urgencyComparator } from "./todo-filter-utils";
+import { buildTodoReorders } from "./todo-reorder";
 import { TodoFilterToolbar } from "./TodoFilterToolbar";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useTheme } from "@/hooks/useTheme";
+import { canonicalizeTodoProject, INBOX_PROJECT_NAME } from "@/features/projects/inbox-project";
 import {
     DndContext,
     DragEndEvent,
@@ -36,6 +38,7 @@ import { CSS } from "@dnd-kit/utilities";
 
 export function ArchivedBrowserView({ project }: { project?: string | null } = {}) {
     const filterProject = project;
+    const canonicalFilterProject = filterProject == null ? undefined : canonicalizeTodoProject(filterProject);
     const { setLoading } = usePlugin();
     const { activeTab, setTabName, openTab } = useWorkspaceContext();
 
@@ -64,22 +67,22 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
     useEffect(() => {
         if (activeTab && activeTab.pluginInstance.plugin.id === "todos" && !hasSetTabNameRef.current) {
             let tabName = "Archived Todos";
-            if (filterProject && filterProject !== "") {
-                tabName = `Archived: ${filterProject}`;
-            } else if (filterProject === "") {
-                tabName = "Archived: No Project";
+            if (canonicalFilterProject) {
+                tabName = canonicalFilterProject === INBOX_PROJECT_NAME
+                    ? `Archived: ${INBOX_PROJECT_NAME}`
+                    : `Archived: ${canonicalFilterProject}`;
             }
 
             setTabName(activeTab.id, tabName);
             hasSetTabNameRef.current = true;
         }
-    }, [activeTab, filterProject, setTabName]);
+    }, [activeTab, canonicalFilterProject, setTabName]);
 
     const loadTodos = useMemo(
         () => async () => {
             setLoading(true);
             try {
-                const archivedData = await todosAPI.getArchivedTodos({ project: filterProject || undefined });
+                const archivedData = await todosAPI.getArchivedTodos(canonicalFilterProject ? { project: canonicalFilterProject } : {});
                 setTodos(archivedData);
 
                 // Load tags and projects
@@ -95,7 +98,7 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
                 setLoading(false);
             }
         },
-        [todosAPI, setLoading, filterProject]
+        [todosAPI, setLoading, canonicalFilterProject]
     );
 
     useEffect(() => {
@@ -266,7 +269,7 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
         openTab({
             pluginMeta: { id: "todos", name: "Todos", icon: "list-todo" },
             view: "browser",
-            props: { project: filterProject }
+            props: { project: canonicalFilterProject }
         });
     };
 
@@ -319,24 +322,26 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
 
             // Same status - reorder within column
             if (activeIndex !== overIndex) {
-                const statusTodos = todos.filter(t => t.status === activeTodo.status);
+                const statusTodos = todos
+                    .filter((todo) => todo.status === activeTodo.status);
+                const sourceIndex = statusTodos.findIndex((todo) => todo.id === activeId);
+                const targetIndex = statusTodos.findIndex((todo) => todo.id === overId);
+                if (sourceIndex === -1 || targetIndex === -1) {
+                    return;
+                }
                 const reorderedTodos = arrayMove(
                     statusTodos,
-                    statusTodos.findIndex(t => t.id === activeId),
-                    statusTodos.findIndex(t => t.id === overId)
+                    sourceIndex,
+                    targetIndex
                 );
-
-                // Create reorder updates
-                const reorders = reorderedTodos.map((todo, index) => ({
-                    todoId: todo.id,
-                    order: index + 1,
-                }));
+                const reorders = buildTodoReorders(reorderedTodos);
 
                 try {
                     await todosAPI.reorderTodos({ reorders });
                     await loadTodos();
                 } catch (error) {
                     console.error("Failed to reorder todos:", error);
+                    await loadTodos();
                 }
             }
         }

@@ -282,7 +282,7 @@ export function BoardSettingsDialog({
                     </div>
 
                     <p className="text-xs text-muted-foreground">
-                        Moving a todo to a column with a status set will automatically update its status.
+                        Each todo is placed in the first column (by order) whose status matches the todo's status. If multiple columns share the same status, the leftmost one wins. Columns with no status set act as &ldquo;To Do&rdquo; — moving a todo there sets its status to <em>todo</em>.
                     </p>
                 </div>
 

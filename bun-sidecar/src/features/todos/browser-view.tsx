@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type ReactNode } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useGoalsAPI } from "@/hooks/useGoalsAPI";
@@ -6,8 +6,9 @@ import type { GoalRecord } from "@/features/goals/goal-types";
 import { subscribe } from "@/lib/events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AlertCircle, CheckCircle2, Clock, Calendar, Eye, EyeOff, MoreHorizontal, Archive, Plus, Settings, Circle, ArrowLeft, FileSearch } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Calendar, Eye, EyeOff, MoreHorizontal, Archive, Plus, Settings, Circle, FileSearch } from "lucide-react";
 import { toast } from "sonner";
 import { TodoCard } from "./TodoCard";
 import { CreateTodoDialog } from "./CreateTodoDialog";
@@ -16,16 +17,21 @@ import { Todo } from "./todo-types";
 import { isEventTodo, isTaskTodo } from "./todo-kind-utils";
 import { useTodoFilterState } from "./useTodoFilterState";
 import { filterAndSortTodos, urgencyComparator } from "./todo-filter-utils";
+import { buildTodoReorders } from "./todo-reorder";
+import { getColumnIdForTodo } from "./todo-column-utils";
 import { TodoFilterToolbar } from "./TodoFilterToolbar";
 import type { TodoFilterCriteria } from "./todo-filter-types";
+import { createDefaultFilterState } from "./todo-filter-types";
 import { BoardConfig, BoardColumn, getDefaultColumns } from "@/features/projects/project-types";
 import { BoardSettingsDialog } from "./BoardSettingsDialog";
 import type { Attachment } from "@/types/attachments";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useTheme } from "@/hooks/useTheme";
+import { canonicalizeTodoProject, INBOX_PROJECT_NAME } from "@/features/projects/inbox-project";
 import {
     DndContext,
+    DragCancelEvent,
     DragEndEvent,
     DragOverEvent,
     DragOverlay,
@@ -47,6 +53,206 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 
+const ALL_TODOS_GROUP = "__all__";
+const WAITING_TAG = "waiting";
+
+type SystemListId = "today" | "upcoming" | "overdue" | "no_due" | "waiting" | "events";
+
+interface SystemListDefinition {
+    id: SystemListId;
+    label: string;
+    criteria: TodoFilterCriteria;
+    kindFilter?: Todo["kind"];
+}
+
+const BASE_SYSTEM_CRITERIA: TodoFilterCriteria = {
+    statusBucket: "active",
+    selectedTags: [],
+    selectedPriority: null,
+    dueFilter: "any",
+    selectedProject: null,
+    quickPreset: "none",
+};
+
+const SYSTEM_LISTS: SystemListDefinition[] = [
+    {
+        id: "today",
+        label: "Today",
+        criteria: { ...BASE_SYSTEM_CRITERIA, dueFilter: "today_or_overdue" },
+    },
+    {
+        id: "upcoming",
+        label: "Upcoming",
+        criteria: { ...BASE_SYSTEM_CRITERIA, dueFilter: "next_7_days" },
+    },
+    {
+        id: "overdue",
+        label: "Overdue",
+        criteria: { ...BASE_SYSTEM_CRITERIA, dueFilter: "overdue" },
+    },
+    {
+        id: "no_due",
+        label: "No Due Date",
+        criteria: { ...BASE_SYSTEM_CRITERIA, dueFilter: "no_due" },
+    },
+    {
+        id: "waiting",
+        label: "Waiting",
+        criteria: { ...BASE_SYSTEM_CRITERIA, selectedTags: [WAITING_TAG] },
+    },
+    {
+        id: "events",
+        label: "Events",
+        criteria: { ...BASE_SYSTEM_CRITERIA },
+        kindFilter: "event",
+    },
+];
+
+function compareProjectGroupNames(a: string, b: string): number {
+    if (a === INBOX_PROJECT_NAME && b !== INBOX_PROJECT_NAME) return -1;
+    if (b === INBOX_PROJECT_NAME && a !== INBOX_PROJECT_NAME) return 1;
+    return a.localeCompare(b);
+}
+
+function SidebarSection({
+    title,
+    children,
+    contentTertiary,
+    borderDefault,
+    sectionSurface,
+}: {
+    title: string;
+    children: ReactNode;
+    contentTertiary: string;
+    borderDefault: string;
+    sectionSurface: string;
+}) {
+    return (
+        <section className="px-1.5">
+            <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em]" style={{ color: contentTertiary }}>
+                {title}
+            </div>
+            <div
+                className="rounded-lg border p-1.5 space-y-0.5"
+                style={{
+                    borderColor: borderDefault,
+                    backgroundColor: sectionSurface,
+                }}
+            >
+                {children}
+            </div>
+        </section>
+    );
+}
+
+function SidebarListItem({
+    label,
+    isSelected,
+    count,
+    onClick,
+    contentPrimary,
+    contentTertiary,
+    surfaceAccent,
+    surfaceTertiary,
+}: {
+    label: string;
+    isSelected: boolean;
+    count: number;
+    onClick: () => void;
+    contentPrimary: string;
+    contentTertiary: string;
+    surfaceAccent: string;
+    surfaceTertiary: string;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            className="w-full px-3 py-1.5 flex items-center gap-2 text-left text-xs rounded-md transition-colors hover:bg-surface-elevated"
+            style={{
+                backgroundColor: isSelected ? surfaceAccent : undefined,
+                color: isSelected ? contentPrimary : contentTertiary,
+            }}
+        >
+            <span className="truncate font-medium" style={{ color: isSelected ? contentPrimary : contentTertiary }}>
+                {label}
+            </span>
+            <span
+                className="ml-auto text-caption tabular-nums shrink-0 px-1.5 py-0.5 rounded-full"
+                style={{
+                    color: contentTertiary,
+                    backgroundColor: isSelected ? surfaceAccent : surfaceTertiary,
+                    opacity: count > 0 ? 1 : 0.65,
+                }}
+            >
+                {count}
+            </span>
+        </button>
+    );
+}
+
+function DroppableProjectItem({
+    groupName,
+    label,
+    isSelected,
+    count,
+    onClick,
+    contentPrimary,
+    contentTertiary,
+    surfaceAccent,
+    surfaceTertiary,
+    borderDefault,
+    isDragging,
+}: {
+    groupName: string;
+    label: string;
+    isSelected: boolean;
+    count: number;
+    onClick: () => void;
+    contentPrimary: string;
+    contentTertiary: string;
+    surfaceAccent: string;
+    surfaceTertiary: string;
+    borderDefault: string;
+    isDragging: boolean;
+}) {
+    const { setNodeRef, isOver } = useDroppable({
+        id: `project-group:${groupName}`,
+    });
+
+    return (
+        <button
+            ref={setNodeRef}
+            onClick={onClick}
+            className="w-full px-3 py-1.5 flex items-center gap-2 text-left text-xs rounded-md transition-colors hover:bg-surface-elevated"
+            style={{
+                backgroundColor: isOver
+                    ? surfaceAccent
+                    : isSelected
+                        ? surfaceAccent
+                        : undefined,
+                color: isSelected ? contentPrimary : contentTertiary,
+                outline: isOver ? `2px solid ${surfaceAccent}` : undefined,
+                outlineOffset: isOver ? "-2px" : undefined,
+                borderBottom: isDragging ? `1px dashed ${borderDefault}` : undefined,
+            }}
+        >
+            <span className="truncate font-medium" style={{ color: isSelected ? contentPrimary : contentTertiary }}>
+                {label}
+            </span>
+            <span
+                className="ml-auto text-caption tabular-nums shrink-0 px-1.5 py-0.5 rounded-full"
+                style={{
+                    color: contentTertiary,
+                    backgroundColor: isSelected ? surfaceAccent : surfaceTertiary,
+                    opacity: count > 0 ? 1 : 0.65,
+                }}
+            >
+                {count}
+            </span>
+        </button>
+    );
+}
+
 export function TodosBrowserView({
     project,
     selectedTodoId: initialSelectedTodoId,
@@ -62,17 +268,25 @@ export function TodosBrowserView({
 } = {}) {
     // Support both 'project' and 'filterProject' prop names for backward compatibility
     const filterProject = project;
+    const canonicalFilterProject = filterProject == null ? undefined : canonicalizeTodoProject(filterProject);
     const { loading, setLoading } = usePlugin();
     const { activeTab, activeTabId, setTabName, openTab, replaceTabWithNewView, getProjectPreferences, setProjectPreferences } = useWorkspaceContext();
     const { currentTheme } = useTheme();
-    const isProjectScopedView = filterProject !== null && filterProject !== undefined;
-    const projectDisplayName = filterProject === "" ? "No Project" : filterProject;
+    const isProjectScopedView = canonicalFilterProject !== undefined;
+    const projectDisplayName = canonicalFilterProject;
 
     const todosAPI = useTodosAPI();
     const goalsAPI = useGoalsAPI();
     const [todos, setTodos] = useState<Todo[]>([]);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
+    const [sidebarSourceTodos, setSidebarSourceTodos] = useState<Todo[]>([]);
+    const [sidebarProjectGroups, setSidebarProjectGroups] = useState<string[]>([INBOX_PROJECT_NAME]);
+    const [sidebarGroupCounts, setSidebarGroupCounts] = useState<Record<string, number>>({
+        [ALL_TODOS_GROUP]: 0,
+        [INBOX_PROJECT_NAME]: 0,
+    });
+    const [activeSystemListId, setActiveSystemListId] = useState<SystemListId | null>(null);
     const [availableGoals, setAvailableGoals] = useState<GoalRecord[]>([]);
     const todoFilter = useTodoFilterState("browser", { defaultSortMode: "urgency" });
     const isManualSort = todoFilter.filterState.sortMode === "manual";
@@ -82,11 +296,10 @@ export function TodosBrowserView({
     const [editSaving, setEditSaving] = useState(false);
     const hasSetTabNameRef = useRef<boolean>(false);
 
-    // Derive the project key for preferences storage
-    // - If filterProject is a non-empty string, use it as the key
-    // - If filterProject is null or undefined (all projects view), use "__all__"
-    // - If filterProject is "" (no project), use "__none__"
-    const projectPreferencesKey = filterProject === null || filterProject === undefined ? "__all__" : filterProject === "" ? "__none__" : filterProject;
+    // Derive the project key for preferences storage:
+    // - null/undefined => all-project board
+    // - project value => canonical project key (Inbox included)
+    const projectPreferencesKey = canonicalFilterProject ?? "__all__";
     const projectPrefs = getProjectPreferences(projectPreferencesKey);
     const showLaterColumn = !projectPrefs.hideLaterColumn;
     const [newTodo, setNewTodo] = useState<{
@@ -107,7 +320,7 @@ export function TodosBrowserView({
     }>({
         title: "",
         description: "",
-        project: filterProject && filterProject !== "" ? filterProject : "",
+        project: canonicalFilterProject ?? INBOX_PROJECT_NAME,
         kind: "task",
         source: "user",
         status: "todo",
@@ -122,7 +335,7 @@ export function TodosBrowserView({
     });
 
     const resetNewTodoDraft = useCallback(() => {
-        const projectValue = filterProject && filterProject !== "" ? filterProject : "";
+        const projectValue = canonicalFilterProject ?? INBOX_PROJECT_NAME;
         setNewTodo({
             title: "",
             description: "",
@@ -139,7 +352,7 @@ export function TodosBrowserView({
             customColumnId: undefined,
             goalRefs: undefined,
         });
-    }, [filterProject]);
+    }, [canonicalFilterProject]);
 
     const [boardConfig, setBoardConfig] = useState<BoardConfig | null>(null);
     const [boardSettingsOpen, setBoardSettingsOpen] = useState(false);
@@ -161,6 +374,7 @@ export function TodosBrowserView({
 
     // Drag and drop state
     const [draggedTodo, setDraggedTodo] = useState<Todo | null>(null);
+    const [draggedTodoId, setDraggedTodoId] = useState<string | null>(null);
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {
@@ -173,6 +387,17 @@ export function TodosBrowserView({
         if (!externalFilterCriteria) return;
         todoFilter.applyFilterCriteria(externalFilterCriteria, { clearSearch: true });
     }, [externalFilterCriteria, todoFilter.applyFilterCriteria]);
+
+    const applyListCriteria = useCallback(
+        (criteria: TodoFilterCriteria) => {
+            todoFilter.applyFilterCriteria(criteria, { clearSearch: true });
+        },
+        [todoFilter.applyFilterCriteria],
+    );
+
+    const clearActiveSidebarListSelection = useCallback(() => {
+        setActiveSystemListId(null);
+    }, []);
 
 
 
@@ -196,39 +421,37 @@ export function TodosBrowserView({
         if (embedded) return;
         if (activeTab && activeTab.pluginInstance.plugin.id === "todos" && !hasSetTabNameRef.current) {
             let tabName = "Todos";
-            if (filterProject && filterProject !== "") {
-                tabName = filterProject === "Inbox" ? "Inbox" : `Todos: ${filterProject}`;
-            } else if (filterProject === "") {
-                tabName = "Todos: No Project";
+            if (canonicalFilterProject) {
+                tabName = canonicalFilterProject === INBOX_PROJECT_NAME
+                    ? INBOX_PROJECT_NAME
+                    : `Todos: ${canonicalFilterProject}`;
             }
 
             setTabName(activeTab.id, tabName);
             hasSetTabNameRef.current = true;
         }
-    }, [activeTab, filterProject, setTabName, embedded]); // Dependencies are fine since we check hasSetTabNameRef
+    }, [activeTab, canonicalFilterProject, setTabName, embedded]); // Dependencies are fine since we check hasSetTabNameRef
 
     // Update the project field when filterProject changes
     useEffect(() => {
-        // filterProject can be null, undefined, or an empty string (for "No Project")
-        // Only set the project if filterProject is a non-empty string
-        const projectValue = filterProject && filterProject !== "" ? filterProject : "";
+        const projectValue = canonicalFilterProject ?? INBOX_PROJECT_NAME;
         setNewTodo(prev => ({
             ...prev,
             project: projectValue
         }));
-    }, [filterProject]);
+    }, [canonicalFilterProject]);
 
     // Load Board Config
     useEffect(() => {
         async function loadBoardConfig() {
-            if (filterProject === null || filterProject === undefined || filterProject === "") {
+            if (canonicalFilterProject === undefined) {
                 setBoardConfig(null);
                 return;
             }
 
             try {
                 const config = await todosAPI.getBoardConfig({
-                    projectName: filterProject
+                    projectName: canonicalFilterProject
                 });
                 setBoardConfig(config);
             } catch (error) {
@@ -236,87 +459,96 @@ export function TodosBrowserView({
             }
         }
         loadBoardConfig();
-    }, [filterProject, todosAPI]);
+    }, [canonicalFilterProject, todosAPI]);
 
-    // Helper: Determine which column a todo belongs to
-    // IMPORTANT: This must be defined before handleDragEnd which uses it
+    // Helper: Determine which column a todo belongs to.
+    // IMPORTANT: This must be defined before handleDragEnd which uses it.
+    //
+    // Strict rule (custom board): column = first column (by order) whose status
+    // matches todo.status. customColumnId is ignored for display placement.
     const getColumnForTodo = useCallback((todo: Todo): string => {
-        // If board config exists, check for customColumnId
         if (boardConfig) {
-            if (todo.customColumnId) {
-                const exists = boardConfig.columns.find(c => c.id === todo.customColumnId);
-                if (exists) return todo.customColumnId;
-            }
-            // Fallback for custom mode logic
-            if (todo.status === "done") {
-                // Put in last column
-                return boardConfig.columns[boardConfig.columns.length - 1].id;
-            }
-            // Put in first column
-            return boardConfig.columns[0].id;
+            return getColumnIdForTodo(todo, boardConfig.columns);
         }
-
-        // Legacy map
+        // Legacy mode: column id equals status
         return todo.status;
     }, [boardConfig]);
-
-    const loadTags = useMemo(
-        () => async () => {
-            try {
-                const tags = await todosAPI.getTags();
-                setAvailableTags(tags);
-            } catch (error) {
-                console.error("Failed to load tags:", error);
-            }
-        },
-        [todosAPI]
-    );
-
-    const loadProjects = useMemo(
-        () => async () => {
-            try {
-                const projects = await todosAPI.getProjects();
-                setAvailableProjects(projects);
-            } catch (error) {
-                console.error("Failed to load projects:", error);
-            }
-        },
-        [todosAPI]
-    );
-
-    const loadGoals = useMemo(
-        () => async () => {
-            try {
-                const goals = await goalsAPI.listGoals({ status: "active" });
-                setAvailableGoals(goals);
-            } catch {
-                // Goals are optional; silently ignore if unavailable
-            }
-        },
-        [goalsAPI]
-    );
 
     const loadTodos = useMemo(
         () => async () => {
             setLoading(true);
             try {
-                // Always load only active (non-archived) todos for the browser view
-                const todosData = await todosAPI.getTodos(filterProject != null ? { project: filterProject } : {});
+                const shouldLoadAllTodosForSidebar = !embedded && canonicalFilterProject !== undefined;
+
+                const [todosData, tags, projects, projectsList, goals, allTodosForSidebar] = await Promise.all([
+                    // Always load only active (non-archived) todos for the board itself
+                    todosAPI.getTodos(canonicalFilterProject ? { project: canonicalFilterProject } : {}),
+                    todosAPI.getTags().catch(() => []),
+                    todosAPI.getProjects().catch(() => []),
+                    !embedded ? todosAPI.getProjectsList().catch(() => []) : Promise.resolve([]),
+                    goalsAPI.listGoals({ status: "active" }).catch(() => []),
+                    shouldLoadAllTodosForSidebar ? todosAPI.getTodos({}) : Promise.resolve<Todo[] | null>(null),
+                ]);
 
                 // The getTodos API should already filter out archived items, but let's be explicit
                 const activeTodos = todosData.filter(t => !t.archived);
-
                 setTodos(activeTodos);
+                setAvailableTags(tags);
+                setAvailableGoals(goals);
 
-                // Reload tags, projects, and goals after todos change
-                await Promise.all([loadTags(), loadProjects(), loadGoals()]);
+                if (!embedded) {
+                    const sidebarTodos = allTodosForSidebar ?? activeTodos;
+                    setSidebarSourceTodos(sidebarTodos);
+                    const projectsFromConfig = projectsList
+                        .filter((project) => !project.archived)
+                        .map((project) => project.name?.trim())
+                        .filter((name): name is string => Boolean(name));
+                    const projectsFromTodos = sidebarTodos.map((todo) => canonicalizeTodoProject(todo.project));
+                    const normalizedProjects = projects.map((projectName) => canonicalizeTodoProject(projectName));
+                    const mergedProjects = Array.from(
+                        new Set([
+                            INBOX_PROJECT_NAME,
+                            ...(canonicalFilterProject ? [canonicalFilterProject] : []),
+                            ...projectsFromConfig.map((name) => canonicalizeTodoProject(name)),
+                            ...projectsFromTodos,
+                            ...normalizedProjects,
+                        ])
+                    ).sort(compareProjectGroupNames);
+
+                    const counts: Record<string, number> = {
+                        [ALL_TODOS_GROUP]: 0,
+                    };
+                    for (const groupName of mergedProjects) {
+                        counts[groupName] = 0;
+                    }
+                    for (const todo of sidebarTodos) {
+                        if (todo.archived || !isTaskTodo(todo) || todo.status === "done") continue;
+                        counts[ALL_TODOS_GROUP] = (counts[ALL_TODOS_GROUP] ?? 0) + 1;
+                        const groupName = canonicalizeTodoProject(todo.project);
+                        counts[groupName] = (counts[groupName] ?? 0) + 1;
+                    }
+
+                    setSidebarProjectGroups(mergedProjects);
+                    setSidebarGroupCounts(counts);
+                    setAvailableProjects(mergedProjects);
+                } else {
+                    setSidebarSourceTodos(activeTodos);
+                    const normalizedProjects = Array.from(
+                        new Set([
+                            INBOX_PROJECT_NAME,
+                            ...(canonicalFilterProject ? [canonicalFilterProject] : []),
+                            ...projects.map((projectName) => canonicalizeTodoProject(projectName)),
+                        ])
+                    ).sort(compareProjectGroupNames);
+                    setAvailableProjects(normalizedProjects);
+                }
             } catch (error) {
                 console.error("Failed to load todos:", error);
             } finally {
                 setLoading(false);
             }
         },
-        [todosAPI, setLoading, filterProject, loadTags, loadProjects, loadGoals]
+        [canonicalFilterProject, embedded, goalsAPI, setLoading, todosAPI]
     );
 
     useEffect(() => {
@@ -382,14 +614,10 @@ export function TodosBrowserView({
     const handleSaveTodo = async (updatedTodo: Todo) => {
         setEditSaving(true);
         try {
-            // If status changed in custom board mode, recalculate customColumnId to match new status
+            // If status changed in custom board mode, sync customColumnId to the new status column
             let resolvedCustomColumnId = updatedTodo.customColumnId;
             if (boardConfig && todoToEdit && updatedTodo.status !== todoToEdit.status) {
-                const targetColumn = boardConfig.columns.find(c => c.status === updatedTodo.status);
-                resolvedCustomColumnId = targetColumn?.id
-                    ?? (updatedTodo.status === "done"
-                        ? boardConfig.columns[boardConfig.columns.length - 1].id
-                        : boardConfig.columns[0].id);
+                resolvedCustomColumnId = getColumnIdForTodo({ status: updatedTodo.status }, boardConfig.columns);
             }
 
             await todosAPI.updateTodo({
@@ -489,14 +717,47 @@ export function TodosBrowserView({
         openTab({
             pluginMeta: { id: "todos", name: "Todos", icon: "list-todo" },
             view: "archived",
-            props: { project: filterProject }
+            props: { project: canonicalFilterProject }
         });
     };
 
-    const goBackToProjects = useCallback(() => {
-        if (!activeTabId) return;
-        replaceTabWithNewView(activeTabId, { id: "todos", name: "Todos", icon: "list-todo" }, { view: "projects" });
-    }, [activeTabId, replaceTabWithNewView]);
+    const switchProjectBoard = useCallback((nextProject?: string) => {
+        const canonicalNextProject = nextProject == null ? undefined : canonicalizeTodoProject(nextProject);
+        if (canonicalNextProject === canonicalFilterProject) {
+            return;
+        }
+
+        const nextProps: Record<string, unknown> = {};
+        if (canonicalNextProject) {
+            nextProps.project = canonicalNextProject;
+        }
+
+        if (activeTabId) {
+            replaceTabWithNewView(activeTabId, { id: "todos", name: "Todos", icon: "list-todo" }, { view: "browser", ...nextProps });
+            return;
+        }
+
+        openTab({
+            pluginMeta: { id: "todos", name: "Todos", icon: "list-todo" },
+            view: "browser",
+            props: nextProps,
+        });
+    }, [activeTabId, canonicalFilterProject, openTab, replaceTabWithNewView]);
+
+    const handleSelectGroup = useCallback((groupName: string) => {
+        setActiveSystemListId(null);
+        if (groupName === ALL_TODOS_GROUP) {
+            switchProjectBoard();
+            return;
+        }
+        switchProjectBoard(groupName);
+    }, [switchProjectBoard]);
+
+    const handleSelectSystemList = useCallback((systemList: SystemListDefinition) => {
+        setActiveSystemListId(systemList.id);
+        applyListCriteria(systemList.criteria);
+        switchProjectBoard();
+    }, [applyListCriteria, switchProjectBoard]);
 
     const archiveAllDone = async () => {
         const doneTodos = todos.filter((todo) => isTaskTodo(todo) && todo.status === "done");
@@ -513,11 +774,57 @@ export function TodosBrowserView({
         }
     };
 
+    const moveTodoToProject = useCallback(async (todo: Todo, targetGroupName: string) => {
+        const currentProject = canonicalizeTodoProject(todo.project);
+        const targetProject = canonicalizeTodoProject(targetGroupName);
+        if (currentProject === targetProject) return;
+
+        const now = new Date().toISOString();
+
+        setSidebarProjectGroups((prev) => {
+            if (prev.includes(targetProject)) return prev;
+            return [...prev, targetProject].sort(compareProjectGroupNames);
+        });
+
+        setTodos((prev) =>
+            prev.map((item) =>
+                item.id === todo.id
+                    ? { ...item, project: targetProject, updatedAt: now }
+                    : item
+            )
+        );
+
+        try {
+            await todosAPI.updateTodo({
+                todoId: todo.id,
+                updates: { project: targetProject },
+            });
+            await loadTodos();
+            toast.success(`Moved to ${targetProject}`);
+        } catch (error) {
+            console.error("Failed to move task to project:", error);
+            setTodos((prev) =>
+                prev.map((item) =>
+                    item.id === todo.id
+                        ? { ...item, project: todo.project, updatedAt: todo.updatedAt }
+                        : item
+                )
+            );
+            toast.error("Failed to move task");
+        }
+    }, [loadTodos, todosAPI]);
+
     // Drag and drop handlers
     const handleDragStart = useCallback((event: DragStartEvent) => {
         const todo = todos.find(t => t.id === event.active.id);
+        setDraggedTodoId(String(event.active.id));
         setDraggedTodo(todo || null);
     }, [todos]);
+
+    const handleDragCancel = useCallback((_event: DragCancelEvent) => {
+        setDraggedTodo(null);
+        setDraggedTodoId(null);
+    }, []);
 
     const rejectEventStatusMove = useCallback(() => {
         toast.error("Events stay active. Move them by schedule or archive them.");
@@ -530,12 +837,21 @@ export function TodosBrowserView({
     const handleDragEnd = useCallback(async (event: DragEndEvent) => {
         const { active, over } = event;
         setDraggedTodo(null);
+        setDraggedTodoId(null);
 
         if (!over) return;
 
         try {
             const activeId = active.id as string;
             const overId = over.id as string;
+
+            if (overId.startsWith("project-group:")) {
+                const targetGroupName = overId.substring("project-group:".length);
+                const draggedTodo = todos.find((todo) => todo.id === activeId);
+                if (!draggedTodo) return;
+                await moveTodoToProject(draggedTodo, targetGroupName);
+                return;
+            }
 
             // Find the dragged todo
             const activeIndex = todos.findIndex(t => t.id === activeId);
@@ -553,30 +869,38 @@ export function TodosBrowserView({
                     // Custom board mode - update customColumnId and optionally status
                     const currentColumnId = getColumnForTodo(activeTodo);
                     if (newColumnId !== currentColumnId) {
-                        // Find the target column to check if it has a status mapping
-                        const targetColumn = boardConfig.columns.find(c => c.id === newColumnId);
-                        const newStatus = targetColumn?.status;
+                        const targetColumnTodos = todos.filter(
+                            (todo) => getColumnForTodo(todo) === newColumnId && todo.id !== activeId
+                        );
 
-                        if (isEventTodo(activeTodo) && newStatus && newStatus !== "todo") {
+                        // Determine target status: column's status, or "todo" for no-status columns
+                        const targetColumn = boardConfig.columns.find(c => c.id === newColumnId);
+                        const newStatus = targetColumn?.status ?? "todo";
+
+                        if (isEventTodo(activeTodo) && newStatus !== "todo") {
                             rejectEventStatusMove();
                             return;
                         }
 
-                        // Optimistic update
-                        setTodos(prev => prev.map(t =>
-                            t.id === activeId
-                                ? { ...t, customColumnId: newColumnId, ...(newStatus && { status: newStatus }) }
-                                : t
-                        ));
+                        const reorders = buildTodoReorders([
+                            ...targetColumnTodos,
+                            {
+                                ...activeTodo,
+                                customColumnId: newColumnId,
+                                status: newStatus,
+                            },
+                        ]);
 
                         try {
                             await todosAPI.updateTodo({
                                 todoId: activeId,
                                 updates: {
                                     customColumnId: newColumnId,
-                                    ...(newStatus && { status: newStatus }),
+                                    status: newStatus,
                                 },
                             });
+                            await todosAPI.reorderTodos({ reorders });
+                            await loadTodos();
                         } catch (error) {
                             console.error("Failed to update todo column:", error);
                             await loadTodos();
@@ -586,20 +910,27 @@ export function TodosBrowserView({
                     // Legacy mode - update status
                     const newStatus = newColumnId as "todo" | "in_progress" | "done" | "later";
                     if (newStatus !== activeTodo.status) {
+                        const targetStatusTodos = todos.filter(
+                            (todo) => todo.status === newStatus && todo.id !== activeId
+                        );
+
                         if (isEventTodo(activeTodo) && newStatus !== "todo") {
                             rejectEventStatusMove();
                             return;
                         }
 
-                        setTodos(prev => prev.map(t =>
-                            t.id === activeId ? { ...t, status: newStatus } : t
-                        ));
+                        const reorders = buildTodoReorders([
+                            ...targetStatusTodos,
+                            { ...activeTodo, status: newStatus },
+                        ]);
 
                         try {
                             await todosAPI.updateTodo({
                                 todoId: activeId,
                                 updates: { status: newStatus },
                             });
+                            await todosAPI.reorderTodos({ reorders });
+                            await loadTodos();
                         } catch (error) {
                             console.error("Failed to update todo status:", error);
                             await loadTodos();
@@ -623,59 +954,39 @@ export function TodosBrowserView({
                     // Cross-column drop onto a specific card
                     if (boardConfig) {
                         // Custom board mode - update customColumnId and position
-                        const targetColumnTodos = todos.filter(t => getColumnForTodo(t) === overColumnId && t.id !== activeId);
+                        const targetColumnTodos = todos.filter(
+                            (todo) => getColumnForTodo(todo) === overColumnId && todo.id !== activeId
+                        );
                         const overIndexInColumn = targetColumnTodos.findIndex(t => t.id === overId);
+                        const insertIndex = overIndexInColumn === -1 ? targetColumnTodos.length : overIndexInColumn;
 
-                        // Find the target column to check if it has a status mapping
+                        // Determine target status: column's status, or "todo" for no-status columns
                         const targetColumn = boardConfig.columns.find(c => c.id === overColumnId);
-                        const newStatus = targetColumn?.status;
+                        const newStatus = targetColumn?.status ?? "todo";
 
-                        if (isEventTodo(activeTodo) && newStatus && newStatus !== "todo") {
+                        if (isEventTodo(activeTodo) && newStatus !== "todo") {
                             rejectEventStatusMove();
                             return;
                         }
 
-                        const newColumnTodos = [...targetColumnTodos];
-                        newColumnTodos.splice(overIndexInColumn, 0, {
+                        const reorderedColumnTodos = [...targetColumnTodos];
+                        reorderedColumnTodos.splice(insertIndex, 0, {
                             ...activeTodo,
                             customColumnId: overColumnId,
-                            ...(newStatus && { status: newStatus }),
+                            status: newStatus,
                         });
-
-                        const reorders = newColumnTodos.map((todo, index) => ({
-                            todoId: todo.id,
-                            order: index + 1,
-                        }));
-
-                        // Optimistic update
-                        setTodos(prev => {
-                            const updated = prev.map(t => {
-                                if (t.id === activeId) {
-                                    return {
-                                        ...t,
-                                        customColumnId: overColumnId,
-                                        order: overIndexInColumn + 1,
-                                        ...(newStatus && { status: newStatus }),
-                                    };
-                                }
-                                const reorder = reorders.find(r => r.todoId === t.id);
-                                if (reorder) {
-                                    return { ...t, order: reorder.order };
-                                }
-                                return t;
-                            });
-                            return updated;
-                        });
+                        const reorders = buildTodoReorders(reorderedColumnTodos);
 
                         try {
                             await todosAPI.updateTodo({
                                 todoId: activeId,
                                 updates: {
                                     customColumnId: overColumnId,
-                                    ...(newStatus && { status: newStatus }),
+                                    status: newStatus,
                                 },
                             });
                             await todosAPI.reorderTodos({ reorders });
+                            await loadTodos();
                         } catch (error) {
                             console.error("Failed to move todo:", error);
                             await loadTodos();
@@ -687,31 +998,17 @@ export function TodosBrowserView({
                             rejectEventStatusMove();
                             return;
                         }
-                        const targetColumnTodos = todos.filter(t => t.status === targetStatus);
+                        const targetColumnTodos = todos.filter(
+                            (todo) => todo.status === targetStatus && todo.id !== activeId
+                        );
                         const overIndexInColumn = targetColumnTodos.findIndex(t => t.id === overId);
-
-                        const updatedActiveTodo = { ...activeTodo, status: targetStatus, order: overIndexInColumn + 1 };
-                        const newColumnTodos = [...targetColumnTodos];
-                        newColumnTodos.splice(overIndexInColumn, 0, updatedActiveTodo);
-
-                        const reorders = newColumnTodos.map((todo, index) => ({
-                            todoId: todo.id,
-                            order: index + 1,
-                        }));
-
-                        setTodos(prev => {
-                            const updated = prev.map(t => {
-                                if (t.id === activeId) {
-                                    return { ...t, status: targetStatus, order: overIndexInColumn + 1 };
-                                }
-                                const reorder = reorders.find(r => r.todoId === t.id);
-                                if (reorder) {
-                                    return { ...t, order: reorder.order };
-                                }
-                                return t;
-                            });
-                            return updated;
+                        const insertIndex = overIndexInColumn === -1 ? targetColumnTodos.length : overIndexInColumn;
+                        const reorderedColumnTodos = [...targetColumnTodos];
+                        reorderedColumnTodos.splice(insertIndex, 0, {
+                            ...activeTodo,
+                            status: targetStatus,
                         });
+                        const reorders = buildTodoReorders(reorderedColumnTodos);
 
                         try {
                             await todosAPI.updateTodo({
@@ -719,6 +1016,7 @@ export function TodosBrowserView({
                                 updates: { status: targetStatus },
                             });
                             await todosAPI.reorderTodos({ reorders });
+                            await loadTodos();
                         } catch (error) {
                             console.error("Failed to move todo:", error);
                             await loadTodos();
@@ -727,29 +1025,18 @@ export function TodosBrowserView({
                 } else {
                     // Same column reorder - only in manual sort mode
                     if (isManualSort && activeIndex !== overIndex) {
-                        const columnTodos = todos.filter(t => getColumnForTodo(t) === activeColumnId);
-                        const reorderedTodos = arrayMove(
-                            columnTodos,
-                            columnTodos.findIndex(t => t.id === activeId),
-                            columnTodos.findIndex(t => t.id === overId)
-                        );
-
-                        const reorders = reorderedTodos.map((todo, index) => ({
-                            todoId: todo.id,
-                            order: index + 1,
-                        }));
-
-                        const newTodos = [...todos];
-                        reorderedTodos.forEach((todo, index) => {
-                            const idx = newTodos.findIndex(t => t.id === todo.id);
-                            if (idx !== -1) {
-                                newTodos[idx] = { ...newTodos[idx], order: index + 1 };
-                            }
-                        });
-                        setTodos(newTodos);
+                        const columnTodos = todos.filter((todo) => getColumnForTodo(todo) === activeColumnId);
+                        const sourceIndex = columnTodos.findIndex((todo) => todo.id === activeId);
+                        const targetIndex = columnTodos.findIndex((todo) => todo.id === overId);
+                        if (sourceIndex === -1 || targetIndex === -1) {
+                            return;
+                        }
+                        const reorderedTodos = arrayMove(columnTodos, sourceIndex, targetIndex);
+                        const reorders = buildTodoReorders(reorderedTodos);
 
                         try {
                             await todosAPI.reorderTodos({ reorders });
+                            await loadTodos();
                         } catch (error) {
                             console.error("Failed to reorder todos:", error);
                             await loadTodos();
@@ -761,7 +1048,7 @@ export function TodosBrowserView({
             console.error("Error in drag end handler:", error);
             await loadTodos();
         }
-    }, [todos, todosAPI, loadTodos, boardConfig, getColumnForTodo, isManualSort, rejectEventStatusMove]);
+    }, [todos, moveTodoToProject, todosAPI, loadTodos, boardConfig, getColumnForTodo, isManualSort, rejectEventStatusMove]);
 
     // Convenience
     // --- Dynamic Columns Logic ---
@@ -791,10 +1078,17 @@ export function TodosBrowserView({
         }
     }, [boardConfig, showLaterColumn]);
 
+    const activeSystemList = useMemo(
+        () => (activeSystemListId ? SYSTEM_LISTS.find((item) => item.id === activeSystemListId) ?? null : null),
+        [activeSystemListId]
+    );
+
+    const effectiveKindFilter = kindFilter ?? activeSystemList?.kindFilter;
+
     const kindScopedTodos = useMemo(() => {
-        if (!kindFilter) return todos;
-        return todos.filter((todo) => todo.kind === kindFilter);
-    }, [todos, kindFilter]);
+        if (!effectiveKindFilter) return todos;
+        return todos.filter((todo) => todo.kind === effectiveKindFilter);
+    }, [todos, effectiveKindFilter]);
 
     const todosByColumn = useMemo(() => {
         // Filter todos using shared pipeline (skip status filter since columns handle it)
@@ -815,7 +1109,7 @@ export function TodosBrowserView({
             }
         });
 
-        // Sort within columns: urgency mode uses urgencyComparator, manual uses order field
+        // Sort within columns: urgency mode uses urgencyComparator, manual uses layout order from API
         if (!isManualSort) {
             for (const colId of Object.keys(grouped)) {
                 grouped[colId].sort(urgencyComparator);
@@ -836,7 +1130,7 @@ export function TodosBrowserView({
     }, [todosByColumn, displayColumns]);
 
     const boardCounts = useMemo(() => {
-        const actionableTodos = kindFilter === "event"
+        const actionableTodos = effectiveKindFilter === "event"
             ? kindScopedTodos
             : kindScopedTodos.filter((todo) => isTaskTodo(todo));
         return {
@@ -845,10 +1139,10 @@ export function TodosBrowserView({
             inProgress: actionableTodos.filter((todo) => todo.status === "in_progress").length,
             done: actionableTodos.filter((todo) => todo.status === "done").length,
         };
-    }, [kindScopedTodos, kindFilter]);
+    }, [kindScopedTodos, effectiveKindFilter]);
 
     const headerStats = useMemo(() => {
-        const entityLabel = kindFilter === "event" ? "events" : "tasks";
+        const entityLabel = effectiveKindFilter === "event" ? "events" : "tasks";
         const stats: Array<{ key: string; label: string; value: number }> = [
             { key: "all", label: entityLabel, value: boardCounts.all },
             { key: "todo", label: "todo", value: boardCounts.todo },
@@ -863,7 +1157,46 @@ export function TodosBrowserView({
         }
 
         return stats;
-    }, [boardCounts, flattenedTodos.length, kindFilter]);
+    }, [boardCounts, flattenedTodos.length, effectiveKindFilter]);
+
+    const sidebarProjects = useMemo(() => {
+        return sidebarProjectGroups.filter((projectName) => projectName !== INBOX_PROJECT_NAME);
+    }, [sidebarProjectGroups]);
+
+    const filterTodosWithCriteria = useCallback(
+        (
+            sourceTodos: Todo[],
+            criteria: TodoFilterCriteria,
+            criteriaKindFilter?: Todo["kind"],
+        ): Todo[] => {
+            const baseState = createDefaultFilterState({
+                ...criteria,
+                searchQuery: "",
+                sortMode: todoFilter.filterState.sortMode,
+            });
+            const filtered = filterAndSortTodos(sourceTodos, baseState);
+            if (!criteriaKindFilter) return filtered;
+            return filtered.filter((todo) => todo.kind === criteriaKindFilter);
+        },
+        [todoFilter.filterState.sortMode],
+    );
+
+    const systemListCounts = useMemo(() => {
+        const counts: Record<SystemListId, number> = {
+            today: 0,
+            upcoming: 0,
+            overdue: 0,
+            no_due: 0,
+            waiting: 0,
+            events: 0,
+        };
+
+        for (const systemList of SYSTEM_LISTS) {
+            counts[systemList.id] = filterTodosWithCriteria(sidebarSourceTodos, systemList.criteria, systemList.kindFilter).length;
+        }
+
+        return counts;
+    }, [filterTodosWithCriteria, sidebarSourceTodos]);
 
     // Get column and index for a given todo
     const getTodoPosition = useCallback((todoId: string | null): { columnId: string; index: number } | null => {
@@ -1000,14 +1333,9 @@ export function TodosBrowserView({
         const newStatus = todo.status === "done" ? "todo" : "done";
 
         // Find target column with matching status (if in custom board mode)
-        // Fall back to last column for "done", first column for everything else
-        const targetColumn = boardConfig?.columns.find(c => c.status === newStatus);
-        const newColumnId = targetColumn?.id
-            ?? (boardConfig
-                ? (newStatus === "done"
-                    ? boardConfig.columns[boardConfig.columns.length - 1].id
-                    : boardConfig.columns[0].id)
-                : undefined);
+        const newColumnId = boardConfig
+            ? getColumnIdForTodo({ status: newStatus }, boardConfig.columns)
+            : undefined;
 
         // Optimistic update
         setTodos(prev => prev.map(t =>
@@ -1135,27 +1463,11 @@ export function TodosBrowserView({
 
         const columnTodos = todosByColumn[pos.columnId];
         const reorderedTodos = arrayMove(columnTodos, pos.index, pos.index - 1);
-
-        // Create reorder updates
-        const reorders = reorderedTodos.map((todo, index) => ({
-            todoId: todo.id,
-            order: index + 1,
-        }));
-
-        // Optimistic update
-        setTodos(prev => {
-            const newTodos = [...prev];
-            reorderedTodos.forEach((todo, index) => {
-                const idx = newTodos.findIndex(t => t.id === todo.id);
-                if (idx !== -1) {
-                    newTodos[idx] = { ...newTodos[idx], order: index + 1 };
-                }
-            });
-            return newTodos;
-        });
+        const reorders = buildTodoReorders(reorderedTodos);
 
         try {
             await todosAPI.reorderTodos({ reorders });
+            await loadTodos();
         } catch (error) {
             console.error("Failed to reorder todos:", error);
             await loadTodos();
@@ -1171,27 +1483,11 @@ export function TodosBrowserView({
         if (pos.index >= columnTodos.length - 1) return; // Can't move down if at bottom
 
         const reorderedTodos = arrayMove(columnTodos, pos.index, pos.index + 1);
-
-        // Create reorder updates
-        const reorders = reorderedTodos.map((todo, index) => ({
-            todoId: todo.id,
-            order: index + 1,
-        }));
-
-        // Optimistic update
-        setTodos(prev => {
-            const newTodos = [...prev];
-            reorderedTodos.forEach((todo, index) => {
-                const idx = newTodos.findIndex(t => t.id === todo.id);
-                if (idx !== -1) {
-                    newTodos[idx] = { ...newTodos[idx], order: index + 1 };
-                }
-            });
-            return newTodos;
-        });
+        const reorders = buildTodoReorders(reorderedTodos);
 
         try {
             await todosAPI.reorderTodos({ reorders });
+            await loadTodos();
         } catch (error) {
             console.error("Failed to reorder todos:", error);
             await loadTodos();
@@ -1213,15 +1509,15 @@ export function TodosBrowserView({
         // Optimistic update
         // Logic depends on column type: legacy status vs custom column
         if (boardConfig) {
-            // Custom mode - change customColumnId and optionally status
-            const newStatus = nextCol.status;
-            if (isEventTodo(selectedTodo) && newStatus && newStatus !== "todo") {
+            // Custom mode - change customColumnId and status (fallback to "todo" for no-status columns)
+            const newStatus = nextCol.status ?? "todo";
+            if (isEventTodo(selectedTodo) && newStatus !== "todo") {
                 rejectEventStatusMove();
                 return;
             }
             setTodos(prev => prev.map(t =>
                 t.id === selectedTodoId
-                    ? { ...t, customColumnId: nextCol.id, ...(newStatus && { status: newStatus }) }
+                    ? { ...t, customColumnId: nextCol.id, status: newStatus }
                     : t
             ));
             try {
@@ -1229,7 +1525,7 @@ export function TodosBrowserView({
                     todoId: selectedTodoId,
                     updates: {
                         customColumnId: nextCol.id,
-                        ...(newStatus && { status: newStatus }),
+                        status: newStatus,
                     },
                 });
             } catch (error) {
@@ -1272,15 +1568,15 @@ export function TodosBrowserView({
 
         // Optimistic update
         if (boardConfig) {
-            // Custom mode - change customColumnId and optionally status
-            const newStatus = prevCol.status;
-            if (isEventTodo(selectedTodo) && newStatus && newStatus !== "todo") {
+            // Custom mode - change customColumnId and status (fallback to "todo" for no-status columns)
+            const newStatus = prevCol.status ?? "todo";
+            if (isEventTodo(selectedTodo) && newStatus !== "todo") {
                 rejectEventStatusMove();
                 return;
             }
             setTodos(prev => prev.map(t =>
                 t.id === selectedTodoId
-                    ? { ...t, customColumnId: prevCol.id, ...(newStatus && { status: newStatus }) }
+                    ? { ...t, customColumnId: prevCol.id, status: newStatus }
                     : t
             ));
             try {
@@ -1288,7 +1584,7 @@ export function TodosBrowserView({
                     todoId: selectedTodoId,
                     updates: {
                         customColumnId: prevCol.id,
-                        ...(newStatus && { status: newStatus }),
+                        status: newStatus,
                     },
                 });
             } catch (error) {
@@ -1695,7 +1991,7 @@ export function TodosBrowserView({
                                 todo={todo}
                                 isOverThis={overId === todo.id && activeId !== todo.id}
                                 isSelected={selectedTodoId === todo.id}
-                                hideProject={!!filterProject}
+                                hideProject={isProjectScopedView}
                             />
                         ))}
                         {safeColumnTodos.length === 0 && (
@@ -1711,10 +2007,278 @@ export function TodosBrowserView({
 
     return (
         <div
-            className="h-full min-h-0 overflow-y-auto"
+            className="h-full min-h-0 overflow-hidden flex"
             style={{ backgroundColor: currentTheme.styles.surfacePrimary, color: currentTheme.styles.contentPrimary }}
         >
-            <div className="mx-auto w-full max-w-[1400px] px-3 pt-3 pb-6 h-full min-h-0 flex flex-col">
+            <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragStart={handleDragStart}
+                onDragCancel={handleDragCancel}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+            >
+                {embedded ? (
+                    <div className="min-w-0 flex-1 overflow-y-auto">
+                        <div className="mx-auto w-full max-w-[1400px] px-3 pt-3 pb-6 h-full min-h-0 flex flex-col">
+                            <div className="shrink-0 flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                        <FileSearch className="size-3" style={{ color: currentTheme.styles.contentTertiary }} />
+                                        <span className="text-xs font-medium uppercase tracking-[0.14em]" style={{ color: currentTheme.styles.contentSecondary }}>
+                                            {isProjectScopedView ? "Project Board" : "Todos Board"}
+                                        </span>
+                                    </div>
+                                    <div className="mt-1 flex items-center gap-2 min-w-0">
+                                        {isProjectScopedView && (
+                                            <span
+                                                className="text-micro px-1.5 py-0.5 rounded uppercase tracking-[0.08em] shrink-0"
+                                                style={{ color: currentTheme.styles.contentSecondary, backgroundColor: currentTheme.styles.surfaceSecondary }}
+                                            >
+                                                project
+                                            </span>
+                                        )}
+                                        <h1 className="text-xl font-semibold truncate" style={{ color: currentTheme.styles.contentPrimary }}>
+                                            {isProjectScopedView ? projectDisplayName : "All Todos"}
+                                        </h1>
+                                    </div>
+                                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                                        {headerStats.map((item) => (
+                                            <span
+                                                key={item.key}
+                                                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-caption font-medium"
+                                                style={{ backgroundColor: currentTheme.styles.surfaceSecondary, color: currentTheme.styles.contentSecondary }}
+                                            >
+                                                <span className="tabular-nums" style={{ color: currentTheme.styles.contentPrimary }}>
+                                                    {item.value}
+                                                </span>
+                                                <span>{item.label}</span>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="ml-auto flex items-center gap-1.5 shrink-0">
+                                    <CreateTodoDialog
+                                        open={createDialogOpen}
+                                        onOpenChange={(open) => {
+                                            setCreateDialogOpen(open);
+                                            if (!open) {
+                                                resetNewTodoDraft();
+                                            }
+                                        }}
+                                        newTodo={newTodo}
+                                        onNewTodoChange={setNewTodo}
+                                        onCreateTodo={createTodo}
+                                        loading={loading}
+                                        projectLocked={isProjectScopedView}
+                                        availableTags={availableTags}
+                                        availableProjects={availableProjects}
+                                        goals={availableGoals}
+                                        triggerLabel="+ new"
+                                        hideTriggerIcon
+                                        triggerVariant="default"
+                                        triggerClassName="h-7 px-2 text-xs font-medium rounded-md"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="shrink-0 mt-2.5">
+                                <TodoFilterToolbar
+                                    filterState={todoFilter.filterState}
+                                    onSearchChange={(query) => {
+                                        clearActiveSidebarListSelection();
+                                        todoFilter.setSearchQuery(query);
+                                    }}
+                                    onSortModeChange={todoFilter.setSortMode}
+                                    onActivatePreset={(preset) => {
+                                        clearActiveSidebarListSelection();
+                                        todoFilter.activatePreset(preset);
+                                    }}
+                                    onFilterChange={(partial) => {
+                                        clearActiveSidebarListSelection();
+                                        if (partial.selectedPriority !== undefined) todoFilter.setSelectedPriority(partial.selectedPriority);
+                                        if (partial.dueFilter !== undefined) todoFilter.setDueFilter(partial.dueFilter);
+                                        if (partial.selectedTags !== undefined) todoFilter.setSelectedTags(partial.selectedTags);
+                                        if (partial.selectedProject !== undefined) todoFilter.setSelectedProject(partial.selectedProject);
+                                    }}
+                                    onClearAllFilters={() => {
+                                        clearActiveSidebarListSelection();
+                                        todoFilter.clearAllFilters();
+                                    }}
+                                    availableTags={availableTags}
+                                    allowedSortModes={["urgency", "manual"]}
+                                    showQuickPresets={false}
+                                    showDueFilter={false}
+                                    activeFilterChips={todoFilter.activeFilterChips}
+                                    hasActiveFilters={todoFilter.hasActiveFilters}
+                                    trailingActions={
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline" size="sm" className="h-7 px-2">
+                                                    <MoreHorizontal className="w-4 h-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={openArchivedView}>
+                                                    <Archive className="w-4 h-4 mr-2" />
+                                                    Open Archived
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    onClick={archiveAllDone}
+                                                    disabled={todos.filter(t => t.status === "done").length === 0}
+                                                >
+                                                    <Archive className="w-4 h-4 mr-2" />
+                                                    Archive All Done ({todos.filter(t => t.status === "done").length})
+                                                </DropdownMenuItem>
+                                                {canonicalFilterProject && (
+                                                    <DropdownMenuItem onClick={() => setBoardSettingsOpen(true)}>
+                                                        <Settings className="w-4 h-4 mr-2" />
+                                                        {boardConfig ? "Board Settings" : "Setup Custom Board"}
+                                                    </DropdownMenuItem>
+                                                )}
+                                                <DropdownMenuItem onClick={toggleShowLaterColumn}>
+                                                    {showLaterColumn ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
+                                                    {showLaterColumn ? "Hide Later Column" : "Show Later Column"}
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    }
+                                />
+                            </div>
+
+                            <div ref={scrollContainerRef} tabIndex={0} className="mt-2.5 flex gap-3 flex-1 min-h-0 overflow-x-auto overflow-y-auto outline-none pb-2">
+                                {displayColumns.map((col) => {
+                                    let Icon = Circle;
+                                    if (col.id === "todo") Icon = AlertCircle;
+                                    else if (col.id === "in_progress") Icon = Clock;
+                                    else if (col.id === "done") Icon = CheckCircle2;
+                                    else if (col.id === "later") Icon = Calendar;
+
+                                    return (
+                                        <KanbanColumn
+                                            key={col.id}
+                                            title={col.title}
+                                            columnId={col.id}
+                                            todos={todosByColumn[col.id] || []}
+                                            icon={<Icon className="w-3.5 h-3.5" style={{ color: currentTheme.styles.contentTertiary }} />}
+                                            onAddTodo={() => {
+                                                if (boardConfig) {
+                                                    openCreateDialogWithStatus(col.status ?? "todo", col.id);
+                                                } else {
+                                                    openCreateDialogWithStatus(col.id as any);
+                                                }
+                                            }}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
+                        <ResizablePanel defaultSize={20} minSize={12} maxSize={35} className="flex flex-col min-h-0" style={{ backgroundColor: currentTheme.styles.surfaceSecondary }}>
+                            <div className="shrink-0 px-3 pt-2.5 pb-1.5">
+                                <div className="px-1 py-0.5 text-[11px] font-semibold tracking-[0.01em]" style={{ color: currentTheme.styles.contentPrimary }}>
+                                    Todos Navigations
+                                </div>
+                                <div className="px-1 text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                                    Views and projects
+                                </div>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto px-0.5 pb-2 space-y-2.5">
+                                <SidebarSection
+                                    title="Groups"
+                                    contentTertiary={currentTheme.styles.contentTertiary}
+                                    borderDefault={currentTheme.styles.borderDefault}
+                                    sectionSurface={currentTheme.styles.surfacePrimary}
+                                >
+                                    <DroppableProjectItem
+                                        groupName={ALL_TODOS_GROUP}
+                                        label="All Todos"
+                                        isSelected={!isProjectScopedView && !activeSystemListId}
+                                        count={sidebarGroupCounts[ALL_TODOS_GROUP] ?? 0}
+                                        onClick={() => handleSelectGroup(ALL_TODOS_GROUP)}
+                                        contentPrimary={currentTheme.styles.contentPrimary}
+                                        contentTertiary={currentTheme.styles.contentTertiary}
+                                        surfaceAccent={currentTheme.styles.surfaceAccent}
+                                        surfaceTertiary={currentTheme.styles.surfaceTertiary}
+                                        borderDefault={currentTheme.styles.borderDefault}
+                                        isDragging={!!draggedTodoId}
+                                    />
+                                    <DroppableProjectItem
+                                        groupName={INBOX_PROJECT_NAME}
+                                        label="Inbox"
+                                        isSelected={canonicalFilterProject === INBOX_PROJECT_NAME && !activeSystemListId}
+                                        count={sidebarGroupCounts[INBOX_PROJECT_NAME] ?? 0}
+                                        onClick={() => handleSelectGroup(INBOX_PROJECT_NAME)}
+                                        contentPrimary={currentTheme.styles.contentPrimary}
+                                        contentTertiary={currentTheme.styles.contentTertiary}
+                                        surfaceAccent={currentTheme.styles.surfaceAccent}
+                                        surfaceTertiary={currentTheme.styles.surfaceTertiary}
+                                        borderDefault={currentTheme.styles.borderDefault}
+                                        isDragging={!!draggedTodoId}
+                                    />
+                                </SidebarSection>
+
+                                <SidebarSection
+                                    title="System Lists"
+                                    contentTertiary={currentTheme.styles.contentTertiary}
+                                    borderDefault={currentTheme.styles.borderDefault}
+                                    sectionSurface={currentTheme.styles.surfacePrimary}
+                                >
+                                    {SYSTEM_LISTS.map((systemList) => (
+                                        <SidebarListItem
+                                            key={systemList.id}
+                                            label={systemList.label}
+                                            isSelected={activeSystemListId === systemList.id}
+                                            count={systemListCounts[systemList.id]}
+                                            onClick={() => handleSelectSystemList(systemList)}
+                                            contentPrimary={currentTheme.styles.contentPrimary}
+                                            contentTertiary={currentTheme.styles.contentTertiary}
+                                            surfaceAccent={currentTheme.styles.surfaceAccent}
+                                            surfaceTertiary={currentTheme.styles.surfaceTertiary}
+                                        />
+                                    ))}
+                                </SidebarSection>
+
+                                <SidebarSection
+                                    title="Projects"
+                                    contentTertiary={currentTheme.styles.contentTertiary}
+                                    borderDefault={currentTheme.styles.borderDefault}
+                                    sectionSurface={currentTheme.styles.surfacePrimary}
+                                >
+                                    {sidebarProjects.map((projectName) => (
+                                        <DroppableProjectItem
+                                            key={projectName}
+                                            groupName={projectName}
+                                            label={projectName}
+                                            isSelected={canonicalFilterProject === projectName && !activeSystemListId}
+                                            count={sidebarGroupCounts[projectName] ?? 0}
+                                            onClick={() => handleSelectGroup(projectName)}
+                                            contentPrimary={currentTheme.styles.contentPrimary}
+                                            contentTertiary={currentTheme.styles.contentTertiary}
+                                            surfaceAccent={currentTheme.styles.surfaceAccent}
+                                            surfaceTertiary={currentTheme.styles.surfaceTertiary}
+                                            borderDefault={currentTheme.styles.borderDefault}
+                                            isDragging={!!draggedTodoId}
+                                        />
+                                    ))}
+                                    {sidebarProjects.length === 0 && (
+                                        <div className="px-3 py-2 text-[10px]" style={{ color: currentTheme.styles.contentTertiary }}>
+                                            no projects yet
+                                        </div>
+                                    )}
+                                </SidebarSection>
+                            </div>
+                        </ResizablePanel>
+
+                        <ResizableHandle withHandle />
+
+                        <ResizablePanel className="flex flex-col min-w-0 min-h-0">
+                            <div className="min-w-0 flex-1 overflow-y-auto">
+                                <div className="mx-auto w-full max-w-[1400px] px-3 pt-3 pb-6 h-full min-h-0 flex flex-col">
                 <div className="shrink-0 flex items-start justify-between gap-2">
                     <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
@@ -1732,9 +2296,9 @@ export function TodosBrowserView({
                                     project
                                 </span>
                             )}
-                            <h1 className="text-xl font-semibold truncate" style={{ color: currentTheme.styles.contentPrimary }}>
-                                {isProjectScopedView ? projectDisplayName : "All Todos"}
-                            </h1>
+                                <h1 className="text-xl font-semibold truncate" style={{ color: currentTheme.styles.contentPrimary }}>
+                                    {isProjectScopedView ? projectDisplayName : "All Todos"}
+                                </h1>
                         </div>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                             {headerStats.map((item) => (
@@ -1753,17 +2317,6 @@ export function TodosBrowserView({
                     </div>
 
                     <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                        {isProjectScopedView && !embedded && (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={goBackToProjects}
-                                className="h-7 px-2 text-xs rounded-md"
-                            >
-                                <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-                                back
-                            </Button>
-                        )}
                         <CreateTodoDialog
                             open={createDialogOpen}
                             onOpenChange={(open) => {
@@ -1776,7 +2329,7 @@ export function TodosBrowserView({
                             onNewTodoChange={setNewTodo}
                             onCreateTodo={createTodo}
                             loading={loading}
-                            projectLocked={!!filterProject}
+                            projectLocked={isProjectScopedView}
                             availableTags={availableTags}
                             availableProjects={availableProjects}
                             goals={availableGoals}
@@ -1791,20 +2344,30 @@ export function TodosBrowserView({
                 <div className="shrink-0 mt-2.5">
                     <TodoFilterToolbar
                         filterState={todoFilter.filterState}
-                        onSearchChange={todoFilter.setSearchQuery}
+                        onSearchChange={(query) => {
+                            clearActiveSidebarListSelection();
+                            todoFilter.setSearchQuery(query);
+                        }}
                         onSortModeChange={todoFilter.setSortMode}
-                        onActivatePreset={todoFilter.activatePreset}
+                        onActivatePreset={(preset) => {
+                            clearActiveSidebarListSelection();
+                            todoFilter.activatePreset(preset);
+                        }}
                         onFilterChange={(partial) => {
+                            clearActiveSidebarListSelection();
                             if (partial.selectedPriority !== undefined) todoFilter.setSelectedPriority(partial.selectedPriority);
                             if (partial.dueFilter !== undefined) todoFilter.setDueFilter(partial.dueFilter);
                             if (partial.selectedTags !== undefined) todoFilter.setSelectedTags(partial.selectedTags);
                             if (partial.selectedProject !== undefined) todoFilter.setSelectedProject(partial.selectedProject);
                         }}
-                        onClearAllFilters={todoFilter.clearAllFilters}
+                        onClearAllFilters={() => {
+                            clearActiveSidebarListSelection();
+                            todoFilter.clearAllFilters();
+                        }}
                         availableTags={availableTags}
                         allowedSortModes={["urgency", "manual"]}
-                        showQuickPresets={!embedded}
-                        showDueFilter={!embedded}
+                        showQuickPresets={false}
+                        showDueFilter={false}
                         activeFilterChips={todoFilter.activeFilterChips}
                         hasActiveFilters={todoFilter.hasActiveFilters}
                         trailingActions={
@@ -1826,7 +2389,7 @@ export function TodosBrowserView({
                                         <Archive className="w-4 h-4 mr-2" />
                                         Archive All Done ({todos.filter(t => t.status === "done").length})
                                     </DropdownMenuItem>
-                                    {filterProject && filterProject !== "" && (
+                                    {canonicalFilterProject && (
                                         <DropdownMenuItem onClick={() => setBoardSettingsOpen(true)}>
                                             <Settings className="w-4 h-4 mr-2" />
                                             {boardConfig ? "Board Settings" : "Setup Custom Board"}
@@ -1843,14 +2406,7 @@ export function TodosBrowserView({
                 </div>
 
                 {/* Kanban Board */}
-                <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
-                    onDragEnd={handleDragEnd}
-                >
-                    <div ref={scrollContainerRef} tabIndex={0} className="mt-2.5 flex gap-3 flex-1 min-h-0 overflow-x-auto overflow-y-auto outline-none pb-2">
+                <div ref={scrollContainerRef} tabIndex={0} className="mt-2.5 flex gap-3 flex-1 min-h-0 overflow-x-auto overflow-y-auto outline-none pb-2">
                         {displayColumns.map((col) => {
                             let Icon = Circle;
                             if (col.id === "todo") Icon = AlertCircle;
@@ -1867,7 +2423,8 @@ export function TodosBrowserView({
                                     icon={<Icon className="w-3.5 h-3.5" style={{ color: currentTheme.styles.contentTertiary }} />}
                                     onAddTodo={() => {
                                         if (boardConfig) {
-                                            openCreateDialogWithStatus("todo", col.id);
+                                            // Use column's actual status (fallback to "todo" for no-status columns)
+                                            openCreateDialogWithStatus(col.status ?? "todo", col.id);
                                         } else {
                                             // Legacy: col.id is the status
                                             openCreateDialogWithStatus(col.id as any);
@@ -1876,29 +2433,34 @@ export function TodosBrowserView({
                                 />
                             );
                         })}
-                    </div>
-                    <DragOverlay>
-                        {draggedTodo ? (
-                            <div className="transform rotate-2 opacity-80">
-                                <TodoCard
-                                    todo={draggedTodo}
-                                    onEdit={() => { }}
-                                    onDelete={() => { }}
-                                    onArchive={() => { }}
-                                    hideProject={!!filterProject}
-                                    hideStatusIcon={true}
-                                />
-                            </div>
-                        ) : null}
-                    </DragOverlay>
-                </DndContext>
+                </div>
             </div>
+                            </div>
+                        </ResizablePanel>
+                    </ResizablePanelGroup>
+                )}
+
+                <DragOverlay>
+                    {draggedTodo ? (
+                        <div className="transform rotate-2 opacity-80">
+                            <TodoCard
+                                todo={draggedTodo}
+                                onEdit={() => { }}
+                                onDelete={() => { }}
+                                onArchive={() => { }}
+                                hideProject={isProjectScopedView}
+                                hideStatusIcon={true}
+                            />
+                        </div>
+                    ) : null}
+                </DragOverlay>
+            </DndContext>
 
             {/* Edit Todo Modal */}
             <TaskCardEditor todo={todoToEdit} open={editDialogOpen} onOpenChange={setEditDialogOpen} onSave={handleSaveTodo} onDelete={deleteTodoWithToast} onToggleCalendarReminder={handleToggleCalendarReminder} saving={editSaving} availableTags={availableTags} availableProjects={availableProjects} goals={availableGoals} />
 
             {/* Board Settings Dialog - Show for project views */}
-            {filterProject && filterProject !== "" && (
+            {canonicalFilterProject && (
                 <BoardSettingsDialog
                     open={boardSettingsOpen}
                     onOpenChange={setBoardSettingsOpen}
@@ -1909,7 +2471,7 @@ export function TodosBrowserView({
                     onSave={async (newConfig) => {
                         try {
                             const savedProject = await todosAPI.saveBoardConfig({
-                                projectName: filterProject,
+                                projectName: canonicalFilterProject,
                                 board: newConfig
                             });
                             setBoardConfig(savedProject.board || null);
@@ -1925,7 +2487,7 @@ export function TodosBrowserView({
                         try {
                             // Backend migration of todos + column deletion
                             await todosAPI.deleteColumn({
-                                projectId: filterProject,
+                                projectId: canonicalFilterProject,
                                 columnId: columnId,
                             });
                             // Refresh todos to see them in new columns
