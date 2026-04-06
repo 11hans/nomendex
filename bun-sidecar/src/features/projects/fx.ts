@@ -12,6 +12,7 @@ import {
     ProjectsFile,
     ProjectsFileSchema,
 } from "./project-types";
+import { INBOX_PROJECT_NAME, isInboxProjectName } from "./inbox-project";
 
 const projectsLogger = createServiceLogger("PROJECTS");
 
@@ -97,6 +98,61 @@ function slugify(name: string): string {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
+}
+
+function asValidationError(message: string, statusCode: number = 400): Error & { statusCode: number } {
+    return Object.assign(new Error(message), { statusCode });
+}
+
+function normalizeProjectNameInput(name: string): string {
+    const trimmed = typeof name === "string" ? name.trim() : "";
+    if (!trimmed) {
+        throw asValidationError("Project name cannot be empty");
+    }
+    if (isInboxProjectName(trimmed)) {
+        return INBOX_PROJECT_NAME;
+    }
+    return trimmed;
+}
+
+function normalizeProjectNameForComparison(name: string): string {
+    const trimmed = typeof name === "string" ? name.trim() : "";
+    if (!trimmed) return "";
+    return isInboxProjectName(trimmed) ? INBOX_PROJECT_NAME : trimmed;
+}
+
+function isSystemInboxProject(projectOrName: Pick<ProjectConfig, "name"> | string): boolean {
+    if (typeof projectOrName === "string") {
+        return isInboxProjectName(projectOrName);
+    }
+    return isInboxProjectName(projectOrName.name);
+}
+
+export function assertInboxMutationAllowed(input: {
+    existingProjectName: string;
+    operation: "rename" | "archive" | "delete";
+    nextProjectName?: string;
+}): void {
+    const isInboxProject = isSystemInboxProject(input.existingProjectName);
+    const normalizedNextName = input.nextProjectName !== undefined
+        ? normalizeProjectNameForComparison(input.nextProjectName)
+        : undefined;
+
+    if (input.operation === "delete" && isInboxProject) {
+        throw asValidationError(`"${INBOX_PROJECT_NAME}" is a reserved system project and cannot be deleted.`, 409);
+    }
+
+    if (input.operation === "archive" && isInboxProject) {
+        throw asValidationError(`"${INBOX_PROJECT_NAME}" is a reserved system project and cannot be archived.`, 409);
+    }
+
+    if (input.operation === "rename" && isInboxProject && normalizedNextName !== INBOX_PROJECT_NAME) {
+        throw asValidationError(`"${INBOX_PROJECT_NAME}" is a reserved system project and cannot be renamed.`, 409);
+    }
+
+    if (input.operation === "rename" && normalizedNextName === INBOX_PROJECT_NAME && !isInboxProject) {
+        throw asValidationError(`"${INBOX_PROJECT_NAME}" is a reserved system project name and cannot be assigned to another project.`, 409);
+    }
 }
 
 function parseFrontMatter(content: string): { frontMatter: FrontMatter; body: string } {
@@ -630,7 +686,7 @@ export async function initializeProjectsService(): Promise<void> {
 
     // Ensure Inbox project exists
     try {
-        await ensureProject({ name: "Inbox" });
+        await ensureProject({ name: INBOX_PROJECT_NAME });
     } catch (e) {
         projectsLogger.error("Failed to default Inbox project", { error: e });
     }
@@ -653,7 +709,11 @@ export async function listProjects(input: {
         projects = projects.filter((project) => !project.archived);
     }
 
-    projects.sort((a, b) => a.name.localeCompare(b.name));
+    projects.sort((a, b) => {
+        if (isSystemInboxProject(a) && !isSystemInboxProject(b)) return -1;
+        if (!isSystemInboxProject(a) && isSystemInboxProject(b)) return 1;
+        return a.name.localeCompare(b.name);
+    });
 
     projectsLogger.info(`Found ${projects.length} projects`);
     return projects;
@@ -680,13 +740,14 @@ export async function getProject(input: { projectId: string }): Promise<ProjectC
  * Get a project by name
  */
 export async function getProjectByName(input: { name: string }): Promise<ProjectConfig | null> {
-    projectsLogger.info(`Getting project by name: ${input.name}`);
+    const normalizedName = normalizeProjectNameInput(input.name);
+    projectsLogger.info(`Getting project by name: ${normalizedName}`);
 
     const data = await readProjectsFile();
-    const project = data.projects.find((candidate) => candidate.name === input.name);
+    const project = data.projects.find((candidate) => normalizeProjectNameForComparison(candidate.name) === normalizedName);
 
     if (!project) {
-        projectsLogger.warn(`Project not found by name: ${input.name}`);
+        projectsLogger.warn(`Project not found by name: ${normalizedName}`);
         return null;
     }
 
@@ -701,17 +762,20 @@ export async function createProject(input: {
     description?: string;
     color?: string;
 }): Promise<ProjectConfig> {
-    projectsLogger.info(`Creating project: ${input.name}`);
+    const normalizedName = normalizeProjectNameInput(input.name);
+    projectsLogger.info(`Creating project: ${normalizedName}`);
 
     const data = await readProjectsFile();
 
-    const existing = data.projects.find((project) => project.name === input.name);
+    const existing = data.projects.find(
+        (project) => normalizeProjectNameForComparison(project.name) === normalizedName
+    );
     if (existing) {
-        throw new Error(`Project with name "${input.name}" already exists`);
+        throw asValidationError(`Project with name "${normalizedName}" already exists`, 409);
     }
 
     const project = await buildProjectRecord({
-        name: input.name,
+        name: normalizedName,
         description: input.description,
         color: input.color,
         projects: data.projects,
@@ -752,26 +816,47 @@ export async function updateProject(input: {
         throw new Error(`Project with ID "${input.projectId}" not found`);
     }
 
-    if (input.updates.name) {
-        const duplicate = data.projects.find(
-            (project) => project.name === input.updates.name && project.id !== input.projectId
-        );
-        if (duplicate) {
-            throw new Error(`Project with name "${input.updates.name}" already exists`);
-        }
-    }
-
     const existingProject = data.projects[index];
     if (!existingProject) {
         throw new Error(`Project with ID "${input.projectId}" not found`);
     }
 
+    const normalizedNameUpdate = input.updates.name !== undefined
+        ? normalizeProjectNameInput(input.updates.name)
+        : undefined;
+
+    if (input.updates.archived === true) {
+        assertInboxMutationAllowed({
+            existingProjectName: existingProject.name,
+            operation: "archive",
+        });
+    }
+    if (normalizedNameUpdate !== undefined) {
+        assertInboxMutationAllowed({
+            existingProjectName: existingProject.name,
+            operation: "rename",
+            nextProjectName: normalizedNameUpdate,
+        });
+    }
+
+    if (normalizedNameUpdate !== undefined) {
+        const duplicate = data.projects.find(
+            (project) => normalizeProjectNameForComparison(project.name) === normalizedNameUpdate && project.id !== input.projectId
+        );
+        if (duplicate) {
+            throw asValidationError(`Project with name "${normalizedNameUpdate}" already exists`, 409);
+        }
+    }
+
     // Build the update payload with goalRef normalized to string | undefined.
     const { goalRef: rawGoalRef, ...otherUpdates } = input.updates;
     const normalizedGoalRef: string | undefined = rawGoalRef ?? undefined;
+    const normalizedOtherUpdates = normalizedNameUpdate !== undefined
+        ? { ...otherUpdates, name: normalizedNameUpdate }
+        : otherUpdates;
     let updatedProject: ProjectConfig = {
         ...existingProject,
-        ...otherUpdates,
+        ...normalizedOtherUpdates,
         ...(goalRefExplicitlySet ? { goalRef: normalizedGoalRef } : {}),
         updatedAt: new Date().toISOString(),
     };
@@ -913,6 +998,10 @@ export async function deleteProject(input: {
     if (!project) {
         throw new Error(`Project with ID "${input.projectId}" not found`);
     }
+    assertInboxMutationAllowed({
+        existingProjectName: project.name,
+        operation: "delete",
+    });
 
     const projectName = project.name;
     const otherProjects = data.projects.filter((candidate) => candidate.id !== project.id);
@@ -966,17 +1055,23 @@ export async function renameProject(input: {
     updatedTodos: number;
     updatedNotes: number;
 }> {
-    projectsLogger.info(`Renaming project: ${input.projectId} to ${input.newName}`);
+    const normalizedNewName = normalizeProjectNameInput(input.newName);
+    projectsLogger.info(`Renaming project: ${input.projectId} to ${normalizedNewName}`);
 
     const currentProject = await getProject({ projectId: input.projectId });
     if (!currentProject) {
         throw new Error(`Project with ID "${input.projectId}" not found`);
     }
+    assertInboxMutationAllowed({
+        existingProjectName: currentProject.name,
+        operation: "rename",
+        nextProjectName: normalizedNewName,
+    });
     const oldName = currentProject.name;
 
     const updatedProject = await updateProject({
         projectId: input.projectId,
-        updates: { name: input.newName },
+        updates: { name: normalizedNewName },
     });
 
     const allTodos = await getTodos({});
@@ -985,11 +1080,11 @@ export async function renameProject(input: {
     for (const todo of projectTodos) {
         await updateTodo({
             todoId: todo.id,
-            updates: { project: input.newName },
+            updates: { project: normalizedNewName },
         });
         updatedTodos++;
     }
-    projectsLogger.info(`Updated ${updatedTodos} todos to new project name: ${input.newName}`);
+    projectsLogger.info(`Updated ${updatedTodos} todos to new project name: ${normalizedNewName}`);
 
     const allNotes = await getNotes({});
     const projectNotes = allNotes.filter((note) => note.frontMatter?.project === oldName);
@@ -997,13 +1092,13 @@ export async function renameProject(input: {
     for (const note of projectNotes) {
         await updateNoteProject({
             fileName: note.fileName,
-            project: input.newName,
+            project: normalizedNewName,
         });
         updatedNotes++;
     }
-    projectsLogger.info(`Updated ${updatedNotes} notes to new project name: ${input.newName}`);
+    projectsLogger.info(`Updated ${updatedNotes} notes to new project name: ${normalizedNewName}`);
 
-    projectsLogger.info(`Renamed project: ${input.projectId} to ${input.newName}`);
+    projectsLogger.info(`Renamed project: ${input.projectId} to ${normalizedNewName}`);
     return { project: updatedProject, updatedTodos, updatedNotes };
 }
 
@@ -1011,14 +1106,15 @@ export async function renameProject(input: {
  * Ensure a project exists by name, creating it if necessary.
  */
 export async function ensureProject(input: { name: string }): Promise<ProjectConfig> {
-    projectsLogger.info(`Ensuring project exists: ${input.name}`);
+    const normalizedName = normalizeProjectNameInput(input.name);
+    projectsLogger.info(`Ensuring project exists: ${normalizedName}`);
 
-    const existing = await getProjectByName({ name: input.name });
+    const existing = await getProjectByName({ name: normalizedName });
     if (existing) {
         return existing;
     }
 
-    return createProject({ name: input.name });
+    return createProject({ name: normalizedName });
 }
 
 /**

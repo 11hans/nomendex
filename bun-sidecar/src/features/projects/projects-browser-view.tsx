@@ -14,6 +14,7 @@ import { CreateProjectDialog } from "./CreateProjectDialog";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { RenameProjectDialog } from "./RenameProjectDialog";
 import { isTaskTodo } from "@/features/todos/todo-kind-utils";
+import { isInboxProjectName } from "./inbox-project";
 
 export function ProjectsBrowserView({ tabId }: { tabId: string }) {
     if (!tabId) {
@@ -59,6 +60,10 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
         });
 
         projectInfos.sort((a, b) => {
+            const inboxA = isInboxProjectName(a.name);
+            const inboxB = isInboxProjectName(b.name);
+            if (inboxA !== inboxB) return inboxA ? -1 : 1;
+
             const activeA = a.inProgressCount + a.todoCount;
             const activeB = b.inProgressCount + b.todoCount;
             if (activeB !== activeA) return activeB - activeA;
@@ -216,6 +221,7 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
             >
                 <BrowserListCard styles={currentTheme.styles}>
                     {filteredProjects.map((project, index) => {
+                        const isSystemInbox = isInboxProjectName(project.name);
                         const totalCount = project.inProgressCount + project.todoCount + project.doneCount;
                         const isSelected = index === selectedIndex;
 
@@ -245,6 +251,18 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
                                         <span className="text-xs truncate">
                                             {project.name}
                                         </span>
+                                        {isSystemInbox && (
+                                            <span
+                                                className="rounded-full px-1.5 py-0.5 text-caption uppercase tracking-[0.08em]"
+                                                style={{
+                                                    backgroundColor: currentTheme.styles.surfaceTertiary,
+                                                    color: currentTheme.styles.contentTertiary,
+                                                }}
+                                                title="System project"
+                                            >
+                                                System
+                                            </span>
+                                        )}
                                     </div>
 
                                     <div className="ml-auto mr-12 flex items-center gap-1 shrink-0">
@@ -311,28 +329,30 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
                                         )}
                                     </div>
                                 </button>
-                                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                        onClick={(event) => handleOpenRename({ id: project.id, name: project.name }, event)}
-                                        className="rounded p-1 transition-colors hover:bg-surface-elevated"
-                                        title="Rename project"
-                                    >
-                                        <Pencil
-                                            className="size-3"
-                                            style={{ color: currentTheme.styles.contentSecondary }}
-                                        />
-                                    </button>
-                                    <button
-                                        onClick={(event) => handleOpenDelete({ id: project.id, name: project.name }, event)}
-                                        className="rounded p-1 transition-colors hover:bg-surface-elevated"
-                                        title="Delete project"
-                                    >
-                                        <Trash2
-                                            className="size-3"
-                                            style={{ color: currentTheme.styles.semanticDestructive }}
-                                        />
-                                    </button>
-                                </div>
+                                {!isSystemInbox && (
+                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                            onClick={(event) => handleOpenRename({ id: project.id, name: project.name }, event)}
+                                            className="rounded p-1 transition-colors hover:bg-surface-elevated"
+                                            title="Rename project"
+                                        >
+                                            <Pencil
+                                                className="size-3"
+                                                style={{ color: currentTheme.styles.contentSecondary }}
+                                            />
+                                        </button>
+                                        <button
+                                            onClick={(event) => handleOpenDelete({ id: project.id, name: project.name }, event)}
+                                            className="rounded p-1 transition-colors hover:bg-surface-elevated"
+                                            title="Delete project"
+                                        >
+                                            <Trash2
+                                                className="size-3"
+                                                style={{ color: currentTheme.styles.semanticDestructive }}
+                                            />
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
