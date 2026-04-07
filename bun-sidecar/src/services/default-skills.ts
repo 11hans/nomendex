@@ -2826,14 +2826,14 @@ If no matches are found:
     files: {
       "SKILL.md": `---
 name: timeblocking
-description: "Create, preview, and re-plan weekly calendar blocks stored as generated event todos (\`kind: event\`, \`source: timeblock-generator\`). Use after weekly review or when the user wants ad-hoc replanning."
-version: 3
+description: "Create, preview, and re-plan weekly calendar blocks. Container blocks use kind:event, concrete single actions use kind:task with scheduledStart/End. Use after weekly review or for ad-hoc replanning."
+version: 4
 source: nomendex
 ---
 
 # Timeblocking Skill
 
-Create, preview, and re-plan weekly calendar blocks stored as generated event todos (\`kind: "event"\`, \`source: "timeblock-generator"\`).
+Create, preview, and re-plan weekly calendar blocks. Container blocks use \`kind: "event"\`, concrete single actions use \`kind: "task"\` with \`scheduledStart\`/\`scheduledEnd\`. Both use \`source: "timeblock-generator"\`.
 
 ## Usage
 
@@ -2848,21 +2848,45 @@ Use this skill when the user wants to:
 
 ## Core Concept
 
-Timeblocks are generated event todos with \`kind: "event"\` and \`source: "timeblock-generator"\`.
+There are two distinct types of generated blocks:
 
-- They are calendar blocks, not actionable tasks.
-- Never mark them as \`done\`.
-- Keep them out of workset snapshots, completion-rate math, and carry-forward.
-- Show them as schedule context first, then discuss changes.
+### 1. Calendar container events (\`kind: "event"\`, \`source: "timeblock-generator"\`)
+
+Used when a block is a named time window that holds multiple tasks or a recurring activity type.
+
+Signals: generic/recurring name — Deep Work, Pohyb, Blok renovace, Evening Review, Admin, etc.
+
+- Never mark as \`done\`.
+- Keep out of workset snapshots, completion-rate math, and carry-forward.
+- Show as schedule context only.
+
+### 2. Scheduled actionable todos (\`kind: "task"\`, \`source: "timeblock-generator"\`, with \`scheduledStart\` + \`scheduledEnd\`)
+
+Used when a block represents exactly one concrete action that will be completed during that slot.
+
+Signals: specific action name — Dokoupit materiál, Zavolat X, Napsat Y, Vyřídit faktury, etc.
+
+- Can be marked \`done\` when the action is completed.
+- Included in completion-rate math and carry-forward.
+- \`status\` starts as \`"todo"\`.
+
+### Decision rule — apply before creating any block
+
+\`\`\`
+IF title = general container or recurring activity type
+  → kind: "event", source: "timeblock-generator"
+ELSE IF title = one specific concrete action
+  → kind: "task", source: "timeblock-generator", scheduledStart, scheduledEnd
+\`\`\`
+
+When uncertain, prefer \`kind: "event"\` and track work on separate actionable todos.
 
 ### Relationship to Actionable Work
 
-Timeblocks are schedule containers, not completion containers.
-
-When a block represents several pieces of work:
-- keep the timeblock as calendar context
-- track completion on separate actionable todos
-- do not collapse several work outcomes into one non-timeblock todo just because the calendar should stay compact
+When a container event block holds several work items:
+- keep the event block as calendar context
+- track completion on separate \`kind: "task"\` todos (not necessarily scheduled)
+- do not collapse multiple outcomes into one non-event todo just for calendar compactness
 
 ## Planning Flow
 
