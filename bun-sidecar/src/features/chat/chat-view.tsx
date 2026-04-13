@@ -54,6 +54,7 @@ import { reconstructMessages, type ChatMessage, type ContentBlock } from "./sess
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { toast } from "sonner";
 import { AgentSelector } from "@/features/agents/agent-selector";
+import { ThinkingSelector } from "@/features/chat/ThinkingSelector";
 import { agentsAPI } from "@/hooks/useAgentsAPI";
 import { QueuedMessagesList } from "./QueuedMessagesList";
 import type { QueuedMessage } from "./index";
@@ -322,6 +323,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
     const [sessionSaved, setSessionSaved] = useState(!!initialSessionId);
     const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
     const [currentAgentId, setCurrentAgentId] = useState<string | undefined>(undefined);
+    const [maxThinkingTokens, setMaxThinkingTokens] = useState<number | undefined>(undefined);
     const [queryTrackingId, setQueryTrackingId] = useState<string | null>(null);
 
     // Message queue state
@@ -625,6 +627,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                     images: imageUrls,
                     sessionId,
                     agentId: currentAgentId,
+                    maxThinkingTokens,
                 }),
             });
 
@@ -1279,6 +1282,11 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                 <AgentSelector
                                     currentAgentId={currentAgentId}
                                     onAgentChange={setCurrentAgentId}
+                                    disabled={isLoading}
+                                />
+                                <ThinkingSelector
+                                    value={maxThinkingTokens}
+                                    onChange={setMaxThinkingTokens}
                                     disabled={isLoading}
                                 />
                                 <ProseMirrorPromptAttach disabled={!!pendingPermission} />

@@ -430,11 +430,12 @@ export const chatRoutes = {
                 const body = await req.json();
                 console.log("[API] Request body:", body);
 
-                const { message, images, sessionId, agentId: requestAgentId } = body as {
+                const { message, images, sessionId, agentId: requestAgentId, maxThinkingTokens } = body as {
                     message: string;
                     images?: string[];
                     sessionId?: string;
                     agentId?: string;
+                    maxThinkingTokens?: number;
                 };
 
                 if (!message && (!images || images.length === 0)) {
@@ -648,6 +649,7 @@ export const chatRoutes = {
                     pathToClaudeCodeExecutable: string;
                     settingSources: Array<"user" | "project">;
                     agents?: Record<string, AgentDefinition>;
+                    maxThinkingTokens?: number;
                 } = {
                     model: agentConfig.model,
                     cwd: targetDir,
@@ -657,6 +659,7 @@ export const chatRoutes = {
                     mcpServers,
                     pathToClaudeCodeExecutable: claudeCliPath,
                     settingSources: ["project"], // Load skills from project .claude/skills/, MCP servers come from mcpServers option
+                    ...(maxThinkingTokens !== undefined && { maxThinkingTokens }),
                 };
 
                 // Build context-aware system prompt
