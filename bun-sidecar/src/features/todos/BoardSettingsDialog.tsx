@@ -35,6 +35,7 @@ interface BoardSettingsDialogProps {
 const STATUS_OPTIONS = [
     { value: "none", label: "No status" },
     { value: "todo", label: "To Do" },
+    { value: "planned", label: "Planned" },
     { value: "in_progress", label: "In Progress" },
     { value: "done", label: "Done" },
     { value: "later", label: "Later" },
@@ -183,7 +184,7 @@ export function BoardSettingsDialog({
     const handleStatusChange = (columnId: string, status: string) => {
         setColumns(columns.map(c =>
             c.id === columnId
-                ? { ...c, status: status === "none" ? undefined : status as "todo" | "in_progress" | "done" | "later" }
+                ? { ...c, status: status === "none" ? undefined : status as "todo" | "planned" | "in_progress" | "done" | "later" }
                 : c
         ));
     };

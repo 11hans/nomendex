@@ -15,6 +15,7 @@ import { getTodoKindLabel, isEventTodo } from "./todo-kind-utils";
 
 const STATUS_OPTIONS = [
     { value: "todo", label: "To Do" },
+    { value: "planned", label: "Planned" },
     { value: "in_progress", label: "In Progress" },
     { value: "done", label: "Done" },
     { value: "later", label: "Later" },

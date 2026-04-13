@@ -1,10 +1,11 @@
 import { useState, useRef } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTheme } from "@/hooks/useTheme";
-import { Circle, Loader2, CheckCircle2, Clock } from "lucide-react";
+import { Circle, Loader2, CheckCircle2, Clock, CalendarCheck } from "lucide-react";
 
 const statusConfig = [
     { value: "todo", label: "Todo", icon: Circle },
+    { value: "planned", label: "Planned", icon: CalendarCheck },
     { value: "in_progress", label: "In Progress", icon: Loader2 },
     { value: "done", label: "Done", icon: CheckCircle2 },
     { value: "later", label: "Later", icon: Clock },

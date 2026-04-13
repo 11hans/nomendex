@@ -76,7 +76,7 @@ Vytvoří nebo aktualizuje dnešní denní záznam.
 **Večerní rutina (5 min):**
 - Aktualizace stavu todos přes `/todos` skill (nastaví `completedAt`)
 - Výpočet completion rate z `completedAt` (NE `updatedAt`) proti rannímu workset snapshotu
-- Ongoing úkoly (`in_progress` mimo ranní workset) se zobrazí zvlášť a nevstupují do completion rate
+- Ongoing úkoly (`in_progress`, `planned` mimo ranní workset) se zobrazí zvlášť a nevstupují do completion rate
 - Jednosměrný reconcile: daily note `[x]` bez protějšku v API → nabídnout zachycení jako ad-hoc
 - Reflexe (paralelně s reconcile)
 - Identifikace zítřejší priority, přesun nedokončených úkolů
@@ -143,7 +143,7 @@ Pro dotazy typu „show today“, „co mám dnes dělat“, „schedule“, „
 
 1. overdue TODO (úkoly s `dueDate` před dneškem)
 2. TODO splatné dnes (úkoly s `dueDate` dnes)
-3. scheduled/in-progress TODO (úkoly s `scheduledStart` zahrnujícím dnešek nebo dříve, plus `in_progress`)
+3. scheduled/in-progress/planned TODO (úkoly s `scheduledStart` zahrnujícím dnešek nebo dříve, plus `in_progress` a `planned`)
 4. Today/Now custom sloupce po načtení reálné board konfigurace
 5. focused project TODO (pokud uživatel jmenuje projekt)
 6. ostatní kandidáti

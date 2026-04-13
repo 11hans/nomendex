@@ -130,10 +130,10 @@ When building "today's work" without an explicitly connected external calendar, 
 1. \`Dnešní rozvrh\`: generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) whose schedule overlaps today; show first as chat-only schedule context
 2. overdue todos (\`dueDate\` before today)
 3. todos due today
-4. single-day todos with \`scheduledStart\` today or already started (include only non-multi-day \`scheduledEnd\` ranges and non-multi-day \`in_progress\`)
+4. single-day todos with \`scheduledStart\` today or already started (include only non-multi-day \`scheduledEnd\` ranges and non-multi-day \`in_progress\` or \`planned\`)
 5. \`Multi-day Context\`: todos whose \`scheduledStart\`/\`scheduledEnd\` are more than 1 local calendar day apart; show separately as context only
 6. open todos in a project's real Today/Now-style column after loading the board config
-7. \`in_progress\` single-day todos not already shown
+7. \`planned\` and \`in_progress\` single-day todos not already shown
 8. open todos for any project the user explicitly names
 
 Present these as separate labeled buckets instead of one mixed list.
@@ -141,6 +141,17 @@ If the user says they want to focus on a specific project, surface that project'
 Treat "calendar" or "schedule" as schedule/calendar queries that rely on \`scheduledStart\`/\`scheduledEnd\`.
 \`Multi-day Context\` is informational and never belongs in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
 \`Dnešní rozvrh\` is chat-only and never gets written into the daily note body.
+
+## Todo Status Semantics
+
+Valid statuses (in lifecycle order): \`todo\` → \`planned\` → \`in_progress\` → \`done\` (plus \`later\` for deferred items).
+- \`todo\`: backlog / not yet committed
+- \`planned\`: committed to, not yet started (use when a task is scoped and decided but work hasn't begun)
+- \`in_progress\`: actively being worked on
+- \`done\`: completed
+- \`later\`: deferred indefinitely
+
+When interpreting user intent, treat \`planned\` as a stronger commitment signal than \`todo\` but not yet active work.
 
 ## Todo Safety Rules
 - **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
@@ -325,7 +336,7 @@ Horizon cascade:
 1. Double-check: compare morning workset snapshot with current API todo states
 2. Present completed vs not-completed in a single batch summary
 3. Ask user to confirm any that should be marked done via API
-4. Propose batch reschedule only for unfinished single-day planned todos (\`scheduledStart\` → tomorrow) after re-fetching each candidate with \`/api/todos/get\` and executing only after user confirms
+4. Propose batch reschedule only for unfinished single-day todos that had a \`scheduledStart\` today (\`scheduledStart\` → tomorrow) after re-fetching each candidate with \`/api/todos/get\` and executing only after user confirms
 5. Calculate completion rate from \`completedAt\` (NOT \`updatedAt\`) against the morning workset snapshot, excluding \`Multi-day Context\`
 6. Classify ongoing and \`Multi-day Context\` separately — they do not affect completion rate or batch reschedule
 7. Reflection prompts

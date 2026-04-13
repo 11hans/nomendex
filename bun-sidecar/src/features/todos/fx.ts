@@ -1014,7 +1014,7 @@ async function createTodo(input: {
     project?: string;
     kind?: TodoKind;
     source?: TodoSource;
-    status?: "todo" | "in_progress" | "done" | "later";
+    status?: "todo" | "planned" | "in_progress" | "done" | "later";
     tags?: string[];
     scheduledStart?: string | null;
     scheduledEnd?: string | null;
@@ -1132,7 +1132,7 @@ async function updateTodo(input: {
         description?: string;
         kind?: TodoKind;
         source?: TodoSource;
-        status?: "todo" | "in_progress" | "done" | "later";
+        status?: "todo" | "planned" | "in_progress" | "done" | "later";
         project?: string;
         archived?: boolean;
         tags?: string[];

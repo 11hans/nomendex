@@ -13,7 +13,7 @@ export const TodoSchema = z.object({
     description: z.string().optional(),
     kind: TodoKindSchema,
     source: TodoSourceSchema,
-    status: z.enum(["todo", "in_progress", "done", "later"]),
+    status: z.enum(["todo", "planned", "in_progress", "done", "later"]),
     customColumnId: z.string().optional(), // ID sloupce z BoardConfig
     createdAt: z.string(),
     updatedAt: z.string(),

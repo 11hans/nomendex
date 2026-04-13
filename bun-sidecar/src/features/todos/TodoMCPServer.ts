@@ -21,6 +21,7 @@ const server = new McpServer({
 
 const STATUS_LABEL: Record<Todo["status"], string> = {
     todo: "To do",
+    planned: "Planned",
     in_progress: "In progress",
     done: "Done",
     later: "Later",
@@ -28,6 +29,7 @@ const STATUS_LABEL: Record<Todo["status"], string> = {
 
 const STATUS_ACCENT: Record<Todo["status"], string> = {
     todo: "var(--content-secondary)",
+    planned: "var(--semantic-warning)",
     in_progress: "var(--semantic-primary)",
     done: "var(--semantic-success)",
     later: "var(--content-tertiary)",
@@ -277,7 +279,7 @@ Format for all date fields: YYYY-MM-DD (all-day) or YYYY-MM-DDTHH:mm (with time)
             updates: z.object({
                 title: z.string().optional(),
                 description: z.string().optional(),
-                status: z.enum(["todo", "in_progress", "done", "later"]).optional(),
+                status: z.enum(["todo", "planned", "in_progress", "done", "later"]).optional(),
                 project: z.string().optional(),
                 scheduledStart: z.string().nullable().optional(),
                 scheduledEnd: z.string().nullable().optional(),

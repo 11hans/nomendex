@@ -31,7 +31,7 @@ interface BoardColumn {
     id: string;           // Unique identifier (e.g., "col-this-week")
     title: string;        // Display name (e.g., "This Week")
     order: number;        // Position left-to-right (1, 2, 3...)
-    status?: "todo" | "in_progress" | "done" | "later";  // Auto-set on drop
+    status?: "todo" | "planned" | "in_progress" | "done" | "later";  // Auto-set on drop
 }
 ```
 

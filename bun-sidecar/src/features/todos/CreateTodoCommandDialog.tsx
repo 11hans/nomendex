@@ -33,7 +33,7 @@ export function CreateTodoCommandDialog({ onSuccess }: CreateTodoCommandDialogPr
     const [project, setProject] = useState("");
     const [kind, setKind] = useState<TodoKind>("task");
     const [source, setSource] = useState<TodoSource>("user");
-    const [status, setStatus] = useState<"todo" | "in_progress" | "done" | "later">("todo");
+    const [status, setStatus] = useState<"todo" | "planned" | "in_progress" | "done" | "later">("todo");
     const [tags, setTags] = useState<string[]>([]);
     const [isCreating, setIsCreating] = useState(false);
 

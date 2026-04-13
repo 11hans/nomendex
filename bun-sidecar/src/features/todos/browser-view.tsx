@@ -308,7 +308,7 @@ export function TodosBrowserView({
         project: string;
         kind: Todo["kind"];
         source: Todo["source"];
-        status: "todo" | "in_progress" | "done" | "later";
+        status: "todo" | "planned" | "in_progress" | "done" | "later";
         tags: string[];
         scheduledStart?: string;
         scheduledEnd?: string;
@@ -361,7 +361,7 @@ export function TodosBrowserView({
     const [selectedTodoId, setSelectedTodoId] = useState<string | null>(initialSelectedTodoId ?? null);
 
     // Helper to open create dialog with specific status OR column
-    const openCreateDialogWithStatus = useCallback((status: "todo" | "in_progress" | "done" | "later", columnId?: string) => {
+    const openCreateDialogWithStatus = useCallback((status: "todo" | "planned" | "in_progress" | "done" | "later", columnId?: string) => {
         setNewTodo(prev => ({
             ...prev,
             kind: status === "todo" ? prev.kind : "task",
@@ -929,7 +929,7 @@ export function TodosBrowserView({
                     }
                 } else {
                     // Legacy mode - update status
-                    const newStatus = newColumnId as "todo" | "in_progress" | "done" | "later";
+                    const newStatus = newColumnId as "todo" | "planned" | "in_progress" | "done" | "later";
                     if (newStatus !== activeTodo.status) {
                         const targetStatusTodos = todos.filter(
                             (todo) => todo.status === newStatus && todo.id !== activeId
@@ -1555,7 +1555,7 @@ export function TodosBrowserView({
             }
         } else {
             // Legacy mode - change status
-            const newStatus = nextCol.id as "todo" | "in_progress" | "done" | "later";
+            const newStatus = nextCol.id as "todo" | "planned" | "in_progress" | "done" | "later";
             if (isEventTodo(selectedTodo) && newStatus !== "todo") {
                 rejectEventStatusMove();
                 return;
@@ -1614,7 +1614,7 @@ export function TodosBrowserView({
             }
         } else {
             // Legacy mode - change status
-            const newStatus = prevCol.id as "todo" | "in_progress" | "done" | "later";
+            const newStatus = prevCol.id as "todo" | "planned" | "in_progress" | "done" | "later";
             if (isEventTodo(selectedTodo) && newStatus !== "todo") {
                 rejectEventStatusMove();
                 return;

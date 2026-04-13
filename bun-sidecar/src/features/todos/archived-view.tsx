@@ -124,7 +124,7 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
         deps: [loadTodos]
     });
 
-    const updateTodoStatus = useCallback(async (todoId: string, status: "todo" | "in_progress" | "done" | "later") => {
+    const updateTodoStatus = useCallback(async (todoId: string, status: "todo" | "planned" | "in_progress" | "done" | "later") => {
         try {
             await todosAPI.updateTodo({
                 todoId,
@@ -302,7 +302,7 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
         // Determine if this is a cross-column drop or same-column reorder
         if (overId.startsWith('column-')) {
             // Cross-column drop - change status
-            const newStatus = overId.replace('column-', '') as "todo" | "in_progress" | "done" | "later";
+            const newStatus = overId.replace('column-', '') as "todo" | "planned" | "in_progress" | "done" | "later";
             if (newStatus !== activeTodo.status) {
                 await updateTodoStatus(activeId, newStatus);
             }
@@ -411,7 +411,7 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
         icon,
     }: {
         title: string;
-        status: "todo" | "in_progress" | "done" | "later";
+        status: "todo" | "planned" | "in_progress" | "done" | "later";
         todos: Todo[];
         icon: React.ReactNode;
     }) {

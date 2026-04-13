@@ -5,7 +5,7 @@ export const BoardColumnSchema = z.object({
     id: z.string(),
     title: z.string(),
     order: z.number(),
-    status: z.enum(["todo", "in_progress", "done", "later"]).optional(), // Maps column to default status
+    status: z.enum(["todo", "planned", "in_progress", "done", "later"]).optional(), // Maps column to default status
 });
 export type BoardColumn = z.infer<typeof BoardColumnSchema>;
 

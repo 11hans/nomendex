@@ -26,7 +26,7 @@ import { applyTimeblockingPlan, previewTimeblockingPlan } from "@/features/timeb
 import { addTodoSSEClient, broadcastTodoEvent, type TodoEvent } from "@/services/todo-events";
 import { TodoKindSchema, TodoSourceSchema } from "@/features/todos/todo-types";
 
-const TodoStatusSchema = z.enum(["todo", "in_progress", "done", "later"]);
+const TodoStatusSchema = z.enum(["todo", "planned", "in_progress", "done", "later"]);
 const PrioritySchema = z.enum(["high", "medium", "low", "none"]);
 const CalendarReminderPresetSchema = z.enum(["30-15", "none"]);
 const nullToUndefined = (value: unknown) => value === null ? undefined : value;

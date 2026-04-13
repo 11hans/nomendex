@@ -386,7 +386,7 @@ export function InboxListView() {
         project: string;
         kind: Todo["kind"];
         source: Todo["source"];
-        status: "todo" | "in_progress" | "done" | "later";
+        status: "todo" | "planned" | "in_progress" | "done" | "later";
         tags: string[];
         scheduledStart?: string;
         scheduledEnd?: string;
