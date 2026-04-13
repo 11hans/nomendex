@@ -388,6 +388,23 @@ export function TodosBrowserView({
         todoFilter.applyFilterCriteria(externalFilterCriteria, { clearSearch: true });
     }, [externalFilterCriteria, todoFilter.applyFilterCriteria]);
 
+    // On mount: if the persisted filter state matches a system list (e.g. after navigation
+    // replaced the tab and reset activeSystemListId), restore activeSystemListId so the
+    // sidebar correctly highlights the active list and the user understands why todos are filtered.
+    useEffect(() => {
+        const { dueFilter, selectedTags, selectedPriority, quickPreset } = todoFilter.filterState;
+        const match = SYSTEM_LISTS.find((list) =>
+            list.criteria.dueFilter === dueFilter &&
+            list.criteria.selectedPriority === selectedPriority &&
+            list.criteria.quickPreset === quickPreset &&
+            JSON.stringify(list.criteria.selectedTags) === JSON.stringify(selectedTags)
+        );
+        if (match) {
+            setActiveSystemListId(match.id);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Intentionally run only once on mount
+
     const applyListCriteria = useCallback(
         (criteria: TodoFilterCriteria) => {
             todoFilter.applyFilterCriteria(criteria, { clearSearch: true });
@@ -745,13 +762,17 @@ export function TodosBrowserView({
     }, [activeTabId, canonicalFilterProject, openTab, replaceTabWithNewView]);
 
     const handleSelectGroup = useCallback((groupName: string) => {
+        // If leaving a system list, clear the persisted filter criteria it set
+        if (activeSystemListId !== null) {
+            todoFilter.clearAllFilters();
+        }
         setActiveSystemListId(null);
         if (groupName === ALL_TODOS_GROUP) {
             switchProjectBoard();
             return;
         }
         switchProjectBoard(groupName);
-    }, [switchProjectBoard]);
+    }, [activeSystemListId, switchProjectBoard, todoFilter]);
 
     const handleSelectSystemList = useCallback((systemList: SystemListDefinition) => {
         setActiveSystemListId(systemList.id);

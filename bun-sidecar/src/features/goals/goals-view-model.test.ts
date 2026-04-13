@@ -1,0 +1,132 @@
+import { describe, expect, test } from "bun:test";
+import type { GoalRecord } from "./goal-types";
+import type { GoalForestNodeView } from "./goals-view-types";
+import { buildGoalsBrowserViewModel, computeAttentionReasons, goalMatchesSearch } from "./goals-view-model";
+
+function makeGoal(overrides: Partial<GoalRecord> & Pick<GoalRecord, "id">): GoalRecord {
+    const { id, ...rest } = overrides;
+    return {
+        id,
+        title: "Goal",
+        area: "Area",
+        horizon: "monthly",
+        status: "active",
+        progressMode: "rollup",
+        createdAt: "2026-01-01T00:00:00Z",
+        updatedAt: "2026-01-01T00:00:00Z",
+        ...rest,
+    } as GoalRecord;
+}
+
+function makeNode(
+    goal: GoalRecord,
+    overrides: Partial<Omit<GoalForestNodeView, "goal" | "children">> = {},
+): GoalForestNodeView {
+    return {
+        goal,
+        children: [],
+        linkedProjects: [],
+        linkedProjectCount: 0,
+        linkedTodoCount: 0,
+        openTodoCount: 0,
+        doneTodoCount: 0,
+        computedProgress: 0,
+        ...overrides,
+    };
+}
+
+describe("goals-view-model", () => {
+    test("computes attention reasons for active goals", () => {
+        const now = new Date("2026-04-01T00:00:00Z");
+        const goal = makeGoal({
+            id: "goal-1",
+            updatedAt: "2026-03-10T00:00:00Z",
+            status: "active",
+        });
+
+        const reasons = computeAttentionReasons(
+            {
+                goal,
+                computedProgress: 85,
+                linkedProjectCount: 0,
+                openTodoCount: 0,
+            },
+            now,
+        );
+
+        expect(reasons).toContain("without_project");
+        expect(reasons).toContain("without_next_action");
+        expect(reasons).toContain("stale");
+        expect(reasons).toContain("nearly_complete");
+    });
+
+    test("does not compute attention reasons for non-active goals", () => {
+        const goal = makeGoal({
+            id: "goal-2",
+            status: "completed",
+            updatedAt: "2025-01-01T00:00:00Z",
+        });
+
+        const reasons = computeAttentionReasons({
+            goal,
+            computedProgress: 90,
+            linkedProjectCount: 0,
+            openTodoCount: 0,
+        });
+
+        expect(reasons).toEqual([]);
+    });
+
+    test("builds summary and groups in horizon order", () => {
+        const visionGoal = makeGoal({
+            id: "g-vision",
+            title: "Vision",
+            horizon: "vision",
+            area: "A",
+            updatedAt: "2026-02-01T00:00:00Z",
+        });
+        const forest = [
+            makeNode(makeGoal({ id: "g-month", title: "Monthly", horizon: "monthly", area: "B", updatedAt: "2026-03-30T00:00:00Z" }), {
+                linkedProjectCount: 1,
+                openTodoCount: 1,
+            }),
+            makeNode(visionGoal, {
+                linkedProjectCount: 0,
+                openTodoCount: 0,
+                computedProgress: 82,
+            }),
+            makeNode(makeGoal({ id: "g-quarter", title: "Quarter", horizon: "quarterly", area: "A", updatedAt: "2026-03-30T00:00:00Z" }), {
+                linkedProjectCount: 1,
+                openTodoCount: 0,
+            }),
+            makeNode(makeGoal({ id: "g-year", title: "Year", horizon: "yearly", area: "A", updatedAt: "2026-03-30T00:00:00Z" }), {
+                linkedProjectCount: 1,
+                openTodoCount: 1,
+            }),
+        ];
+
+        const viewModel = buildGoalsBrowserViewModel(forest, "", "all", new Date("2026-04-01T00:00:00Z"));
+
+        expect(viewModel.groups.map((group) => group.label)).toEqual(["Vision", "Yearly", "Quarterly", "Monthly"]);
+        expect(viewModel.summary.active).toBe(4);
+        expect(viewModel.summary.withoutProject).toBe(1);
+        expect(viewModel.summary.withoutNextAction).toBe(2);
+        expect(viewModel.summary.needsAttention).toBe(2);
+    });
+
+    test("search matches title and area case-insensitively", () => {
+        const goalCareer = makeGoal({ id: "career", title: "Launch Nomendex", area: "Career", horizon: "yearly" });
+        const goalHealth = makeGoal({ id: "health", title: "Train Daily", area: "Health", horizon: "monthly" });
+        const forest = [
+            makeNode(goalCareer, { linkedProjectCount: 1, openTodoCount: 1 }),
+            makeNode(goalHealth, { linkedProjectCount: 1, openTodoCount: 1 }),
+        ];
+
+        const byTitle = buildGoalsBrowserViewModel(forest, "nomendex");
+        const byArea = buildGoalsBrowserViewModel(forest, "HEALTH");
+
+        expect(byTitle.filteredRows.map((row) => row.goal.id)).toEqual(["career"]);
+        expect(byArea.filteredRows.map((row) => row.goal.id)).toEqual(["health"]);
+        expect(goalMatchesSearch(byArea.filteredRows[0]!, "health")).toBe(true);
+    });
+});

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Settings, GitBranch, Bot, HelpCircle, Inbox, Loader2, RefreshCw } from "lucide-react";
 import { Separator } from "./ui/separator";
 import { baseRegistry } from "@/registry/registry";
@@ -45,6 +45,19 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export function WorkspaceSidebar() {
     const plugins = Object.values(baseRegistry);
+    const orderedViewPlugins = useMemo(() => {
+        const pluginsById = new Map(plugins.map((plugin) => [plugin.id, plugin] as const));
+        const orderedIds = ["goals", "projects", "todos", "notes", "uploads", "tags", "memory"];
+
+        const ordered = orderedIds
+            .map((pluginId) => pluginsById.get(pluginId))
+            .filter((plugin): plugin is (typeof plugins)[number] => Boolean(plugin));
+
+        const orderedSet = new Set(orderedIds);
+        const remaining = plugins.filter((plugin) => !orderedSet.has(plugin.id) && plugin.id !== "chat");
+        return [...ordered, ...remaining];
+    }, [plugins]);
+
     const { openTab, activeTab } = useWorkspaceContext();
     const { sync, status: syncStatus, isReady } = useGHSync();
     const { navigate, currentPath } = useRouting();
@@ -61,7 +74,7 @@ export function WorkspaceSidebar() {
         if (currentPath != "/") {
             navigate("/");
         }
-        const view = plugin.id === "todos" || plugin.id === "projects"
+        const view = plugin.id === "todos" || plugin.id === "projects" || plugin.id === "goals"
             ? "browser"
             : "default";
         openTab({ pluginMeta: plugin, view, props: {} });
@@ -107,7 +120,7 @@ export function WorkspaceSidebar() {
                     isActive={isWorkspaceView && activePluginId === "todos" && activeViewId === "inbox"}
                     onClick={handleOpenInbox}
                 />
-                {plugins.filter(p => p.id !== 'chat').map((plugin) => {
+                {orderedViewPlugins.map((plugin) => {
                     const IconComponent = getIcon(plugin.icon);
                     const isPluginActive = plugin.id === "todos"
                         ? isWorkspaceView && activePluginId === "todos" && activeViewId !== "inbox"

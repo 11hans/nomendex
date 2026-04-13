@@ -6,6 +6,7 @@ import { UploadsPluginBase } from "@/features/uploads";
 import { TagsPluginBase } from "@/features/tags";
 import { ProjectsPluginBase } from "@/features/projects";
 import { MemoryPluginBase } from "@/features/memory";
+import { GoalsPluginBase } from "@/features/goals/plugin";
 
 // Registry of built-in features (simplified from plugin system)
 export const baseRegistry = {
@@ -14,6 +15,7 @@ export const baseRegistry = {
     uploads: UploadsPluginBase,
     chat: ChatPluginBase,
     tags: TagsPluginBase,
+    goals: GoalsPluginBase,
     projects: ProjectsPluginBase,
     memory: MemoryPluginBase,
 } as const;

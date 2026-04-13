@@ -7,7 +7,7 @@ Nomendex is a native macOS desktop app for managing **notes**, **tasks**, **AI c
 ## Quick Start
 
 1. **Launch the app** — on first run you'll be prompted to choose a workspace folder
-2. **Explore the sidebar** — switch between workspace views such as Inbox, Notes, Todos, Projects, Memory, Agents, Chat, Sync, Settings, and Help
+2. **Explore the sidebar** — switch between workspace views such as Inbox, Goals, Notes, Todos, Projects, Memory, Agents, Chat, Sync, Settings, and Help
 3. **Use tabs** — keep multiple notes, tasks, and views open at once
 4. **Press `⌘K`** — open the command palette for quick actions
 
@@ -128,6 +128,36 @@ Inbox is a **task triage workspace** rather than a flat capture list.
 - **Quick capture** — tasks created from Inbox default to the `"Inbox"` project
 - **Drag and drop** — move a task onto another group to reassign its project
 - **Context-aware create dialog** — when you create from a specific group, the project is preselected and locked
+
+---
+
+## 🎯 Goals
+
+Goals is a **strategic workspace layer** for answering:
+- why this work matters (goal)
+- which project supports it
+- what next action exists now
+
+### Goals Browser (Home)
+
+The Goals browser acts as a hybrid home screen:
+- **Summary strip** — Active, Needs attention, Without project, Without next action
+- **Attention block** — goals that are missing project linkage, missing next actions, or stale
+- **Horizon grouping** — Vision, Yearly, Quarterly, Monthly
+- **Search** — by goal title or area
+
+### Goal Detail
+
+Goal detail provides:
+- goal header with status, horizon, area, and computed progress
+- parent and child goal navigation
+- linked projects and linked todos
+- quick actions:
+  - open linked project detail
+  - open todo context in Todos browser
+  - open mirror note when available
+
+> **Note:** Current version is read-first. Full inline goal editing is not part of this V1 UI.
 
 ---
 

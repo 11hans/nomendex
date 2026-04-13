@@ -9,9 +9,9 @@ import { emit } from "@/lib/events";
 // Helper to generate unique IDs
 const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-const BROWSER_EQUIVALENT_PLUGINS = new Set(["notes", "chat", "tags", "projects", "uploads"]);
+const BROWSER_EQUIVALENT_PLUGINS = new Set(["notes", "chat", "tags", "projects", "uploads", "goals"]);
 
-function areViewsEquivalent(pluginId: string, leftView: string, rightView: string): boolean {
+export function areViewsEquivalent(pluginId: string, leftView: string, rightView: string): boolean {
     if (leftView === rightView) {
         return true;
     }

@@ -2,6 +2,9 @@
 
 This document describes the Typed Goal Graph architecture — a structured data layer for goals that serves as the source of truth for the goal-project-todo cascade.
 
+For the workspace UI layer (`Goals Browser` + `Goal Detail`), see [goals-workspace-v1.md](./goals-workspace-v1.md).
+For API-shape rationale (`forest summary` vs `graph detail`), see [goals-forest-vs-graph.md](../internal/goals-forest-vs-graph.md).
+
 ## Motivation
 
 Goals were previously stored only as markdown files (`Goals/*.md`) with checkbox lists. This made it impossible to:
@@ -135,8 +138,21 @@ All endpoints are `POST` with JSON body.
 | Endpoint | Input | Output |
 |----------|-------|--------|
 | `/api/goals/graph` | `{ goalId }` | `{ goal, childGoals, linkedProjects, linkedTodos, computedProgress }` |
+| `/api/goals/graph/forest` | `{}` | `GoalTreeNode[]` with summary counts for browser/home views |
 
 Returns the full graph for a goal: child goals, projects with matching `goalRef`, todos with matching `resolvedGoalRefs`, and computed progress per `progressMode`.
+
+Forest endpoint (`/graph/forest`) returns the nested tree used by the Goals browser/home view. Each node includes:
+- `goal`
+- `children`
+- `linkedProjects`
+- `linkedProjectCount`
+- `linkedTodoCount`
+- `openTodoCount` (`task` todos only, statuses: `todo|in_progress|later`)
+- `doneTodoCount` (`task` todos only, status: `done`)
+- `computedProgress`
+
+This response shape is additive and backward-compatible with earlier forest consumers.
 
 ### Mirror Sync
 
@@ -320,9 +336,15 @@ The BPagent system prompt (`built-in-bpagent.ts`) includes:
 | `features/goals/goal-types.ts` | Zod schemas for GoalRecord with discriminated union |
 | `features/goals/fx.ts` | CRUD + goal graph query with rollup computation |
 | `features/goals/index.ts` | Re-exports |
+| `features/goals/plugin.ts` | Goals plugin entrypoint for workspace integration |
+| `features/goals/goals-browser-view.tsx` | Hybrid Goals home/browser view |
+| `features/goals/goal-detail-view.tsx` | Goal detail view with project/todo/note actions |
+| `features/goals/goals-view-model.ts` | Browser helper logic (attention, grouping, search, summary) |
+| `features/goals/goals-view-types.ts` | Shared frontend contracts for forest/detail responses |
 | `features/goals/migration.ts` | Legacy markdown → GoalRecord migration |
 | `features/goals/mirror-sync.ts` | Bidirectional mirror sync engine |
 | `server-routes/goals-routes.ts` | API route handlers |
+| `hooks/useGoalsAPI.ts` | Frontend hook for list/get/forest/graph goals endpoints |
 | `features/projects/project-types.ts` | ProjectConfig with `goalRef` |
 | `features/todos/todo-types.ts` | Todo with `goalRefs` + `resolvedGoalRefs` |
 | `features/todos/fx.ts` | resolvedGoalRefs computation logic |

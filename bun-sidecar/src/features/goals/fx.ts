@@ -3,6 +3,7 @@ import { FileDatabase } from "@/storage/FileDatabase";
 import { getGoalsPath, hasActiveWorkspace } from "@/storage/root-path";
 import { GoalRecord, GoalRecordSchema } from "./goal-types";
 import type { Todo } from "@/features/todos/todo-types";
+import { isTaskTodo } from "@/features/todos/todo-kind-utils";
 import type { ProjectConfig } from "@/features/projects/project-types";
 
 const goalsLogger = createServiceLogger("GOALS");
@@ -299,8 +300,88 @@ export type GoalTreeNode = {
     goal: GoalRecord;
     children: GoalTreeNode[];
     linkedProjects: ProjectConfig[];
+    linkedProjectCount: number;
+    linkedTodoCount: number;
+    openTodoCount: number;
+    doneTodoCount: number;
     computedProgress: number;
 };
+
+const ROOT_PARENT_KEY = "__root__";
+const OPEN_TODO_STATUSES = new Set<Todo["status"]>(["todo", "in_progress", "later"]);
+
+/**
+ * Build goal forest nodes with indexed lookups.
+ * Exported for unit tests.
+ */
+export function buildGoalForestNodes(input: {
+    allGoals: GoalRecord[];
+    allProjects: ProjectConfig[];
+    allTodos: Todo[];
+}): GoalTreeNode[] {
+    const goalsByParent = new Map<string, GoalRecord[]>();
+    for (const goal of input.allGoals) {
+        const key = goal.parentGoalId ?? ROOT_PARENT_KEY;
+        const existing = goalsByParent.get(key);
+        if (existing) {
+            existing.push(goal);
+        } else {
+            goalsByParent.set(key, [goal]);
+        }
+    }
+
+    const projectsByGoalId = new Map<string, ProjectConfig[]>();
+    for (const project of input.allProjects) {
+        if (!project.goalRef) continue;
+        const existing = projectsByGoalId.get(project.goalRef);
+        if (existing) {
+            existing.push(project);
+        } else {
+            projectsByGoalId.set(project.goalRef, [project]);
+        }
+    }
+
+    const todosByGoalId = new Map<string, Todo[]>();
+    for (const todo of input.allTodos) {
+        const goalRefs = todo.resolvedGoalRefs ?? [];
+        for (const goalId of goalRefs) {
+            const existing = todosByGoalId.get(goalId);
+            if (existing) {
+                existing.push(todo);
+            } else {
+                todosByGoalId.set(goalId, [todo]);
+            }
+        }
+    }
+
+    function buildNode(goal: GoalRecord): GoalTreeNode {
+        const childGoals = goalsByParent.get(goal.id) ?? [];
+        const children = childGoals.map(buildNode);
+        const linkedProjects = projectsByGoalId.get(goal.id) ?? [];
+        const linkedTodos = todosByGoalId.get(goal.id) ?? [];
+        const taskTodos = linkedTodos.filter((todo) => isTaskTodo(todo));
+        const openTaskTodos = taskTodos.filter((todo) => OPEN_TODO_STATUSES.has(todo.status));
+        const doneTaskTodos = taskTodos.filter((todo) => todo.status === "done");
+
+        return {
+            goal,
+            children,
+            linkedProjects,
+            linkedProjectCount: linkedProjects.length,
+            linkedTodoCount: linkedTodos.length,
+            openTodoCount: openTaskTodos.length,
+            doneTodoCount: doneTaskTodos.length,
+            computedProgress: computeGoalProgress(
+                goal,
+                children.map((node) => ({ ...node.goal, _computedProgress: node.computedProgress } as GoalRecord & { _computedProgress: number })),
+                linkedTodos,
+            ),
+        };
+    }
+
+    const roots = goalsByParent.get(ROOT_PARENT_KEY) ?? [];
+    return roots.map(buildNode);
+}
 
 /**
  * Get the full goal forest: all goals as a nested tree with progress.
@@ -321,26 +402,11 @@ export async function getGoalForest(): Promise<GoalTreeNode[]> {
         allTodos = await getTodos({});
     } catch { /* todos optional */ }
 
-    function buildNode(goal: GoalRecord): GoalTreeNode {
-        const children = allGoals
-            .filter(g => g.parentGoalId === goal.id)
-            .map(buildNode);
-        const linkedProjects = allProjects.filter(p => p.goalRef === goal.id);
-        const linkedTodos = allTodos.filter(t => t.resolvedGoalRefs?.includes(goal.id));
-        return {
-            goal,
-            children,
-            linkedProjects,
-            computedProgress: computeGoalProgress(
-                goal,
-                children.map(n => ({ ...n.goal, _computedProgress: n.computedProgress } as GoalRecord & { _computedProgress: number })),
-                linkedTodos,
-            ),
-        };
-    }
-
-    const roots = allGoals.filter(g => !g.parentGoalId);
-    return roots.map(buildNode);
+    return buildGoalForestNodes({
+        allGoals,
+        allProjects,
+        allTodos,
+    });
 }
 
 /**
