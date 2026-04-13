@@ -1978,7 +1978,7 @@ export function TodosBrowserView({
                 }}
             >
                 <div
-                    className="sticky top-0 z-10 flex items-center gap-1.5 flex-shrink-0 group cursor-pointer rounded-t-lg px-1.5 py-1 transition-colors"
+                    className="sticky top-0 z-10 flex items-center gap-1.5 flex-shrink-0 group cursor-pointer rounded-t-lg px-1.5 py-1 transition-colors shadow-[0_2px_4px_-1px_rgba(0,0,0,0.15)]"
                     onMouseEnter={() => setHeaderHovered(true)}
                     onMouseLeave={() => setHeaderHovered(false)}
                     onClick={onAddTodo}
@@ -2008,7 +2008,7 @@ export function TodosBrowserView({
                     </button>
                 </div>
                 <SortableContext items={safeColumnTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-2 py-3 px-1.5">
+                    <div className="space-y-2 py-3 px-1.5 flex-1 min-h-0 overflow-y-auto">
                         {safeColumnTodos.map((todo) => (
                             <SortableTodoCard
                                 key={todo.id}
