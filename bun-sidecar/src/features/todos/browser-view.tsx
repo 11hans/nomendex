@@ -1969,13 +1969,23 @@ export function TodosBrowserView({
         const safeColumnTodos = Array.isArray(columnTodos) ? columnTodos : [];
 
         return (
-            <div className="flex-1 min-w-0 flex flex-col">
+            <div
+                ref={setNodeRef}
+                className="flex-1 min-w-0 flex flex-col rounded-lg transition-colors border"
+                style={{
+                    borderColor: isOver ? currentTheme.styles.surfaceAccent : currentTheme.styles.borderDefault,
+                    backgroundColor: currentTheme.styles.surfaceSecondary,
+                }}
+            >
                 <div
-                    className="flex items-center gap-1.5 mb-2.5 flex-shrink-0 group cursor-pointer rounded-md px-1.5 py-1 transition-colors"
+                    className="sticky top-0 z-10 flex items-center gap-1.5 flex-shrink-0 group cursor-pointer rounded-t-lg px-1.5 py-1 transition-colors"
                     onMouseEnter={() => setHeaderHovered(true)}
                     onMouseLeave={() => setHeaderHovered(false)}
                     onClick={onAddTodo}
-                    style={{ color: currentTheme.styles.contentSecondary }}
+                    style={{
+                        color: currentTheme.styles.contentSecondary,
+                        backgroundColor: currentTheme.styles.surfaceSecondary,
+                    }}
                 >
                     {icon}
                     <h3 className="text-xs font-medium uppercase tracking-[0.08em]">{title}</h3>
@@ -1998,14 +2008,7 @@ export function TodosBrowserView({
                     </button>
                 </div>
                 <SortableContext items={safeColumnTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                    <div
-                        ref={setNodeRef}
-                        className="space-y-2 rounded-lg py-3 px-1.5 transition-colors border"
-                        style={{
-                            borderColor: isOver ? currentTheme.styles.surfaceAccent : currentTheme.styles.borderDefault,
-                            backgroundColor: currentTheme.styles.surfaceSecondary,
-                        }}
-                    >
+                    <div className="space-y-2 py-3 px-1.5">
                         {safeColumnTodos.map((todo) => (
                             <SortableTodoCard
                                 key={todo.id}
