@@ -36,10 +36,12 @@ function makeNode(
 }
 
 describe("goals-view-model", () => {
-    test("computes attention reasons for active goals", () => {
+    test("computes attention reasons for active monthly goal", () => {
         const now = new Date("2026-04-01T00:00:00Z");
+        // updatedAt 22 days ago — exceeds monthly stale threshold (10 days)
         const goal = makeGoal({
             id: "goal-1",
+            horizon: "monthly",
             updatedAt: "2026-03-10T00:00:00Z",
             status: "active",
         });
@@ -48,13 +50,11 @@ describe("goals-view-model", () => {
             {
                 goal,
                 computedProgress: 85,
-                linkedProjectCount: 0,
                 openTodoCount: 0,
             },
             now,
         );
 
-        expect(reasons).toContain("without_project");
         expect(reasons).toContain("without_next_action");
         expect(reasons).toContain("stale");
         expect(reasons).toContain("nearly_complete");
@@ -70,11 +70,60 @@ describe("goals-view-model", () => {
         const reasons = computeAttentionReasons({
             goal,
             computedProgress: 90,
-            linkedProjectCount: 0,
             openTodoCount: 0,
         });
 
         expect(reasons).toEqual([]);
+    });
+
+    test("vision goals never get attention regardless of state", () => {
+        const now = new Date("2026-04-01T00:00:00Z");
+        const goal = makeGoal({
+            id: "goal-vision",
+            horizon: "vision",
+            updatedAt: "2025-01-01T00:00:00Z", // very old
+            status: "active",
+        });
+
+        const reasons = computeAttentionReasons(
+            { goal, computedProgress: 85, openTodoCount: 0 },
+            now,
+        );
+
+        expect(reasons).toEqual([]);
+    });
+
+    test("yearly goals only get stale after 60 days", () => {
+        const now = new Date("2026-04-01T00:00:00Z");
+        const goalFresh = makeGoal({ id: "g-year-fresh", horizon: "yearly", updatedAt: "2026-03-01T00:00:00Z", status: "active" });
+        const goalStale = makeGoal({ id: "g-year-stale", horizon: "yearly", updatedAt: "2026-01-01T00:00:00Z", status: "active" });
+
+        const reasonsFresh = computeAttentionReasons({ goal: goalFresh, computedProgress: 0, openTodoCount: 0 }, now);
+        const reasonsStale = computeAttentionReasons({ goal: goalStale, computedProgress: 0, openTodoCount: 0 }, now);
+
+        expect(reasonsFresh).toEqual([]);
+        expect(reasonsStale).toContain("stale");
+        expect(reasonsStale).not.toContain("without_next_action");
+    });
+
+    test("quarterly goals get stale after 21 days", () => {
+        const now = new Date("2026-04-01T00:00:00Z");
+        // 22 days ago
+        const goal = makeGoal({ id: "g-q-stale", horizon: "quarterly", updatedAt: "2026-03-10T00:00:00Z", status: "active" });
+
+        const reasons = computeAttentionReasons({ goal, computedProgress: 0, openTodoCount: 1 }, now);
+
+        expect(reasons).toContain("stale");
+    });
+
+    test("quarterly goals within 21 days are not stale", () => {
+        const now = new Date("2026-04-01T00:00:00Z");
+        // 2 days ago
+        const goal = makeGoal({ id: "g-q-fresh", horizon: "quarterly", updatedAt: "2026-03-30T00:00:00Z", status: "active" });
+
+        const reasons = computeAttentionReasons({ goal, computedProgress: 0, openTodoCount: 1 }, now);
+
+        expect(reasons).not.toContain("stale");
     });
 
     test("builds summary and groups in horizon order", () => {
@@ -87,39 +136,37 @@ describe("goals-view-model", () => {
         });
         const forest = [
             makeNode(makeGoal({ id: "g-month", title: "Monthly", horizon: "monthly", area: "B", updatedAt: "2026-03-30T00:00:00Z" }), {
-                linkedProjectCount: 1,
                 openTodoCount: 1,
             }),
             makeNode(visionGoal, {
-                linkedProjectCount: 0,
                 openTodoCount: 0,
                 computedProgress: 82,
             }),
             makeNode(makeGoal({ id: "g-quarter", title: "Quarter", horizon: "quarterly", area: "A", updatedAt: "2026-03-30T00:00:00Z" }), {
-                linkedProjectCount: 1,
                 openTodoCount: 0,
             }),
             makeNode(makeGoal({ id: "g-year", title: "Year", horizon: "yearly", area: "A", updatedAt: "2026-03-30T00:00:00Z" }), {
-                linkedProjectCount: 1,
                 openTodoCount: 1,
             }),
         ];
 
         const viewModel = buildGoalsBrowserViewModel(forest, "", "all", new Date("2026-04-01T00:00:00Z"));
 
+        // g-quarter: openTodoCount=0 → without_next_action
+        // vision/yearly: exempt from execution signals
+        // g-month: openTodoCount=1 → no attention
         expect(viewModel.groups.map((group) => group.label)).toEqual(["Vision", "Yearly", "Quarterly", "Monthly"]);
         expect(viewModel.summary.active).toBe(4);
-        expect(viewModel.summary.withoutProject).toBe(1);
-        expect(viewModel.summary.withoutNextAction).toBe(2);
-        expect(viewModel.summary.needsAttention).toBe(2);
+        expect(viewModel.summary.withoutNextAction).toBe(1);
+        expect(viewModel.summary.needsAttention).toBe(1);
     });
 
     test("search matches title and area case-insensitively", () => {
         const goalCareer = makeGoal({ id: "career", title: "Launch Nomendex", area: "Career", horizon: "yearly" });
         const goalHealth = makeGoal({ id: "health", title: "Train Daily", area: "Health", horizon: "monthly" });
         const forest = [
-            makeNode(goalCareer, { linkedProjectCount: 1, openTodoCount: 1 }),
-            makeNode(goalHealth, { linkedProjectCount: 1, openTodoCount: 1 }),
+            makeNode(goalCareer, { openTodoCount: 1 }),
+            makeNode(goalHealth, { openTodoCount: 1 }),
         ];
 
         const byTitle = buildGoalsBrowserViewModel(forest, "nomendex");

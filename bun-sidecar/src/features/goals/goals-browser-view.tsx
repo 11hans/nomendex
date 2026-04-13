@@ -15,7 +15,6 @@ import { goalsPluginSerial } from "./plugin";
 import { CreateGoalDialog } from "./create-goal-dialog";
 
 const REASON_LABELS: Record<GoalAttentionReason, string> = {
-    without_project: "Without project",
     without_next_action: "Without next action",
     stale: "Stale",
     nearly_complete: "Nearly complete",
@@ -168,7 +167,6 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
     });
 
     const noGoals = forest.length === 0;
-    const allGoalsWithoutProjects = viewModel.allRows.length > 0 && viewModel.allRows.every((row) => row.linkedProjectCount === 0);
     const allGoalsWithoutNextAction = viewModel.allRows.length > 0 && viewModel.allRows.every((row) => row.openTodoCount === 0);
 
     const emptyLabel = noGoals
@@ -215,7 +213,6 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
                     {([
                         { label: "Active", value: viewModel.summary.active, mode: "all" as const },
                         { label: "Needs attention", value: viewModel.summary.needsAttention, mode: "needs_attention" as const },
-                        { label: "Without project", value: viewModel.summary.withoutProject, mode: "without_project" as const },
                         { label: "Without next action", value: viewModel.summary.withoutNextAction, mode: "without_next_action" as const },
                     ]).map((item) => {
                         const isActive = filterMode === item.mode || (item.mode === "all" && filterMode === "all");
@@ -248,19 +245,6 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
                         );
                     })}
                 </div>
-
-                {allGoalsWithoutProjects && (
-                    <div
-                        className="rounded-md border px-2.5 py-2 text-xs"
-                        style={{
-                            borderColor: currentTheme.styles.borderDefault,
-                            backgroundColor: currentTheme.styles.surfaceSecondary,
-                            color: currentTheme.styles.contentSecondary,
-                        }}
-                    >
-                        Goals exist but none are linked to projects yet. Link your first project from Project Detail.
-                    </div>
-                )}
 
                 {allGoalsWithoutNextAction && (
                     <div

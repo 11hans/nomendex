@@ -9,7 +9,8 @@
       "Bash(bun test:*)",
       "Bash(git log:*)",
       "Bash(bun eslint:*)",
-      "Bash(echo \"EXIT:$?\")"
+      "Bash(echo \"EXIT:$?\")",
+      "WebFetch(domain:claude.com)"
     ]
   }
 }

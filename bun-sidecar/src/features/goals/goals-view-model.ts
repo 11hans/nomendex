@@ -2,7 +2,6 @@ import type { GoalRecord } from "./goal-types";
 import type { GoalForestNodeView } from "./goals-view-types";
 
 export type GoalAttentionReason =
-    | "without_project"
     | "without_next_action"
     | "stale"
     | "nearly_complete";
@@ -21,7 +20,6 @@ export type GoalBrowserRow = {
 export type GoalBrowserSummary = {
     active: number;
     needsAttention: number;
-    withoutProject: number;
     withoutNextAction: number;
 };
 
@@ -40,7 +38,7 @@ export type GoalBrowserViewModel = {
 };
 
 const HORIZON_ORDER: GoalRecord["horizon"][] = ["vision", "yearly", "quarterly", "monthly"];
-const ATTENTION_SUMMARY_REASONS: GoalAttentionReason[] = ["without_project", "without_next_action", "stale"];
+const ATTENTION_SUMMARY_REASONS: GoalAttentionReason[] = ["without_next_action", "stale"];
 
 export function statusLabel(status: GoalRecord["status"]): string {
     switch (status) {
@@ -89,32 +87,52 @@ export function flattenGoalForest(forest: GoalForestNodeView[]): GoalForestNodeV
     return flattened;
 }
 
+// Stale threshold per horizon. null = never stale (aspirational goals).
+const HORIZON_STALE_DAYS: Record<GoalRecord["horizon"], number | null> = {
+    vision: null,
+    yearly: 60,
+    quarterly: 21,
+    monthly: 10,
+};
+
+// Whether a horizon tracks execution signals (without_next_action, nearly_complete).
+// Vision and Yearly goals are strategic — they drive child goals, not direct todos.
+const HORIZON_TRACK_EXECUTION: Record<GoalRecord["horizon"], boolean> = {
+    vision: false,
+    yearly: false,
+    quarterly: true,
+    monthly: true,
+};
+
 export function computeAttentionReasons(
-    row: Pick<GoalBrowserRow, "goal" | "computedProgress" | "linkedProjectCount" | "openTodoCount">,
+    row: Pick<GoalBrowserRow, "goal" | "computedProgress" | "openTodoCount">,
     now: Date = new Date(),
 ): GoalAttentionReason[] {
     if (row.goal.status !== "active") {
         return [];
     }
 
+    const { horizon } = row.goal;
     const reasons: GoalAttentionReason[] = [];
-    if (row.linkedProjectCount === 0) {
-        reasons.push("without_project");
-    }
-    if (row.openTodoCount === 0) {
-        reasons.push("without_next_action");
-    }
 
-    const updatedAt = Date.parse(row.goal.updatedAt);
-    if (!Number.isNaN(updatedAt)) {
-        const staleThresholdMs = 14 * 24 * 60 * 60 * 1000;
-        if (now.getTime() - updatedAt >= staleThresholdMs) {
-            reasons.push("stale");
+    if (HORIZON_TRACK_EXECUTION[horizon]) {
+        if (row.openTodoCount === 0) {
+            reasons.push("without_next_action");
+        }
+        if (row.computedProgress >= 80 && row.computedProgress < 100) {
+            reasons.push("nearly_complete");
         }
     }
 
-    if (row.computedProgress >= 80 && row.computedProgress < 100) {
-        reasons.push("nearly_complete");
+    const staleDays = HORIZON_STALE_DAYS[horizon];
+    if (staleDays !== null) {
+        const updatedAt = Date.parse(row.goal.updatedAt);
+        if (!Number.isNaN(updatedAt)) {
+            const staleThresholdMs = staleDays * 24 * 60 * 60 * 1000;
+            if (now.getTime() - updatedAt >= staleThresholdMs) {
+                reasons.push("stale");
+            }
+        }
     }
 
     return reasons;
@@ -123,7 +141,6 @@ export function computeAttentionReasons(
 function buildSummary(rows: GoalBrowserRow[]): GoalBrowserSummary {
     const activeRows = rows.filter((row) => row.goal.status === "active");
 
-    const withoutProject = activeRows.filter((row) => row.attentionReasons.includes("without_project")).length;
     const withoutNextAction = activeRows.filter((row) => row.attentionReasons.includes("without_next_action")).length;
     const needsAttention = activeRows.filter((row) =>
         ATTENTION_SUMMARY_REASONS.some((reason) => row.attentionReasons.includes(reason))
@@ -132,12 +149,11 @@ function buildSummary(rows: GoalBrowserRow[]): GoalBrowserSummary {
     return {
         active: activeRows.length,
         needsAttention,
-        withoutProject,
         withoutNextAction,
     };
 }
 
-export type GoalBrowserFilterMode = "all" | "needs_attention" | "without_project" | "without_next_action";
+export type GoalBrowserFilterMode = "all" | "needs_attention" | "without_next_action";
 
 export function goalMatchesSearch(row: GoalBrowserRow, query: string): boolean {
     const normalized = query.trim().toLowerCase();
@@ -152,7 +168,6 @@ export function goalMatchesSearch(row: GoalBrowserRow, query: string): boolean {
 function goalMatchesFilterMode(row: GoalBrowserRow, mode: GoalBrowserFilterMode): boolean {
     if (mode === "all") return true;
     if (mode === "needs_attention") return row.needsAttention;
-    if (mode === "without_project") return row.attentionReasons.includes("without_project");
     if (mode === "without_next_action") return row.attentionReasons.includes("without_next_action");
     return true;
 }
@@ -179,7 +194,6 @@ export function buildGoalsBrowserViewModel(
             const partial = {
                 goal: node.goal,
                 computedProgress: node.computedProgress,
-                linkedProjectCount: node.linkedProjectCount,
                 openTodoCount: node.openTodoCount,
             };
             const attentionReasons = computeAttentionReasons(partial, now);
