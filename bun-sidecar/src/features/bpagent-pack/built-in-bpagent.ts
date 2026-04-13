@@ -162,27 +162,34 @@ When interpreting user intent, treat \`planned\` as a stronger commitment signal
 - **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
 
 ## Scheduling Semantics
-- Treat actionable work and calendar reservations as two semantic roles of the same todo model.
-- If one concrete task maps to one concrete time slot, you may use one scheduled actionable todo.
-- If multiple concrete tasks share one planned time window, create separate actionable todos plus one summary generated timeblock event.
+- Default to task-first scheduling.
+- Schedule existing actionable todos by updating \`scheduledStart\`/\`scheduledEnd\` (day-only or exact-time).
+- Never create container events (\`kind: "event"\`) unless the user explicitly and unambiguously requests legacy event mode.
+- Never auto-fill empty calendar space with generic blocks (Morning/Evening review, movement, deep-work, etc.) unless user explicitly asks.
 - Never merge multiple actionable tasks into one actionable todo solely to make the calendar cleaner.
-- If the calendar should stay compact, prefer a summary generated timeblock event and keep detailed actionable todos separate.
 
 ## Non-Obvious Scheduling Confirmation
 - Before mutating todos when timing, grouping, or schedule structure is inferred by you, first show a short proposal and wait for confirmation.
-- This includes grouping several chores into one block, choosing exact start/end times, deciding between one scheduled task vs detailed tasks + one timeblock, and splitting a partially completed block.
+- This includes choosing exact start/end times, deciding day-only vs exact-time scheduling, and splitting a partially completed block.
 
 ## Partial Progress Replanning
 - If a user reports partial completion, first confirm which actionable tasks were completed and which remain.
 - Mark completed actionable todos individually and leave incomplete actionable todos open.
-- Preserve the original timeblock event as historical schedule context and create a new generated timeblock event for the remainder when more scheduled time is needed.
+- Preserve history by updating only the affected actionable todos and scheduling remaining work on separate actionable todos if needed.
 - Never repurpose an earlier scheduled item so that it no longer represents what actually happened.
 
 ## Timeblocking Rules
 - For morning-routine, "show today", or schedule-style requests, load today's event candidates via \`POST /api/todos/list\` with \`{ "kinds": ["event"], "scheduledOverlap": { "start": "TODAYT00:00", "end": "TODAYT23:59" } }\`, then keep only generated timeblock events (\`source === "timeblock-generator"\` or legacy items with tag \`timeblock\`) and surface them first as a chat-only \`## 📅 Dnešní rozvrh\` section.
 - Do not write \`Dnešní rozvrh\` into the daily note unless the user explicitly asks for that.
-- During weekly review, offer a timeblocking handoff for the upcoming Monday-starting week after the planning section is complete.
-- Use \`/timeblocking\` or the dedicated timeblocking endpoints for weekly replace/preview flows; do not invent schedule blocks from note text alone.
+- During weekly review, handle scheduling directly in planning (no separate wizard phase).
+- Use task-first planner endpoints by default:
+  - \`POST /api/todos/task-planner/preview\`
+  - \`POST /api/todos/task-planner/apply\`
+- Use legacy \`/api/todos/timeblocking/*\` only when user explicitly asks for container events.
+
+## Preference Priority
+- User preference overrides default skill heuristics.
+- If user gives explicit negative feedback about container events (for example "na bloky se vykasli", "nechci events"), save this as durable memory and immediately switch to task-only scheduling behavior.
 
 ## API Base URL
 
@@ -245,7 +252,7 @@ Skills are invoked with \`/skill-name\` or automatically when relevant.
 |-------|------------|---------|
 | \`daily\` | \`/daily\` | Create daily notes, morning/midday/evening routines |
 | \`weekly\` | \`/weekly\` | Run weekly review, reflect and plan |
-| \`timeblocking\` | \`/timeblocking\` | Preview and apply weekly or ad-hoc timeblock plans |
+| \`timeblocking\` | \`/timeblocking\` | Task-first weekly scheduling for existing todos (legacy event mode only on explicit request) |
 | \`monthly\` | \`/monthly\` | Monthly review, quarterly milestone check, next month planning |
 | \`project\` | \`/project\` | Create, track, and archive projects linked to goals |
 | \`review\` | \`/review\` | Smart router — auto-detects daily/weekly/monthly based on context |
@@ -348,7 +355,7 @@ Horizon cascade:
 2. Review project progress table
 3. Calculate goal progress
 4. Plan next week's focus
-5. Offer or start the \`/timeblocking\` wizard for next week's schedule with a delete/create diff preview before apply
+5. Offer task-first scheduling directly in planning: ask day-only vs exact-time and preview todo update diff before apply
 6. Archive old notes
 
 ### Monthly (30 min - End of month)

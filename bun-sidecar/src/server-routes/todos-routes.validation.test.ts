@@ -167,4 +167,38 @@ describe("todos route schema validation", () => {
             },
         })).toThrow();
     });
+
+    test("task planner schema validates assignments", () => {
+        const parsed = todosRouteSchemasForTests.TaskPlannerPlanInputSchema.parse({
+            weekStart: "2026-04-06",
+            mode: "exact_time",
+            assignments: [
+                {
+                    todoId: "todo-1",
+                    date: "2026-04-08",
+                    start: "09:00",
+                    end: "10:30",
+                },
+            ],
+        });
+
+        expect(parsed).toEqual({
+            weekStart: "2026-04-06",
+            mode: "exact_time",
+            assignments: [
+                {
+                    todoId: "todo-1",
+                    date: "2026-04-08",
+                    start: "09:00",
+                    end: "10:30",
+                },
+            ],
+        });
+
+        expect(() => todosRouteSchemasForTests.TaskPlannerPlanInputSchema.parse({
+            weekStart: "2026-04-06",
+            mode: "exact_time",
+            assignments: [],
+        })).toThrow();
+    });
 });

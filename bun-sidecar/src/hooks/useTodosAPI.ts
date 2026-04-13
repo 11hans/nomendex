@@ -4,6 +4,7 @@ import type { BoardConfig, ProjectConfig } from "@/features/projects/project-typ
 import type { GetTodosInput } from "@/features/todos";
 import type { DayConfig } from "@/features/timeblocking/types";
 import type { TimeblockingApplyResult, TimeblockingPreviewResult } from "@/features/timeblocking/service";
+import type { TaskPlannerApplyResult, TaskPlannerPlanInput, TaskPlannerPreviewResult } from "@/features/timeblocking/task-planner";
 import {
     sanitizeTodoForClient,
     sanitizeTodoListForClient,
@@ -121,6 +122,10 @@ export const todosAPI = {
         fetchAPI<TimeblockingPreviewResult>("timeblocking/preview", args),
     applyTimeblocking: (args: { weekStart: string; days: DayConfig[] }) =>
         fetchAPI<TimeblockingApplyResult>("timeblocking/apply", args),
+    previewTaskPlanner: (args: TaskPlannerPlanInput) =>
+        fetchAPI<TaskPlannerPreviewResult>("task-planner/preview", args),
+    applyTaskPlanner: (args: TaskPlannerPlanInput) =>
+        fetchAPI<TaskPlannerApplyResult>("task-planner/apply", args),
     // Board config - now uses projects API
     getBoardConfig: (args: { projectId?: string; projectName?: string }) => fetchProjectsAPI<BoardConfig | null>("board/get", args),
     saveBoardConfig: (args: { projectId?: string; projectName?: string; board: BoardConfig }) => fetchProjectsAPI<ProjectConfig>("board/save", args),

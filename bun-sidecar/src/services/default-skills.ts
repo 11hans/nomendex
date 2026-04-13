@@ -1430,25 +1430,24 @@ Morning planning is **read-only by default**. Summarize and propose a plan first
 
 ### Scheduling Semantics
 
-In Nomendex, both actionable work and calendar reservations are stored as todos. The distinction is semantic:
+In Nomendex default mode, scheduling is task-first:
 
-- **Actionable todo**: a concrete piece of work the user wants to track or complete
-- **Timeblock**: a generated event (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) that represents reserved calendar time, not a completion item
+- **Actionable todo**: a concrete piece of work that can be completed
+- **Legacy timeblock event**: generated \`kind: "event"\` (\`source: "timeblock-generator"\`) used only when explicitly requested
 
 Rules:
-- If one concrete task maps to one concrete time slot, you may use a single scheduled actionable todo.
-- If multiple concrete tasks share one planned time window, create separate actionable todos for the tasks and create one separate generated timeblock event for the shared calendar reservation.
-- Never merge multiple actionable tasks into one actionable todo solely to make the calendar look cleaner.
-- If the user wants a cleaner calendar, prefer keeping detailed actionable todos and adding one summary generated timeblock event.
-- Do not assign exact times to every actionable todo by default when a summary timeblock would express the schedule more cleanly.
-- Keep generated timeblock events out of workset snapshots, carry-forward logic, completion-rate math, and done/reschedule flows unless the user explicitly wants to edit the schedule itself.
+- Use existing actionable todos as the source of truth.
+- For planning, update \`scheduledStart\`/\`scheduledEnd\` on actionable todos (day-only or exact-time).
+- Do not create container events by default.
+- Never merge multiple actionable tasks into one actionable todo solely for calendar compactness.
+- Keep legacy generated timeblock events out of workset snapshots, carry-forward logic, completion-rate math, and done/reschedule flows unless the user explicitly edits legacy schedule data.
 
 ### Scheduling Decision Guide
 
-- **One concrete thing, one concrete time** -> use one scheduled actionable todo
-- **Multiple concrete tasks in one planned window** -> create separate actionable todos plus one summary generated timeblock event
-- **Pure time reservation without granular tracking** -> create a generated timeblock event only
-- **Deep work block with one clear deliverable** -> propose both options (\`A\` scheduled actionable todo, \`B\` actionable todo + summary generated timeblock event) and let the user choose before mutating
+- **One concrete thing, one concrete time** -> schedule that actionable todo with \`scheduledStart\`/\`scheduledEnd\`
+- **Multiple concrete tasks planned for one day** -> keep separate actionable todos and schedule each explicitly
+- **Pure reservation without actionable task** -> ask whether to create a real actionable todo or skip scheduling change
+- **Legacy event mode request** -> confirm explicit opt-in before creating any \`kind: "event"\` entity
 
 ### Non-Obvious Scheduling Confirmation
 
@@ -1457,7 +1456,7 @@ Before creating or updating todos when timing, grouping, or block structure is i
 This includes:
 - grouping several chores into one block
 - choosing exact start/end times
-- deciding whether to use one scheduled task vs detailed tasks + one generated timeblock event
+- deciding exact times vs day-only scheduling on existing todos
 - splitting or replacing an existing block after partial progress
 
 Do not mutate immediately unless the user explicitly gave exact timing and structure.
@@ -2826,14 +2825,14 @@ If no matches are found:
     files: {
       "SKILL.md": `---
 name: timeblocking
-description: "Create, preview, and re-plan weekly calendar blocks. Container blocks use kind:event, concrete single actions use kind:task with scheduledStart/End. Use after weekly review or for ad-hoc replanning."
-version: 4
+description: "Task-first weekly scheduling. Plan existing actionable todos by day or exact time without creating container events. Legacy event mode only on explicit request."
+version: 5
 source: nomendex
 ---
 
 # Timeblocking Skill
 
-Create, preview, and re-plan weekly calendar blocks. Container blocks use \`kind: "event"\`, concrete single actions use \`kind: "task"\` with \`scheduledStart\`/\`scheduledEnd\`. Both use \`source: "timeblock-generator"\`.
+Task-first weekly scheduling for existing actionable todos.
 
 ## Usage
 
@@ -2844,124 +2843,81 @@ Create, preview, and re-plan weekly calendar blocks. Container blocks use \`kind
 Use this skill when the user wants to:
 - plan next week's schedule after weekly review
 - re-plan the current week after changes
-- inspect, move, replace, or preview timeblocks
+- inspect, move, replace, or preview scheduled todos
 
 ## Core Concept
 
-There are two distinct types of generated blocks:
+Default mode is **task-first**:
+- update existing \`kind: "task"\` todos only
+- set \`scheduledStart\`/\`scheduledEnd\` to day-only or exact time
+- never create container events by default
 
-### 1. Calendar container events (\`kind: "event"\`, \`source: "timeblock-generator"\`)
-
-Used when a block is a named time window that holds multiple tasks or a recurring activity type.
-
-Signals: generic/recurring name — Deep Work, Pohyb, Blok renovace, Evening Review, Admin, etc.
-
-- Never mark as \`done\`.
-- Keep out of workset snapshots, completion-rate math, and carry-forward.
-- Show as schedule context only.
-
-### 2. Scheduled actionable todos (\`kind: "task"\`, \`source: "timeblock-generator"\`, with \`scheduledStart\` + \`scheduledEnd\`)
-
-Used when a block represents exactly one concrete action that will be completed during that slot.
-
-Signals: specific action name — Dokoupit materiál, Zavolat X, Napsat Y, Vyřídit faktury, etc.
-
-- Can be marked \`done\` when the action is completed.
-- Included in completion-rate math and carry-forward.
-- \`status\` starts as \`"todo"\`.
-
-### Decision rule — apply before creating any block
-
-\`\`\`
-IF title = general container or recurring activity type
-  → kind: "event", source: "timeblock-generator"
-ELSE IF title = one specific concrete action
-  → kind: "task", source: "timeblock-generator", scheduledStart, scheduledEnd
-\`\`\`
-
-When uncertain, prefer \`kind: "event"\` and track work on separate actionable todos.
-
-### Relationship to Actionable Work
-
-When a container event block holds several work items:
-- keep the event block as calendar context
-- track completion on separate \`kind: "task"\` todos (not necessarily scheduled)
-- do not collapse multiple outcomes into one non-event todo just for calendar compactness
+Legacy event mode:
+- only if the user explicitly and unambiguously asks for calendar container events
+- then use legacy \`/api/todos/timeblocking/*\` endpoints
 
 ## Planning Flow
 
 ### Phase 1: Load current state
 1. Detect the target week (default: next Monday-starting week unless the user says otherwise)
-2. Load existing event candidates for that week with \`POST /api/todos/list\`
-3. Use:
-
-\`\`\`json
-{
-  "kinds": ["event"],
-  "scheduledOverlap": { "start": "WEEK_STARTT00:00", "end": "WEEK_ENDT23:59" }
-}
-\`\`\`
-
-Then keep only generated timeblock events: \`source === "timeblock-generator"\` or legacy items with tag \`timeblock\`.
+2. Load candidate actionable todos (\`kind: "task"\`) for planning
+3. Confirm user preference:
+   - \`day_only\` (assign day only)
+   - \`exact_time\` (assign start/end)
 
 ### Phase 2: Gather inputs
-Ask for a day type for each day:
-- \`work_full\`
-- \`work_early\`
-- \`pohotovost\`
-- \`free\`
-
-Rules:
-- If the user leaves a day blank, use the config default.
-- For each \`work_early\` day, ask for \`workEnd\` in \`HH:mm\`.
-- If the user wants only partial replanning, confirm the target days before applying changes.
+Ask only for scheduling choices needed to update existing todos:
+- target day per todo
+- optional start/end time when \`exact_time\` is selected
+- if replanning is partial, confirm exactly which todos should change
 
 ### Phase 3: Preview
-Use the timeblocking generator/validator to produce:
-- proposed timeblocks to create
-- existing timeblocks that would be deleted
-- blocking conflicts
-- coverage warnings
+Use task planner preview to produce:
+- todos to update (before/after schedule)
+- blocking conflicts (invalid range, overlap, missing todo, non-task todo)
+- optional warnings
 
 Render a diff preview before any mutation:
 
 \`\`\`markdown
 ## Timeblocking Preview
 
-### Smazat
-- Tue 2026-04-07 · 19:30-21:30 · [[todo:old-123|🔵 Deep Work]]
+### Aktualizovat
+- [[todo:abc-123|Manuál frekvenční měnič]]
+  - from: 2026-04-07
+  - to: 2026-04-07T09:00 → 2026-04-07T11:30
 
-### Vytvořit
-- Tue 2026-04-07 · 18:30-20:30 · 🔵 Deep Work
-- Tue 2026-04-07 · 21:00-21:15 · 📓 Evening Review
-
-### Coverage
-- ✅ Pohyb: 4x (cíl 3x)
-- ⚠️ Renovace: 0x (cíl 1x)
+- [[todo:def-456|Procházka]]
+  - from: (none)
+  - to: 2026-04-07T13:00 → 2026-04-07T14:00
 \`\`\`
 
 Rules:
 - If blocking conflicts exist, do not apply changes.
-- Coverage warnings are advisory, not blockers.
-- Explain clearly what will be deleted vs created.
+- Never invent generic filler blocks.
+- Explain clearly which existing todos change.
 
 ### Phase 4: Apply
 After explicit confirmation:
-1. Replace the target week's existing generated timeblock events
-2. If any create/update step fails, restore the prior week's timeblocks
+1. Update only the selected existing todos
+2. If any update fails, restore prior schedule values for touched todos
 3. Summarize the final applied schedule
 
 ## Safety Rules
-- Never mark a generated timeblock event as \`done\`.
-- Before updating or moving an existing timeblock, re-fetch it via \`POST /api/todos/get\`.
-- If the refreshed schedule differs from what was previewed, stop and show the latest state.
-- Treat timeblocks as schedule context, not carry-forward tasks.
+- Do not create container events (\`kind: "event"\`) unless user explicitly requests legacy event mode.
+- Before updating or moving an existing todo, re-fetch it via \`POST /api/todos/get\`.
+- If refreshed data differs from previewed data, stop and show latest state.
+- One concrete task = one schedulable todo. No duplicate shadow entities.
+- If the user explicitly rejects container events (for example "nechci bloky/events"), save that as durable memory and keep future scheduling task-only.
 
 ## Integration
 
-- \`/weekly\` should offer this skill at the end of planning
-- \`/daily\` should read the resulting schedule into the chat-only \`Dnešní rozvrh\` section
-- Use \`/todos\` only for live API operations; do not infer timeblocks from note text
+- \`/weekly\` uses this skill within planning (no separate wizard phase)
+- \`/daily\` reads resulting task schedules from \`scheduledStart\`/\`scheduledEnd\`
+- Use task planner endpoints by default:
+  - \`POST /api/todos/task-planner/preview\`
+  - \`POST /api/todos/task-planner/apply\`
+- Legacy event planner endpoints are explicit opt-in only.
 `,
     },
   },
@@ -3001,10 +2957,10 @@ Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
    - Plans upcoming week
    - Aligns with typed goals (monthly/quarterly/yearly) via Goals API
 
-3. **Adds Timeblocking Handoff**
-   - Offers weekly timeblocking at the end of planning
-   - Shows preview as delete/create diff before any mutation
-   - Treats coverage shortfall as warning and conflicts as blockers
+3. **Adds Task-First Scheduling**
+   - Handles scheduling directly in planning (no separate wizard phase)
+   - Shows preview as todo update diff before any mutation
+   - Treats conflicts as blockers; warnings are advisory
 
 4. **Automates Housekeeping**
    - Archives old daily notes
@@ -3044,47 +3000,29 @@ Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
 - Explicitly exclude generated timeblock events from carry-forward and completion summaries
 - Plan todo distribution for next week by day
 - Include project next-actions when planning week
-- Schedule important tasks
-
-### Phase 4: Timeblocking Wizard (5-10 minutes)
-At the end of planning, always offer timeblocking for the target week.
-
-1. Load existing weekly event candidates via \`POST /api/todos/list\` with:
-
-\`\`\`json
-{
-  "kinds": ["event"],
-  "scheduledOverlap": { "start": "WEEK_STARTT00:00", "end": "WEEK_ENDT23:59" }
-}
-\`\`\`
-
-Then keep only generated timeblock events: \`source === "timeblock-generator"\` or legacy items with tag \`timeblock\`.
-
-2. Gather day types for Monday-Sunday
-3. For \`work_early\`, ask for \`workEnd\`
-4. Generate preview and show a diff:
+- Schedule important tasks using task-first planner:
+  - ask whether user wants \`day_only\` or \`exact_time\`
+  - preview update diff for existing actionable todos
+  - apply only after confirmation
 
 \`\`\`markdown
 ## Timeblocking Preview
 
-### Smazat
-- Tue 2026-04-07 · 19:30-21:30 · [[todo:old-123|🔵 Deep Work]]
+### Aktualizovat
+- [[todo:abc-123|Manuál frekvenční měnič]]
+  - from: 2026-04-07
+  - to: 2026-04-07T09:00 → 2026-04-07T11:30
 
-### Vytvořit
-- Tue 2026-04-07 · 18:30-20:30 · 🔵 Deep Work
-- Tue 2026-04-07 · 21:00-21:15 · 📓 Evening Review
-
-### Coverage
-- ✅ Pohyb: 4x (cíl 3x)
-- ⚠️ Renovace: 0x (cíl 1x)
+- [[todo:def-456|Procházka]]
+  - from: (none)
+  - to: 2026-04-07T13:00 → 2026-04-07T14:00
 \`\`\`
 
 Rules:
-- Show exactly what will be deleted vs created
-- Coverage warnings are advisory
+- Show exactly which existing todos are updated
 - Conflicts block apply
 - Apply only after explicit confirmation
-- If the user wants to skip this step, acknowledge it and finish the weekly review normally
+- Do not create generic filler blocks (Morning/Evening review, movement, deep-work, etc.) unless explicitly requested by user
 
 ## Interactive Prompts
 
@@ -3120,7 +3058,7 @@ The skill guides you through:
 - Copy streak values from the latest relevant daily note verbatim; do not derive them from todo text or checkbox arithmetic
 - Plan next week's priorities
 - Propose new todos and todo distribution for next week (batch confirm with user, then create/update via API)
-- Offer the timeblocking wizard and show its diff preview before any apply step
+- Offer task-first scheduling choices (day-only vs exact-time) directly inside planning and show update diff before apply
 - Clean digital workspace
 - Archive completed todos via API (batch confirm with user)
 - Commit changes to Git
@@ -3297,7 +3235,7 @@ Calculate habit success rates from daily notes:
 
 ## Task-Based Progress Tracking
 
-The weekly skill uses session tasks to show progress through the 4-phase review.
+The weekly skill uses session tasks to show progress through the 3-phase review.
 
 ### Phase Tasks
 
@@ -3319,10 +3257,6 @@ TaskCreate:
   description: "Identify ONE Big Thing, triage todos, plan daily focus areas for next week"
   activeForm: "Planning next week's focus and todo distribution..."
 
-TaskCreate:
-  subject: "Phase 4: Timeblocking Wizard"
-  description: "Preview weekly timeblocks, coverage, and diff before apply"
-  activeForm: "Preparing weekly timeblocking preview..."
 \`\`\`
 
 ### Dependencies
@@ -3331,10 +3265,9 @@ Phases must run in order:
 \`\`\`
 TaskUpdate: "Phase 2: Reflect", addBlockedBy: [phase-1-collect-id]
 TaskUpdate: "Phase 3: Plan", addBlockedBy: [phase-2-reflect-id]
-TaskUpdate: "Phase 4: Timeblocking Wizard", addBlockedBy: [phase-3-plan-id]
 \`\`\`
 
-Reflect is blocked until Collect completes. Plan is blocked until Reflect completes. Timeblocking Wizard is blocked until Plan completes. This provides visibility into the weekly review process.
+Reflect is blocked until Collect completes. Plan is blocked until Reflect completes. This provides visibility into the weekly review process.
 
 Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
 

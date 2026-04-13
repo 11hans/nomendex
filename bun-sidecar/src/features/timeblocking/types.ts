@@ -91,3 +91,38 @@ export interface TimeblockingPreview {
     conflicts: TimeblockingConflict[];
     coverage: CoverageResult[];
 }
+
+export const TaskPlannerModeSchema = z.enum(["day_only", "exact_time"]);
+export type TaskPlannerMode = z.infer<typeof TaskPlannerModeSchema>;
+
+export const TaskPlannerAssignmentSchema = z.object({
+    todoId: z.string().min(1),
+    date: z.string().min(1), // YYYY-MM-DD
+    start: z.string().optional(), // HH:mm (exact_time mode)
+    end: z.string().optional(), // HH:mm (exact_time mode)
+});
+export type TaskPlannerAssignment = z.infer<typeof TaskPlannerAssignmentSchema>;
+
+export interface TaskPlannerTodoUpdatePreview {
+    todoId: string;
+    title: string;
+    previousScheduledStart?: string;
+    previousScheduledEnd?: string;
+    nextScheduledStart: string;
+    nextScheduledEnd: string;
+}
+
+export interface TaskPlannerConflict {
+    code:
+        | "missing-todo"
+        | "not-task"
+        | "invalid-date"
+        | "invalid-time"
+        | "invalid-range"
+        | "outside-week"
+        | "duplicate-assignment"
+        | "overlap";
+    todoId?: string;
+    message: string;
+    details?: string;
+}

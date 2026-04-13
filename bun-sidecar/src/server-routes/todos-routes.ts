@@ -23,6 +23,7 @@ import {
 } from "@/features/todos/fx";
 import { DayTypeSchema } from "@/features/timeblocking/types";
 import { applyTimeblockingPlan, previewTimeblockingPlan } from "@/features/timeblocking/service";
+import { applyTaskPlannerPlan, previewTaskPlannerPlan } from "@/features/timeblocking/task-planner";
 import { addTodoSSEClient, broadcastTodoEvent, type TodoEvent } from "@/services/todo-events";
 import { TodoKindSchema, TodoSourceSchema } from "@/features/todos/todo-types";
 
@@ -144,6 +145,18 @@ const TimeblockingPlanInputSchema = z.object({
     })).length(7),
 });
 
+const TaskPlannerModeSchema = z.enum(["day_only", "exact_time"]);
+const TaskPlannerPlanInputSchema = z.object({
+    weekStart: z.string(),
+    mode: TaskPlannerModeSchema.optional(),
+    assignments: z.array(z.object({
+        todoId: z.string().min(1),
+        date: z.string().min(1),
+        start: z.string().optional(),
+        end: z.string().optional(),
+    })).min(1),
+});
+
 const EmptyInputSchema = z.object({});
 const DeleteTagInputSchema = z.object({ tagName: z.string() });
 
@@ -152,6 +165,7 @@ export const todosRouteSchemasForTests = {
     GetTodosInputSchema,
     CreateTodoInputSchema,
     UpdateTodoInputSchema,
+    TaskPlannerPlanInputSchema,
 };
 
 function jsonValidationError(error: unknown): Response {
@@ -457,6 +471,46 @@ export const todosRoutes = {
                     }
                     for (const created of result.createdTodos) {
                         broadcastTodoEvent({ type: "upsert", todo: created });
+                    }
+                }
+                return Response.json(result);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                return Response.json({ error: message }, { status: 400 });
+            }
+        },
+    },
+    "/api/todos/task-planner/preview": {
+        async POST(req: Request) {
+            let args;
+            try {
+                args = TaskPlannerPlanInputSchema.parse(await req.json());
+            } catch (error) {
+                return jsonValidationError(error);
+            }
+
+            try {
+                return Response.json(await previewTaskPlannerPlan(args));
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                return Response.json({ error: message }, { status: 400 });
+            }
+        },
+    },
+    "/api/todos/task-planner/apply": {
+        async POST(req: Request) {
+            let args;
+            try {
+                args = TaskPlannerPlanInputSchema.parse(await req.json());
+            } catch (error) {
+                return jsonValidationError(error);
+            }
+
+            try {
+                const result = await applyTaskPlannerPlan(args);
+                if (shouldBroadcastTodoEvents(req)) {
+                    for (const todo of result.updatedTodos) {
+                        broadcastTodoEvent({ type: "upsert", todo });
                     }
                 }
                 return Response.json(result);
