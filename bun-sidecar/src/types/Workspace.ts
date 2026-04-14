@@ -65,6 +65,10 @@ export const WorkspaceStateSchema = z.object({
     chatInputEnterToSend: z.boolean().default(true),
     showHiddenFiles: z.boolean().default(false),
     todoViewPreferences: TodoViewPreferencesSchema.default({}),
+    memoryExtraction: z.object({
+        provider: z.enum(["disabled", "openrouter", "claude"]).default("disabled"),
+        openRouterModel: z.string().default("xiaomi/mimo-v2-flash:free"),
+    }).default({ provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free" }),
 });
 
 export type WorkspaceTab = z.infer<typeof WorkspaceTabSchema>;

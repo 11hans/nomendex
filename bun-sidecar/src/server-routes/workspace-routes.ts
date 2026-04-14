@@ -183,6 +183,7 @@ export const workspaceRoutes = {
                         chatInputEnterToSend: true,
                         showHiddenFiles: false,
                         todoViewPreferences: {},
+                        memoryExtraction: { provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free" },
                     };
                     await Bun.write(`${getNomendexPath()}/workspace.json`, JSON.stringify(defaultWorkspace, null, 2));
 

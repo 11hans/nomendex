@@ -11,9 +11,12 @@ import { MemoryScopeSchema, MemoryKindSchema } from "@/features/agent-memory/ind
 /**
  * Build an inline MCP server that exposes agent memory tools.
  * Scoped to a specific agentId so the agent can only access its own + workspace memories.
+ *
+ * When readOnly is true (extraction is enabled), only search/list tools are exposed.
+ * Write tools (save/delete) are omitted — the extraction model handles writing after each session.
  */
-export function buildAgentMemoryMcpServer(ctx: { agentId: string; sessionId?: string }) {
-    const { agentId } = ctx;
+export function buildAgentMemoryMcpServer(ctx: { agentId: string; sessionId?: string; readOnly?: boolean }) {
+    const { agentId, readOnly = false } = ctx;
 
     return createSdkMcpServer({
         name: "agent-memory",
@@ -44,7 +47,7 @@ export function buildAgentMemoryMcpServer(ctx: { agentId: string; sessionId?: st
                 }
             ),
 
-            tool(
+            ...(readOnly ? [] : [tool(
                 "memory_save",
                 `Save information to your long-term memory so you can recall it in future sessions. Use this to remember:
 - User preferences and working style
@@ -92,7 +95,7 @@ Duplicate detection is automatic - saving the same fact again will merge rather 
                         }],
                     };
                 }
-            ),
+            )]),
 
             tool(
                 "memory_list_recent",
@@ -117,7 +120,7 @@ Duplicate detection is automatic - saving the same fact again will merge rather 
                 }
             ),
 
-            tool(
+            ...(readOnly ? [] : [tool(
                 "memory_delete",
                 `Delete a specific memory by its ID. Use when information is outdated or incorrect.`,
                 {
@@ -136,7 +139,7 @@ Duplicate detection is automatic - saving the same fact again will merge rather 
                         }],
                     };
                 }
-            ),
+            )]),
         ],
     });
 }

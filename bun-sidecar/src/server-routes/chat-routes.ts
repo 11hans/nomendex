@@ -15,6 +15,8 @@ import { buildBpagentSubagents } from "@/features/bpagent-pack/subagents";
 import { buildBpagentSystemPrompt, readVaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
 import { buildMemoryPromptBlock } from "@/features/agent-memory/fx";
 import { buildAgentMemoryMcpServer } from "@/mcp-servers/agent-memory";
+import { triggerPostSessionExtraction, loadExtractionConfig } from "@/features/agent-memory/extraction/orchestrator";
+import { sdkMessagesToTurns } from "@/features/agent-memory/extraction/history-utils";
 
 // Create logger for chat routes
 const chatLogger = createServiceLogger("CHAT");
@@ -673,6 +675,13 @@ export const chatRoutes = {
                     const serverPort = parseInt(process.env.PORT || "1234", 10);
                     let bpagentPrompt = `${buildAgentContext(notesPath)}\n\n${buildBpagentSystemPrompt(notesPath, vaultConfig, serverPort)}`;
 
+                    // Load extraction config — used for MCP read-only mode and prompt note
+                    const extractionConfig = await loadExtractionConfig().catch(() => ({
+                        provider: "disabled" as const,
+                        openRouterModel: "xiaomi/mimo-v2-flash:free",
+                    }));
+                    const extractionEnabled = extractionConfig.provider !== "disabled";
+
                     // Inject memory recall into system prompt (non-fatal on error)
                     try {
                         const memoryBlock = await buildMemoryPromptBlock({
@@ -690,12 +699,20 @@ export const chatRoutes = {
                         });
                     }
 
+                    // Inform agent about memory extraction mode
+                    if (extractionEnabled) {
+                        bpagentPrompt = `${bpagentPrompt}\n\n## Memory\n\nYour conversations are automatically analyzed for memories after each session ends. You do NOT need to call memory_save manually. Use memory_search and memory_list_recent to recall what you know.`;
+                    } else {
+                        bpagentPrompt = `${bpagentPrompt}\n\n## Memory\n\nUse memory_save proactively to preserve important context, preferences, decisions, and goals that should survive across sessions.`;
+                    }
+
                     sdkOptions.systemPrompt = bpagentPrompt;
 
-                    // Inject agent memory MCP server
+                    // Inject agent memory MCP server — read-only when extraction is handling writes
                     mcpServers["agent-memory"] = buildAgentMemoryMcpServer({
                         agentId: agentConfig.id,
                         sessionId,
+                        readOnly: extractionEnabled,
                     });
 
                     // Inject programmatic BPagent subagents
@@ -846,6 +863,7 @@ export const chatRoutes = {
                     let messageCount = 0;
                     const startTime = Date.now();
                     let currentTrackingId = queryTrackingId;
+                    let resultReceived = false;
 
                     console.log("[API] Starting SDK iterator consumption (outside stream)...");
 
@@ -930,6 +948,7 @@ export const chatRoutes = {
                             });
 
                             if (msg.type === "result") {
+                                resultReceived = true;
                                 console.log(`[API] Query complete in ${elapsed}s, ${messageCount} messages`);
                                 break;
                             }
@@ -973,6 +992,28 @@ export const chatRoutes = {
                         // Clean up active query tracking
                         activeQueries.delete(currentTrackingId);
                         console.log(`[API] Cleaned up query tracking: ${currentTrackingId}`);
+                    }
+
+                    if (resultReceived && agentConfig.id === "bpagent" && newSessionId) {
+                        const sid = newSessionId;
+                        (async () => {
+                            try {
+                                const sessionFile = await findSessionFilePath(sid);
+                                if (!sessionFile) return;
+                                const fullHistory = await readJSONL<SDKMessage>(sessionFile);
+                                const turns = sdkMessagesToTurns(fullHistory);
+                                await triggerPostSessionExtraction({
+                                    agentId: agentConfig.id,
+                                    sessionId: sid,
+                                    conversationHistory: turns,
+                                });
+                            } catch (err: unknown) {
+                                chatLogger.warn("Post-turn memory extraction failed", {
+                                    error: err instanceof Error ? err.message : String(err),
+                                    sessionId: sid,
+                                });
+                            }
+                        })();
                     }
 
                     pushToQueue({

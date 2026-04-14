@@ -9,7 +9,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { triggerNativeUpdate } from "@/hooks/useUpdateNotification";
 import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { RotateCcw, Eye, EyeOff, Check, X, Key, RefreshCw, Info, Plus, Trash2, FolderOpen } from "lucide-react";
+import { RotateCcw, Eye, EyeOff, Check, X, Key, RefreshCw, Info, Plus, Trash2, FolderOpen, Brain, Loader2, ExternalLink } from "lucide-react";
 import { Input } from "../components/ui/input";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Label } from "../components/ui/label";
@@ -26,6 +26,263 @@ type SecretInfo = {
     maskedValue: string;
     isPredefined: boolean;
 };
+
+const SUGGESTED_FREE_MODELS = [
+    { id: "xiaomi/mimo-v2-flash:free", label: "MiMo-V2-Flash (309B, free)" },
+    { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash (free)" },
+    { id: "google/gemini-2.5-flash-preview:free", label: "Gemini 2.5 Flash (free)" },
+    { id: "deepseek/deepseek-r1:free", label: "DeepSeek R1 (free)" },
+    { id: "meta-llama/llama-3.1-70b-instruct:free", label: "Llama 3.1 70B (free)" },
+];
+
+type TestResult = {
+    candidates: Array<{ kind: string; title: string; importance: number }>;
+    providerUsed: string;
+    durationMs: number;
+};
+
+function MemoryExtractionSettings() {
+    const { memoryExtraction, setMemoryExtraction } = useWorkspaceContext();
+    const { currentTheme } = useTheme();
+
+    const [provider, setProvider] = useState(memoryExtraction.provider);
+    const [model, setModel] = useState(memoryExtraction.openRouterModel);
+    const [apiKey, setApiKey] = useState("");
+    const [showKey, setShowKey] = useState(false);
+    const [hasApiKey, setHasApiKey] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+    const [testing, setTesting] = useState(false);
+    const [testResult, setTestResult] = useState<TestResult | null>(null);
+    const [testError, setTestError] = useState<string | null>(null);
+
+    // Load current hasApiKey status
+    useEffect(() => {
+        fetch("/api/memory-extraction/config")
+            .then((r) => r.json())
+            .then((data: { hasApiKey?: boolean }) => {
+                if (typeof data.hasApiKey === "boolean") setHasApiKey(data.hasApiKey);
+            })
+            .catch(() => {});
+    }, []);
+
+    const handleSave = async () => {
+        setSaving(true);
+        setSaved(false);
+        setTestResult(null);
+        setTestError(null);
+        try {
+            const body: Record<string, string | null> = { provider, openRouterModel: model };
+            if (apiKey) body.openRouterApiKey = apiKey;
+            const res = await fetch("/api/memory-extraction/config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json() as { success?: boolean; hasApiKey?: boolean; error?: string };
+            if (!res.ok) throw new Error(data.error ?? "Save failed");
+            setMemoryExtraction({ provider, openRouterModel: model });
+            if (typeof data.hasApiKey === "boolean") setHasApiKey(data.hasApiKey);
+            if (apiKey) setApiKey("");
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+        } catch (err) {
+            console.error("Failed to save memory extraction config", err);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleTest = async () => {
+        setTesting(true);
+        setTestResult(null);
+        setTestError(null);
+        try {
+            const body: Record<string, string> = { provider, model };
+            if (apiKey) body.apiKey = apiKey;
+            const res = await fetch("/api/memory-extraction/test", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json() as TestResult & { error?: string };
+            if (!res.ok) throw new Error(data.error ?? "Test failed");
+            setTestResult(data);
+        } catch (err) {
+            setTestError(err instanceof Error ? err.message : "Test failed");
+        } finally {
+            setTesting(false);
+        }
+    };
+
+    const isDirty =
+        provider !== memoryExtraction.provider ||
+        model !== memoryExtraction.openRouterModel ||
+        apiKey.length > 0;
+
+    const canTest = provider !== "disabled" && (provider === "claude" || hasApiKey || apiKey.length > 0);
+
+    return (
+        <div className="space-y-3">
+            <Card className="rounded-lg border-border shadow-none">
+                <CardHeader className="p-3 pb-2">
+                    <CardTitle className="flex items-center gap-2">
+                        <Brain className="h-4 w-4" />
+                        Memory Extraction
+                    </CardTitle>
+                    <CardDescription>
+                        Automatically extract and save memories from BPagent sessions using an AI model.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {/* Provider select */}
+                    <div className="space-y-1.5">
+                        <Label>Provider</Label>
+                        <Select value={provider} onValueChange={(v) => setProvider(v as typeof provider)}>
+                            <SelectTrigger className="h-7 w-48">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="disabled">Disabled</SelectItem>
+                                <SelectItem value="openrouter">OpenRouter</SelectItem>
+                                <SelectItem value="claude">Claude (Haiku)</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        {provider === "disabled" && (
+                            <p className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
+                                Memories are only saved when BPagent explicitly calls memory_save.
+                            </p>
+                        )}
+                        {provider === "claude" && (
+                            <p className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
+                                Uses your existing Claude API key (claude-haiku-4-5). Charged per token.
+                            </p>
+                        )}
+                    </div>
+
+                    {/* OpenRouter config */}
+                    {provider === "openrouter" && (
+                        <>
+                            <div className="space-y-1.5">
+                                <Label>API Key</Label>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <Input
+                                            type={showKey ? "text" : "password"}
+                                            placeholder={hasApiKey ? "sk-or-v1-••••••••••••••••••••" : "sk-or-v1-..."}
+                                            value={apiKey}
+                                            onChange={(e) => setApiKey(e.target.value)}
+                                            className="h-7 pr-8 font-mono"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowKey((v) => !v)}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                        >
+                                            {showKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                                        </button>
+                                    </div>
+                                </div>
+                                <p className="text-caption flex items-center gap-1" style={{ color: currentTheme.styles.contentTertiary }}>
+                                    {hasApiKey && !apiKey ? (
+                                        <><Check className="h-3 w-3 text-green-500" /> API key configured</>
+                                    ) : (
+                                        <>Get a free key at openrouter.ai — no credit card required</>
+                                    )}
+                                </p>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <Label>Model</Label>
+                                <div className="flex gap-2">
+                                    <Input
+                                        value={model}
+                                        onChange={(e) => setModel(e.target.value)}
+                                        className="h-7 font-mono flex-1"
+                                        placeholder="xiaomi/mimo-v2-flash:free"
+                                    />
+                                </div>
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                    {SUGGESTED_FREE_MODELS.map((m) => (
+                                        <button
+                                            key={m.id}
+                                            type="button"
+                                            onClick={() => setModel(m.id)}
+                                            className="text-caption px-1.5 py-0.5 rounded border border-border hover:bg-secondary transition-colors"
+                                            style={{
+                                                color: model === m.id
+                                                    ? currentTheme.styles.contentPrimary
+                                                    : currentTheme.styles.contentTertiary,
+                                                borderColor: model === m.id ? currentTheme.styles.borderAccent : undefined,
+                                            }}
+                                        >
+                                            {m.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </>
+                    )}
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 pt-1">
+                        <Button
+                            size="sm"
+                            className="h-7 px-3"
+                            onClick={handleSave}
+                            disabled={saving || !isDirty}
+                        >
+                            {saving ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : saved ? <Check className="h-3 w-3 mr-1.5" /> : null}
+                            {saved ? "Saved" : "Save"}
+                        </Button>
+                        {provider !== "disabled" && (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-3"
+                                onClick={handleTest}
+                                disabled={testing || !canTest}
+                            >
+                                {testing ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : <ExternalLink className="h-3 w-3 mr-1.5" />}
+                                Test
+                            </Button>
+                        )}
+                    </div>
+
+                    {/* Test result */}
+                    {testError && (
+                        <div className="text-caption p-2 rounded border border-red-200 bg-red-50 text-red-700">
+                            {testError}
+                        </div>
+                    )}
+                    {testResult && (
+                        <div className="space-y-1.5">
+                            <p className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
+                                {testResult.candidates.length} memories extracted in {testResult.durationMs}ms via {testResult.providerUsed}
+                            </p>
+                            {testResult.candidates.length > 0 && (
+                                <div className="space-y-1">
+                                    {testResult.candidates.map((c, i) => (
+                                        <div
+                                            key={i}
+                                            className="flex items-center gap-2 p-1.5 rounded border border-border text-caption"
+                                        >
+                                            <span className="px-1 rounded bg-secondary font-mono" style={{ color: currentTheme.styles.contentSecondary }}>
+                                                {c.kind}
+                                            </span>
+                                            <span className="flex-1 truncate">{c.title}</span>
+                                            <span style={{ color: currentTheme.styles.contentTertiary }}>{Math.round(c.importance * 100)}%</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
 
 function StorageSettings() {
     const { notesLocation, setNotesLocation, showHiddenFiles, setShowHiddenFiles } = useWorkspaceContext();
@@ -556,6 +813,7 @@ function SettingsContent() {
                         <TabsTrigger value="preferences">Preferences</TabsTrigger>
                         <TabsTrigger value="theme">Theme</TabsTrigger>
                         <TabsTrigger value="secrets">API Keys</TabsTrigger>
+                        <TabsTrigger value="memory">Memory</TabsTrigger>
                         <TabsTrigger value="storage">Storage</TabsTrigger>
                         <TabsTrigger value="about">About</TabsTrigger>
                     </TabsList>
@@ -1263,6 +1521,10 @@ function SettingsContent() {
                                 </CardContent>
                             </Card>
                         </div>
+                    </TabsContent>
+
+                    <TabsContent value="memory" className="mt-0">
+                        <MemoryExtractionSettings />
                     </TabsContent>
 
                     <TabsContent value="storage" className="mt-0">

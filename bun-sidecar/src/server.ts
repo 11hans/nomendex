@@ -23,6 +23,7 @@ import { versionRoutes } from "./server-routes/version-routes";
 import { logsRoutes } from "./server-routes/logs-routes";
 import { dictionariesRoutes } from "./server-routes/dictionaries-routes";
 import { agentMemoryRoutes } from "./server-routes/agent-memory-routes";
+import { memoryExtractionRoutes } from "./server-routes/memory-extraction-routes";
 
 
 // Terminal WebSocket data type
@@ -124,6 +125,7 @@ const server = serve<WSData>({
         ...dictionariesRoutes,
         ...projectsRoutes,
         ...agentMemoryRoutes,
+        ...memoryExtractionRoutes,
         // WebSocket route handler
         "/ws": {
             GET: (req, server) => {

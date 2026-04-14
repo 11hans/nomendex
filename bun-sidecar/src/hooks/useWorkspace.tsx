@@ -62,6 +62,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         chatInputEnterToSend: true,
         showHiddenFiles: false,
         todoViewPreferences: {},
+        memoryExtraction: { provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free" },
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -842,6 +843,14 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         [updateWorkspace]
     );
 
+    // Memory extraction config
+    const setMemoryExtraction = useCallback(
+        (config: WorkspaceState["memoryExtraction"]) => {
+            updateWorkspace((prev) => ({ ...prev, memoryExtraction: config }));
+        },
+        [updateWorkspace]
+    );
+
 
 
     // === Pane Operations ===
@@ -1203,6 +1212,10 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         // Show hidden files
         showHiddenFiles: workspace.showHiddenFiles,
         setShowHiddenFiles,
+
+        // Memory extraction
+        memoryExtraction: workspace.memoryExtraction,
+        setMemoryExtraction,
 
 
 
