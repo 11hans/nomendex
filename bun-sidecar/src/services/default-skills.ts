@@ -1361,7 +1361,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 11
+version: 12
 source: nomendex
 ---
 
@@ -1681,8 +1681,9 @@ If today's daily note contains legacy \`[x]\` checkboxes (from before API-only m
 
 ### Capture
 1. Add notes and learnings to daily note (plain text, no checkboxes)
-2. Log energy levels (1-10)
-3. Record gratitude items
+2. Fill in the **Pracovní zápisek** section — co se řešilo, co se naučilo, otevřené otázky/blockers
+3. Log energy levels (1-10)
+4. Record gratitude items
 
 ### Goal & Project Attention Summary
 Automatically generate an end-of-day summary showing which goals and projects received attention:
@@ -1762,6 +1763,12 @@ Standard daily note template. The \`## Today's Workset\` section is populated by
 
 ## Notes
 [Capture thoughts, meeting notes, ideas]
+
+## Pracovní zápisek
+<!-- Každodenní zápisek z práce — co se řešilo, co se naučilo. Základ pro zpětnou analýzu a knowledge base. -->
+- **Co jsem řešil:**
+- **Co jsem se naučil:**
+- **Otevřené otázky / blockers:**
 
 ## Reflection
 - **Wins:**
