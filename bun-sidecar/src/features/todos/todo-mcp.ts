@@ -62,11 +62,12 @@ server.registerTool(
     "create_todo",
     {
         title: "Create Todo",
-        description: "Create a new todo. IMPORTANT: The project must already exist. Use list_projects first to see available projects.",
+        description: "Create a new todo. IMPORTANT: The project must already exist. Use list_projects first to see available projects. To create a subtask, provide parentTodoId (must be a top-level todo, no depth > 1).",
         inputSchema: {
             title: z.string(),
             description: z.string().optional(),
             project: z.string().optional(),
+            parentTodoId: z.string().optional().describe("ID of the parent todo. When set, creates a subtask (max 1 level deep). Project is inherited from parent."),
         },
     },
     async (input) => {

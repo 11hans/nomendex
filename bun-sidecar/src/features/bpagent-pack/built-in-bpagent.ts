@@ -153,6 +153,40 @@ Valid statuses (in lifecycle order): \`todo\` → \`planned\` → \`in_progress\
 
 When interpreting user intent, treat \`planned\` as a stronger commitment signal than \`todo\` but not yet active work.
 
+## Subtask Semantics
+
+Todos support one level of subtasks via the \`parentTodoId\` field. Subtasks are full todos with their own status, priority, and schedule.
+
+**Max depth: 1.** Subtasks cannot have children. The parent's status is NOT automatically derived from subtask states — update it explicitly.
+
+### When to decompose into subtasks
+- The parent task requires multiple distinct actions to complete (e.g. "Launch feature" → research, implement, review)
+- Different phases or blocking dependencies exist between steps
+- Do NOT create subtasks for simple single-action todos
+
+### Subtask API
+\`\`\`bash
+# Create a subtask
+curl -s -X POST "http://localhost:${port}/api/todos/create" \\
+  -H "Content-Type: application/json" \\
+  -d '{"title": "Write unit tests", "parentTodoId": "<parent-id>", "project": "<project>"}'
+
+# List subtasks of a parent
+curl -s -X POST "http://localhost:${port}/api/todos/list" \\
+  -H "Content-Type: application/json" \\
+  -d '{"parentTodoId": "<parent-id>"}'
+
+# Top-level todos with subtasks included
+curl -s -X POST "http://localhost:${port}/api/todos/list" \\
+  -H "Content-Type: application/json" \\
+  -d '{"includeSubtasks": true}'
+\`\`\`
+
+### Subtask rules
+- Do NOT include subtasks in the daily workset by default — load them on demand when the user drills into a parent
+- Completing all subtasks does NOT auto-complete the parent; mark the parent done explicitly after confirming with the user
+- Do NOT schedule subtasks independently unless the user explicitly requests it; prefer scheduling the parent
+
 ## Todo Safety Rules
 - **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
 - **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.

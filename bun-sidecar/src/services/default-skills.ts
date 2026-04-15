@@ -22,7 +22,7 @@ const DEFAULT_SKILLS: DefaultSkill[] = [
       "SKILL.md": `---
 name: todos
 description: "Manages project todos via REST API. BEFORE using this skill, you must THINK: 'Does the user mention a project? Does the user imply a specific column like Today?'. Use when the user asks to create, view, update, or delete todos."
-version: 13
+version: 14
 source: nomendex
 ---
 
@@ -152,6 +152,65 @@ curl -s -X POST "http://localhost:$PORT/api/todos/list" \\
   -H "Content-Type: application/json" \\
   -d '{"project": "work"}'
 \`\`\`
+
+## Subtasks
+
+Todos support **one level of subtasks** via the \`parentTodoId\` field. A subtask is a full todo with its own status, priority, and schedule — it just carries a reference to its parent.
+
+> **Max depth is 1.** Subtasks cannot have their own subtasks. The parent's status is NOT automatically computed from subtask states; manage status changes explicitly.
+
+### When to create subtasks
+
+Decompose a parent todo into subtasks when:
+- The task cannot be completed in a single action (e.g. "Launch new feature")
+- Different phases or contexts are involved (research → implementation → review)
+- You need to track blocking dependencies between steps
+
+Do NOT create subtasks for simple todos that can be done in one step.
+
+### Create a subtask
+
+\`\`\`bash
+# Create a subtask linked to a parent
+curl -s -X POST "http://localhost:$PORT/api/todos/create" \\
+  -H "Content-Type: application/json" \\
+  -d '{"title": "Write unit tests", "parentTodoId": "<parent-id>", "project": "work"}'
+\`\`\`
+
+### Read subtasks of a parent
+
+\`\`\`bash
+# All subtasks of a specific parent
+curl -s -X POST "http://localhost:$PORT/api/todos/list" \\
+  -H "Content-Type: application/json" \\
+  -d '{"parentTodoId": "<parent-id>"}'
+
+# Top-level todos WITH their subtasks included
+curl -s -X POST "http://localhost:$PORT/api/todos/list" \\
+  -H "Content-Type: application/json" \\
+  -d '{"includeSubtasks": true}'
+
+# Only subtasks (all parents)
+curl -s -X POST "http://localhost:$PORT/api/todos/list" \\
+  -H "Content-Type: application/json" \\
+  -d '{"subtasksOnly": true}'
+\`\`\`
+
+### Unlink or reparent a subtask
+
+\`\`\`bash
+# Remove subtask relationship (promote to top-level)
+curl -s -X POST "http://localhost:$PORT/api/todos/update" \\
+  -H "Content-Type: application/json" \\
+  -d '{"todoId": "<subtask-id>", "updates": {"parentTodoId": null}}'
+\`\`\`
+
+### Subtask anti-patterns
+
+- ❌ **DO NOT nest subtasks**: max depth is 1; creating a subtask of a subtask is not supported
+- ❌ **DO NOT assume parent is done**: completing all subtasks does NOT auto-complete the parent — update it explicitly
+- ❌ **DO NOT create subtasks for simple one-step todos**: only decompose when genuine multi-step complexity exists
+- ❌ **DO NOT show subtasks in the daily workset by default**: load them on demand when the user drills into a specific parent todo
 
 ## Read Workflow: Today / Scheduled / Calendar Queries
 
