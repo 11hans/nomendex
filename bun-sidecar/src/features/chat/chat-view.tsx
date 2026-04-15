@@ -62,6 +62,7 @@ import { useTabScrollPersistence, hasSavedScrollPosition } from "@/hooks/useTabS
 import { AskUserQuestionBanner, parseAskUserQuestionInput } from "./AskUserQuestionBanner";
 import { OverlayScrollbar } from "@/components/OverlayScrollbar";
 import { removeFileLock, upsertFileLock } from "@/hooks/useFileLocks";
+import { ChatPlanWidget, type PlanItem } from "./ChatPlanWidget";
 
 type ToolCallState =
     | "input-streaming"
@@ -308,6 +309,72 @@ function ToolUseItem({ block }: { block: ToolBlock }) {
     );
 }
 
+/** Detects numbered list plans: `1. [[todo:id|Title]]` with 3+ items */
+function extractNumberedListPlan(content: string): PlanItem[] | null {
+    const pattern = /^\d+\.\s+\[\[todo:([^\]|]+)\|([^\]]+)\]\]/gm;
+    const items: PlanItem[] = [];
+    let match;
+    while ((match = pattern.exec(content)) !== null) {
+        items.push({ id: match[1].trim(), title: match[2].trim(), hasTodoId: true });
+    }
+    return items.length >= 3 ? items : null;
+}
+
+/** Detects markdown table plans with 3+ data rows. Extracts task name and optional time slot. */
+function extractTablePlan(content: string): PlanItem[] | null {
+    const lines = content.split("\n");
+    let headerCols: string[] = [];
+    let separatorSeen = false;
+    let inTable = false;
+    const dataRows: string[][] = [];
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("|")) {
+            if (inTable && dataRows.length >= 3) break;
+            if (inTable) { dataRows.length = 0; inTable = false; separatorSeen = false; headerCols = []; }
+            continue;
+        }
+        // Split cells (remove first/last empty strings from leading/trailing |)
+        const cells = trimmed.split("|").slice(1, -1).map((c) => c.trim());
+        if (!inTable) {
+            headerCols = cells;
+            inTable = true;
+        } else if (!separatorSeen && cells.every((c) => /^[-: ]+$/.test(c))) {
+            separatorSeen = true;
+        } else if (separatorSeen) {
+            dataRows.push(cells);
+        }
+    }
+
+    if (dataRows.length < 3) return null;
+
+    // Find task column — prefer "Úkol", "Task", or "Aktivita"; fall back to column 1
+    const taskIdx = (() => {
+        const i = headerCols.findIndex((h) => /úkol|task|aktivita|activity|název/i.test(h));
+        return i >= 0 ? i : Math.min(1, headerCols.length - 1);
+    })();
+    // Find time column — prefer "Čas", "Time", "Slot", "Od"
+    const timeIdx = headerCols.findIndex((h) => /^čas$|^time$|^slot$|^od$/i.test(h));
+
+    return dataRows.map((cells, i) => {
+        const rawTask = cells[taskIdx] ?? cells[0] ?? "";
+        // Strip wiki-link syntax if agent embedded [[todo:id|title]] in cell
+        const title = rawTask.replace(/\[\[(?:todo|note):[^\]|]*\|([^\]]+)\]\]/g, "$1").trim();
+        const meta = timeIdx >= 0 ? (cells[timeIdx] ?? "").trim() : undefined;
+        return {
+            id: `table-row-${i}`,
+            title: title || "—",
+            meta: meta || undefined,
+            hasTodoId: false,
+        };
+    }).filter((item) => item.title && item.title !== "—");
+}
+
+function extractPlanTodos(content: string): PlanItem[] | null {
+    return extractNumberedListPlan(content) ?? extractTablePlan(content);
+}
+
 export default function ChatView({ sessionId: initialSessionId, tabId, initialPrompt }: ChatViewProps) {
     const { setTabName, updateTabProps, activeTab, setActiveTabId, chatInputEnterToSend } = useWorkspaceContext();
 
@@ -325,6 +392,10 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
     const [currentAgentId, setCurrentAgentId] = useState<string | undefined>(undefined);
     const [maxThinkingTokens, setMaxThinkingTokens] = useState<number | undefined>(undefined);
     const [queryTrackingId, setQueryTrackingId] = useState<string | null>(null);
+
+    // Plan reorder widget state
+    const [planItems, setPlanItems] = useState<PlanItem[] | null>(null);
+    const [planMessageId, setPlanMessageId] = useState<string | null>(null);
 
     // Message queue state
     const [messageQueue, setMessageQueue] = useState<QueuedMessage[]>([]);
@@ -388,6 +459,21 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
             });
         }
     }, [activeTab?.id, tabId, isLoadingHistory]);
+
+    // Detect plan todos in the last assistant message (only when not streaming)
+    useEffect(() => {
+        if (isLoading) return;
+        const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+        if (!lastAssistant) return;
+        if (lastAssistant.id === planMessageId) return;
+        const textContent = lastAssistant.blocks
+            .filter((b): b is Extract<typeof b, { type: "text" }> => b.type === "text")
+            .map((b) => b.content)
+            .join("\n");
+        const items = extractPlanTodos(textContent);
+        setPlanItems(items);
+        setPlanMessageId(lastAssistant.id);
+    }, [messages, isLoading, planMessageId]);
 
     // Scroll to bottom after history loads if this tab has no saved scroll position.
     // Uses MutationObserver because the scroll container's own dimensions don't change
@@ -1161,6 +1247,28 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
 
                                             return null;
                                         })}
+                                        {planItems && message.id === planMessageId && !isLoading && (
+                                            <ChatPlanWidget
+                                                items={planItems}
+                                                onSend={(ordered) => {
+                                                    const hasTodoIds = ordered[0]?.hasTodoId ?? false;
+                                                    const text = hasTodoIds
+                                                        ? "Upravil jsem pořadí plánu:\n" +
+                                                          ordered
+                                                              .map((item, i) => `${i + 1}. ${item.title} [[todo:${item.id}|${item.title}]]`)
+                                                              .join("\n") +
+                                                          "\nProsím aplikuj toto pořadí."
+                                                        : "Upravil jsem pořadí rozvrhu:\n" +
+                                                          ordered
+                                                              .map((item, i) => `${i + 1}. ${item.meta ? `${item.meta}: ` : ""}${item.title}`)
+                                                              .join("\n") +
+                                                          "\nProsím přeplánuj den v tomto pořadí.";
+                                                    setPlanItems(null);
+                                                    void handleSubmit({ text, attachments: [] });
+                                                }}
+                                                onDismiss={() => setPlanItems(null)}
+                                            />
+                                        )}
                                     </div>
                                 );
                             })}
