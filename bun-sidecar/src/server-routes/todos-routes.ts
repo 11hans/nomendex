@@ -57,6 +57,9 @@ const GetTodosInputSchema = z.object({
     sources: z.preprocess(nullToUndefined, z.array(TodoSourceSchema).optional()),
     status: OptionalStatusSchema,
     statuses: OptionalStatusArraySchema,
+    parentTodoId: OptionalStringSchema,
+    includeSubtasks: OptionalBooleanSchema,
+    subtasksOnly: OptionalBooleanSchema,
 });
 
 const GetTodoByIdInputSchema = z.object({
@@ -80,6 +83,7 @@ const CreateTodoInputSchema = z.object({
     customColumnId: OptionalStringSchema,
     calendarReminderPreset: OptionalCalendarReminderSchema,
     goalRefs: OptionalStringArraySchema,
+    parentTodoId: OptionalStringSchema,
 });
 
 const UpdateTodoInputSchema = z.object({
@@ -103,6 +107,7 @@ const UpdateTodoInputSchema = z.object({
         customColumnId: OptionalStringSchema,
         calendarReminderPreset: OptionalCalendarReminderSchema,
         goalRefs: OptionalStringArraySchema,
+        parentTodoId: z.string().nullable().optional(),
     }).strict(),
 });
 

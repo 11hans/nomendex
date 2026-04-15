@@ -27,6 +27,12 @@ export const GetTodosInputSchema = z.object({
     sources: z.array(TodoSourceSchema).optional(),
     status: z.enum(["todo", "in_progress", "done", "later"]).optional(),
     statuses: z.array(z.enum(["todo", "in_progress", "done", "later"])).optional(),
+    /** When set, only return subtasks of this parent todo ID. */
+    parentTodoId: z.string().optional(),
+    /** When true, include subtasks (todos with a parentTodoId) in results. Default: false (top-level only). */
+    includeSubtasks: z.boolean().optional(),
+    /** When true, return only subtasks (todos with a parentTodoId). */
+    subtasksOnly: z.boolean().optional(),
 });
 
 export type GetTodosInput = z.infer<typeof GetTodosInputSchema>;
@@ -62,6 +68,7 @@ export const functionStubs = {
             attachments: z.array(AttachmentSchema).optional(),
             customColumnId: z.string().optional(),
             goalRefs: z.array(z.string()).optional(),
+            parentTodoId: z.string().optional(),
         }),
         output: TodoSchema,
     },
@@ -87,6 +94,7 @@ export const functionStubs = {
                 attachments: z.array(AttachmentSchema).optional(),
                 customColumnId: z.string().optional(),
                 goalRefs: z.array(z.string()).optional(),
+                parentTodoId: z.string().nullable().optional(),
             }).strict(),
         }),
         output: TodoSchema,

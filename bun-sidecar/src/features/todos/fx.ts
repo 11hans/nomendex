@@ -71,6 +71,10 @@ function getTodosOrderLayoutMigrationMarkerPath(): string {
     return path.join(getNomendexPath(), "migrations", "todos-order-layout-v7.done");
 }
 
+function getTodosSubtaskNormalizationMigrationMarkerPath(): string {
+    return path.join(getNomendexPath(), "migrations", "todos-subtask-normalization-v8.done");
+}
+
 /**
  * Initialize the todos service. Must be called after initializePaths().
  */
@@ -100,6 +104,8 @@ export async function initializeTodosService(): Promise<void> {
     await runTodosInboxCanonicalMigrationIfNeeded();
     // One-off migration: move legacy todo.order into standalone layout storage.
     await runTodosOrderLayoutMigrationIfNeeded();
+    // One-off migration: normalize parentTodoId references (remove dangling/invalid ones).
+    await runTodosSubtaskNormalizationMigrationIfNeeded();
     await ensureTimeblockingConfig();
     await runTimeblockHousekeepingIfNeeded();
     todosLogger.info("Todos service initialized");
@@ -905,6 +911,65 @@ async function runTodosOrderLayoutMigrationIfNeeded(): Promise<void> {
 }
 
 /**
+ * Migration v8: normalize subtask references.
+ * - Remove parentTodoId on todos that reference a non-existent parent.
+ * - Remove parentTodoId on todos whose parent is itself a subtask (depth > 1).
+ * - Synchronize project on subtasks to match their parent's project.
+ */
+async function runTodosSubtaskNormalizationMigrationIfNeeded(): Promise<void> {
+    const markerPath = getTodosSubtaskNormalizationMigrationMarkerPath();
+    const markerFile = Bun.file(markerPath);
+    if (await markerFile.exists()) {
+        todosLogger.info("Todos subtask normalization migration already applied, skipping");
+        return;
+    }
+
+    const todos = await getDb().findAll();
+    const todoIdSet = new Set(todos.map((t) => t.id));
+    let removedCount = 0;
+    let syncedCount = 0;
+
+    for (const todo of todos) {
+        const maybeParentId = todo.parentTodoId || undefined;
+
+        if (!maybeParentId) {
+            continue;
+        }
+
+        const updates: Partial<Todo> & Record<string, unknown> = {};
+
+        if (maybeParentId) {
+            const parent = todos.find((t) => t.id === maybeParentId);
+            const parentHasParent = parent && parent.parentTodoId;
+
+            if (!todoIdSet.has(maybeParentId) || parentHasParent) {
+                // Dangling reference or depth > 1 — detach
+                updates.parentTodoId = undefined;
+                removedCount += 1;
+            } else if (parent && canonicalizeTodoProject(parent.project) !== canonicalizeTodoProject(todo.project)) {
+                // Project out of sync — fix
+                updates.project = canonicalizeTodoProject(parent.project);
+                syncedCount += 1;
+            }
+        }
+
+        if (Object.keys(updates).length > 0) {
+            updates.updatedAt = new Date().toISOString();
+            await getDb().update(todo.id, updates as Partial<Todo>);
+        }
+    }
+
+    await mkdir(path.dirname(markerPath), { recursive: true });
+    await Bun.write(markerPath, JSON.stringify({
+        migratedAt: new Date().toISOString(),
+        removedInvalidParentRefs: removedCount,
+        syncedProjectCount: syncedCount,
+    }, null, 2));
+
+    todosLogger.info(`Todos subtask normalization migration complete (removed=${removedCount}, synced=${syncedCount})`);
+}
+
+/**
  * Compute resolvedGoalRefs for a todo.
  * If the todo has explicit goalRefs, use those.
  * Otherwise, inherit from the project's goalRef.
@@ -946,6 +1011,16 @@ async function getTodos(rawInput: unknown) {
 
         let activeTodos = todos.filter(t => !t.archived);
         logNonCanonicalProjectValues(activeTodos, "getTodos");
+
+        // By default, exclude subtasks (todos with parentTodoId) from results.
+        // Callers can opt in with includeSubtasks:true, subtasksOnly:true, or fetch a specific parent's subtasks with parentTodoId.
+        if (input.parentTodoId) {
+            activeTodos = activeTodos.filter((todo) => todo.parentTodoId === input.parentTodoId);
+        } else if (input.subtasksOnly) {
+            activeTodos = activeTodos.filter((todo) => Boolean(todo.parentTodoId));
+        } else if (!input.includeSubtasks) {
+            activeTodos = activeTodos.filter((todo) => !todo.parentTodoId);
+        }
 
         // Filter by project if specified (legacy aliases map to canonical Inbox)
         if (projectFilter) {
@@ -1025,15 +1100,35 @@ async function createTodo(input: {
     customColumnId?: string;
     calendarReminderPreset?: "30-15" | "none";
     goalRefs?: string[];
+    parentTodoId?: string;
 }) {
     todosLogger.info(`Creating new todo: ${input.title}`);
 
     try {
-        const canonicalProject = canonicalizeTodoProject(input.project);
+        // ── Subtask validation ──────────────────────────────────────────────
+        let resolvedParentTodoId: string | undefined;
+        let inheritedProject: string | undefined;
+
+        if (input.parentTodoId) {
+            const parent = await getDb().findById(input.parentTodoId);
+            if (!parent) {
+                throw new Error(`Parent todo '${input.parentTodoId}' does not exist.`);
+            }
+            if (parent.parentTodoId) {
+                throw new Error("Cannot create a subtask of a subtask. Maximum hierarchy depth is 1.");
+            }
+            resolvedParentTodoId = input.parentTodoId;
+            inheritedProject = canonicalizeTodoProject(parent.project);
+        }
+
+        // Project for subtasks is always inherited from parent; ignore any provided value
+        const canonicalProject = resolvedParentTodoId
+            ? inheritedProject!
+            : canonicalizeTodoProject(input.project);
 
         // Validate that the project exists BEFORE creating the todo.
         // Inbox is a reserved system project and is always allowed.
-        if (canonicalProject !== INBOX_PROJECT_NAME) {
+        if (!resolvedParentTodoId && canonicalProject !== INBOX_PROJECT_NAME) {
             const { getProjectByName } = await import("@/features/projects/fx");
             const project = await getProjectByName({ name: canonicalProject });
             if (!project) {
@@ -1043,7 +1138,13 @@ async function createTodo(input: {
 
         const kind = normalizeKindField(input.kind) ?? "task";
         const source = normalizeSourceField(input.source) ?? "user";
-        const requestedStatus = input.status || "todo";
+        let requestedStatus = input.status || "todo";
+
+        // Subtasks only support todo/done — restrict other statuses
+        if (resolvedParentTodoId && requestedStatus !== "todo" && requestedStatus !== "done") {
+            requestedStatus = "todo";
+        }
+
         if (shouldRejectEventLifecycleChange({
             nextKind: kind,
             nextStatus: requestedStatus,
@@ -1110,6 +1211,7 @@ async function createTodo(input: {
             calendarReminderPreset: input.calendarReminderPreset,
             goalRefs: input.goalRefs,
             resolvedGoalRefs: resolvedGoalRefs.length > 0 ? resolvedGoalRefs : undefined,
+            parentTodoId: resolvedParentTodoId,
         };
 
         const created = await getDb().create(newTodo);
@@ -1146,6 +1248,7 @@ async function updateTodo(input: {
         customColumnId?: string;
         calendarReminderPreset?: "30-15" | "none";
         goalRefs?: string[];
+        parentTodoId?: string | null;
     };
 }) {
     todosLogger.info(`Updating todo: ${input.todoId}`);
@@ -1172,6 +1275,41 @@ async function updateTodo(input: {
             throw new Error(`Todo with ID ${input.todoId} not found`);
         }
 
+        const isSubtask = Boolean(currentTodo.parentTodoId);
+
+        // ── Subtask-specific guards ─────────────────────────────────────────
+        if (isSubtask && projectUpdateProvided) {
+            throw new Error("Cannot change the project of a subtask directly. Change the parent todo's project instead.");
+        }
+
+        const wantsParentUpdate = hasOwnKey(input.updates, "parentTodoId");
+        if (wantsParentUpdate) {
+            const newParentId = input.updates.parentTodoId ?? undefined;
+            if (newParentId) {
+                if (newParentId === input.todoId) {
+                    throw new Error("A todo cannot be its own parent.");
+                }
+                const newParent = await getDb().findById(newParentId);
+                if (!newParent) {
+                    throw new Error(`Parent todo '${newParentId}' does not exist.`);
+                }
+                if (newParent.parentTodoId) {
+                    throw new Error("Cannot attach to a subtask as parent. Maximum hierarchy depth is 1.");
+                }
+            }
+        }
+
+        // Subtask status restricted to todo/done
+        const wantsStatusUpdateForSubtask = hasOwnKey(input.updates, "status") && input.updates.status !== undefined;
+        const nextParentId = wantsParentUpdate ? (input.updates.parentTodoId ?? undefined) : currentTodo.parentTodoId;
+        const willBeSubtask = Boolean(nextParentId);
+        if (willBeSubtask && wantsStatusUpdateForSubtask) {
+            const requestedStatus = input.updates.status!;
+            if (requestedStatus !== "todo" && requestedStatus !== "done") {
+                throw new Error(`Subtasks only support status 'todo' or 'done'. Got '${requestedStatus}'.`);
+            }
+        }
+
         // Guard: reject goalRefs mutation on a todo that is already closed and stays closed.
         // Closed todos have a frozen resolvedGoalRefs snapshot; mutating goalRefs would cause drift.
         const wouldBeClosed = (input.updates.status ?? currentTodo.status) === "done"
@@ -1193,14 +1331,37 @@ async function updateTodo(input: {
             updatedAt: new Date().toISOString(),
         } as Partial<Todo>;
 
-        if (projectUpdateProvided) {
+        // Handle parentTodoId update
+        if (wantsParentUpdate) {
+            const newParentId = input.updates.parentTodoId ?? undefined;
+            updates.parentTodoId = newParentId;
+            // Inherit project from new parent if attaching
+            if (newParentId) {
+                const newParent = await getDb().findById(newParentId);
+                if (newParent) {
+                    updates.project = canonicalizeTodoProject(newParent.project);
+                }
+            }
+        }
+
+        // Project resolution:
+        // - Top-level + project provided → use canonicalProjectUpdate
+        // - Top-level + no project → canonicalize current (invariant fix)
+        // - Attaching to parent → project already set from parent above
+        // - Subtask staying as subtask → don't touch project (inherited from parent)
+        if (wantsParentUpdate && nextParentId) {
+            // Project already set from parent in the parentTodoId handling block above
+        } else if (!isSubtask && projectUpdateProvided) {
             updates.project = canonicalProjectUpdate;
-        } else {
+        } else if (!isSubtask && !projectUpdateProvided) {
             delete updates.project;
             const invariantProject = canonicalizeTodoProject(currentTodo.project);
             if (currentTodo.project !== invariantProject) {
                 updates.project = invariantProject;
             }
+        } else {
+            // Subtask, no parent change, no project change — don't update project field
+            delete updates.project;
         }
 
         const wantsKindUpdate = hasOwnKey(input.updates, "kind") && input.updates.kind !== undefined;
@@ -1327,9 +1488,30 @@ async function updateTodo(input: {
 
         const previousColumnKey = getTodoLayoutColumnKey(currentTodo);
         const nextColumnKey = getTodoLayoutColumnKey(updated);
-        if (previousColumnKey !== nextColumnKey) {
-            const allTodos = await getDb().findAll();
+        const columnChanged = previousColumnKey !== nextColumnKey;
+        const projectChanged = !isSubtask && updates.project !== undefined && updates.project !== canonicalizeTodoProject(currentTodo.project);
+
+        // Single findAll for both layout move and child propagation
+        const allTodos = (columnChanged || projectChanged) ? await getDb().findAll() : undefined;
+
+        if (columnChanged && allTodos) {
             await moveTodoInLayout(updated.id, updated, new Set(allTodos.map((todo) => todo.id)));
+        }
+
+        // Propagate project change to children when a top-level todo's project changes
+        if (projectChanged && allTodos) {
+            const newProject = canonicalizeTodoProject(updated.project);
+            const children = allTodos.filter((t) => t.parentTodoId === input.todoId);
+            const childUpdateTime = new Date().toISOString();
+            for (const child of children) {
+                const updatedChild = await getDb().update(child.id, {
+                    project: newProject,
+                    updatedAt: childUpdateTime,
+                } as Partial<Todo>);
+                if (updatedChild) {
+                    broadcastTodoEvent({ type: "upsert", todo: sanitizeTodoForClient(updatedChild) });
+                }
+            }
         }
 
         const sanitized = sanitizeTodoForClient(updated);
@@ -1345,6 +1527,14 @@ async function deleteTodo(input: { todoId: string }) {
     todosLogger.info(`Deleting todo: ${input.todoId}`);
 
     try {
+        // Cascade delete children (subtasks) first
+        const allBeforeDelete = await getDb().findAll();
+        const children = allBeforeDelete.filter((t) => t.parentTodoId === input.todoId);
+        for (const child of children) {
+            await getDb().delete(child.id);
+            todosLogger.info(`Cascade-deleted subtask: ${child.id}`);
+        }
+
         const deleted = await getDb().delete(input.todoId);
 
         if (!deleted) {
@@ -1353,9 +1543,13 @@ async function deleteTodo(input: { todoId: string }) {
         }
 
         const allTodos = await getDb().findAll();
-        await removeTodoFromLayout(input.todoId, new Set(allTodos.map((todo) => todo.id)));
+        const allRemainingIds = new Set(allTodos.map((todo) => todo.id));
+        for (const child of children) {
+            await removeTodoFromLayout(child.id, allRemainingIds);
+        }
+        await removeTodoFromLayout(input.todoId, allRemainingIds);
 
-        todosLogger.info(`Deleted todo: ${input.todoId}`);
+        todosLogger.info(`Deleted todo: ${input.todoId} (and ${children.length} subtask(s))`);
         return { success: true };
     } catch (error) {
         todosLogger.error(`Failed to delete todo ${input.todoId}`, { error });
@@ -1431,12 +1625,24 @@ async function reorderTodos(input: {
 
 async function archiveTodo(input: { todoId: string }) {
     todosLogger.info(`Archiving todo: ${input.todoId}`);
+    // Cascade archive to children (subtasks) first
+    const allTodos = await getDb().findAll();
+    const children = allTodos.filter((t) => t.parentTodoId === input.todoId && !t.archived);
+    for (const child of children) {
+        await updateTodo({ todoId: child.id, updates: { archived: true } });
+    }
     // Route through updateTodo so resolvedGoalRefs freeze/recompute logic stays consistent.
     return updateTodo({ todoId: input.todoId, updates: { archived: true } });
 }
 
 async function unarchiveTodo(input: { todoId: string }) {
     todosLogger.info(`Unarchiving todo: ${input.todoId}`);
+    // Cascade unarchive to children (subtasks) as well
+    const allTodos = await getDb().findAll();
+    const children = allTodos.filter((t) => t.parentTodoId === input.todoId && t.archived);
+    for (const child of children) {
+        await updateTodo({ todoId: child.id, updates: { archived: false } });
+    }
     // Route through updateTodo so resolvedGoalRefs recompute logic stays consistent.
     return updateTodo({ todoId: input.todoId, updates: { archived: false } });
 }
@@ -1551,7 +1757,8 @@ async function getArchivedTodos(input: { project?: string }) {
     try {
         const todos = await getDb().findAll();
 
-        let archivedTodos = todos.filter(t => t.archived);
+        // Exclude subtasks from the archived view — they are shown under their parent
+        let archivedTodos = todos.filter((t) => t.archived && !t.parentTodoId);
         logNonCanonicalProjectValues(archivedTodos, "getArchivedTodos");
 
         // Filter by project if specified (legacy aliases map to canonical Inbox)

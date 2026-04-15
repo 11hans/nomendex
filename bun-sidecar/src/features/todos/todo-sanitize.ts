@@ -67,6 +67,7 @@ export function sanitizeTodoForClient(todo: Todo): Todo {
         calendarReminderPreset,
         goalRefs: toOptionalStringArray(raw.goalRefs, true),
         resolvedGoalRefs: toOptionalStringArray(raw.resolvedGoalRefs),
+        parentTodoId: toOptionalString(raw.parentTodoId),
     };
 }
 

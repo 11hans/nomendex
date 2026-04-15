@@ -28,6 +28,7 @@ interface CreateTodoInput {
     customColumnId?: string;
     calendarReminderPreset?: "30-15" | "none";
     goalRefs?: string[];
+    parentTodoId?: string;
 }
 
 interface UpdateTodoInput {
@@ -50,6 +51,7 @@ interface UpdateTodoInput {
         customColumnId?: string;
         calendarReminderPreset?: "30-15" | "none";
         goalRefs?: string[];
+        parentTodoId?: string | null;
     };
 }
 
@@ -58,7 +60,7 @@ interface ReorderInput {
 }
 
 const CREATE_NULLABLE_KEYS = new Set(["scheduledStart", "scheduledEnd", "dueDate"]);
-const UPDATE_NULLABLE_KEYS = new Set(["scheduledStart", "scheduledEnd", "dueDate", "duration"]);
+const UPDATE_NULLABLE_KEYS = new Set(["scheduledStart", "scheduledEnd", "dueDate", "duration", "parentTodoId"]);
 
 async function fetchAPI<T>(endpoint: string, body: object = {}): Promise<T> {
     const response = await fetch(`/api/todos/${endpoint}`, {
@@ -98,8 +100,10 @@ async function fetchProjectsAPI<T>(endpoint: string, body: object = {}): Promise
 
 // Standalone API object for use outside React components
 export const todosAPI = {
-    getTodos: async (args: GetTodosInput = {}) =>
+    getTodos: async (args: GetTodosInput & { parentTodoId?: string; includeSubtasks?: boolean; subtasksOnly?: boolean } = {}) =>
         sanitizeTodoListForClient(await fetchAPI<Todo[]>("list", args)),
+    getSubtasks: async (args: { parentTodoId: string }) =>
+        sanitizeTodoListForClient(await fetchAPI<Todo[]>("list", { parentTodoId: args.parentTodoId })),
     getTodoById: async (args: { todoId: string }) =>
         sanitizeTodoForClient(await fetchAPI<Todo>("get", args)),
     createTodo: async (args: CreateTodoInput) =>

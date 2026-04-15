@@ -34,6 +34,8 @@ export const TodoSchema = z.object({
     calendarReminderPreset: z.enum(["30-15", "none"]).optional(),
     goalRefs: z.array(z.string()).optional(), // user/agent editable input
     resolvedGoalRefs: z.array(z.string()).optional(), // frozen snapshot for reporting
+    // First-class subtask support (max 1 level deep)
+    parentTodoId: z.string().optional(), // set on subtasks; absent on top-level todos
 });
 
 export type Todo = z.infer<typeof TodoSchema>;
