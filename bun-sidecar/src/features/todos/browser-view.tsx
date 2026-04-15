@@ -1152,7 +1152,7 @@ export function TodosBrowserView({
         return map;
     }, [subtasks]);
 
-    // Subtasks grouped by parent todo ID
+    // Subtasks grouped by parent todo ID (done subtasks sorted to the end)
     const subtasksByParentId = useMemo(() => {
         const map = new Map<string, Todo[]>();
         for (const st of subtasks) {
@@ -1160,6 +1160,13 @@ export function TodosBrowserView({
             const list = map.get(st.parentTodoId) ?? [];
             list.push(st);
             map.set(st.parentTodoId, list);
+        }
+        for (const [parentId, list] of map) {
+            map.set(parentId, [...list].sort((a, b) => {
+                const aDone = a.status === "done" ? 1 : 0;
+                const bDone = b.status === "done" ? 1 : 0;
+                return aDone - bDone;
+            }));
         }
         return map;
     }, [subtasks]);
@@ -1188,6 +1195,15 @@ export function TodosBrowserView({
             for (const colId of Object.keys(grouped)) {
                 grouped[colId].sort(urgencyComparator);
             }
+        }
+
+        // Done todos always sink to the bottom within each column
+        for (const colId of Object.keys(grouped)) {
+            grouped[colId].sort((a, b) => {
+                const aDone = a.status === "done" ? 1 : 0;
+                const bDone = b.status === "done" ? 1 : 0;
+                return aDone - bDone;
+            });
         }
 
         return grouped;
