@@ -271,7 +271,7 @@ export function TodosBrowserView({
     const filterProject = project;
     const canonicalFilterProject = filterProject == null ? undefined : canonicalizeTodoProject(filterProject);
     const { loading, setLoading } = usePlugin();
-    const { activeTab, activeTabId, setTabName, openTab, replaceTabWithNewView, getProjectPreferences, setProjectPreferences } = useWorkspaceContext();
+    const { activeTab, activeTabId, setTabName, openTab, replaceTabWithNewView, getProjectPreferences, setProjectPreferences, todoViewPreferences } = useWorkspaceContext();
     const { currentTheme } = useTheme();
     const isProjectScopedView = canonicalFilterProject !== undefined;
     const projectDisplayName = canonicalFilterProject;
@@ -394,9 +394,11 @@ export function TodosBrowserView({
     // On mount: if the persisted filter state matches a system list (e.g. after navigation
     // replaced the tab and reset activeSystemListId), restore activeSystemListId so the
     // sidebar correctly highlights the active list and the user understands why todos are filtered.
+    // If no saved preferences exist (first open), default to the "today" system list.
     useEffect(() => {
         const { dueFilter, selectedTags, selectedPriority, quickPreset } = todoFilter.filterState;
         const match = SYSTEM_LISTS.find((list) =>
+            !list.kindFilter && // kindFilter-based lists (e.g. "events") can't be reliably restored from criteria alone
             list.criteria.dueFilter === dueFilter &&
             list.criteria.selectedPriority === selectedPriority &&
             list.criteria.quickPreset === quickPreset &&
@@ -404,6 +406,11 @@ export function TodosBrowserView({
         );
         if (match) {
             setActiveSystemListId(match.id);
+        } else if (!todoViewPreferences?.browser) {
+            // No saved browser preferences — default to "today" list on first open
+            const todayList = SYSTEM_LISTS.find((l) => l.id === "today")!;
+            setActiveSystemListId("today");
+            todoFilter.applyFilterCriteria(todayList.criteria, { clearSearch: true });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Intentionally run only once on mount

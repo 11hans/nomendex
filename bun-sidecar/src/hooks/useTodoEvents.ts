@@ -69,8 +69,8 @@ export function useTodoEvents(): void {
                         const data = JSON.parse(event.data) as TodoEvent;
                         if (data.type === "delete") {
                             await removeTaskFromCalendar(data.todoId);
-                        } else if (data.todo.archived) {
-                            await removeTaskFromCalendar(data.todo.id);
+                        // } else if (data.todo.archived) {
+                        //     await removeTaskFromCalendar(data.todo.id);
                         } else {
                             await syncTaskToCalendar(data.todo as Todo);
                         }
