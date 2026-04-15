@@ -120,17 +120,28 @@ export const MessageAction = ({
   return button;
 };
 
+// Transform wiki-link syntax used by AI agents into readable markdown.
+// Handles [[todo:id|Display Title]] and [[note:id|Display Title]] patterns.
+function preprocessWikiLinks(content: string): string {
+  return content.replace(
+    /\[\[(?:todo|note|wiki):[^\]|]*\|([^\]]+)\]\]/g,
+    (_, title: string) => `**${title}**`
+  );
+}
+
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 export const MessageResponse = memo(
-  ({ className, ...props }: MessageResponseProps) => (
+  ({ className, children, ...props }: MessageResponseProps) => (
     <Streamdown
       className={cn(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
       {...props}
-    />
+    >
+      {typeof children === "string" ? preprocessWikiLinks(children) : children}
+    </Streamdown>
   ),
   (prevProps, nextProps) => prevProps.children === nextProps.children
 );
