@@ -43,6 +43,9 @@ import {
     LayoutGrid,
     type LucideIcon,
     Wrench,
+    Loader2,
+    CheckCircle2,
+    XCircle,
 } from "lucide-react";
 import { Loader } from "@/components/ai-elements/loader";
 import {
@@ -230,6 +233,106 @@ function toolText(name: string, pending: boolean): string {
     const text = TOOL_TEXT[name];
     if (!text) return pending ? `Running ${name}` : `Ran ${name}`;
     return pending ? text.pending : text.done;
+}
+
+function BashToolUseItem({ block }: { block: ToolBlock }) {
+    const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+    const toolCall = block.toolCall;
+    const hasOutput = toolCall.output !== undefined || !!toolCall.errorText;
+    const pending = isToolPending(toolCall.state) && !hasOutput;
+    const hasError = toolCall.state === "output-error";
+    const isOpen = manualOpen !== null ? manualOpen : pending;
+
+    const command = asText(toolCall.input?.command);
+    const commandFirstLine = firstLine(command);
+    const outputText =
+        typeof toolCall.output === "string"
+            ? toolCall.output
+            : toolCall.output != null
+              ? JSON.stringify(toolCall.output, null, 2)
+              : "";
+
+    return (
+        <div className="my-1.5 max-w-xl">
+            <Collapsible open={isOpen} onOpenChange={(open) => setManualOpen(open)}>
+                {!isOpen && (
+                    <CollapsibleTrigger className="flex w-full items-center gap-1.5 rounded-md border border-border/50 px-2.5 py-1.5 text-xs transition-colors hover:bg-secondary/50">
+                        {pending ? (
+                            <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+                        ) : hasError ? (
+                            <XCircle className="size-3.5 shrink-0 text-destructive" />
+                        ) : (
+                            <CheckCircle2 className="size-3.5 shrink-0 text-emerald-500" />
+                        )}
+                        <span className="shrink-0 font-mono text-muted-foreground">$</span>
+                        <span className="flex-1 truncate text-left font-mono text-foreground">{commandFirstLine}</span>
+                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+                    </CollapsibleTrigger>
+                )}
+                <CollapsibleContent forceMount={isOpen ? true : undefined}>
+                    {isOpen && (
+                        <div className="overflow-hidden rounded-md border border-border/60">
+                            {/* Header bar */}
+                            <div className="flex items-center gap-2 border-b border-border/50 bg-secondary/30 px-3 py-1.5 text-xs">
+                                <Terminal className="size-3.5 shrink-0 text-muted-foreground" />
+                                <span className="font-medium text-foreground">Bash</span>
+                                <span className="flex-1" />
+                                {pending ? (
+                                    <>
+                                        <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                                        <span className="text-muted-foreground">running</span>
+                                    </>
+                                ) : hasError ? (
+                                    <>
+                                        <XCircle className="size-3 text-destructive" />
+                                        <span className="text-destructive">error</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <CheckCircle2 className="size-3 text-emerald-500" />
+                                        <span className="text-emerald-500">done</span>
+                                    </>
+                                )}
+                                {!pending && (
+                                    <button
+                                        type="button"
+                                        className="ml-1 rounded p-0.5 text-muted-foreground transition-colors hover:bg-secondary"
+                                        onClick={() => setManualOpen(false)}
+                                        title="Collapse"
+                                    >
+                                        <ChevronDown className="size-3.5" />
+                                    </button>
+                                )}
+                            </div>
+                            {/* Terminal body */}
+                            <div className="bg-[#111111] font-mono text-xs">
+                                {/* Command line */}
+                                <div className="flex gap-2 border-b border-white/5 px-3 py-2">
+                                    <span className="shrink-0 select-none text-emerald-400">$</span>
+                                    <pre className="whitespace-pre-wrap break-all text-white/90">{command}</pre>
+                                </div>
+                                {/* Output */}
+                                {(outputText || toolCall.errorText) ? (
+                                    <div className="max-h-64 overflow-auto px-3 py-2">
+                                        <pre className={cn(
+                                            "whitespace-pre-wrap break-all leading-relaxed",
+                                            hasError ? "text-red-400" : "text-white/75"
+                                        )}>
+                                            {toolCall.errorText || outputText}
+                                        </pre>
+                                    </div>
+                                ) : pending ? (
+                                    <div className="px-3 py-2 text-white/25">
+                                        <span className="animate-pulse">▋</span>
+                                    </div>
+                                ) : null}
+                            </div>
+                        </div>
+                    )}
+                </CollapsibleContent>
+            </Collapsible>
+        </div>
+    );
 }
 
 function ToolUseItem({ block }: { block: ToolBlock }) {
@@ -1242,6 +1345,9 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                             }
 
                                             if (block.type === "tool") {
+                                                if (block.toolCall.name === "Bash") {
+                                                    return <BashToolUseItem key={block.id} block={block} />;
+                                                }
                                                 return <ToolUseItem key={block.id} block={block} />;
                                             }
 
