@@ -1,4 +1,4 @@
-import { Trash2, Archive, ArchiveRestore, CalendarDays, Bell, AlertCircle } from "lucide-react";
+import { Trash2, Archive, ArchiveRestore, CalendarDays, Bell, AlertCircle, ListPlus } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Todo, PRIORITY_CONFIG } from "./todo-types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,6 +87,9 @@ export function TodoCard({
     hideStatusIcon,
     onDateChange,
     onChecklistToggle,
+    subtaskProgress,
+    onAddSubtask,
+    children,
 }: {
     todo: Todo;
     selected?: boolean;
@@ -98,6 +101,11 @@ export function TodoCard({
     hideStatusIcon?: boolean;
     onDateChange?: (todo: Todo, dates: { scheduledStart?: string; scheduledEnd?: string }) => void;
     onChecklistToggle?: (todo: Todo, newDescription: string) => void;
+    /** Pre-computed subtask progress { done, total }. When total > 0, shown instead of checklist fallback. */
+    subtaskProgress?: { done: number; total: number };
+    onAddSubtask?: (todo: Todo) => void;
+    /** Slot for subtask rows rendered inside the card */
+    children?: React.ReactNode;
 }) {
     const { currentTheme } = useTheme();
     const isEvent = isEventTodo(todo);
@@ -176,7 +184,34 @@ export function TodoCard({
                     </div>
                 )}
             </CardHeader>
-            {todo.description && (
+            {/* Subtask progress bar (takes priority over checklist) */}
+            {subtaskProgress && subtaskProgress.total > 0 && (
+                <CardContent className="pt-0 px-3 pb-1">
+                    <div className="space-y-1">
+                        {todo.description && (
+                            <p className="text-xs line-clamp-2 break-words [overflow-wrap:anywhere]" style={{ color: currentTheme.styles.contentTertiary }}>
+                                {todo.description}
+                            </p>
+                        )}
+                        <div className="flex items-center gap-2">
+                            <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ backgroundColor: currentTheme.styles.borderDefault }}>
+                                <div
+                                    className="h-full rounded-full transition-all"
+                                    style={{
+                                        width: `${Math.round((subtaskProgress.done / subtaskProgress.total) * 100)}%`,
+                                        backgroundColor: currentTheme.styles.contentAccent,
+                                    }}
+                                />
+                            </div>
+                            <p className="text-caption shrink-0" style={{ color: currentTheme.styles.contentTertiary }}>
+                                {subtaskProgress.done}/{subtaskProgress.total}
+                            </p>
+                        </div>
+                    </div>
+                </CardContent>
+            )}
+            {/* Description / checklist (shown when no subtasks) */}
+            {(!subtaskProgress || subtaskProgress.total === 0) && todo.description && (
                 <CardContent className="pt-0 px-3 pb-1">
                     {hasChecklistItems(todo.description) ? (() => {
                         const checklistItems = parseChecklistLines(todo.description!);
@@ -229,10 +264,10 @@ export function TodoCard({
                 </CardContent>
             )}
             <div className="px-3 pb-2 flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 flex items-center gap-1">
                     {onDateChange ? (
                         <div
-                            className={`inline-flex max-w-full ${!(todo.scheduledStart || todo.scheduledEnd) ? 'opacity-0 group-hover/card:opacity-100' : ''} transition-opacity`}
+                            className="inline-flex max-w-full"
                             onClick={(e) => { e.stopPropagation(); }}
                             onDoubleClick={(e) => { e.stopPropagation(); }}
                             onPointerDown={(e) => { e.stopPropagation(); }}
@@ -274,10 +309,25 @@ export function TodoCard({
                             <div />
                         )
                     )}
+                    {onAddSubtask && (
+                        <button
+                            type="button"
+                            className="inline-flex items-center justify-center size-6 rounded hover:bg-surface-elevated"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                onAddSubtask(todo);
+                            }}
+                            title="Add subtask"
+                            aria-label="Add subtask"
+                            style={{ color: currentTheme.styles.contentTertiary }}
+                        >
+                            <ListPlus className="size-3" />
+                        </button>
+                    )}
                 </div>
-                {/* Actions - show when selected */}
-                <div className={`shrink-0 flex items-center gap-0.5 transition-opacity duration-150 ${selected ? 'opacity-100' : 'opacity-0 group-hover/card:opacity-100'}`}>
-
+                {/* Actions */}
+                <div className="shrink-0 flex items-center gap-0.5">
                     <button
                         type="button"
                         className="inline-flex items-center justify-center size-6 rounded hover:bg-surface-elevated"
@@ -307,6 +357,7 @@ export function TodoCard({
                     </button>
                 </div>
             </div>
+            {children}
         </Card >
     );
 }

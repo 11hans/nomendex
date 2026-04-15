@@ -1,13 +1,15 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Save, X, Trash2, ListChecks, Bell } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Save, X, Trash2, ListChecks, Bell, Plus } from "lucide-react";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { useTheme } from "@/hooks/useTheme";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
+import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { Todo } from "./todo-types";
 import { AttachmentThumbnail } from "@/components/AttachmentThumbnail";
 import {
@@ -48,6 +50,32 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
     const reminderAutoDisabledRef = useRef(false);
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
+    const api = useTodosAPI();
+
+    // Subtask state
+    const [subtasks, setSubtasks] = useState<Todo[]>([]);
+    const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+    const [addingSubtask, setAddingSubtask] = useState(false);
+    const newSubtaskInputRef = useRef<HTMLInputElement>(null);
+
+    const fetchSubtasks = useCallback(async (parentId: string) => {
+        const result = await api.getSubtasks({ parentTodoId: parentId });
+        setSubtasks(result);
+    }, [api]);
+
+    useEffect(() => {
+        if (!todo?.id || todo.parentTodoId) {
+            setSubtasks([]);
+            return;
+        }
+        fetchSubtasks(todo.id);
+    }, [todo?.id, todo?.parentTodoId, fetchSubtasks]);
+
+    useEffect(() => {
+        if (addingSubtask) {
+            requestAnimationFrame(() => newSubtaskInputRef.current?.focus());
+        }
+    }, [addingSubtask]);
 
     const hasTimedSchedule = (item: Pick<Todo, "scheduledStart" | "scheduledEnd">): boolean =>
         Boolean(item.scheduledStart?.includes("T") || item.scheduledEnd?.includes("T"));
@@ -156,13 +184,43 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
         }
     };
 
+    const handleSubtaskToggle = async (subtask: Todo) => {
+        const newStatus = subtask.status === "done" ? "todo" : "done";
+        const updated = await api.updateTodo({ todoId: subtask.id, updates: { status: newStatus } });
+        setSubtasks((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    };
+
+    const handleAddSubtask = async () => {
+        if (!editedTodo || !newSubtaskTitle.trim()) return;
+        const created = await api.createTodo({
+            title: newSubtaskTitle.trim(),
+            parentTodoId: editedTodo.id,
+            kind: "task",
+            source: "user",
+            status: "todo",
+        });
+        setSubtasks((prev) => [...prev, created]);
+        setNewSubtaskTitle("");
+    };
+
+    const handleSubtaskKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            handleAddSubtask();
+        } else if (e.key === "Escape") {
+            setAddingSubtask(false);
+            setNewSubtaskTitle("");
+        }
+    };
+
     if (!editedTodo) {
         return null;
     }
 
+    const isSubtask = Boolean(editedTodo.parentTodoId);
     const isEventDraft = editedTodo.kind === "event";
-    const itemLabel = getTodoKindLabel(editedTodo.kind);
-    const canChangeKind = editedTodo.source === "user";
+    const itemLabel = isSubtask ? "Subtask" : getTodoKindLabel(editedTodo.kind);
+    const canChangeKind = editedTodo.source === "user" && !isSubtask;
 
     const handleKindChange = (kind: Todo["kind"]) => {
         setEditedTodo((prev) => (prev ? applyTodoKindToDraft(prev, kind) : prev));
@@ -186,9 +244,16 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                         borderBottom: `1px solid ${styles.borderDefault}`,
                     }}
                 >
-                    <span className="text-xs font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
-                        Edit {itemLabel}
-                    </span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium uppercase tracking-[0.08em]" style={{ color: styles.contentPrimary }}>
+                            Edit {itemLabel}
+                        </span>
+                        {isSubtask && (
+                            <span className="text-caption px-1.5 py-0.5 rounded" style={{ backgroundColor: styles.surfaceTertiary, color: styles.contentAccent }}>
+                                subtask
+                            </span>
+                        )}
+                    </div>
                     <span className="text-caption" style={{ color: styles.contentTertiary }}>
                         Cmd+Enter to save
                     </span>
@@ -242,6 +307,76 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                             }}
                         />
                     </div>
+
+                    {!isSubtask && (
+                        <div>
+                            <div className="mb-1.5 flex items-center justify-between">
+                                <span className="text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                                    Subtasks {subtasks.length > 0 && `(${subtasks.filter(s => s.status === "done").length}/${subtasks.length})`}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setAddingSubtask(true)}
+                                    className="flex items-center gap-1 text-caption px-1.5 py-0.5 rounded transition-colors"
+                                    style={{ color: styles.contentTertiary }}
+                                >
+                                    <Plus className="size-3" />
+                                    Add
+                                </button>
+                            </div>
+                            <div className="space-y-1">
+                                {subtasks.map((subtask) => (
+                                    <div
+                                        key={subtask.id}
+                                        className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md"
+                                        style={{ backgroundColor: styles.surfaceSecondary }}
+                                    >
+                                        <Checkbox
+                                            checked={subtask.status === "done"}
+                                            onCheckedChange={() => handleSubtaskToggle(subtask)}
+                                            className="size-3.5 shrink-0"
+                                        />
+                                        <span
+                                            className="text-sm flex-1 min-w-0 truncate"
+                                            style={{
+                                                color: subtask.status === "done" ? styles.contentTertiary : styles.contentPrimary,
+                                                textDecoration: subtask.status === "done" ? "line-through" : "none",
+                                            }}
+                                        >
+                                            {subtask.title}
+                                        </span>
+                                    </div>
+                                ))}
+                                {addingSubtask && (
+                                    <div
+                                        className="flex items-center gap-2.5 px-2.5 py-1 rounded-md"
+                                        style={{ backgroundColor: styles.surfaceSecondary }}
+                                    >
+                                        <div className="size-3.5 shrink-0" />
+                                        <Input
+                                            ref={newSubtaskInputRef}
+                                            value={newSubtaskTitle}
+                                            onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                                            onKeyDown={handleSubtaskKeyDown}
+                                            onBlur={() => {
+                                                if (!newSubtaskTitle.trim()) {
+                                                    setAddingSubtask(false);
+                                                }
+                                            }}
+                                            placeholder="Subtask title…"
+                                            className="h-7 text-sm border-0 px-0 shadow-none focus-visible:ring-0 bg-transparent"
+                                            style={{ color: styles.contentPrimary }}
+                                        />
+                                    </div>
+                                )}
+                                {subtasks.length === 0 && !addingSubtask && (
+                                    <p className="text-caption px-0.5" style={{ color: styles.contentTertiary }}>
+                                        No subtasks yet
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {editedTodo.attachments && editedTodo.attachments.length > 0 && (
                         <div className="pt-1">
@@ -301,7 +436,7 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                 >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-2">
-                            {!isEventDraft && (
+                            {!isEventDraft && !isSubtask && (
                                 <>
                                     <StatusPicker
                                         value={editedTodo.status}
@@ -312,6 +447,23 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                                         onChange={(priority) => setEditedTodo({ ...editedTodo, priority })}
                                     />
                                 </>
+                            )}
+                            {isSubtask && (
+                                <button
+                                    type="button"
+                                    className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs border transition-colors"
+                                    onClick={() => setEditedTodo({
+                                        ...editedTodo,
+                                        status: editedTodo.status === "done" ? "todo" : "done",
+                                    })}
+                                    style={{
+                                        borderColor: styles.borderDefault,
+                                        backgroundColor: editedTodo.status === "done" ? styles.surfaceAccent : styles.surfaceSecondary,
+                                        color: editedTodo.status === "done" ? styles.contentAccent : styles.contentSecondary,
+                                    }}
+                                >
+                                    {editedTodo.status === "done" ? "Done" : "Not done"}
+                                </button>
                             )}
                             <div className="flex items-center gap-2">
                                 <ScheduledDateTimePicker
@@ -387,6 +539,7 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                                 value={editedTodo.project}
                                 onChange={(project) => setEditedTodo({ ...editedTodo, project })}
                                 availableProjects={availableProjects}
+                                disabled={isSubtask}
                             />
                             <TagsPicker
                                 value={editedTodo.tags || []}

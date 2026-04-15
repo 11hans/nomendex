@@ -263,39 +263,39 @@ export function CreateTodoDialog({
                             <div className="h-5 w-px mx-0.5" style={{ backgroundColor: styles.borderDefault }} />
 
                             <ProjectPicker
-                                value={newTodo.project || undefined}
-                                onChange={(project) => onNewTodoChange({ ...newTodo, project })}
-                                availableProjects={availableProjects}
-                                disabled={projectLocked}
-                            />
-                            <TagsPicker
-                                value={newTodo.tags}
-                                onChange={(tags) => onNewTodoChange({ ...newTodo, tags })}
-                                availableTags={availableTags}
-                            />
-                            <AttachmentPicker
-                                attachments={newTodo.attachments || []}
-                                onChange={(attachments) => onNewTodoChange({ ...newTodo, attachments })}
-                            />
-                            <GoalPicker
-                                mode="multi"
-                                value={newTodo.goalRefs}
-                                onChange={(goalRefs) => onNewTodoChange({ ...newTodo, goalRefs })}
-                                goals={goals}
-                            />
-                            <div className="flex items-center gap-2">
-                                <ScheduledDateTimePicker
-                                    scheduledStart={newTodo.scheduledStart}
-                                    scheduledEnd={newTodo.scheduledEnd}
-                                    onChange={(dates) => onNewTodoChange({ ...newTodo, ...dates })}
-                                />
-                                {!isEventDraft && (
-                                    <DateTimePicker
-                                        dueDate={newTodo.dueDate}
-                                        onChange={({ dueDate }) => onNewTodoChange({ ...newTodo, dueDate })}
+                                        value={newTodo.project || undefined}
+                                        onChange={(project) => onNewTodoChange({ ...newTodo, project })}
+                                        availableProjects={availableProjects}
+                                        disabled={projectLocked}
                                     />
-                                )}
-                            </div>
+                                    <TagsPicker
+                                        value={newTodo.tags}
+                                        onChange={(tags) => onNewTodoChange({ ...newTodo, tags })}
+                                        availableTags={availableTags}
+                                    />
+                                    <AttachmentPicker
+                                        attachments={newTodo.attachments || []}
+                                        onChange={(attachments) => onNewTodoChange({ ...newTodo, attachments })}
+                                    />
+                                    <GoalPicker
+                                        mode="multi"
+                                        value={newTodo.goalRefs}
+                                        onChange={(goalRefs) => onNewTodoChange({ ...newTodo, goalRefs })}
+                                        goals={goals}
+                                    />
+                                    <div className="flex items-center gap-2">
+                                        <ScheduledDateTimePicker
+                                            scheduledStart={newTodo.scheduledStart}
+                                            scheduledEnd={newTodo.scheduledEnd}
+                                            onChange={(dates) => onNewTodoChange({ ...newTodo, ...dates })}
+                                        />
+                                        {!isEventDraft && (
+                                            <DateTimePicker
+                                                dueDate={newTodo.dueDate}
+                                                onChange={({ dueDate }) => onNewTodoChange({ ...newTodo, dueDate })}
+                                            />
+                                        )}
+                                    </div>
                         </div>
 
                         <div className="flex items-center gap-2 ml-auto">

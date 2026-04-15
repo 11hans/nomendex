@@ -6,6 +6,7 @@ import type { GoalRecord } from "@/features/goals/goal-types";
 import { subscribe } from "@/lib/events";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertCircle, CheckCircle2, Clock, Calendar, Eye, EyeOff, MoreHorizontal, Archive, Plus, Settings, Circle, FileSearch } from "lucide-react";
@@ -278,6 +279,7 @@ export function TodosBrowserView({
     const todosAPI = useTodosAPI();
     const goalsAPI = useGoalsAPI();
     const [todos, setTodos] = useState<Todo[]>([]);
+    const [subtasks, setSubtasks] = useState<Todo[]>([]);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
     const [sidebarSourceTodos, setSidebarSourceTodos] = useState<Todo[]>([]);
@@ -291,6 +293,7 @@ export function TodosBrowserView({
     const todoFilter = useTodoFilterState("browser", { defaultSortMode: "urgency" });
     const isManualSort = todoFilter.filterState.sortMode === "manual";
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
+    const [inlineSubtaskParentId, setInlineSubtaskParentId] = useState<string | null>(null);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [todoToEdit, setTodoToEdit] = useState<Todo | null>(null);
     const [editSaving, setEditSaving] = useState(false);
@@ -497,9 +500,13 @@ export function TodosBrowserView({
             try {
                 const shouldLoadAllTodosForSidebar = !embedded && canonicalFilterProject !== undefined;
 
-                const [todosData, tags, projects, projectsList, goals, allTodosForSidebar] = await Promise.all([
-                    // Always load only active (non-archived) todos for the board itself
+                const [todosData, subtasksData, tags, projects, projectsList, goals, allTodosForSidebar] = await Promise.all([
+                    // Always load only active (non-archived) top-level todos for the board itself
                     todosAPI.getTodos(canonicalFilterProject ? { project: canonicalFilterProject } : {}),
+                    // Load only subtasks (not top-level todos) for progress and inline rows
+                    todosAPI.getTodos(canonicalFilterProject
+                        ? { project: canonicalFilterProject, subtasksOnly: true }
+                        : { subtasksOnly: true }),
                     todosAPI.getTags().catch(() => []),
                     todosAPI.getProjects().catch(() => []),
                     !embedded ? todosAPI.getProjectsList().catch(() => []) : Promise.resolve([]),
@@ -510,6 +517,8 @@ export function TodosBrowserView({
                 // The getTodos API should already filter out archived items, but let's be explicit
                 const activeTodos = todosData.filter(t => !t.archived);
                 setTodos(activeTodos);
+                // Track only actual subtasks (have parentTodoId)
+                setSubtasks(subtasksData.filter(t => !t.archived && t.parentTodoId));
                 setAvailableTags(tags);
                 setAvailableGoals(goals);
 
@@ -620,13 +629,25 @@ export function TodosBrowserView({
         }
     }
 
+    const handleCreateInlineSubtask = useCallback(async (parentId: string, title: string) => {
+        try {
+            await todosAPI.createTodo({
+                title,
+                parentTodoId: parentId,
+            });
+            await loadTodos();
+        } catch (error) {
+            console.error("Failed to create subtask:", error);
+        }
+    }, [todosAPI, loadTodos]);
+
     const handleOpenTodo = useCallback(async (todoId: string) => {
-        const todo = todos.find((t) => t.id === todoId);
+        const todo = todos.find((t) => t.id === todoId) ?? subtasks.find((t) => t.id === todoId);
         if (todo) {
             setTodoToEdit(todo);
             setEditDialogOpen(true);
         }
-    }, [todos]);
+    }, [todos, subtasks]);
 
     const handleSaveTodo = async (updatedTodo: Todo) => {
         setEditSaving(true);
@@ -1111,6 +1132,31 @@ export function TodosBrowserView({
         return todos.filter((todo) => todo.kind === effectiveKindFilter);
     }, [todos, effectiveKindFilter]);
 
+    // Subtask progress per parent todo ID (done / total)
+    const subtaskProgressMap = useMemo(() => {
+        const map = new Map<string, { done: number; total: number }>();
+        for (const st of subtasks) {
+            if (!st.parentTodoId) continue;
+            const existing = map.get(st.parentTodoId) ?? { done: 0, total: 0 };
+            existing.total += 1;
+            if (st.status === "done") existing.done += 1;
+            map.set(st.parentTodoId, existing);
+        }
+        return map;
+    }, [subtasks]);
+
+    // Subtasks grouped by parent todo ID
+    const subtasksByParentId = useMemo(() => {
+        const map = new Map<string, Todo[]>();
+        for (const st of subtasks) {
+            if (!st.parentTodoId) continue;
+            const list = map.get(st.parentTodoId) ?? [];
+            list.push(st);
+            map.set(st.parentTodoId, list);
+        }
+        return map;
+    }, [subtasks]);
+
     const todosByColumn = useMemo(() => {
         // Filter todos using shared pipeline (skip status filter since columns handle it)
         const filteredTodos = filterAndSortTodos(kindScopedTodos, todoFilter.filterState, { skipStatusFilter: true });
@@ -1246,8 +1292,15 @@ export function TodosBrowserView({
             }
         }
 
-        // Optimistic update - remove from list
-        setTodos(prev => prev.filter(t => t.id !== todo.id));
+        // Optimistic update - remove from list (handles both top-level todos and subtasks)
+        const isSubtaskTodo = Boolean(todo.parentTodoId);
+        if (isSubtaskTodo) {
+            setSubtasks(prev => prev.filter(t => t.id !== todo.id));
+        } else {
+            setTodos(prev => prev.filter(t => t.id !== todo.id));
+            // Also remove any subtasks of this todo from the subtasks state
+            setSubtasks(prev => prev.filter(t => t.parentTodoId !== todo.id));
+        }
         if (selectedTodoId === todo.id) {
             setSelectedTodoId(nextSelectedId);
         }
@@ -1351,19 +1404,26 @@ export function TodosBrowserView({
             return;
         }
 
+        const isSubtaskTodo = Boolean(todo.parentTodoId);
         const newStatus = todo.status === "done" ? "todo" : "done";
 
-        // Find target column with matching status (if in custom board mode)
-        const newColumnId = boardConfig
+        // Find target column with matching status (if in custom board mode, top-level only)
+        const newColumnId = !isSubtaskTodo && boardConfig
             ? getColumnIdForTodo({ status: newStatus }, boardConfig.columns)
             : undefined;
 
-        // Optimistic update
-        setTodos(prev => prev.map(t =>
-            t.id === todo.id
-                ? { ...t, status: newStatus, ...(newColumnId && { customColumnId: newColumnId }) }
-                : t
-        ));
+        // Optimistic update — subtasks update the subtasks list, top-level todos update the todos list
+        if (isSubtaskTodo) {
+            setSubtasks(prev => prev.map(t =>
+                t.id === todo.id ? { ...t, status: newStatus } : t
+            ));
+        } else {
+            setTodos(prev => prev.map(t =>
+                t.id === todo.id
+                    ? { ...t, status: newStatus, ...(newColumnId && { customColumnId: newColumnId }) }
+                    : t
+            ));
+        }
 
         try {
             await todosAPI.updateTodo({
@@ -1885,6 +1945,87 @@ export function TodosBrowserView({
         }
     }, [selectedTodoId, flattenedTodos, todosByColumn, getColumnForTodo]);
 
+    // Inline subtask row rendered below a parent card
+    function SubtaskRow({ subtask }: { subtask: Todo }) {
+        const isSubtaskDone = subtask.status === "done";
+        return (
+            <div
+                className="flex items-center gap-2 pl-4 pr-3 py-0.5 cursor-pointer group/subtask hover:bg-surface-elevated rounded-sm transition-colors"
+                onClick={(e) => { e.stopPropagation(); handleOpenTodo(subtask.id); }}
+                title={subtask.title}
+            >
+                <Checkbox
+                    checked={isSubtaskDone}
+                    onCheckedChange={(checked) => {
+                        if (checked !== "indeterminate") toggleDoneWithToast(subtask);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="size-3 shrink-0"
+                />
+                <span
+                    className="text-xs truncate flex-1 py-1"
+                    style={{
+                        color: isSubtaskDone ? currentTheme.styles.contentTertiary : currentTheme.styles.contentSecondary,
+                        textDecoration: isSubtaskDone ? "line-through" : "none",
+                    }}
+                >
+                    {subtask.title}
+                </span>
+            </div>
+        );
+    }
+
+    // Inline subtask input (TickTick/Todoist style)
+    function InlineSubtaskInput({ parentId, onClose }: { parentId: string; onClose: () => void }) {
+        const [value, setValue] = useState("");
+        const inputRef = useRef<HTMLInputElement>(null);
+
+        useEffect(() => {
+            // Focus on mount
+            inputRef.current?.focus();
+        }, []);
+
+        const handleSubmit = async () => {
+            const trimmed = value.trim();
+            if (!trimmed) return;
+            setValue("");
+            await handleCreateInlineSubtask(parentId, trimmed);
+            // Keep input open for next subtask — re-focus after creation
+            inputRef.current?.focus();
+        };
+
+        return (
+            <div className="flex items-center gap-2 pl-4 pr-3 py-0.5">
+                <div className="size-3 shrink-0 rounded-sm border" style={{ borderColor: currentTheme.styles.borderDefault }} />
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleSubmit();
+                        } else if (e.key === "Escape") {
+                            onClose();
+                        }
+                    }}
+                    onBlur={() => {
+                        // Close if empty, otherwise submit then close
+                        if (value.trim()) {
+                            handleSubmit().then(onClose);
+                        } else {
+                            onClose();
+                        }
+                    }}
+                    placeholder="New subtask..."
+                    className="flex-1 text-xs bg-transparent border-none outline-none placeholder:opacity-40 py-1"
+                    style={{ color: currentTheme.styles.contentPrimary }}
+                />
+            </div>
+        );
+    }
+
     // Sortable Todo Card component with drop indicator and selection
     function SortableTodoCard({ todo, isOverThis, isSelected, hideProject }: { todo: Todo; isOverThis: boolean; isSelected: boolean; hideProject?: boolean }) {
         const {
@@ -1905,6 +2046,8 @@ export function TodosBrowserView({
 
         // Show drop indicator when hovering over this card (but not when dragging this card)
         const showIndicator = isOverThis && !isDragging;
+        const todoSubtasks = subtasksByParentId.get(todo.id) ?? [];
+        const progress = subtaskProgressMap.get(todo.id);
 
         return (
             <div
@@ -1936,7 +2079,29 @@ export function TodosBrowserView({
                         hideProject={hideProject}
                         onDateChange={handleInlineDateChange}
                         onChecklistToggle={handleChecklistToggle}
-                    />
+                        subtaskProgress={progress}
+                        onAddSubtask={(t) => setInlineSubtaskParentId(t.id)}
+                    >
+                        {/* Subtask rows + inline input inside the card */}
+                        {(todoSubtasks.length > 0 || inlineSubtaskParentId === todo.id) && (
+                            <div
+                                className="mx-2 mb-1.5 pt-1 border-t"
+                                style={{ borderColor: currentTheme.styles.borderDefault }}
+                                onClick={(e) => e.stopPropagation()}
+                                onPointerDown={(e) => e.stopPropagation()}
+                            >
+                                {todoSubtasks.map((st) => (
+                                    <SubtaskRow key={st.id} subtask={st} />
+                                ))}
+                                {inlineSubtaskParentId === todo.id && (
+                                    <InlineSubtaskInput
+                                        parentId={todo.id}
+                                        onClose={() => setInlineSubtaskParentId(null)}
+                                    />
+                                )}
+                            </div>
+                        )}
+                    </TodoCard>
                 </div>
             </div>
         );
