@@ -39,7 +39,7 @@ export type AgentMemoryRecord = z.infer<typeof AgentMemoryRecordSchema>;
 // --- Default TTL by kind (days, undefined = no expiry) ---
 
 export const DEFAULT_TTL_DAYS: Record<MemoryKind, number | undefined> = {
-    context: 90,
+    context: 14,
     reference: 90,
     goal: undefined,
     project: undefined,

@@ -65,7 +65,7 @@ Use exactly one of these kinds:
 - \`goal\`: An active or durable objective the user is pursuing (e.g. "wants to migrate all notes to a flat structure by end of month")
 - \`project\`: A durable fact about a workspace entity such as a project, folder, codebase, or system
 - \`decision\`: A one-time committed choice that replaced a previous state (e.g. "switched from flat to folder-based notes", "chose GTD over ad-hoc task management")
-- \`context\`: A temporary current focus or active area of work; may become stale when attention shifts
+- \`context\`: A recurring focus area or ongoing concern that spans multiple sessions; not a single-session task or in-progress item
 - \`reference\`: A durable reference worth remembering, such as an important path, workspace location, project name, or recurring resource
 
 **Preference vs. decision:** If the behavior has always been true for this user, use \`preference\`. If a choice was made and something changed as a result, use \`decision\`.
@@ -122,7 +122,7 @@ Good candidates include:
 - task management style
 - important project identities and purposes
 - adopted methods or systems
-- current focus areas that may matter in the next few sessions
+- ongoing focus areas that span multiple sessions (not single-session tasks)
 - important reference paths or recurring workspace locations
 
 ## What NOT to extract
@@ -138,6 +138,7 @@ Do NOT extract:
 - facts obvious from workspace structure alone
 - duplicate variants of the same fact
 - anything below the minimum importance threshold
+- what the user is working on right now in this session ("currently implementing X", "working on Y today") — these are session-level working state, not durable memory
 
 Sensitive data is strictly forbidden.
 
@@ -266,7 +267,7 @@ Input:
 
 Output:
 
-<memories>{"memories":[{"kind":"project","scope":"workspace","title":"Uses Atlas as a Python sync project in the workspace","text":"Atlas is a Python automation project used to sync notes to GitHub.","tags":["projects","workspace","coding","sync"],"importance":0.84,"confidence":0.97},{"kind":"context","scope":"workspace","title":"Currently migrating Atlas slash commands","text":"The current focus is migrating slash commands in Atlas this week.","tags":["projects","skills","coding"],"importance":0.55,"confidence":0.95}]}</memories>
+<memories>{"memories":[{"kind":"project","scope":"workspace","title":"Uses Atlas as a Python sync project in the workspace","text":"Atlas is a Python automation project used to sync notes to GitHub.","tags":["projects","workspace","coding","sync"],"importance":0.84,"confidence":0.97}]}</memories>
 
 ## Final check before answering
 

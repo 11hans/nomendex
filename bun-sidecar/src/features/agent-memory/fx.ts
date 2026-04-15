@@ -372,16 +372,44 @@ export async function initializeAgentMemoryService(): Promise<void> {
     }
 }
 
+/**
+ * Returns the importance-based TTL in days for records that have no explicit expiresAt.
+ * - importance >= 0.7 → permanent (no cleanup)
+ * - importance 0.4–0.69 → 180 days since last update
+ * - importance < 0.4 → 60 days since last update
+ */
+function importanceBasedTtlDays(importance: number): number | undefined {
+    if (importance >= 0.7) return undefined; // permanent
+    if (importance >= 0.4) return 180;
+    return 60;
+}
+
 async function cleanupExpired(): Promise<void> {
     try {
         const all = await loadAllNormalized();
-        const nowIso = new Date().toISOString();
+        const now = Date.now();
+        const nowIso = new Date(now).toISOString();
         let cleaned = 0;
 
         for (const record of all) {
+            // 1. Explicit TTL expiry
             if (record.expiresAt && record.expiresAt < nowIso) {
                 await getDb().delete(record.id);
                 cleaned++;
+                continue;
+            }
+
+            // 2. Importance-based cleanup for records without explicit expiry
+            if (!record.expiresAt) {
+                const ttlDays = importanceBasedTtlDays(record.importance);
+                if (ttlDays !== undefined) {
+                    const cutoffMs = now - ttlDays * 24 * 60 * 60 * 1000;
+                    const updatedMs = new Date(record.updatedAt).getTime();
+                    if (updatedMs < cutoffMs) {
+                        await getDb().delete(record.id);
+                        cleaned++;
+                    }
+                }
             }
         }
 

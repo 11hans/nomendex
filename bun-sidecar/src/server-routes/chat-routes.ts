@@ -253,6 +253,10 @@ type ActiveQuery = {
 };
 const activeQueries = new Map<string, ActiveQuery>();
 
+// Track last extraction turn count per session to avoid re-extracting the same history.
+// Key: sessionId, Value: turn count at time of last extraction.
+const sessionExtractionTurnCount = new Map<string, number>();
+
 // Clean up stale permissions (older than 5 minutes)
 setInterval(() => {
     const now = Date.now();
@@ -1002,6 +1006,21 @@ export const chatRoutes = {
                                 if (!sessionFile) return;
                                 const fullHistory = await readJSONL<SDKMessage>(sessionFile);
                                 const turns = sdkMessagesToTurns(fullHistory);
+
+                                // Skip extraction if we already processed this many (or more) turns.
+                                // This prevents re-extracting the same history on every turn and
+                                // creating duplicate memory records with slightly different wording.
+                                const lastExtractedCount = sessionExtractionTurnCount.get(sid) ?? 0;
+                                if (turns.length <= lastExtractedCount) {
+                                    chatLogger.debug("Skipping memory extraction — no new turns since last extraction", {
+                                        sessionId: sid,
+                                        turns: turns.length,
+                                        lastExtractedCount,
+                                    });
+                                    return;
+                                }
+
+                                sessionExtractionTurnCount.set(sid, turns.length);
                                 await triggerPostSessionExtraction({
                                     agentId: agentConfig.id,
                                     sessionId: sid,
