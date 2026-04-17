@@ -10,6 +10,9 @@ export type RecurrenceFrequency = z.infer<typeof RecurrenceFrequencySchema>;
 export const RecurrenceSchema = z.object({
     frequency: RecurrenceFrequencySchema,
     interval: z.number().int().min(1).max(99).default(1),
+    // Canonical day-of-month for monthly recurrence; preserved across spawns so
+    // a "31st" task doesn't permanently drift to 28 after passing through February.
+    originDay: z.number().int().min(1).max(31).optional(),
 });
 export type Recurrence = z.infer<typeof RecurrenceSchema>;
 

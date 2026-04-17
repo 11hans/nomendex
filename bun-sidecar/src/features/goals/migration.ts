@@ -171,8 +171,10 @@ function monthEndDate(monthLabel: string, year: number): string | undefined {
         march: "03-31", březen: "03-31", března: "03-31",
         april: "04-30", duben: "04-30",
         may: "05-31", květen: "05-31",
-        june: "06-30", červen: "06-30",
+        // `červenec` (July) MUST come before `červen` (June) — the loop uses
+        // substring `includes()`, and `'červenec'.includes('červen')` is true.
         july: "07-31", červenec: "07-31",
+        june: "06-30", červen: "06-30",
         august: "08-31", srpen: "08-31",
         september: "09-30", září: "09-30",
         october: "10-31", říjen: "10-31",

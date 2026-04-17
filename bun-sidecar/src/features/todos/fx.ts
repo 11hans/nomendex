@@ -160,7 +160,7 @@ function formatDateValue(value: Date): string {
     return `${year}-${month}-${day}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
-function computeNextOccurrenceDate(anchor: string, recurrence: Recurrence): string {
+function computeNextOccurrenceDate(anchor: string, recurrence: Recurrence, originDay?: number): string {
     const hasTime = anchor.includes("T");
     const datePart = anchor.split("T")[0];
     const timePart = hasTime ? anchor.split("T")[1] : undefined;
@@ -172,13 +172,14 @@ function computeNextOccurrenceDate(anchor: string, recurrence: Recurrence): stri
     } else if (recurrence.frequency === "weekly") {
         base.setDate(base.getDate() + n * 7);
     } else {
-        // Monthly: preserve origin day, clamping to last valid day of target month
-        // instead of JS's default rollover (Jan 31 + 1mo -> Mar 3 becomes Feb 28/29).
+        // Monthly: clamp against the canonical origin day (not the possibly-drifted
+        // anchor day), so e.g. Jan 31 -> Feb 28 -> Mar 31 instead of permanently 28.
+        const canonicalDay = originDay ?? day;
         const targetMonth = base.getMonth() + n;
         const targetYear = base.getFullYear() + Math.floor(targetMonth / 12);
         const normalizedMonth = ((targetMonth % 12) + 12) % 12;
         const lastDay = new Date(targetYear, normalizedMonth + 1, 0).getDate();
-        base.setFullYear(targetYear, normalizedMonth, Math.min(day, lastDay));
+        base.setFullYear(targetYear, normalizedMonth, Math.min(canonicalDay, lastDay));
     }
     const y = base.getFullYear();
     const m = String(base.getMonth() + 1).padStart(2, "0");
@@ -191,13 +192,14 @@ function computeNextOccurrenceDate(anchor: string, recurrence: Recurrence): stri
 // still-overdue instances. Bounded loop for safety.
 function advanceAnchorPastNow(anchor: string, recurrence: Recurrence, now: Date = new Date()): string {
     const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    let cursor = computeNextOccurrenceDate(anchor, recurrence);
+    const originDay = recurrence.originDay ?? Number(anchor.split("T")[0].split("-")[2]);
+    let cursor = computeNextOccurrenceDate(anchor, recurrence, originDay);
     for (let i = 0; i < 1000; i++) {
         const datePart = cursor.split("T")[0];
         const [y, m, d] = datePart.split("-").map(Number);
         const cursorMidnight = new Date(y, m - 1, d).getTime();
         if (cursorMidnight > nowMidnight) return cursor;
-        cursor = computeNextOccurrenceDate(cursor, recurrence);
+        cursor = computeNextOccurrenceDate(cursor, recurrence, originDay);
     }
     return cursor;
 }
@@ -206,11 +208,14 @@ async function spawnRecurringInstance(completedTodo: Todo): Promise<Todo | undef
     if (!completedTodo.recurrence) return undefined;
     // Subtasks should never spawn top-level recurring instances.
     if (completedTodo.parentTodoId) return undefined;
-    const recurrence = completedTodo.recurrence;
-
     // Determine anchor date: dueDate > scheduledStart > today
     const todayStr = formatDateValue(new Date());
     const anchor = completedTodo.dueDate ?? completedTodo.scheduledStart ?? todayStr;
+    // Stamp originDay on monthly recurrences the first time we spawn, so the
+    // canonical origin survives subsequent completions (Jan 31 -> Feb 28 -> Mar 31).
+    const recurrence: Recurrence = completedTodo.recurrence.frequency === "monthly" && completedTodo.recurrence.originDay == null
+        ? { ...completedTodo.recurrence, originDay: Number(anchor.split("T")[0].split("-")[2]) }
+        : completedTodo.recurrence;
     // Advance past today so overdue completions don't spawn still-overdue instances.
     const nextAnchor = advanceAnchorPastNow(anchor, recurrence);
 
