@@ -22,6 +22,7 @@ import {
     ScheduledDateTimePicker,
     AttachmentPicker,
     GoalPicker,
+    RecurrencePicker,
 } from "./pickers";
 import type { GoalRecord } from "@/features/goals/goal-types";
 import { applyTodoKindToDraft, getTodoKindLabel } from "./todo-kind-utils";
@@ -33,6 +34,7 @@ interface TaskCardEditorProps {
     onSave: (todo: Todo) => void;
     onDelete?: (todo: Todo) => void;
     onToggleCalendarReminder?: (todo: Todo) => void;
+    onSkipRecurrence?: (todo: Todo) => void;
     saving: boolean;
     availableTags: string[];
     availableProjects: string[];
@@ -43,7 +45,7 @@ interface TaskCardEditorProps {
  * TaskCardEditor is the primary popup/dialog component for editing todo details.
  * It is triggered when a user clicks on a todo in the Kanban board or Inbox view.
  */
-export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onToggleCalendarReminder, saving, availableTags, availableProjects, goals = [] }: TaskCardEditorProps) {
+export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onToggleCalendarReminder, onSkipRecurrence, saving, availableTags, availableProjects, goals = [] }: TaskCardEditorProps) {
     const [editedTodo, setEditedTodo] = useState<Todo | null>(null);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -477,6 +479,12 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                                         onChange={({ dueDate }) => setEditedTodo({ ...editedTodo, dueDate })}
                                     />
                                 )}
+                                {!isEventDraft && !editedTodo.parentTodoId && (
+                                    <RecurrencePicker
+                                        value={editedTodo.recurrence}
+                                        onChange={(recurrence) => setEditedTodo({ ...editedTodo, recurrence })}
+                                    />
+                                )}
                                 {onToggleCalendarReminder && (() => {
                                     const hasTimed = editedTodo.scheduledStart?.includes("T") || editedTodo.scheduledEnd?.includes("T");
                                     const isActive = editedTodo.calendarReminderPreset === "30-15";
@@ -610,6 +618,18 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                             >
                                 <Trash2 className="size-3.5 mr-1.5" />
                                 {confirmDelete ? "Sure?" : "Delete"}
+                            </Button>
+                        )}
+                        {onSkipRecurrence && todo?.recurrence && (
+                            <Button
+                                onClick={() => { if (todo) { onSkipRecurrence(todo); onOpenChange(false); } }}
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-3 text-xs"
+                                style={{ color: styles.contentSecondary }}
+                                title="Skip this occurrence and advance to the next one (unsaved edits are not kept)"
+                            >
+                                Skip
                             </Button>
                         )}
                         <Button

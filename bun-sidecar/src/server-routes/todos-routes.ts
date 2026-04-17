@@ -20,12 +20,13 @@ import {
     deleteColumn,
     recomputeAllGoalRefs,
     forceReindexTodos,
+    skipRecurrenceOccurrence,
 } from "@/features/todos/fx";
 import { DayTypeSchema } from "@/features/timeblocking/types";
 import { applyTimeblockingPlan, previewTimeblockingPlan } from "@/features/timeblocking/service";
 import { applyTaskPlannerPlan, previewTaskPlannerPlan } from "@/features/timeblocking/task-planner";
 import { addTodoSSEClient, broadcastTodoEvent, type TodoEvent } from "@/services/todo-events";
-import { TodoKindSchema, TodoSourceSchema } from "@/features/todos/todo-types";
+import { TodoKindSchema, TodoSourceSchema, RecurrenceSchema } from "@/features/todos/todo-types";
 
 const TodoStatusSchema = z.enum(["todo", "planned", "in_progress", "done", "later"]);
 const PrioritySchema = z.enum(["high", "medium", "low", "none"]);
@@ -42,6 +43,7 @@ const OptionalStatusSchema = z.preprocess(nullToUndefined, TodoStatusSchema.opti
 const OptionalStatusArraySchema = z.preprocess(nullToUndefined, z.array(TodoStatusSchema).optional());
 const OptionalPrioritySchema = z.preprocess(nullToUndefined, PrioritySchema.optional());
 const OptionalCalendarReminderSchema = z.preprocess(nullToUndefined, CalendarReminderPresetSchema.optional());
+const OptionalRecurrenceSchema = z.union([RecurrenceSchema, z.null()]).optional();
 const ScheduledOverlapSchema = z.object({
     start: z.string(),
     end: z.string(),
@@ -84,6 +86,7 @@ const CreateTodoInputSchema = z.object({
     calendarReminderPreset: OptionalCalendarReminderSchema,
     goalRefs: OptionalStringArraySchema,
     parentTodoId: OptionalStringSchema,
+    recurrence: RecurrenceSchema.optional(),
 });
 
 const UpdateTodoInputSchema = z.object({
@@ -108,8 +111,11 @@ const UpdateTodoInputSchema = z.object({
         calendarReminderPreset: OptionalCalendarReminderSchema,
         goalRefs: OptionalStringArraySchema,
         parentTodoId: z.string().nullable().optional(),
+        recurrence: OptionalRecurrenceSchema,
     }).strict(),
 });
+
+const SkipRecurrenceInputSchema = z.object({ todoId: z.string() });
 
 const DeleteTodoInputSchema = z.object({
     todoId: z.string(),
@@ -439,6 +445,26 @@ export const todosRoutes = {
             } catch (e) {
                 const msg = e instanceof Error ? e.message : String(e);
                 return Response.json({ error: msg }, { status: 500 });
+            }
+        },
+    },
+    "/api/todos/skip-recurrence": {
+        async POST(req: Request) {
+            let args;
+            try {
+                args = SkipRecurrenceInputSchema.parse(await req.json());
+            } catch (error) {
+                return jsonValidationError(error);
+            }
+            try {
+                const result = await skipRecurrenceOccurrence(args);
+                return Response.json(result);
+            } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                let status = 500;
+                if (msg.includes("not found")) status = 404;
+                else if (msg.includes("no recurrence")) status = 400;
+                return Response.json({ error: msg }, { status });
             }
         },
     },

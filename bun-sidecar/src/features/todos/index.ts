@@ -5,7 +5,7 @@ import { TodosBrowserView } from "./browser-view";
 import { ArchivedBrowserView } from "./archived-view";
 import { InboxListView } from "./inbox-view";
 import { FunctionStubs } from "@/types/Functions";
-import { TodoKindSchema, TodoSchema, TodoSourceSchema } from "./todo-types";
+import { TodoKindSchema, TodoSchema, TodoSourceSchema, RecurrenceSchema } from "./todo-types";
 import { AttachmentSchema } from "@/types/attachments";
 import { BoardConfigSchema } from "./board-types";
 
@@ -95,6 +95,7 @@ export const functionStubs = {
                 customColumnId: z.string().optional(),
                 goalRefs: z.array(z.string()).optional(),
                 parentTodoId: z.string().nullable().optional(),
+                recurrence: RecurrenceSchema.nullable().optional(),
             }).strict(),
         }),
         output: TodoSchema,

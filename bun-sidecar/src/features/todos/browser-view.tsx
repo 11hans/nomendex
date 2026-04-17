@@ -683,6 +683,7 @@ export function TodosBrowserView({
                     customColumnId: resolvedCustomColumnId,
                     calendarReminderPreset: updatedTodo.calendarReminderPreset,
                     goalRefs: updatedTodo.goalRefs,
+                    recurrence: updatedTodo.recurrence ?? null,
                 },
             });
             setEditDialogOpen(false);
@@ -715,6 +716,16 @@ export function TodosBrowserView({
             }
         } catch {
             toast.error("Failed to update calendar alerts");
+        }
+    };
+
+    const handleSkipRecurrence = async (todo: Todo) => {
+        try {
+            const updated = await todosAPI.skipRecurrenceOccurrence({ todoId: todo.id });
+            setTodos((prev) => prev.map((t) => t.id === updated.id ? updated : t));
+            toast.success("Occurrence skipped");
+        } catch {
+            toast.error("Failed to skip occurrence");
         }
     };
 
@@ -2669,7 +2680,7 @@ export function TodosBrowserView({
             </DndContext>
 
             {/* Edit Todo Modal */}
-            <TaskCardEditor todo={todoToEdit} open={editDialogOpen} onOpenChange={setEditDialogOpen} onSave={handleSaveTodo} onDelete={deleteTodoWithToast} onToggleCalendarReminder={handleToggleCalendarReminder} saving={editSaving} availableTags={availableTags} availableProjects={availableProjects} goals={availableGoals} />
+            <TaskCardEditor todo={todoToEdit} open={editDialogOpen} onOpenChange={setEditDialogOpen} onSave={handleSaveTodo} onDelete={deleteTodoWithToast} onToggleCalendarReminder={handleToggleCalendarReminder} onSkipRecurrence={handleSkipRecurrence} saving={editSaving} availableTags={availableTags} availableProjects={availableProjects} goals={availableGoals} />
 
             {/* Board Settings Dialog - Show for project views */}
             {canonicalFilterProject && (

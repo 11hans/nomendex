@@ -1,4 +1,4 @@
-import type { Todo } from "./todo-types";
+import type { Todo, RecurrenceFrequency } from "./todo-types";
 
 const TODO_KINDS = new Set(["task", "event"]);
 const TODO_SOURCES = new Set(["user", "timeblock-generator"]);
@@ -68,6 +68,14 @@ export function sanitizeTodoForClient(todo: Todo): Todo {
         goalRefs: toOptionalStringArray(raw.goalRefs, true),
         resolvedGoalRefs: toOptionalStringArray(raw.resolvedGoalRefs),
         parentTodoId: toOptionalString(raw.parentTodoId),
+        recurrence: (() => {
+            const r = raw.recurrence as { frequency?: unknown; interval?: unknown } | undefined;
+            if (!r || typeof r !== "object") return undefined;
+            const freq = r.frequency;
+            if (freq !== "daily" && freq !== "weekly" && freq !== "monthly") return undefined;
+            const interval = typeof r.interval === "number" && r.interval >= 1 ? Math.round(r.interval) : 1;
+            return { frequency: freq as RecurrenceFrequency, interval };
+        })(),
     };
 }
 

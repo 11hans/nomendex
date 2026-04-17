@@ -187,6 +187,50 @@ curl -s -X POST "http://localhost:${port}/api/todos/list" \\
 - Completing all subtasks does NOT auto-complete the parent; mark the parent done explicitly after confirming with the user
 - Do NOT schedule subtasks independently unless the user explicitly requests it; prefer scheduling the parent
 
+## Recurrence Semantics
+
+Todos can have a \`recurrence\` field: \`{ frequency: "daily" | "weekly" | "monthly", interval: number }\` (interval defaults to 1).
+
+### How it works
+- When a recurring task is marked **done**, the completion is recorded normally AND a new "next occurrence" todo is automatically spawned with the same title/project/tags/priority — its date is advanced by the interval.
+- Anchor date priority for spawning: \`dueDate\` → \`scheduledStart\` → today. The new instance inherits \`scheduledEnd\` offset-preserved if both start and end were set.
+- The completed instance stays as \`done\` (normal history). The spawned instance appears immediately in the list.
+
+### When to use skip vs complete
+- **User completes the task** (did the work): mark \`status: "done"\` via \`POST /api/todos/update\`. The engine auto-spawns the next occurrence.
+- **User skips this occurrence** (wants to push it without recording completion): call \`POST /api/todos/skip-recurrence { "todoId": "..." }\`. The dates advance, status stays \`"todo"\`, nothing is marked done.
+
+### API
+\`\`\`bash
+# Create a recurring todo (every week)
+curl -s -X POST "http://localhost:${port}/api/todos/create" \\
+  -H "Content-Type: application/json" \\
+  -d '{"title": "Weekly review", "dueDate": "YYYY-MM-DD", "recurrence": {"frequency": "weekly", "interval": 1}}'
+
+# Add recurrence to an existing todo
+curl -s -X POST "http://localhost:${port}/api/todos/update" \\
+  -H "Content-Type: application/json" \\
+  -d '{"todoId": "<id>", "updates": {"recurrence": {"frequency": "monthly", "interval": 1}}}'
+
+# Remove recurrence
+curl -s -X POST "http://localhost:${port}/api/todos/update" \\
+  -H "Content-Type: application/json" \\
+  -d '{"todoId": "<id>", "updates": {"recurrence": null}}'
+
+# Skip this occurrence (push to next, no completion recorded)
+curl -s -X POST "http://localhost:${port}/api/todos/skip-recurrence" \\
+  -H "Content-Type: application/json" \\
+  -d '{"todoId": "<id>"}'
+\`\`\`
+
+### Display
+In list output, recurring todos have a \`recurrence\` field. Show it as a label (e.g. "↻ Weekly", "↻ Every 2 weeks") so the user knows the task will come back.
+
+### Rules
+- Do NOT manually create the "next occurrence" after marking done — the engine does it automatically.
+- If a recurring todo has no date set and is completed, the new instance gets \`dueDate = today + interval\`.
+- Subtasks cannot have recurrence — it only applies to top-level todos.
+
 ## Todo Safety Rules
 - **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
 - **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.

@@ -4,7 +4,8 @@ import { McpServer } from "@socotra/modelcontextprotocol-sdk/server/mcp.js";
 import { StdioServerTransport } from "@socotra/modelcontextprotocol-sdk/server/stdio.js";
 import { FileDatabase } from "@/storage/FileDatabase";
 import { Todo } from "./todo-types";
-import { createTodo, updateTodo } from "./fx";
+import { createTodo, updateTodo, skipRecurrenceOccurrence } from "./fx";
+import { RecurrenceSchema, formatRecurrence } from "./todo-types";
 import { getTodosPath } from "@/storage/root-path";
 import { z } from "zod";
 import { canonicalizeProjectFilter, canonicalizeTodoProject, isInboxProjectName } from "@/features/projects/inbox-project";
@@ -58,6 +59,65 @@ function renderUI(args: { html: string; title: string; height?: number }) {
     };
 }
 
+// Like renderUI, but also emits a second structured-JSON content item so the
+// agent can read back the resulting fields programmatically (not just parse HTML).
+function renderUIWithData(args: { html: string; title: string; height?: number }, data: unknown) {
+    return {
+        content: [
+            {
+                type: "text" as const,
+                text: JSON.stringify({
+                    __noetect_ui: true,
+                    html: args.html,
+                    title: args.title,
+                    height: args.height,
+                }),
+            },
+            {
+                type: "text" as const,
+                text: JSON.stringify(data, null, 2),
+            },
+        ],
+    };
+}
+
+// Compact projection of a todo for MCP response bodies — only the fields an
+// agent needs to confirm a mutation (not the full shape).
+function projectTodoForAgent(t: Todo) {
+    return {
+        id: t.id,
+        title: t.title,
+        status: t.status,
+        project: canonicalizeTodoProject(t.project),
+        scheduledStart: t.scheduledStart ?? null,
+        scheduledEnd: t.scheduledEnd ?? null,
+        dueDate: t.dueDate ?? null,
+        duration: t.duration ?? null,
+        priority: t.priority ?? null,
+        recurrence: t.recurrence ?? null,
+        parentTodoId: t.parentTodoId ?? null,
+    };
+}
+
+// Full projection for get_todo — includes fields an agent may want to read
+// (description, tags, archived, completedAt, timestamps) but still trims
+// internal bookkeeping (customColumnId, resolvedGoalRefs, attachments blobs).
+function projectTodoFull(t: Todo) {
+    return {
+        ...projectTodoForAgent(t),
+        description: t.description ?? null,
+        kind: t.kind,
+        source: t.source,
+        tags: t.tags ?? [],
+        archived: t.archived ?? false,
+        completedAt: t.completedAt ?? null,
+        calendarReminderPreset: t.calendarReminderPreset ?? null,
+        goalRefs: t.goalRefs ?? [],
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+    };
+}
+
 function buildTodosHtml(todos: Todo[], project?: string): string {
     const counts = {
         todo: todos.filter((t) => t.status === "todo").length,
@@ -107,6 +167,7 @@ function buildTodosHtml(todos: Todo[], project?: string): string {
       ${priority ? `<span class="text-secondary" style="font-size:12px;">Priority: ${priority}</span>` : ""}
       ${scheduledStart ? `<span class="text-secondary" style="font-size:12px;">Schedule: ${scheduledStart}${scheduledEnd ? ` → ${scheduledEnd}` : ""}</span>` : ""}
       ${dueDate ? `<span class="text-secondary" style="font-size:12px;">Deadline: ${dueDate}</span>` : ""}
+      ${todo.recurrence ? `<span class="text-secondary" style="font-size:12px;">↻ ${formatRecurrence(todo.recurrence)}</span>` : ""}
       ${updatedAt ? `<span class="text-muted" style="font-size:11px;">Updated: ${escapeHtml(updatedAt)}</span>` : ""}
     </div>
   </td>
@@ -211,6 +272,7 @@ server.registerTool(
                 dueDate: t.dueDate ?? null,
                 duration: t.duration ?? null,
                 priority: t.priority ?? null,
+                recurrence: t.recurrence ?? null,
             })),
         };
 
@@ -231,6 +293,44 @@ server.registerTool(
                 },
             ],
         };
+    }
+);
+
+// Register get_todo tool
+server.registerTool(
+    "get_todo",
+    {
+        title: "Get Todo",
+        description: `Fetch a single todo by ID. Returns the full todo shape (title, status, project, dates, recurrence, tags, description, etc.) as structured JSON.
+
+Use this instead of list_todos when you already know the ID and just need to check the current state before updating or skipping. Cheaper than listing + filtering.
+
+Returns an error if the todo does not exist.`,
+        inputSchema: {
+            todoId: z.string().describe("ID of the todo to fetch"),
+        },
+    },
+    async (input) => {
+        const todo = await todosDb.findById(input.todoId);
+        if (!todo) {
+            return renderUIWithData(
+                {
+                    html: buildMutationHtml("Todo Not Found", `No todo with ID: ${input.todoId}`),
+                    title: "Get Result",
+                    height: 150,
+                },
+                { error: "not_found", todoId: input.todoId },
+            );
+        }
+        const recurrenceNote = todo.recurrence ? ` — recurs: ${formatRecurrence(todo.recurrence)}` : "";
+        return renderUIWithData(
+            {
+                html: buildMutationHtml("Todo", `${todo.title} (${STATUS_LABEL[todo.status]})${recurrenceNote}`),
+                title: "Get Result",
+                height: 150,
+            },
+            { todo: projectTodoFull(todo) },
+        );
     }
 );
 
@@ -273,7 +373,14 @@ Date field semantics:
 - dueDate — deadline only (drives overdue logic). Pass null to clear.
 - duration — minutes; auto-derived from scheduledStart+scheduledEnd when both have a time component.
 
-Format for all date fields: YYYY-MM-DD (all-day) or YYYY-MM-DDTHH:mm (with time).`,
+Format for all date fields: YYYY-MM-DD (all-day) or YYYY-MM-DDTHH:mm (with time).
+
+Recurrence:
+- Set recurrence to make a todo repeat automatically.
+- When a recurring todo is marked status="done", a new instance is spawned AUTOMATICALLY for the next occurrence (same title/project/tags, date advanced by the interval). The completed todo stays as done.
+- IMPORTANT: Do NOT manually create the next occurrence with create_todo after marking a recurring task done — the engine does it for you. Creating it manually will produce duplicates.
+- To remove recurrence, pass recurrence: null.
+- Use skip_recurrence_occurrence instead of marking done if the user wants to skip this occurrence without recording a completion.`,
         inputSchema: {
             todoId: z.string(),
             updates: z.object({
@@ -285,16 +392,33 @@ Format for all date fields: YYYY-MM-DD (all-day) or YYYY-MM-DDTHH:mm (with time)
                 scheduledEnd: z.string().nullable().optional(),
                 dueDate: z.string().nullable().optional(),
                 duration: z.number().nullable().optional(),
+                recurrence: z.union([
+                    RecurrenceSchema.describe("Set recurrence rule. frequency: daily|weekly|monthly. interval: repeat every N units (default 1)."),
+                    z.null().describe("Pass null to remove recurrence from this todo."),
+                ]).optional(),
             }),
         },
     },
     async (input) => {
         const updated = await updateTodo(input);
-        return renderUI({
-            html: buildMutationHtml("Todo Updated", `${updated.title} (${STATUS_LABEL[updated.status]})`),
-            title: "Update Result",
-            height: 150,
-        });
+        const recurrenceNote = updated.recurrence ? ` — recurs: ${formatRecurrence(updated.recurrence)}` : "";
+        const spawnedRecurring =
+            updated.status === "done" &&
+            Boolean(updated.recurrence) &&
+            !updated.parentTodoId;
+        return renderUIWithData(
+            {
+                html: buildMutationHtml("Todo Updated", `${updated.title} (${STATUS_LABEL[updated.status]})${recurrenceNote}`),
+                title: "Update Result",
+                height: 150,
+            },
+            {
+                todo: projectTodoForAgent(updated),
+                // Hint for the agent: a recurring completion triggered an automatic spawn.
+                // The new instance has the same title with an advanced date — do NOT create it manually.
+                spawnedRecurring,
+            },
+        );
     }
 );
 
@@ -310,7 +434,12 @@ Date field semantics:
 - dueDate — deadline only (drives overdue logic). Independent from schedule.
 - duration — minutes; auto-derived from scheduledStart+scheduledEnd when both have a time component.
 
-Format for all date fields: YYYY-MM-DD (all-day) or YYYY-MM-DDTHH:mm (with time).`,
+Format for all date fields: YYYY-MM-DD (all-day) or YYYY-MM-DDTHH:mm (with time).
+
+Recurrence:
+- Pass recurrence to create a recurring todo. When marked done, the next occurrence is automatically spawned with the date advanced.
+- Anchor date precedence: dueDate > scheduledStart > today.
+- Example: { frequency: "weekly", interval: 1 } = every week. { frequency: "monthly", interval: 2 } = every 2 months.`,
         inputSchema: {
             title: z.string(),
             description: z.string().optional(),
@@ -319,15 +448,50 @@ Format for all date fields: YYYY-MM-DD (all-day) or YYYY-MM-DDTHH:mm (with time)
             scheduledEnd: z.string().nullable().optional(),
             dueDate: z.string().nullable().optional(),
             duration: z.number().optional(),
+            recurrence: RecurrenceSchema.optional().describe("Optional recurrence rule. frequency: daily|weekly|monthly. interval: repeat every N units (default 1)."),
         },
     },
     async (input) => {
         const created = await createTodo(input);
-        return renderUI({
-            html: buildMutationHtml("Todo Created", `${created.title} (ID: ${created.id})`),
-            title: "Create Result",
-            height: 150,
-        });
+        const recurrenceNote = created.recurrence ? ` — recurs: ${formatRecurrence(created.recurrence)}` : "";
+        return renderUIWithData(
+            {
+                html: buildMutationHtml("Todo Created", `${created.title} (ID: ${created.id})${recurrenceNote}`),
+                title: "Create Result",
+                height: 150,
+            },
+            { todo: projectTodoForAgent(created) },
+        );
+    }
+);
+
+// Register skip_recurrence_occurrence tool
+server.registerTool(
+    "skip_recurrence_occurrence",
+    {
+        title: "Skip Recurrence Occurrence",
+        description: `Skip the current occurrence of a recurring todo, advancing its date to the next one without recording a completion.
+
+Use this when the user says they want to skip/postpone this occurrence (e.g. "skip this week's review", "push to next week") rather than marking it done.
+
+The todo's scheduledStart or dueDate is advanced by the recurrence interval. The todo stays with status "todo".
+
+Note: The todo must have a recurrence set. Use update_todo with status="done" instead if you want to record a completion and spawn the next occurrence.`,
+        inputSchema: {
+            todoId: z.string().describe("ID of the recurring todo to skip"),
+        },
+    },
+    async (input) => {
+        const updated = await skipRecurrenceOccurrence(input);
+        const nextDate = updated.dueDate ?? updated.scheduledStart ?? "next occurrence";
+        return renderUIWithData(
+            {
+                html: buildMutationHtml("Occurrence Skipped", `${updated.title} — next: ${nextDate}`),
+                title: "Skip Result",
+                height: 150,
+            },
+            { todo: projectTodoForAgent(updated) },
+        );
     }
 );
 

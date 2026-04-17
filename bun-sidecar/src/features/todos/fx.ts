@@ -2,7 +2,7 @@ import { TypedPluginWithFunctions } from "@/types/Plugin";
 import { functionStubs, GetTodosInputSchema, TodosPluginBase } from "./index";
 import { FunctionsFromStubs } from "@/types/Functions";
 import { createServiceLogger } from "@/lib/logger";
-import type { Todo, TodoKind, TodoSource } from "./todo-types";
+import type { Todo, TodoKind, TodoSource, Recurrence } from "./todo-types";
 import { FileDatabase } from "@/storage/FileDatabase";
 import path from "path";
 import { getNomendexPath, getTodosPath, hasActiveWorkspace } from "@/storage/root-path";
@@ -158,6 +158,107 @@ function formatDateValue(value: Date): string {
     }
 
     return `${year}-${month}-${day}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function computeNextOccurrenceDate(anchor: string, recurrence: Recurrence): string {
+    const hasTime = anchor.includes("T");
+    const datePart = anchor.split("T")[0];
+    const timePart = hasTime ? anchor.split("T")[1] : undefined;
+    const [year, month, day] = datePart.split("-").map(Number);
+    const base = new Date(year, month - 1, day, 0, 0, 0, 0);
+    const n = recurrence.interval;
+    if (recurrence.frequency === "daily") {
+        base.setDate(base.getDate() + n);
+    } else if (recurrence.frequency === "weekly") {
+        base.setDate(base.getDate() + n * 7);
+    } else {
+        // Monthly: preserve origin day, clamping to last valid day of target month
+        // instead of JS's default rollover (Jan 31 + 1mo -> Mar 3 becomes Feb 28/29).
+        const targetMonth = base.getMonth() + n;
+        const targetYear = base.getFullYear() + Math.floor(targetMonth / 12);
+        const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+        const lastDay = new Date(targetYear, normalizedMonth + 1, 0).getDate();
+        base.setFullYear(targetYear, normalizedMonth, Math.min(day, lastDay));
+    }
+    const y = base.getFullYear();
+    const m = String(base.getMonth() + 1).padStart(2, "0");
+    const d = String(base.getDate()).padStart(2, "0");
+    return timePart ? `${y}-${m}-${d}T${timePart}` : `${y}-${m}-${d}`;
+}
+
+// Advance anchor by `recurrence` repeatedly until the resulting local-date is
+// strictly after `now`. Prevents overdue recurring tasks from spawning
+// still-overdue instances. Bounded loop for safety.
+function advanceAnchorPastNow(anchor: string, recurrence: Recurrence, now: Date = new Date()): string {
+    const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    let cursor = computeNextOccurrenceDate(anchor, recurrence);
+    for (let i = 0; i < 1000; i++) {
+        const datePart = cursor.split("T")[0];
+        const [y, m, d] = datePart.split("-").map(Number);
+        const cursorMidnight = new Date(y, m - 1, d).getTime();
+        if (cursorMidnight > nowMidnight) return cursor;
+        cursor = computeNextOccurrenceDate(cursor, recurrence);
+    }
+    return cursor;
+}
+
+async function spawnRecurringInstance(completedTodo: Todo): Promise<Todo | undefined> {
+    if (!completedTodo.recurrence) return undefined;
+    // Subtasks should never spawn top-level recurring instances.
+    if (completedTodo.parentTodoId) return undefined;
+    const recurrence = completedTodo.recurrence;
+
+    // Determine anchor date: dueDate > scheduledStart > today
+    const todayStr = formatDateValue(new Date());
+    const anchor = completedTodo.dueDate ?? completedTodo.scheduledStart ?? todayStr;
+    // Advance past today so overdue completions don't spawn still-overdue instances.
+    const nextAnchor = advanceAnchorPastNow(anchor, recurrence);
+
+    let nextScheduledStart: string | null = null;
+    let nextScheduledEnd: string | null = null;
+    let nextDueDate: string | null = null;
+
+    if (completedTodo.scheduledStart && !completedTodo.dueDate) {
+        nextScheduledStart = nextAnchor;
+        if (completedTodo.scheduledEnd) {
+            const startD = parseLocalScheduleDate(completedTodo.scheduledStart);
+            const endD   = parseLocalScheduleDate(completedTodo.scheduledEnd);
+            if (startD && endD) {
+                const nextStartD = parseLocalScheduleDate(nextAnchor);
+                if (nextStartD) {
+                    const offsetMs = endD.getTime() - startD.getTime();
+                    nextScheduledEnd = formatDateValue(new Date(nextStartD.getTime() + offsetMs));
+                }
+            }
+        }
+    } else if (completedTodo.dueDate) {
+        nextDueDate = nextAnchor;
+        nextScheduledStart = completedTodo.scheduledStart ?? null;
+        nextScheduledEnd   = completedTodo.scheduledEnd   ?? null;
+    } else {
+        nextDueDate = nextAnchor;
+    }
+
+    const spawned = await createTodo({
+        title:                  completedTodo.title,
+        description:            completedTodo.description,
+        project:                completedTodo.project,
+        kind:                   completedTodo.kind,
+        source:                 completedTodo.source,
+        tags:                   completedTodo.tags,
+        scheduledStart:         nextScheduledStart,
+        scheduledEnd:           nextScheduledEnd,
+        dueDate:                nextDueDate,
+        priority:               completedTodo.priority,
+        duration:               completedTodo.duration,
+        attachments:            completedTodo.attachments,
+        calendarReminderPreset: completedTodo.calendarReminderPreset,
+        goalRefs:               completedTodo.goalRefs,
+        recurrence,
+    });
+
+    todosLogger.info(`Spawned recurring instance: ${spawned.id} from ${completedTodo.id}`);
+    return spawned;
 }
 
 function normalizeDateField(value: unknown): string | undefined {
@@ -1101,6 +1202,7 @@ async function createTodo(input: {
     calendarReminderPreset?: "30-15" | "none";
     goalRefs?: string[];
     parentTodoId?: string;
+    recurrence?: Recurrence;
 }) {
     todosLogger.info(`Creating new todo: ${input.title}`);
 
@@ -1212,6 +1314,8 @@ async function createTodo(input: {
             goalRefs: input.goalRefs,
             resolvedGoalRefs: resolvedGoalRefs.length > 0 ? resolvedGoalRefs : undefined,
             parentTodoId: resolvedParentTodoId,
+            // Recurrence is top-level-only; silently drop when creating a subtask.
+            recurrence: resolvedParentTodoId ? undefined : input.recurrence,
         };
 
         const created = await getDb().create(newTodo);
@@ -1249,6 +1353,7 @@ async function updateTodo(input: {
         calendarReminderPreset?: "30-15" | "none";
         goalRefs?: string[];
         parentTodoId?: string | null;
+        recurrence?: Recurrence | null;
     };
 }) {
     todosLogger.info(`Updating todo: ${input.todoId}`);
@@ -1418,6 +1523,16 @@ async function updateTodo(input: {
             updates.dueDate = normalizeDateField(input.updates.dueDate);
         }
 
+        if (hasOwnKey(input.updates, "recurrence")) {
+            const r = input.updates.recurrence;
+            // Subtasks cannot have recurrence (top-level-only feature).
+            if (currentTodo.parentTodoId) {
+                updates.recurrence = undefined;
+            } else {
+                updates.recurrence = r === null ? undefined : (r ?? undefined);
+            }
+        }
+
         if (hasOwnKey(input.updates, "duration")) {
             updates.duration = normalizeDurationField(input.updates.duration);
         }
@@ -1453,6 +1568,14 @@ async function updateTodo(input: {
                 updates.completedAt = undefined;
             }
         }
+
+        // Capture before DB write: does this completion need a recurring spawn?
+        const isSpawningOccurrence =
+            wantsStatusUpdate &&
+            nextKind === "task" &&
+            input.updates.status === "done" &&
+            currentTodo.status !== "done" &&
+            Boolean(currentTodo.recurrence);
 
         // Compute resolvedGoalRefs based on status and archived state.
         // "closed" means status=done OR archived=true.
@@ -1516,6 +1639,18 @@ async function updateTodo(input: {
 
         const sanitized = sanitizeTodoForClient(updated);
         todosLogger.info(`Updated todo: ${input.todoId}`);
+
+        // Spawn next occurrence if this was a recurring task completion
+        if (isSpawningOccurrence) {
+            try {
+                const spawned = await spawnRecurringInstance(updated);
+                if (spawned) broadcastTodoEvent({ type: "upsert", todo: spawned });
+            } catch (spawnErr) {
+                todosLogger.warn(`Failed to spawn recurring instance for ${input.todoId}`, { error: spawnErr });
+                // Non-fatal: completion is recorded even if spawn fails
+            }
+        }
+
         return sanitized;
     } catch (error) {
         todosLogger.error(`Failed to update todo ${input.todoId}`, { error });
@@ -1560,6 +1695,45 @@ async function deleteTodo(input: { todoId: string }) {
 async function restoreTodoSnapshot(todo: Todo): Promise<Todo> {
     await getDb().create(todo);
     return todo;
+}
+
+export async function skipRecurrenceOccurrence(input: { todoId: string }): Promise<Todo> {
+    todosLogger.info(`Skipping recurrence occurrence for todo: ${input.todoId}`);
+
+    try {
+        const current = await getDb().findById(input.todoId);
+        if (!current) throw new Error(`Todo ${input.todoId} not found`);
+        if (!current.recurrence) throw new Error(`Todo ${input.todoId} has no recurrence`);
+
+        const todayStr = formatDateValue(new Date());
+        const anchor = current.dueDate ?? current.scheduledStart ?? todayStr;
+        const nextAnchor = advanceAnchorPastNow(anchor, current.recurrence);
+
+        const dateUpdates: Partial<Todo> = { updatedAt: new Date().toISOString() };
+        if (current.scheduledStart && !current.dueDate) {
+            dateUpdates.scheduledStart = nextAnchor;
+            if (current.scheduledEnd) {
+                const s = parseLocalScheduleDate(current.scheduledStart);
+                const e = parseLocalScheduleDate(current.scheduledEnd);
+                if (s && e) {
+                    const ns = parseLocalScheduleDate(nextAnchor);
+                    if (ns) dateUpdates.scheduledEnd = formatDateValue(new Date(ns.getTime() + e.getTime() - s.getTime()));
+                }
+            }
+        } else {
+            dateUpdates.dueDate = nextAnchor;
+        }
+
+        const updated = await getDb().update(input.todoId, dateUpdates);
+        if (!updated) throw new Error(`Failed to update todo ${input.todoId}`);
+        const sanitized = sanitizeTodoForClient(updated);
+        broadcastTodoEvent({ type: "upsert", todo: sanitized });
+        todosLogger.info(`Skipped occurrence for todo: ${input.todoId}, next anchor: ${nextAnchor}`);
+        return sanitized;
+    } catch (error) {
+        todosLogger.error(`Failed to skip recurrence for todo ${input.todoId}`, { error });
+        throw error;
+    }
 }
 
 async function getProjects() {

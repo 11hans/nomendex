@@ -1,4 +1,4 @@
-import { Todo, type TodoKind, type TodoSource } from "@/features/todos/todo-types";
+import { Todo, type TodoKind, type TodoSource, type Recurrence } from "@/features/todos/todo-types";
 import type { Attachment } from "@/types/attachments";
 import type { BoardConfig, ProjectConfig } from "@/features/projects/project-types";
 import type { GetTodosInput } from "@/features/todos";
@@ -29,6 +29,7 @@ interface CreateTodoInput {
     calendarReminderPreset?: "30-15" | "none";
     goalRefs?: string[];
     parentTodoId?: string;
+    recurrence?: Recurrence;
 }
 
 interface UpdateTodoInput {
@@ -52,6 +53,7 @@ interface UpdateTodoInput {
         calendarReminderPreset?: "30-15" | "none";
         goalRefs?: string[];
         parentTodoId?: string | null;
+        recurrence?: Recurrence | null;
     };
 }
 
@@ -60,7 +62,7 @@ interface ReorderInput {
 }
 
 const CREATE_NULLABLE_KEYS = new Set(["scheduledStart", "scheduledEnd", "dueDate"]);
-const UPDATE_NULLABLE_KEYS = new Set(["scheduledStart", "scheduledEnd", "dueDate", "duration", "parentTodoId"]);
+const UPDATE_NULLABLE_KEYS = new Set(["scheduledStart", "scheduledEnd", "dueDate", "duration", "parentTodoId", "recurrence"]);
 
 async function fetchAPI<T>(endpoint: string, body: object = {}): Promise<T> {
     const response = await fetch(`/api/todos/${endpoint}`, {
@@ -136,6 +138,8 @@ export const todosAPI = {
     deleteColumn: (args: { projectId: string; columnId: string }) => fetchProjectsAPI<{ success: boolean }>("column/delete", args),
     // Projects service API
     getProjectsList: () => fetchProjectsAPI<ProjectConfig[]>("list", {}),
+    skipRecurrenceOccurrence: async (args: { todoId: string }) =>
+        sanitizeTodoForClient(await fetchAPI<Todo>("skip-recurrence", args)),
 };
 
 // Hook wrapper for use in React components

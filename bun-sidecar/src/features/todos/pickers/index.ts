@@ -9,3 +9,4 @@ export { DateTimePicker } from "./DateTimePicker";
 export { AttachmentPicker } from "./AttachmentPicker";
 export { ScheduledDateTimePicker } from "./ScheduledDateTimePicker";
 export { GoalPicker } from "./GoalPicker";
+export { RecurrencePicker } from "./RecurrencePicker";

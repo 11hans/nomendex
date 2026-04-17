@@ -4,6 +4,27 @@ import { AttachmentSchema } from "@/types/attachments";
 export const TodoKindSchema = z.enum(["task", "event"]);
 export const TodoSourceSchema = z.enum(["user", "timeblock-generator"]);
 
+export const RecurrenceFrequencySchema = z.enum(["daily", "weekly", "monthly"]);
+export type RecurrenceFrequency = z.infer<typeof RecurrenceFrequencySchema>;
+
+export const RecurrenceSchema = z.object({
+    frequency: RecurrenceFrequencySchema,
+    interval: z.number().int().min(1).max(99).default(1),
+});
+export type Recurrence = z.infer<typeof RecurrenceSchema>;
+
+export function formatRecurrence(recurrence: Recurrence): string {
+    const n = recurrence.interval;
+    const unit = recurrence.frequency === "daily" ? "day"
+        : recurrence.frequency === "weekly" ? "week"
+        : "month";
+    if (n === 1) {
+        // Capitalize single-unit labels: Daily/Weekly/Monthly
+        return recurrence.frequency.charAt(0).toUpperCase() + recurrence.frequency.slice(1);
+    }
+    return `Every ${n} ${unit}s`;
+}
+
 export type TodoKind = z.infer<typeof TodoKindSchema>;
 export type TodoSource = z.infer<typeof TodoSourceSchema>;
 
@@ -36,6 +57,7 @@ export const TodoSchema = z.object({
     resolvedGoalRefs: z.array(z.string()).optional(), // frozen snapshot for reporting
     // First-class subtask support (max 1 level deep)
     parentTodoId: z.string().optional(), // set on subtasks; absent on top-level todos
+    recurrence: RecurrenceSchema.optional(),
 });
 
 export type Todo = z.infer<typeof TodoSchema>;
