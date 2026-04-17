@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Save, X, Trash2, ListChecks, Bell, Plus } from "lucide-react";
+import { Save, Sparkles, X, Trash2, ListChecks, Bell, Plus } from "lucide-react";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { useTheme } from "@/hooks/useTheme";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
@@ -26,6 +26,7 @@ import {
 } from "./pickers";
 import type { GoalRecord } from "@/features/goals/goal-types";
 import { applyTodoKindToDraft, getTodoKindLabel } from "./todo-kind-utils";
+import { useRewriteDraft } from "@/hooks/useRewriteDraft";
 
 interface TaskCardEditorProps {
     todo: Todo | null;
@@ -215,6 +216,8 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
         }
     };
 
+    const { isRewriting, error: rewriteError, lastSnapshot, rewrite, clearSnapshot, clearError } = useRewriteDraft();
+
     if (!editedTodo) {
         return null;
     }
@@ -226,6 +229,22 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
 
     const handleKindChange = (kind: Todo["kind"]) => {
         setEditedTodo((prev) => (prev ? applyTodoKindToDraft(prev, kind) : prev));
+    };
+
+    const handleRewrite = async () => {
+        if (rewriteError) clearError();
+        const result = await rewrite({
+            title: editedTodo.title,
+            description: editedTodo.description ?? "",
+            kind: editedTodo.kind,
+        });
+        if (result) setEditedTodo((prev) => prev ? { ...prev, title: result.title, description: result.description } : prev);
+    };
+
+    const handleRevert = () => {
+        if (!lastSnapshot) return;
+        setEditedTodo((prev) => prev ? { ...prev, title: lastSnapshot.title, description: lastSnapshot.description } : prev);
+        clearSnapshot();
     };
 
     return (
@@ -279,7 +298,10 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                         </div>
                         <Input
                             value={editedTodo.title}
-                            onChange={(e) => setEditedTodo({ ...editedTodo, title: e.target.value })}
+                            onChange={(e) => {
+                                if (lastSnapshot) clearSnapshot();
+                                setEditedTodo({ ...editedTodo, title: e.target.value });
+                            }}
                             placeholder={`${itemLabel} title`}
                             className="h-10 text-title font-semibold border rounded-md px-3 focus-visible:ring-0 placeholder:font-normal"
                             style={{
@@ -292,13 +314,32 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                     </div>
 
                     <div>
-                        <div className="mb-1 text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
-                            Description
+                        <div className="mb-1 flex items-center justify-between">
+                            <span className="text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                                Description
+                            </span>
+                            <div className="flex items-center gap-2">
+                                {lastSnapshot && !isRewriting && (
+                                    <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px]"
+                                        onClick={handleRevert}>
+                                        Revert
+                                    </Button>
+                                )}
+                                <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px]"
+                                    disabled={isRewriting || (!editedTodo.title.trim() && !(editedTodo.description ?? "").trim())}
+                                    onClick={handleRewrite}>
+                                    <Sparkles className="size-3 mr-1" />
+                                    {isRewriting ? "Rewriting..." : "Rewrite draft"}
+                                </Button>
+                            </div>
                         </div>
                         <Textarea
                             ref={descriptionRef}
                             value={editedTodo.description || ""}
-                            onChange={(e) => setEditedTodo({ ...editedTodo, description: e.target.value })}
+                            onChange={(e) => {
+                                if (lastSnapshot) clearSnapshot();
+                                setEditedTodo({ ...editedTodo, description: e.target.value });
+                            }}
                             placeholder="Add description..."
                             className="resize-none text-sm px-3 py-2.5 rounded-md focus-visible:ring-0"
                             style={{
@@ -308,6 +349,11 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                                 minHeight: '150px',
                             }}
                         />
+                        {rewriteError && (
+                            <div className="text-[11px] mt-1" style={{ color: styles.semanticDestructive }}>
+                                {rewriteError}
+                            </div>
+                        )}
                     </div>
 
                     {!isSubtask && (

@@ -27,6 +27,7 @@ import { applyTimeblockingPlan, previewTimeblockingPlan } from "@/features/timeb
 import { applyTaskPlannerPlan, previewTaskPlannerPlan } from "@/features/timeblocking/task-planner";
 import { addTodoSSEClient, broadcastTodoEvent, type TodoEvent } from "@/services/todo-events";
 import { TodoKindSchema, TodoSourceSchema, RecurrenceSchema } from "@/features/todos/todo-types";
+import { rewriteTodoDraft } from "@/features/todos/rewrite";
 
 const TodoStatusSchema = z.enum(["todo", "planned", "in_progress", "done", "later"]);
 const PrioritySchema = z.enum(["high", "medium", "low", "none"]);
@@ -170,6 +171,12 @@ const TaskPlannerPlanInputSchema = z.object({
 
 const EmptyInputSchema = z.object({});
 const DeleteTagInputSchema = z.object({ tagName: z.string() });
+
+const RewriteDraftInputSchema = z.object({
+    title: z.string(),
+    description: z.string().optional(),
+    kind: TodoKindSchema,
+});
 
 // Exposed for route-schema regression tests.
 export const todosRouteSchemasForTests = {
@@ -548,6 +555,22 @@ export const todosRoutes = {
             } catch (error) {
                 const message = error instanceof Error ? error.message : String(error);
                 return Response.json({ error: message }, { status: 400 });
+            }
+        },
+    },
+    "/api/todos/rewrite-draft": {
+        async POST(req: Request) {
+            let args;
+            try {
+                args = RewriteDraftInputSchema.parse(await req.json());
+            } catch (error) {
+                return jsonValidationError(error);
+            }
+            try {
+                const result = await rewriteTodoDraft({ ...args, signal: req.signal });
+                return Response.json(result);
+            } catch (error) {
+                return jsonError(error);
             }
         },
     },

@@ -140,6 +140,29 @@ export const todosAPI = {
     getProjectsList: () => fetchProjectsAPI<ProjectConfig[]>("list", {}),
     skipRecurrenceOccurrence: async (args: { todoId: string }) =>
         sanitizeTodoForClient(await fetchAPI<Todo>("skip-recurrence", args)),
+    rewriteDraft: async (
+        args: { title: string; description?: string; kind: TodoKind },
+        signal?: AbortSignal,
+    ): Promise<{ title: string; description: string }> => {
+        const response = await fetch("/api/todos/rewrite-draft", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Nomendex-Client": "ui",
+            },
+            body: JSON.stringify(args),
+            signal,
+        });
+        if (!response.ok) {
+            let msg = `API error: ${response.status}`;
+            try {
+                const data = await response.json();
+                if (data?.error) msg = data.error;
+            } catch { /* ignore */ }
+            throw Object.assign(new Error(msg), { status: response.status });
+        }
+        return response.json();
+    },
 };
 
 // Hook wrapper for use in React components

@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Plus, X } from "lucide-react";
+import { Plus, Sparkles, X } from "lucide-react";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { useTheme } from "@/hooks/useTheme";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
@@ -23,6 +23,7 @@ import {
 import type { GoalRecord } from "@/features/goals/goal-types";
 import type { TodoKind, TodoSource } from "./todo-types";
 import { applyTodoKindToDraft, getTodoKindLabel } from "./todo-kind-utils";
+import { useRewriteDraft } from "@/hooks/useRewriteDraft";
 
 interface NewTodo {
     title: string;
@@ -78,6 +79,7 @@ export function CreateTodoDialog({
     const { styles } = currentTheme;
     const isEventDraft = newTodo.kind === "event";
     const itemLabel = getTodoKindLabel(newTodo.kind);
+    const { isRewriting, error: rewriteError, lastSnapshot, rewrite, clearSnapshot, clearError } = useRewriteDraft();
 
     // Handle Cmd+Enter from native Mac app
     useNativeSubmit(() => {
@@ -95,6 +97,22 @@ export function CreateTodoDialog({
 
     const handleKindChange = (kind: TodoKind) => {
         onNewTodoChange(applyTodoKindToDraft(newTodo, kind));
+    };
+
+    const handleRewrite = async () => {
+        if (rewriteError) clearError();
+        const result = await rewrite({
+            title: newTodo.title,
+            description: newTodo.description,
+            kind: newTodo.kind,
+        });
+        if (result) onNewTodoChange({ ...newTodo, title: result.title, description: result.description });
+    };
+
+    const handleRevert = () => {
+        if (!lastSnapshot) return;
+        onNewTodoChange({ ...newTodo, title: lastSnapshot.title, description: lastSnapshot.description });
+        clearSnapshot();
     };
 
     const removeTag = (tagToRemove: string) => {
@@ -157,7 +175,10 @@ export function CreateTodoDialog({
                         </div>
                         <Input
                             value={newTodo.title}
-                            onChange={(e) => onNewTodoChange({ ...newTodo, title: e.target.value })}
+                            onChange={(e) => {
+                                if (lastSnapshot) clearSnapshot();
+                                onNewTodoChange({ ...newTodo, title: e.target.value });
+                            }}
                             placeholder={`${itemLabel} title`}
                             className="h-10 text-title font-semibold border rounded-md px-3 focus-visible:ring-0 placeholder:font-normal"
                             style={{
@@ -171,12 +192,31 @@ export function CreateTodoDialog({
                     </div>
 
                     <div>
-                        <div className="mb-1 text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
-                            Description
+                        <div className="mb-1 flex items-center justify-between">
+                            <span className="text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
+                                Description
+                            </span>
+                            <div className="flex items-center gap-2">
+                                {lastSnapshot && !isRewriting && (
+                                    <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px]"
+                                        onClick={handleRevert}>
+                                        Revert
+                                    </Button>
+                                )}
+                                <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px]"
+                                    disabled={isRewriting || (!newTodo.title.trim() && !newTodo.description.trim())}
+                                    onClick={handleRewrite}>
+                                    <Sparkles className="size-3 mr-1" />
+                                    {isRewriting ? "Rewriting..." : "Rewrite draft"}
+                                </Button>
+                            </div>
                         </div>
                         <Textarea
                             value={newTodo.description}
-                            onChange={(e) => onNewTodoChange({ ...newTodo, description: e.target.value })}
+                            onChange={(e) => {
+                                if (lastSnapshot) clearSnapshot();
+                                onNewTodoChange({ ...newTodo, description: e.target.value });
+                            }}
                             placeholder="Add description..."
                             className="resize-none text-sm px-3 py-2.5 rounded-md focus-visible:ring-0"
                             style={{
@@ -187,6 +227,11 @@ export function CreateTodoDialog({
                             }}
                             onKeyDown={handleKeyDown}
                         />
+                        {rewriteError && (
+                            <div className="text-[11px] mt-1" style={{ color: styles.semanticDestructive }}>
+                                {rewriteError}
+                            </div>
+                        )}
                     </div>
 
                     {(newTodo.attachments && newTodo.attachments.length > 0) && (
