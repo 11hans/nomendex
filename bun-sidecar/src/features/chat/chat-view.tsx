@@ -452,23 +452,23 @@ function extractTablePlan(content: string): PlanItem[] | null {
 
     if (dataRows.length < 3) return null;
 
-    // Find task column — prefer "Úkol", "Task", or "Aktivita"; fall back to column 1
-    const taskIdx = (() => {
-        const i = headerCols.findIndex((h) => /úkol|task|aktivita|activity|název/i.test(h));
-        return i >= 0 ? i : Math.min(1, headerCols.length - 1);
-    })();
+    // Find task column — require explicit header (no index fallback, otherwise any table would match)
+    const taskIdx = headerCols.findIndex((h) => /úkol|task|aktivita|activity|název/i.test(h));
     // Find time column — prefer "Čas", "Time", "Slot", "Od"
     const timeIdx = headerCols.findIndex((h) => /^čas$|^time$|^slot$|^od$/i.test(h));
 
+    // Only treat as a time/todo plan when both columns are present
+    if (taskIdx < 0 || timeIdx < 0) return null;
+
     return dataRows.map((cells, i) => {
-        const rawTask = cells[taskIdx] ?? cells[0] ?? "";
+        const rawTask = cells[taskIdx] ?? "";
         // Strip wiki-link syntax if agent embedded [[todo:id|title]] in cell
         const title = rawTask.replace(/\[\[(?:todo|note):[^\]|]*\|([^\]]+)\]\]/g, "$1").trim();
-        const meta = timeIdx >= 0 ? (cells[timeIdx] ?? "").trim() : undefined;
+        const meta = (cells[timeIdx] ?? "").trim() || undefined;
         return {
             id: `table-row-${i}`,
             title: title || "—",
-            meta: meta || undefined,
+            meta,
             hasTodoId: false,
         };
     }).filter((item) => item.title && item.title !== "—");
