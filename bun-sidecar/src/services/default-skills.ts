@@ -22,11 +22,23 @@ const DEFAULT_SKILLS: DefaultSkill[] = [
       "SKILL.md": `---
 name: todos
 description: "Manages project todos via REST API. BEFORE using this skill, you must THINK: 'Does the user mention a project? Does the user imply a specific column like Today?'. Use when the user asks to create, view, update, or delete todos."
-version: 14
+version: 15
 source: nomendex
 ---
 
 # Todos Management
+
+## ⚠️ Before You Create: Is This Really a Todo?
+
+Nomendex has **three item types** (see \`built-in-bpagent\` prompt → "Item Types" for full detail):
+
+| Type | Trigger phrases | Route to |
+|------|-----------------|----------|
+| **Todo** (\`kind: "task"\`) | "opravit bug", "odpovědět email", "do pátku udělat X" | this skill |
+| **Timeblock** (\`kind: "event"\`, \`source: "timeblock-generator"\`, tag \`timeblock\`) | "dopoledne pracuju na X", "blok 9–12 na Y", "vyhradím si čas na Z" | \`/timeblocking\` skill |
+| **Event** (\`kind: "event"\`, \`source: "user"\`) | "schůzka s X ve 14:00", "doktor v úterý", "telefonát s Y" | \`/timeblocking\` skill (event mode) |
+
+> **Before creating a todo**, verify the user's phrase is actually a todo. Do NOT create a new todo when the user described a timeblock ("dopoledne pracuju na Nomendex") — create a timeblock instead. Actionable todos for that project already exist.
 
 ## ⚠️ REQUIRED WORKFLOW (Always Do This)
 
@@ -289,6 +301,7 @@ Follow this checklist exactly for mutating requests:
 *   ❌ **DO NOT hide duplicate titles**: When titles repeat, show visible plain-text ID + \`scheduledStart\`-\`scheduledEnd\`.
 *   ❌ **DO NOT invent streak arithmetic**: Use the latest relevant daily note verbatim, or say \`streak neuveden\`.
 *   ❌ **DO NOT treat generated timeblock events as normal tasks**: Keep generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) out of workset math, carry-forward, and done/completion actions unless the user explicitly converts them first.
+*   ❌ **DO NOT create a todo from a timeblock phrase**: "Dopoledne pracuju na Nomendex" = create one timeblock (via \`/timeblocking\`), NOT a new todo. "14:00 schůzka s Petrem" = create one event, NOT a new todo. Recognize the phrase class before choosing this skill.
 
 ## Golden Example (Few-Shot)
 
@@ -1420,7 +1433,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 13
+version: 14
 source: nomendex
 ---
 
@@ -1522,7 +1535,7 @@ This includes:
 
 Do not mutate immediately unless the user explicitly gave exact timing and structure.
 
-### Dnešní rozvrh (chat-only)
+### Dnešní events + Dnešní timebloky (chat-only)
 Before building the actionable workset, load today's event candidates via \`POST /api/todos/list\` with:
 
 \`\`\`json
@@ -1532,13 +1545,16 @@ Before building the actionable workset, load today's event candidates via \`POST
 }
 \`\`\`
 
+Split the result into two groups by \`source\`:
+- **\`source === "user"\`** → external fixed-time obligations (meetings, appointments). Render as \`## 📅 Dnešní events\`.
+- **\`source === "timeblock-generator"\`** (or legacy tag \`timeblock\`) → user-reserved focus time. Render as \`## 🧱 Dnešní timebloky\`, right after events.
+
 Rules:
-- Sort by \`scheduledStart\` ascending.
-- Render this as a separate top section named \`## 📅 Dnešní rozvrh\` in the chat response.
-- This section is **chat-only**. Do not write it into today's daily note.
-- Keep only generated timeblock events: \`source === "timeblock-generator"\` or legacy items with tag \`timeblock\`.
-- If there are no generated timeblocks today, say that explicitly and continue with the regular workset.
-- Ask whether anything in the schedule needs moving only if the user signals a change or wants replanning.
+- Sort both groups by \`scheduledStart\` ascending.
+- Both sections are **chat-only**. Do not write them into today's daily note.
+- If either group is empty, say so explicitly and continue.
+- Ask whether anything in the schedule needs moving only if the user signals a change.
+- When the user expresses timeblock intent ("dopoledne pracuju na X") or event intent ("14:00 schůzka s Y") during the morning, route to \`/timeblocking\` (see "Timeblock Creation Workflow" and "Event Creation").
 
 ### Today Workset Algorithm
 Build today's workset via \`/todos\` using these buckets:
@@ -1559,19 +1575,21 @@ Rules:
 
 ### Automated Steps
 1. Detect today's real daily-note path and open it only if it already exists or the user explicitly asked to create/open it
-2. Load today's generated timeblock events and show them first as chat-only \`## 📅 Dnešní rozvrh\`
+2. Load today's events and timeblocks: fetch \`kinds: ["event"]\` overlapping today, split by \`source\` — render external events as chat-only \`## 📅 Dnešní events\` first, then user timeblocks as \`## 🧱 Dnešní timebloky\`
 3. Pull incomplete tasks from yesterday's real daily note if one exists
 4. Build today's actionable single-day todo workset using the bucket order above
 5. Surface \`Multi-day Context\` separately and keep it out of the actionable workset snapshot
-6. Keep generated timeblock events out of the actionable workset snapshot even if they are scheduled today
+6. Keep both user events and generated timeblocks out of the actionable workset snapshot even if they are scheduled today
 7. If the user names a focus project, surface that project's open todos before unrelated work
-8. **Save workset snapshot** — after the workset is finalized, write only the actionable single-day todo list with \`[[todo:id|Title]]\` wiki-links into today's daily note under \`## Today's Workset\`, plus a hidden HTML comment listing the todo IDs: \`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`. Never include \`Multi-day Context\` or generated timeblock events in this snapshot. This snapshot is the evening flow's baseline for completion rate. Place it right after the \`## Today's Workset\` heading (or at the top of the note if the section doesn't exist). If the daily note hasn't been created yet, include both when creating it.
+8. **Save workset snapshot** — after the workset is finalized, write only the actionable single-day todo list with \`[[todo:id|Title]]\` wiki-links into today's daily note under \`## Today's Workset\`, plus a hidden HTML comment listing the todo IDs: \`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`. Never include \`Multi-day Context\`, events, or timeblocks in this snapshot. This snapshot is the evening flow's baseline for completion rate. Place it right after the \`## Today's Workset\` heading (or at the top of the note if the section doesn't exist). If the daily note hasn't been created yet, include both when creating it.
 9. Read typed goal progress from Goals API first; use weekly/monthly notes only as strategic narrative context
-10. Ask focus questions and propose a plan before editing anything
+10. If the user expresses timeblock or event intent during planning, route creation through \`/timeblocking\` instead of creating an actionable todo
+11. Ask focus questions and propose a plan before editing anything
 
 ### Context Surfacing
 Before interactive prompts, automatically surface:
-- **Dnešní rozvrh** from generated timeblock events that overlap today
+- **📅 Dnešní events** — external fixed-time obligations (\`kind: "event"\`, \`source: "user"\`) overlapping today
+- **🧱 Dnešní timebloky** — user-reserved focus time (\`kind: "event"\`, \`source: "timeblock-generator"\`, tag \`timeblock\`) overlapping today
 - **Overdue** todos
 - **Due Today** todos
 - **Started / In Progress** todos
@@ -1583,11 +1601,17 @@ Before interactive prompts, automatically surface:
 
 Display as a brief context block at the top of the morning routine using \`[[todo:id|Title]]\` wiki-links (never checkboxes):
 \`\`\`markdown
-## 📅 Dnešní rozvrh
-| Čas | Blok | Délka |
-|-----|------|-------|
-| 07:00 | 📓 Morning Review | 15 min |
-| 19:30 | 🔵 Deep Work | 2h |
+## 📅 Dnešní events
+| Čas | Event | Místo / kontext |
+|-----|-------|-----------------|
+| 10:00 | Stand-up | Zoom |
+| 14:00 | Schůzka s Petrem | kavárna Liberal |
+
+## 🧱 Dnešní timebloky
+| Čas | Blok | Projekt |
+|-----|------|---------|
+| 09:00–12:00 | Nomendex — práce | Nomendex |
+| 19:30–21:30 | 🔵 Deep Work | — |
 
 ### Today's Context
 - **Overdue:**
@@ -1629,13 +1653,13 @@ Create all? (or specify which ones)
 
 ### Morning Checklist
 - Daily note path detected
-- Today's timeblock schedule surfaced in chat only
+- Today's events + timeblocks surfaced in chat only (two separate sections)
 - Today workset reviewed (overdue, due today, started, multi-day context, focused project, other candidates)
 - Read-only single-day workset with \`[[todo:id|Title]]\` wiki-links written to daily note
-- Workset snapshot saved (\`<!-- workset: ... -->\`)
+- Workset snapshot saved (\`<!-- workset: ... -->\`) — excludes events and timeblocks
 - Yesterday's incomplete tasks reviewed
 - ONE priority identified
-- Time blocks set
+- Any explicit new timeblock/event intents routed through \`/timeblocking\`
 - Potential obstacles identified
 
 ## Midday Check-in (2-3 minutes)
@@ -1740,6 +1764,17 @@ If today's daily note contains legacy \`[x]\` checkboxes (from before API-only m
 - Daily note \`[x]\` items with NO matching API todo → mention as ad-hoc completions: "Want to capture these as API todos?"
 - Do NOT create new checkboxes. This step is read-only.
 
+### Timeblock Retrospective Linking
+
+For each of today's timeblocks, persist which todos were worked on inside. Procedure: **infer → confirm → persist** (see \`/timeblocking\` → "Timeblock Retrospective Linking" for full detail).
+
+1. Load today's timeblocks: \`POST /api/todos/list { "kinds": ["event"], "scheduledOverlap": { "start": "TODAYT00:00", "end": "TODAYT23:59" } }\`, keep only \`source === "timeblock-generator"\` or legacy tag \`timeblock\`.
+2. **Skip** any timeblock whose \`description\` already contains \`<!-- timeblock-worked-todos -->\` (already linked).
+3. For each remaining timeblock, infer candidate todos: \`completedAt\` or \`scheduledStart\` inside the timeblock's \`scheduledStart\`–\`scheduledEnd\`, AND matching \`project\` (case-insensitive). If the timeblock has no \`project\`, drop that filter and flag candidates as lower-confidence.
+4. Show the list to the user and ask for add/remove confirmation.
+5. After confirmation, append/replace the \`<!-- timeblock-worked-todos -->\` ... \`<!-- /timeblock-worked-todos -->\` block inside the timeblock's \`description\` via \`POST /api/todos/update\`. Preserve any surrounding \`description\` content.
+6. Do NOT mark any contained todo as \`done\` based on inference — that is handled in Step 5 of Completion Scoring. Do NOT mark the timeblock itself as \`done\`.
+
 ### Capture
 1. Add notes and learnings to daily note (plain text, no checkboxes)
 2. Fill in the **Pracovní zápisek** section — co se řešilo, co se naučilo, otevřené otázky/blockers
@@ -1788,6 +1823,7 @@ These run in parallel — reflection does not wait for reconcile to complete:
 - Todos double-checked with user (batch confirm done/reschedule)
 - Completion rate calculated (from \`completedAt\`, not \`updatedAt\`)
 - Incomplete single-day todos rescheduled to tomorrow via API after fresh \`/api/todos/get\` checks
+- Timeblock retrospective linking run for today's timeblocks (\`<!-- timeblock-worked-todos -->\` blocks persisted)
 - Reflection completed
 - Tomorrow's priority identified
 - Changes committed
@@ -2893,14 +2929,14 @@ If no matches are found:
     files: {
       "SKILL.md": `---
 name: timeblocking
-description: "Task-first weekly scheduling. Plan existing actionable todos by day or exact time without creating container events. Legacy event mode only on explicit request."
-version: 5
+description: "Schedule work across three item types: task-first scheduling for todos, timeblock creation for reserved focus time, and event creation for external fixed-time obligations. Includes retrospective linking of todos worked on inside each timeblock."
+version: 6
 source: nomendex
 ---
 
 # Timeblocking Skill
 
-Task-first weekly scheduling for existing actionable todos.
+Schedule work across the three Nomendex item types: **Todos**, **Timeblocks**, **Events**.
 
 ## Usage
 
@@ -2912,80 +2948,213 @@ Use this skill when the user wants to:
 - plan next week's schedule after weekly review
 - re-plan the current week after changes
 - inspect, move, replace, or preview scheduled todos
+- **create a timeblock** ("dopoledne pracuju na Nomendex")
+- **create an event** ("schůzka s Petrem ve 14:00")
+- **retrospectively link** completed todos into timeblocks (evening/weekly flow)
 
-## Core Concept
+## Item Types (recap)
 
-Default mode is **task-first**:
-- update existing \`kind: "task"\` todos only
-- set \`scheduledStart\`/\`scheduledEnd\` to day-only or exact time
-- never create container events by default
+See \`built-in-bpagent\` → "Item Types" for full detail. Short form:
 
-Legacy event mode:
-- only if the user explicitly and unambiguously asks for calendar container events
-- then use legacy \`/api/todos/timeblocking/*\` endpoints
+| Type | Schema | Meaning |
+|------|--------|---------|
+| **Todo** | \`kind: "task"\`, \`source: "user"\` | Actionable work, optionally scheduled |
+| **Timeblock** | \`kind: "event"\`, \`source: "timeblock-generator"\`, tag \`"timeblock"\` | User-reserved time for focused work |
+| **Event** | \`kind: "event"\`, \`source: "user"\` | External fixed-time obligation |
 
-## Planning Flow
+### Phrase → Item type routing
 
-### Phase 1: Load current state
-1. Detect the target week (default: next Monday-starting week unless the user says otherwise)
-2. Load candidate actionable todos (\`kind: "task"\`) for planning
-3. Confirm user preference:
-   - \`day_only\` (assign day only)
-   - \`exact_time\` (assign start/end)
+| Phrase | Route to |
+|--------|----------|
+| "zítra 15:00 opravím bug X" | Task scheduling (update todo \`scheduledStart\`) |
+| "dopoledne pracuju na Nomendex" | **Timeblock Creation** |
+| "blok 9–12 pro deep work na Nomendex" | **Timeblock Creation** |
+| "14:00 schůzka s Petrem v kavárně" | **Event Creation** |
+| "doktor v úterý v 16:00" | **Event Creation** |
 
-### Phase 2: Gather inputs
-Ask only for scheduling choices needed to update existing todos:
-- target day per todo
-- optional start/end time when \`exact_time\` is selected
-- if replanning is partial, confirm exactly which todos should change
+When in doubt, ask before creating.
 
-### Phase 3: Preview
-Use task planner preview to produce:
-- todos to update (before/after schedule)
-- blocking conflicts (invalid range, overlap, missing todo, non-task todo)
-- optional warnings
+---
+
+## Task Scheduling (existing actionable todos)
+
+Default mode for actionable work: update \`scheduledStart\`/\`scheduledEnd\` on existing \`kind: "task"\` todos. Do NOT wrap a task in a container event.
+
+### Flow
+
+1. **Detect target window** (default: next Monday-starting week unless user says otherwise)
+2. **Load candidate tasks** — todos with \`kind: "task"\` that the user wants to schedule
+3. **Ask scheduling preference**: \`day_only\` vs \`exact_time\`
+4. **Preview** via \`POST /api/todos/task-planner/preview\`
+5. **Apply** only after confirmation via \`POST /api/todos/task-planner/apply\`
 
 Render a diff preview before any mutation:
 
 \`\`\`markdown
-## Timeblocking Preview
+## Task Scheduling Preview
 
 ### Aktualizovat
 - [[todo:abc-123|Manuál frekvenční měnič]]
   - from: 2026-04-07
   - to: 2026-04-07T09:00 → 2026-04-07T11:30
-
-- [[todo:def-456|Procházka]]
-  - from: (none)
-  - to: 2026-04-07T13:00 → 2026-04-07T14:00
 \`\`\`
 
 Rules:
-- If blocking conflicts exist, do not apply changes.
+- Blocking conflicts (invalid range, overlap, missing todo, non-task todo) abort apply.
 - Never invent generic filler blocks.
-- Explain clearly which existing todos change.
+- Before updating any existing todo, re-fetch via \`POST /api/todos/get\`. If refreshed data changed, stop and show latest.
 
-### Phase 4: Apply
-After explicit confirmation:
-1. Update only the selected existing todos
-2. If any update fails, restore prior schedule values for touched todos
-3. Summarize the final applied schedule
+---
+
+## Timeblock Creation (user-reserved focus time)
+
+Trigger: user says "dopoledne / odpoledne / večer pracuju na X", "blok na Y", "vyhradím si čas na Z".
+
+### Step 1: Parse the intent
+- **Topic**: "Nomendex", "hluboká práce", "administrativa"
+- **Time range**: explicit ("9–12") vs vague ("dopoledne")
+
+### Step 2: Time range handling
+- **Explicit range** ("9–12 pracuju na Nomendex") → propose in one line, create after confirmation:
+  > Vytvořím timeblock **Nomendex — práce** 09:00–12:00. Potvrď.
+- **Vague range** ("dopoledne") → ask for a concrete range before creating:
+  > Jaký časový rozsah chceš pro dopolední blok Nomendex? (např. 9–12)
+
+### Step 3: Project matching
+Look up the topic against existing projects:
+\`\`\`bash
+curl -s -X POST "http://localhost:$PORT/api/todos/projects" -d '{}'
+\`\`\`
+- **Case-insensitive match** → set \`project: "<canonical name>"\` on the timeblock. This enables retrospective linking.
+- **No match** → ask: "Ke kterému projektu tento blok patří?" Accept "žádný"/"none"/"obecně" to leave \`project\` unset.
+
+### Step 4: Create
+\`\`\`bash
+curl -s -X POST "http://localhost:$PORT/api/todos/create" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "title": "Nomendex — práce",
+    "kind": "event",
+    "source": "timeblock-generator",
+    "tags": ["timeblock"],
+    "scheduledStart": "2026-04-18T09:00:00",
+    "scheduledEnd": "2026-04-18T12:00:00",
+    "project": "Nomendex"
+  }'
+\`\`\`
+
+Rules:
+- Do NOT set \`status\`, \`priority\`, or \`dueDate\` on timeblocks.
+- Do NOT create a parallel actionable todo for the same topic.
+- Do NOT auto-fill empty calendar space with generic timeblocks unless explicitly asked.
+
+### Step 5: Offer content
+After creation, surface the project's open todos so the user can pick what to work on inside:
+> Vytvořen timeblock Nomendex 9–12. Chceš vidět otevřené Nomendex todos?
+
+If yes: \`POST /api/todos/list { "project": "Nomendex", "status": ["todo","planned","in_progress"] }\`. Do NOT auto-assign them to the block.
+
+---
+
+## Event Creation (external fixed-time obligations)
+
+Trigger: explicit person/place/social slot — "schůzka s Petrem ve 14:00", "doktor v úterý".
+
+### Create
+\`\`\`bash
+curl -s -X POST "http://localhost:$PORT/api/todos/create" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "title": "Schůzka s Petrem",
+    "kind": "event",
+    "source": "user",
+    "scheduledStart": "2026-04-18T14:00:00",
+    "scheduledEnd": "2026-04-18T15:00:00",
+    "description": "kavárna Liberal"
+  }'
+\`\`\`
+
+Rules:
+- Put location, attendees, or other context into \`description\` — schema has no dedicated fields.
+- Do NOT set tag \`timeblock\` on events (that distinguishes them from user timeblocks).
+- Do NOT set \`status\`/\`priority\`/\`dueDate\` on events.
+- Confirm time range if the user said something vague like "odpoledne" rather than a concrete time.
+
+---
+
+## Timeblock Retrospective Linking
+
+Goal: record which todos were worked on inside each timeblock, for weekly/monthly review context.
+
+### When
+- **Evening** (\`/daily\` evening) — for today's timeblocks
+- **Weekly review** (\`/weekly\` Phase 1) — for past-week timeblocks without persisted data
+
+### Procedure (infer → confirm → persist)
+
+**1. Load today's timeblocks:**
+\`\`\`bash
+curl -s -X POST "http://localhost:$PORT/api/todos/list" \\
+  -d '{"kinds":["event"],"scheduledOverlap":{"start":"TODAYT00:00","end":"TODAYT23:59"}}'
+\`\`\`
+Filter to \`source === "timeblock-generator"\` or legacy tag \`timeblock\`.
+
+**2. Infer candidate todos per timeblock:**
+For each timeblock, find todos where BOTH:
+- \`completedAt\` **or** \`scheduledStart\` falls inside the timeblock's \`scheduledStart\`–\`scheduledEnd\` range, AND
+- todo's \`project\` equals the timeblock's \`project\` (case-insensitive).
+
+If the timeblock has no \`project\`, drop the project filter and show time-overlap matches as lower-confidence candidates.
+
+**3. Confirm with user:**
+\`\`\`markdown
+V bloku **Nomendex — práce** (09:00–12:00) jsem podle času a projektu našel:
+- ✅ [[todo:abc-123|Fix tag deletion UI]] · done 10:22
+- 🟡 [[todo:def-456|Refactor chat routes]] · in_progress
+
+Souhlasí? Chceš něco přidat/odebrat?
+\`\`\`
+
+**4. Persist into the timeblock's \`description\`:**
+\`\`\`
+<!-- timeblock-worked-todos -->
+- [[todo:abc-123|Fix tag deletion UI]] · done 10:22
+- [[todo:def-456|Refactor chat routes]] · in_progress
+<!-- /timeblock-worked-todos -->
+\`\`\`
+
+Update via \`POST /api/todos/update { "todoId": "<timeblock-id>", "updates": { "description": "<full new description>" } }\`.
+
+Rules:
+- Preserve prior \`description\` content outside the marker block.
+- If the marker block already exists, **replace** it, do not duplicate.
+- Never silently mark a contained todo as \`done\` based on inference — ask explicitly.
+- Do NOT mark the timeblock itself as \`done\`.
+
+### Reading retrospective data later
+Prefer persisted \`<!-- timeblock-worked-todos -->\` blocks over re-inferring. Re-infer only for timeblocks without a persisted block.
+
+---
+
+## Legacy Bulk Event Mode
+
+If the user explicitly asks for the old bulk container-event generator (not per-request timeblock creation above), use:
+- \`POST /api/todos/timeblocking/preview\`
+- \`POST /api/todos/timeblocking/apply\`
+
+This is opt-in only. Modern timeblock creation uses the per-request flow above.
 
 ## Safety Rules
-- Do not create container events (\`kind: "event"\`) unless user explicitly requests legacy event mode.
-- Before updating or moving an existing todo, re-fetch it via \`POST /api/todos/get\`.
-- If refreshed data differs from previewed data, stop and show latest state.
+- Before updating or moving any existing todo, re-fetch via \`POST /api/todos/get\`.
+- If refreshed data differs from previewed data, stop and show the latest state.
 - One concrete task = one schedulable todo. No duplicate shadow entities.
-- If the user explicitly rejects container events (for example "nechci bloky/events"), save that as durable memory and keep future scheduling task-only.
+- If the user explicitly rejects auto-proposed timeblocks ("nechci bloky od tebe sám"), save as durable memory and stop proposing. User-initiated timeblocks still go through.
 
 ## Integration
 
-- \`/weekly\` uses this skill within planning (no separate wizard phase)
-- \`/daily\` reads resulting task schedules from \`scheduledStart\`/\`scheduledEnd\`
-- Use task planner endpoints by default:
-  - \`POST /api/todos/task-planner/preview\`
-  - \`POST /api/todos/task-planner/apply\`
-- Legacy event planner endpoints are explicit opt-in only.
+- \`/weekly\` uses this skill inside planning (task scheduling + retrospective linking)
+- \`/daily\` reads task schedules, surfaces events + timeblocks, and runs retrospective linking in the evening
+- \`/todos\` handles actionable todo CRUD; route timeblock/event phrases here instead
 `,
     },
   },
@@ -2995,7 +3164,7 @@ After explicit confirmation:
       "SKILL.md": `---
 name: weekly
 description: Facilitate weekly review process with reflection, goal alignment, planning, and timeblocking handoff. Create review notes, analyze past week, plan next week. Use on Sundays or whenever doing weekly planning.
-version: 10
+version: 11
 source: nomendex
 ---
 
@@ -3049,6 +3218,8 @@ Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
 - Review daily notes from past week
 - Fetch all todos via \`/todos\` skill (project, status, \`scheduledStart\`/\`scheduledEnd\`, dueDate, priority)
 - Calculate todo completion rate by project while keeping \`Multi-day Context\` and generated timeblock events out of day-level completion math
+- **Backfill timeblock retrospective links**: list the past week's timeblocks (\`POST /api/todos/list\` with \`kinds: ["event"]\` and \`scheduledOverlap\` covering the week, filter to \`source === "timeblock-generator"\` or legacy tag \`timeblock\`). For any timeblock whose \`description\` does NOT contain \`<!-- timeblock-worked-todos -->\`, run the infer → confirm → persist procedure (see \`/timeblocking\` → "Timeblock Retrospective Linking"). Skip already-linked timeblocks.
+- Use the persisted \`<!-- timeblock-worked-todos -->\` data from each linked timeblock to build a Focus Time table (which projects actually received reserved time, and what concrete todos were worked on inside each block)
 - Identify wins and challenges
 - Capture lessons learned
 - Copy any explicit streak wording from the latest relevant daily note verbatim
@@ -3119,6 +3290,7 @@ The skill guides you through:
 - Identify overdue and blocked todos
 - Keep multi-day scheduled todos in a separate context section, not carry-forward or daily-rate math
 - Keep generated timeblock events out of carry-forward, completion tables, and weekly completion math
+- Backfill \`<!-- timeblock-worked-todos -->\` on past-week timeblocks that are missing it
 - Process inbox items
 - Update project statuses
 - Check upcoming scheduled todos via \`scheduledStart\`/\`scheduledEnd\` (and external calendar only if explicitly available)
@@ -3164,9 +3336,17 @@ All todo references use \`[[todo:id|Title]]\` wiki-links. Never write \`[ ]\`/\`
 ### Multi-day Context
 - [[todo:mno-345|Morava]] · id: mno-345 · 2026-03-11 → 2026-03-14 · [ProjectB] · context only
 
-### Timeblocks
+### Timeblocks & Events (this week)
 - Excluded from completion math and carry-forward
-- Reviewed separately in weekly timeblocking preview
+- **Focus Time Summary** (from persisted \`<!-- timeblock-worked-todos -->\` blocks on this week's timeblocks):
+
+| Day | Block | Project | Worked on |
+|-----|-------|---------|-----------|
+| Mon | Nomendex — práce (09:00–12:00) | Nomendex | [[todo:abc-123\\|Fix tag UI]], [[todo:def-456\\|Refactor chat routes]] |
+| Tue | Deep Work (19:30–21:30) | — | [[todo:ghi-789\\|API spec draft]] |
+
+- Backfill any timeblock in the week without a persisted link block (Step 1 of Reflection)
+- External events this week are listed separately below for context only
 
 ### Today Column Patterns
 - Average "Today" todos: 8/day
