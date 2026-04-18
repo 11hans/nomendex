@@ -74,4 +74,21 @@ describe("getColumnIdForTodo", () => {
         // Column "old-col" no longer exists → fall back to first matching status column
         expect(getColumnIdForTodo(todo("todo", "old-col"), columns)).toBe("x");
     });
+
+    test("falls back to status matching when customColumnId column has incompatible status", () => {
+        const columns = [col("week", 1, "todo"), col("doing", 2, "in_progress"), col("done-col", 3, "done")];
+        // Todo marked done but customColumnId still points to a "todo" column
+        // → should move to the done column, not stay in "week"
+        expect(getColumnIdForTodo(todo("done", "week"), columns)).toBe("done-col");
+        // Todo returned to "todo" but customColumnId still points to done
+        // → should move back to a "todo" column
+        expect(getColumnIdForTodo(todo("todo", "done-col"), columns)).toBe("week");
+    });
+
+    test("customColumnId into a no-status column sticks regardless of todo status", () => {
+        const columns = [col("inbox", 1), col("doing", 2, "in_progress"), col("done-col", 3, "done")];
+        // No-status columns act as "any status" containers — customColumnId is honored
+        expect(getColumnIdForTodo(todo("todo", "inbox"), columns)).toBe("inbox");
+        expect(getColumnIdForTodo(todo("done", "inbox"), columns)).toBe("inbox");
+    });
 });

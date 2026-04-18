@@ -491,8 +491,11 @@ export function TodosBrowserView({
     // Helper: Determine which column a todo belongs to.
     // IMPORTANT: This must be defined before handleDragEnd which uses it.
     //
-    // Strict rule (custom board): column = first column (by order) whose status
-    // matches todo.status. customColumnId is ignored for display placement.
+    // Custom board placement (see getColumnIdForTodo for full rules):
+    //   1. customColumnId — honored only when its column's status is compatible
+    //      with todo.status (same status, or a no-status column), so stale
+    //      customColumnId after a status change falls back to status matching.
+    //   2. First column (by order) whose status matches todo.status.
     const getColumnForTodo = useCallback((todo: Todo): string => {
         if (boardConfig) {
             return getColumnIdForTodo(todo, boardConfig.columns);
