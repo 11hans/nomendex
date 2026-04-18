@@ -8,8 +8,7 @@ import { TodoCard } from "./TodoCard";
 import { TaskCardEditor } from "./TaskCardEditor";
 import { Todo } from "./todo-types";
 import { useTodoFilterState } from "./useTodoFilterState";
-import { filterAndSortTodos, urgencyComparator } from "./todo-filter-utils";
-import { buildTodoReorders } from "./todo-reorder";
+import { filterAndSortTodos } from "./todo-filter-utils";
 import { TodoFilterToolbar } from "./TodoFilterToolbar";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -29,7 +28,6 @@ import {
 import {
     SortableContext,
     verticalListSortingStrategy,
-    arrayMove,
 } from "@dnd-kit/sortable";
 import {
     useSortable,
@@ -46,7 +44,7 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
     const [todos, setTodos] = useState<Todo[]>([]);
     const [availableTags, setAvailableTags] = useState<string[]>([]);
     const [availableProjects, setAvailableProjects] = useState<string[]>([]);
-    const todoFilter = useTodoFilterState("archived", { defaultSortMode: "urgency" });
+    const todoFilter = useTodoFilterState("archived");
     const { currentTheme } = useTheme();
     const [editDialogOpen, setEditDialogOpen] = useState(false);
     const [todoToEdit, setTodoToEdit] = useState<Todo | null>(null);
@@ -320,30 +318,6 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
                 return;
             }
 
-            // Same status - reorder within column
-            if (activeIndex !== overIndex) {
-                const statusTodos = todos
-                    .filter((todo) => todo.status === activeTodo.status);
-                const sourceIndex = statusTodos.findIndex((todo) => todo.id === activeId);
-                const targetIndex = statusTodos.findIndex((todo) => todo.id === overId);
-                if (sourceIndex === -1 || targetIndex === -1) {
-                    return;
-                }
-                const reorderedTodos = arrayMove(
-                    statusTodos,
-                    sourceIndex,
-                    targetIndex
-                );
-                const reorders = buildTodoReorders(reorderedTodos);
-
-                try {
-                    await todosAPI.reorderTodos({ reorders });
-                    await loadTodos();
-                } catch (error) {
-                    console.error("Failed to reorder todos:", error);
-                    await loadTodos();
-                }
-            }
         }
     }, [todos, todosAPI, updateTodoStatus, loadTodos]);
 
@@ -357,12 +331,6 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
             later: filtered.filter((t) => t.status === "later"),
         };
 
-        // Apply urgency sort within each column
-        if (todoFilter.filterState.sortMode !== "manual") {
-            for (const key of Object.keys(grouped) as Array<keyof typeof grouped>) {
-                grouped[key].sort(urgencyComparator);
-            }
-        }
 
         return grouped;
     }, [todos, todoFilter.filterState]);
@@ -448,7 +416,6 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
             <TodoFilterToolbar
                 filterState={todoFilter.filterState}
                 onSearchChange={todoFilter.setSearchQuery}
-                onSortModeChange={todoFilter.setSortMode}
                 onActivatePreset={todoFilter.activatePreset}
                 onFilterChange={(partial) => {
                     if (partial.selectedTags !== undefined) todoFilter.setSelectedTags(partial.selectedTags);
@@ -460,7 +427,6 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
                 availableTags={availableTags}
                 availableProjects={availableProjects}
                 showStatusBucket={false}
-                allowedSortModes={["urgency", "recent"]}
                 activeFilterChips={todoFilter.activeFilterChips}
                 hasActiveFilters={todoFilter.hasActiveFilters}
                 trailingActions={

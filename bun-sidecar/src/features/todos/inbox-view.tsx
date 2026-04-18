@@ -367,7 +367,7 @@ export function InboxListView() {
     const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
     const [todoToEdit, setTodoToEdit] = useState<Todo | null>(null);
     const [editSaving, setEditSaving] = useState(false);
-    const todoFilter = useTodoFilterState("inbox", { defaultSortMode: "urgency", defaultStatusBucket: "all" });
+    const todoFilter = useTodoFilterState("inbox", { defaultStatusBucket: "all" });
     const [draggedTodoId, setDraggedTodoId] = useState<string | null>(null);
     const [selectedGroup, setSelectedGroup] = useState<string>(ALL_TASKS);
     const [activeSystemListId, setActiveSystemListId] = useState<SystemListId | null>(null);
@@ -798,13 +798,12 @@ export function InboxListView() {
             const baseState = createDefaultFilterState({
                 ...criteria,
                 searchQuery: "",
-                sortMode: todoFilter.filterState.sortMode,
             });
             const filtered = filterAndSortTodos(sourceTodos, baseState);
             if (!kindFilter) return filtered;
             return filtered.filter((todo) => todo.kind === kindFilter);
         },
-        [todoFilter.filterState.sortMode],
+        [],
     );
 
     const filteredTodos = useMemo(() => {
@@ -1016,7 +1015,6 @@ export function InboxListView() {
                                     clearActiveSidebarListSelection();
                                     todoFilter.setSearchQuery(query);
                                 }}
-                                onSortModeChange={todoFilter.setSortMode}
                                 onActivatePreset={(preset) => {
                                     clearActiveSidebarListSelection();
                                     todoFilter.activatePreset(preset);
@@ -1040,7 +1038,6 @@ export function InboxListView() {
                                     clearActiveSidebarListSelection();
                                     todoFilter.setStatusBucket(statusBucket);
                                 }}
-                                allowedSortModes={["urgency", "recent"]}
                                 showQuickPresets={false}
                                 showDueFilter={false}
                                 activeFilterChips={todoFilter.activeFilterChips}

@@ -17,8 +17,7 @@ import { TaskCardEditor } from "./TaskCardEditor";
 import { Todo } from "./todo-types";
 import { isEventTodo, isTaskTodo } from "./todo-kind-utils";
 import { useTodoFilterState } from "./useTodoFilterState";
-import { filterAndSortTodos, urgencyComparator } from "./todo-filter-utils";
-import { buildTodoReorders } from "./todo-reorder";
+import { filterAndSortTodos, dateSortComparator } from "./todo-filter-utils";
 import { getColumnIdForTodo } from "./todo-column-utils";
 import { TodoFilterToolbar } from "./TodoFilterToolbar";
 import type { TodoFilterCriteria } from "./todo-filter-types";
@@ -46,7 +45,6 @@ import {
 import {
     SortableContext,
     verticalListSortingStrategy,
-    arrayMove,
 } from "@dnd-kit/sortable";
 import {
     useSortable,
@@ -290,8 +288,7 @@ export function TodosBrowserView({
     });
     const [activeSystemListId, setActiveSystemListId] = useState<SystemListId | null>(null);
     const [availableGoals, setAvailableGoals] = useState<GoalRecord[]>([]);
-    const todoFilter = useTodoFilterState("browser", { defaultSortMode: "urgency" });
-    const isManualSort = todoFilter.filterState.sortMode === "manual";
+    const todoFilter = useTodoFilterState("browser");
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [inlineSubtaskParentId, setInlineSubtaskParentId] = useState<string | null>(null);
     const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -932,10 +929,6 @@ export function TodosBrowserView({
                     // Custom board mode - update customColumnId and optionally status
                     const currentColumnId = getColumnForTodo(activeTodo);
                     if (newColumnId !== currentColumnId) {
-                        const targetColumnTodos = todos.filter(
-                            (todo) => getColumnForTodo(todo) === newColumnId && todo.id !== activeId
-                        );
-
                         // Determine target status: column's status, or "todo" for no-status columns
                         const targetColumn = boardConfig.columns.find(c => c.id === newColumnId);
                         const newStatus = targetColumn?.status ?? "todo";
@@ -945,15 +938,6 @@ export function TodosBrowserView({
                             return;
                         }
 
-                        const reorders = buildTodoReorders([
-                            ...targetColumnTodos,
-                            {
-                                ...activeTodo,
-                                customColumnId: newColumnId,
-                                status: newStatus,
-                            },
-                        ]);
-
                         try {
                             await todosAPI.updateTodo({
                                 todoId: activeId,
@@ -962,7 +946,6 @@ export function TodosBrowserView({
                                     status: newStatus,
                                 },
                             });
-                            await todosAPI.reorderTodos({ reorders });
                             await loadTodos();
                         } catch (error) {
                             console.error("Failed to update todo column:", error);
@@ -973,26 +956,16 @@ export function TodosBrowserView({
                     // Legacy mode - update status
                     const newStatus = newColumnId as "todo" | "planned" | "in_progress" | "done" | "later";
                     if (newStatus !== activeTodo.status) {
-                        const targetStatusTodos = todos.filter(
-                            (todo) => todo.status === newStatus && todo.id !== activeId
-                        );
-
                         if (isEventTodo(activeTodo) && newStatus !== "todo") {
                             rejectEventStatusMove();
                             return;
                         }
-
-                        const reorders = buildTodoReorders([
-                            ...targetStatusTodos,
-                            { ...activeTodo, status: newStatus },
-                        ]);
 
                         try {
                             await todosAPI.updateTodo({
                                 todoId: activeId,
                                 updates: { status: newStatus },
                             });
-                            await todosAPI.reorderTodos({ reorders });
                             await loadTodos();
                         } catch (error) {
                             console.error("Failed to update todo status:", error);
@@ -1017,12 +990,6 @@ export function TodosBrowserView({
                     // Cross-column drop onto a specific card
                     if (boardConfig) {
                         // Custom board mode - update customColumnId and position
-                        const targetColumnTodos = todos.filter(
-                            (todo) => getColumnForTodo(todo) === overColumnId && todo.id !== activeId
-                        );
-                        const overIndexInColumn = targetColumnTodos.findIndex(t => t.id === overId);
-                        const insertIndex = overIndexInColumn === -1 ? targetColumnTodos.length : overIndexInColumn;
-
                         // Determine target status: column's status, or "todo" for no-status columns
                         const targetColumn = boardConfig.columns.find(c => c.id === overColumnId);
                         const newStatus = targetColumn?.status ?? "todo";
@@ -1032,14 +999,6 @@ export function TodosBrowserView({
                             return;
                         }
 
-                        const reorderedColumnTodos = [...targetColumnTodos];
-                        reorderedColumnTodos.splice(insertIndex, 0, {
-                            ...activeTodo,
-                            customColumnId: overColumnId,
-                            status: newStatus,
-                        });
-                        const reorders = buildTodoReorders(reorderedColumnTodos);
-
                         try {
                             await todosAPI.updateTodo({
                                 todoId: activeId,
@@ -1048,7 +1007,6 @@ export function TodosBrowserView({
                                     status: newStatus,
                                 },
                             });
-                            await todosAPI.reorderTodos({ reorders });
                             await loadTodos();
                         } catch (error) {
                             console.error("Failed to move todo:", error);
@@ -1061,47 +1019,14 @@ export function TodosBrowserView({
                             rejectEventStatusMove();
                             return;
                         }
-                        const targetColumnTodos = todos.filter(
-                            (todo) => todo.status === targetStatus && todo.id !== activeId
-                        );
-                        const overIndexInColumn = targetColumnTodos.findIndex(t => t.id === overId);
-                        const insertIndex = overIndexInColumn === -1 ? targetColumnTodos.length : overIndexInColumn;
-                        const reorderedColumnTodos = [...targetColumnTodos];
-                        reorderedColumnTodos.splice(insertIndex, 0, {
-                            ...activeTodo,
-                            status: targetStatus,
-                        });
-                        const reorders = buildTodoReorders(reorderedColumnTodos);
-
                         try {
                             await todosAPI.updateTodo({
                                 todoId: activeId,
                                 updates: { status: targetStatus },
                             });
-                            await todosAPI.reorderTodos({ reorders });
                             await loadTodos();
                         } catch (error) {
                             console.error("Failed to move todo:", error);
-                            await loadTodos();
-                        }
-                    }
-                } else {
-                    // Same column reorder - only in manual sort mode
-                    if (isManualSort && activeIndex !== overIndex) {
-                        const columnTodos = todos.filter((todo) => getColumnForTodo(todo) === activeColumnId);
-                        const sourceIndex = columnTodos.findIndex((todo) => todo.id === activeId);
-                        const targetIndex = columnTodos.findIndex((todo) => todo.id === overId);
-                        if (sourceIndex === -1 || targetIndex === -1) {
-                            return;
-                        }
-                        const reorderedTodos = arrayMove(columnTodos, sourceIndex, targetIndex);
-                        const reorders = buildTodoReorders(reorderedTodos);
-
-                        try {
-                            await todosAPI.reorderTodos({ reorders });
-                            await loadTodos();
-                        } catch (error) {
-                            console.error("Failed to reorder todos:", error);
                             await loadTodos();
                         }
                     }
@@ -1111,7 +1036,7 @@ export function TodosBrowserView({
             console.error("Error in drag end handler:", error);
             await loadTodos();
         }
-    }, [todos, moveTodoToProject, todosAPI, loadTodos, boardConfig, getColumnForTodo, isManualSort, rejectEventStatusMove]);
+    }, [todos, moveTodoToProject, todosAPI, loadTodos, boardConfig, getColumnForTodo, rejectEventStatusMove]);
 
     // Convenience
     // --- Dynamic Columns Logic ---
@@ -1204,24 +1129,13 @@ export function TodosBrowserView({
             }
         });
 
-        // Sort within columns: urgency mode uses urgencyComparator, manual uses layout order from API
-        if (!isManualSort) {
-            for (const colId of Object.keys(grouped)) {
-                grouped[colId].sort(urgencyComparator);
-            }
-        }
-
-        // Done todos always sink to the bottom within each column
+        // Sort within columns by date
         for (const colId of Object.keys(grouped)) {
-            grouped[colId].sort((a, b) => {
-                const aDone = a.status === "done" ? 1 : 0;
-                const bDone = b.status === "done" ? 1 : 0;
-                return aDone - bDone;
-            });
+            grouped[colId].sort(dateSortComparator);
         }
 
         return grouped;
-    }, [kindScopedTodos, todoFilter.filterState, displayColumns, getColumnForTodo, isManualSort]);
+    }, [kindScopedTodos, todoFilter.filterState, displayColumns, getColumnForTodo]);
 
 
     // Flattened list of all visible todos for keyboard navigation
@@ -1276,13 +1190,12 @@ export function TodosBrowserView({
             const baseState = createDefaultFilterState({
                 ...criteria,
                 searchQuery: "",
-                sortMode: todoFilter.filterState.sortMode,
             });
             const filtered = filterAndSortTodos(sourceTodos, baseState);
             if (!criteriaKindFilter) return filtered;
             return filtered.filter((todo) => todo.kind === criteriaKindFilter);
         },
-        [todoFilter.filterState.sortMode],
+        [],
     );
 
     const systemListCounts = useMemo(() => {
@@ -1573,45 +1486,6 @@ export function TodosBrowserView({
         }
     }, [selectedTodoId, handleOpenTodo]);
 
-    // Move handlers - reorder with Shift+Arrow (only in manual sort mode)
-    const moveUp = useCallback(async () => {
-        if (!selectedTodoId || !isManualSort) return;
-        const pos = getTodoPosition(selectedTodoId);
-        if (!pos || pos.index === 0) return; // Can't move up if at top
-
-        const columnTodos = todosByColumn[pos.columnId];
-        const reorderedTodos = arrayMove(columnTodos, pos.index, pos.index - 1);
-        const reorders = buildTodoReorders(reorderedTodos);
-
-        try {
-            await todosAPI.reorderTodos({ reorders });
-            await loadTodos();
-        } catch (error) {
-            console.error("Failed to reorder todos:", error);
-            await loadTodos();
-        }
-    }, [selectedTodoId, getTodoPosition, todosByColumn, todosAPI, loadTodos, isManualSort]);
-
-    const moveDown = useCallback(async () => {
-        if (!selectedTodoId || !isManualSort) return;
-        const pos = getTodoPosition(selectedTodoId);
-        if (!pos) return;
-
-        const columnTodos = todosByColumn[pos.columnId];
-        if (pos.index >= columnTodos.length - 1) return; // Can't move down if at bottom
-
-        const reorderedTodos = arrayMove(columnTodos, pos.index, pos.index + 1);
-        const reorders = buildTodoReorders(reorderedTodos);
-
-        try {
-            await todosAPI.reorderTodos({ reorders });
-            await loadTodos();
-        } catch (error) {
-            console.error("Failed to reorder todos:", error);
-            await loadTodos();
-        }
-    }, [selectedTodoId, getTodoPosition, todosByColumn, todosAPI, loadTodos, isManualSort]);
-
     const moveRight = useCallback(async () => {
         if (!selectedTodoId) return;
         const pos = getTodoPosition(selectedTodoId);
@@ -1809,22 +1683,6 @@ export function TodosBrowserView({
             category: 'Navigation',
         },
         {
-            id: 'todos.move-up',
-            name: 'Move Up',
-            combo: { key: 'ArrowUp', shift: true },
-            handler: moveUp,
-            when: () => selectedTodoId !== null && !isInputFocused(),
-            category: 'Actions',
-        },
-        {
-            id: 'todos.move-down',
-            name: 'Move Down',
-            combo: { key: 'ArrowDown', shift: true },
-            handler: moveDown,
-            when: () => selectedTodoId !== null && !isInputFocused(),
-            category: 'Actions',
-        },
-        {
             id: 'todos.move-right',
             name: 'Move Right',
             combo: { key: 'ArrowRight', shift: true },
@@ -1930,7 +1788,7 @@ export function TodosBrowserView({
     ], {
         context: 'plugin:todos',
         onlyWhenActive: true,
-        deps: [loadTodos, flattenedTodos, selectedTodoId, todoFilter.filterState.searchQuery, navigateDown, navigateUp, navigateLeft, navigateRight, openSelectedTodo, moveUp, moveDown, moveLeft, moveRight, archiveSelected, deleteSelected, copySelectedTodo]
+        deps: [loadTodos, flattenedTodos, selectedTodoId, todoFilter.filterState.searchQuery, navigateDown, navigateUp, navigateLeft, navigateRight, openSelectedTodo, moveLeft, moveRight, archiveSelected, deleteSelected, copySelectedTodo]
     });
 
     // Refs for scrolling
@@ -2316,7 +2174,6 @@ export function TodosBrowserView({
                                         clearActiveSidebarListSelection();
                                         todoFilter.setSearchQuery(query);
                                     }}
-                                    onSortModeChange={todoFilter.setSortMode}
                                     onActivatePreset={(preset) => {
                                         clearActiveSidebarListSelection();
                                         todoFilter.activatePreset(preset);
@@ -2333,7 +2190,6 @@ export function TodosBrowserView({
                                         todoFilter.clearAllFilters();
                                     }}
                                     availableTags={availableTags}
-                                    allowedSortModes={["urgency", "manual"]}
                                     showQuickPresets={false}
                                     showDueFilter={false}
                                     activeFilterChips={todoFilter.activeFilterChips}
@@ -2574,7 +2430,6 @@ export function TodosBrowserView({
                             clearActiveSidebarListSelection();
                             todoFilter.setSearchQuery(query);
                         }}
-                        onSortModeChange={todoFilter.setSortMode}
                         onActivatePreset={(preset) => {
                             clearActiveSidebarListSelection();
                             todoFilter.activatePreset(preset);
@@ -2591,7 +2446,6 @@ export function TodosBrowserView({
                             todoFilter.clearAllFilters();
                         }}
                         availableTags={availableTags}
-                        allowedSortModes={["urgency", "manual"]}
                         showQuickPresets={false}
                         showDueFilter={false}
                         activeFilterChips={todoFilter.activeFilterChips}

@@ -3,7 +3,7 @@ import type { Todo } from "./todo-types";
 import {
     classifyDueBucket,
     getEffectiveDate,
-    urgencyComparator,
+    dateSortComparator,
     needsAttention,
     matchesDueFilter,
     applyQuickPreset,
@@ -97,55 +97,50 @@ describe("getEffectiveDate", () => {
     });
 });
 
-// ─── urgencyComparator ──────────────────────────────────────────────────────
+// ─── dateSortComparator ──────────────────────────────────────────────────────
 
-describe("urgencyComparator", () => {
-    test("overdue before today", () => {
-        const a = makeTodo({ dueDate: daysFromNow(-1) });
-        const b = makeTodo({ dueDate: todayStr() });
-        expect(urgencyComparator(a, b)).toBeLessThan(0);
+describe("dateSortComparator", () => {
+    test("earlier scheduledStart sorts first", () => {
+        const a = makeTodo({ scheduledStart: daysFromNow(1) });
+        const b = makeTodo({ scheduledStart: daysFromNow(3) });
+        expect(dateSortComparator(a, b)).toBeLessThan(0);
     });
 
-    test("today before next_7_days", () => {
-        const a = makeTodo({ dueDate: todayStr() });
-        const b = makeTodo({ dueDate: daysFromNow(3) });
-        expect(urgencyComparator(a, b)).toBeLessThan(0);
+    test("scheduledStart takes priority over dueDate", () => {
+        const a = makeTodo({ scheduledStart: daysFromNow(1), dueDate: daysFromNow(10) });
+        const b = makeTodo({ dueDate: daysFromNow(2) }); // no scheduledStart
+        expect(dateSortComparator(a, b)).toBeLessThan(0);
     });
 
-    test("next_7_days before no_due", () => {
+    test("falls back to dueDate when no scheduledStart", () => {
         const a = makeTodo({ dueDate: daysFromNow(2) });
-        const b = makeTodo(); // no date
-        expect(urgencyComparator(a, b)).toBeLessThan(0);
+        const b = makeTodo({ dueDate: daysFromNow(5) });
+        expect(dateSortComparator(a, b)).toBeLessThan(0);
     });
 
-    test("within same bucket: earlier date first", () => {
-        const a = makeTodo({ dueDate: daysFromNow(-3) });
-        const b = makeTodo({ dueDate: daysFromNow(-1) });
-        expect(urgencyComparator(a, b)).toBeLessThan(0);
+    test("falls back to createdAt when no scheduled or due date", () => {
+        const a = makeTodo({ createdAt: "2026-01-01T00:00", updatedAt: "2026-01-01T00:00" });
+        const b = makeTodo({ createdAt: "2026-02-01T00:00", updatedAt: "2026-02-01T00:00" });
+        expect(dateSortComparator(a, b)).toBeLessThan(0); // older first (ASC)
     });
 
-    test("same bucket/date: high priority before low", () => {
-        const a = makeTodo({ dueDate: todayStr(), priority: "high" });
-        const b = makeTodo({ dueDate: todayStr(), priority: "low" });
-        expect(urgencyComparator(a, b)).toBeLessThan(0);
+    test("done todos sorted by completedAt DESC", () => {
+        const a = makeTodo({ status: "done", completedAt: "2026-03-01T00:00", updatedAt: "2026-03-01T00:00" });
+        const b = makeTodo({ status: "done", completedAt: "2026-03-10T00:00", updatedAt: "2026-03-10T00:00" });
+        expect(dateSortComparator(a, b)).toBeGreaterThan(0); // b before a (DESC)
     });
 
-    test("same bucket/date/priority: in_progress before todo", () => {
-        const a = makeTodo({ dueDate: todayStr(), priority: "high", status: "in_progress" });
-        const b = makeTodo({ dueDate: todayStr(), priority: "high", status: "todo" });
-        expect(urgencyComparator(a, b)).toBeLessThan(0);
+    test("done todos fall back to updatedAt DESC when no completedAt", () => {
+        const a = makeTodo({ status: "done", updatedAt: "2026-03-01T00:00" });
+        const b = makeTodo({ status: "done", updatedAt: "2026-03-10T00:00" });
+        expect(dateSortComparator(a, b)).toBeGreaterThan(0); // b before a
     });
 
-    test("same everything: more recently updated first", () => {
-        const a = makeTodo({ updatedAt: "2026-03-20T12:00" });
-        const b = makeTodo({ updatedAt: "2026-03-19T12:00" });
-        expect(urgencyComparator(a, b)).toBeLessThan(0);
-    });
-
-    test("final tiebreak: title ASC", () => {
-        const a = makeTodo({ title: "Alpha", updatedAt: "2026-01-01T00:00" });
-        const b = makeTodo({ title: "Beta", updatedAt: "2026-01-01T00:00" });
-        expect(urgencyComparator(a, b)).toBeLessThan(0);
+    test("non-done always before done", () => {
+        const active = makeTodo({ status: "todo", createdAt: "2026-01-01T00:00", updatedAt: "2026-01-01T00:00" });
+        const done = makeTodo({ status: "done", completedAt: "2026-03-10T00:00", updatedAt: "2026-03-10T00:00" });
+        expect(dateSortComparator(active, done)).toBeLessThan(0);
+        expect(dateSortComparator(done, active)).toBeGreaterThan(0);
     });
 });
 
@@ -348,11 +343,17 @@ describe("filterAndSortTodos", () => {
         makeTodo({ id: "6", title: "Archived task", archived: true, dueDate: daysFromNow(-1), updatedAt: "2026-03-02T00:00" }),
     ];
 
-    test("default state returns all, sorted by urgency", () => {
+    test("default state returns all, sorted by date ASC (non-done), done last", () => {
         const result = filterAndSortTodos(todos, createDefaultFilterState());
         expect(result.length).toBe(6);
-        // Urgency order: overdue > today > next_7_days > no_due
-        expect(result[0].id).toBe("1"); // overdue high
+        // Non-done todos sorted by effective date ASC, done todos sorted completedAt DESC
+        // Done and archived todos should have status===done or archived===true
+        const nonDone = result.filter((t) => t.status !== "done");
+        for (let i = 1; i < nonDone.length; i++) {
+            const aDate = nonDone[i - 1].scheduledStart ?? nonDone[i - 1].dueDate ?? nonDone[i - 1].createdAt;
+            const bDate = nonDone[i].scheduledStart ?? nonDone[i].dueDate ?? nonDone[i].createdAt;
+            expect(new Date(aDate).getTime()).toBeLessThanOrEqual(new Date(bDate).getTime());
+        }
     });
 
     test("active status bucket filters out done and archived", () => {
@@ -411,23 +412,34 @@ describe("filterAndSortTodos", () => {
         expect(result.length).toBe(6);
     });
 
-    test("recent sort mode", () => {
-        const result = filterAndSortTodos(todos, createDefaultFilterState({ sortMode: "recent" }));
-        // Most recently updated first
-        for (let i = 1; i < result.length; i++) {
-            expect(new Date(result[i - 1].updatedAt).getTime()).toBeGreaterThanOrEqual(
-                new Date(result[i].updatedAt).getTime(),
-            );
-        }
+    test("dateSortComparator: non-done sorted by scheduledStart ASC", () => {
+        const t1 = makeTodo({ id: "a", scheduledStart: daysFromNow(3) });
+        const t2 = makeTodo({ id: "b", scheduledStart: daysFromNow(1) });
+        const t3 = makeTodo({ id: "c", scheduledStart: daysFromNow(5) });
+        const result = [t1, t2, t3].sort(dateSortComparator);
+        expect(result.map((t) => t.id)).toEqual(["b", "a", "c"]);
     });
 
-    test("manual sort mode preserves original order", () => {
-        const ordered = [
-            makeTodo({ id: "x", title: "Third" }),
-            makeTodo({ id: "y", title: "First" }),
-            makeTodo({ id: "z", title: "Second" }),
-        ];
-        const result = filterAndSortTodos(ordered, createDefaultFilterState({ sortMode: "manual" }));
-        expect(result.map((t) => t.id)).toEqual(["x", "y", "z"]); // original order preserved
+    test("dateSortComparator: falls back to dueDate when no scheduledStart", () => {
+        const t1 = makeTodo({ id: "a", dueDate: daysFromNow(4) });
+        const t2 = makeTodo({ id: "b", dueDate: daysFromNow(2) });
+        const result = [t1, t2].sort(dateSortComparator);
+        expect(result.map((t) => t.id)).toEqual(["b", "a"]);
+    });
+
+    test("dateSortComparator: done todos sorted completedAt DESC", () => {
+        const t1 = makeTodo({ id: "a", status: "done", completedAt: "2026-03-01T00:00" });
+        const t2 = makeTodo({ id: "b", status: "done", completedAt: "2026-03-10T00:00" });
+        const t3 = makeTodo({ id: "c", status: "done", completedAt: "2026-03-05T00:00" });
+        const result = [t1, t2, t3].sort(dateSortComparator);
+        expect(result.map((t) => t.id)).toEqual(["b", "c", "a"]);
+    });
+
+    test("dateSortComparator: done todos sorted after non-done", () => {
+        const active = makeTodo({ id: "active", status: "todo", createdAt: "2026-01-01T00:00" });
+        const done = makeTodo({ id: "done", status: "done", completedAt: "2026-03-10T00:00" });
+        const result = [done, active].sort(dateSortComparator);
+        expect(result[0].id).toBe("active");
+        expect(result[1].id).toBe("done");
     });
 });

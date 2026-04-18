@@ -6,7 +6,6 @@ import type {
     TodoQuickPreset,
     TodoDueFilter,
     TodoStatusBucket,
-    TodoSortMode,
     TodoViewPreferences,
     FilterChip,
 } from "./todo-filter-types";
@@ -28,7 +27,6 @@ const DUE_FILTER_LABELS: Record<TodoDueFilter, string> = {
 };
 
 interface UseTodoFilterStateOptions {
-    defaultSortMode?: TodoSortMode;
     defaultStatusBucket?: TodoStatusBucket;
 }
 
@@ -41,10 +39,9 @@ export function useTodoFilterState(
     // Build defaults from options
     const defaults = useMemo(
         () => createDefaultFilterState({
-            sortMode: options?.defaultSortMode ?? "urgency",
             statusBucket: options?.defaultStatusBucket ?? "all",
         }),
-        [options?.defaultSortMode, options?.defaultStatusBucket],
+        [options?.defaultStatusBucket],
     );
 
     // Initialize from workspace preferences (or defaults)
@@ -52,8 +49,7 @@ export function useTodoFilterState(
     const [filterState, setFilterState] = useState<TodoFilterState>(() => ({
         ...defaults,
         ...savedPrefs,
-        // Always apply default sort/status if not previously saved
-        sortMode: savedPrefs.sortMode ?? defaults.sortMode,
+        // Always apply default status if not previously saved
         statusBucket: savedPrefs.statusBucket ?? defaults.statusBucket,
     }));
 
@@ -160,28 +156,21 @@ export function useTodoFilterState(
         [updateFilter],
     );
 
-    const setSortMode = useCallback(
-        (mode: TodoSortMode) => updateFilter((prev) => ({ ...prev, sortMode: mode })),
-        [updateFilter],
-    );
-
     const activatePreset = useCallback(
         (preset: TodoQuickPreset) => updateFilter((prev) => {
             if (prev.quickPreset === preset) {
-                // Toggle off: reset to defaults (keep search and sort)
+                // Toggle off: reset to defaults (keep search)
                 return {
                     ...defaults,
                     searchQuery: prev.searchQuery,
-                    sortMode: prev.sortMode,
                 };
             }
             const presetOverrides = applyQuickPreset(preset);
             return {
                 ...prev,
                 ...presetOverrides,
-                // Keep search and sort
+                // Keep search
                 searchQuery: prev.searchQuery,
-                sortMode: prev.sortMode,
             };
         }),
         [updateFilter, defaults],
@@ -191,7 +180,6 @@ export function useTodoFilterState(
         () => updateFilter((prev) => ({
             ...defaults,
             searchQuery: prev.searchQuery,
-            sortMode: prev.sortMode,
         })),
         [updateFilter, defaults],
     );
@@ -289,7 +277,6 @@ export function useTodoFilterState(
         setSelectedPriority,
         setDueFilter,
         setSelectedProject,
-        setSortMode,
         activatePreset,
         hasActiveFilters,
         activeFilterChips,

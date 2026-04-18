@@ -1,4 +1,4 @@
-import { Search, SlidersHorizontal, ArrowUpDown, X, AlertTriangle, Clock, AlertCircle } from "lucide-react";
+import { Search, SlidersHorizontal, X, AlertTriangle, Clock, AlertCircle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTheme } from "@/hooks/useTheme";
 import { useState } from "react";
@@ -6,16 +6,9 @@ import { TodoFilterPopover } from "./TodoFilterPopover";
 import type {
     TodoFilterState,
     TodoQuickPreset,
-    TodoSortMode,
     TodoStatusBucket,
     FilterChip,
 } from "./todo-filter-types";
-
-const SORT_MODE_LABELS: Record<TodoSortMode, string> = {
-    urgency: "Urgency",
-    manual: "Manual",
-    recent: "Recent",
-};
 
 const PRESET_CONFIG: { value: TodoQuickPreset; label: string; icon: typeof AlertTriangle }[] = [
     { value: "needs_attention", label: "Needs Attention", icon: AlertTriangle },
@@ -26,7 +19,6 @@ const PRESET_CONFIG: { value: TodoQuickPreset; label: string; icon: typeof Alert
 interface TodoFilterToolbarProps {
     filterState: TodoFilterState;
     onSearchChange: (query: string) => void;
-    onSortModeChange: (mode: TodoSortMode) => void;
     onActivatePreset: (preset: TodoQuickPreset) => void;
     onFilterChange: (partial: Partial<TodoFilterState>) => void;
     onClearAllFilters: () => void;
@@ -39,7 +31,6 @@ interface TodoFilterToolbarProps {
     showStatusBucket?: boolean;
     statusBucketCounts?: Record<TodoStatusBucket, number>;
     onStatusBucketChange?: (bucket: TodoStatusBucket) => void;
-    allowedSortModes: TodoSortMode[];
     showQuickPresets?: boolean;
     showDueFilter?: boolean;
 
@@ -61,7 +52,6 @@ const STATUS_BUCKET_CONFIG: { value: TodoStatusBucket; label: string }[] = [
 export function TodoFilterToolbar({
     filterState,
     onSearchChange,
-    onSortModeChange,
     onActivatePreset,
     onFilterChange,
     onClearAllFilters,
@@ -70,7 +60,6 @@ export function TodoFilterToolbar({
     showStatusBucket,
     statusBucketCounts,
     onStatusBucketChange,
-    allowedSortModes,
     showQuickPresets = true,
     showDueFilter = true,
     activeFilterChips,
@@ -79,7 +68,6 @@ export function TodoFilterToolbar({
 }: TodoFilterToolbarProps) {
     const { currentTheme } = useTheme();
     const [filterOpen, setFilterOpen] = useState(false);
-    const [sortOpen, setSortOpen] = useState(false);
 
     const hasAnyActiveFilter = hasActiveFilters || filterState.selectedTags.length > 0
         || filterState.selectedPriority !== null || filterState.dueFilter !== "any";
@@ -204,53 +192,6 @@ export function TodoFilterToolbar({
                         />
                     </PopoverContent>
                 </Popover>
-
-                {/* Sort popover */}
-                {allowedSortModes.length > 1 && (
-                    <Popover open={sortOpen} onOpenChange={setSortOpen}>
-                        <PopoverTrigger asChild>
-                            <button
-                                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors"
-                                style={{
-                                    color: currentTheme.styles.contentTertiary,
-                                    border: `1px solid ${currentTheme.styles.borderDefault}`,
-                                }}
-                            >
-                                <ArrowUpDown className="size-3.5" />
-                                {SORT_MODE_LABELS[filterState.sortMode]}
-                            </button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                            className="w-40 p-1"
-                            align="start"
-                            style={{
-                                backgroundColor: currentTheme.styles.surfacePrimary,
-                                borderColor: currentTheme.styles.borderDefault,
-                            }}
-                        >
-                            {allowedSortModes.map((mode) => {
-                                const isActive = filterState.sortMode === mode;
-                                return (
-                                    <button
-                                        key={mode}
-                                        type="button"
-                                        onClick={() => {
-                                            onSortModeChange(mode);
-                                            setSortOpen(false);
-                                        }}
-                                        className="flex items-center gap-2 w-full px-2.5 py-1.5 rounded text-sm transition-colors text-left"
-                                        style={{
-                                            backgroundColor: isActive ? currentTheme.styles.surfaceTertiary : 'transparent',
-                                            color: currentTheme.styles.contentPrimary,
-                                        }}
-                                    >
-                                        {SORT_MODE_LABELS[mode]}
-                                    </button>
-                                );
-                            })}
-                        </PopoverContent>
-                    </Popover>
-                )}
 
                 {/* Spacer */}
                 <div className="flex-1" />

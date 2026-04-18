@@ -10,9 +10,6 @@ export type TodoDueFilter = z.infer<typeof TodoDueFilterSchema>;
 export const TodoStatusBucketSchema = z.enum(["all", "active", "completed", "archived"]);
 export type TodoStatusBucket = z.infer<typeof TodoStatusBucketSchema>;
 
-export const TodoSortModeSchema = z.enum(["urgency", "manual", "recent"]);
-export type TodoSortMode = z.infer<typeof TodoSortModeSchema>;
-
 // --- Due bucket classification (for urgency sort) ---
 
 export type DueBucket = "overdue" | "today" | "next_7_days" | "no_due";
@@ -27,7 +24,6 @@ export const TodoFilterStateSchema = z.object({
     dueFilter: TodoDueFilterSchema.default("any"),
     selectedProject: z.string().nullable().default(null),
     quickPreset: TodoQuickPresetSchema.default("none"),
-    sortMode: TodoSortModeSchema.default("urgency"),
 });
 
 export type TodoFilterState = z.infer<typeof TodoFilterStateSchema>;
@@ -74,7 +70,6 @@ export function createDefaultFilterState(overrides?: Partial<TodoFilterState>): 
         dueFilter: "any",
         selectedProject: null,
         quickPreset: "none",
-        sortMode: "urgency",
         ...overrides,
     };
 }

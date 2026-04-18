@@ -14,14 +14,8 @@ import { broadcastTodoEvent } from "@/services/todo-events";
 import { sanitizeTodoForClient, sanitizeTodoListForClient } from "./todo-sanitize";
 import { getTodoKind, getTodoSource, isTimeblockTodo } from "./todo-kind-utils";
 import {
-    appendTodoToLayout,
-    applyTodoReorders,
     getTodoLayoutColumnKey,
-    loadTodoLayout,
-    moveTodoInLayout,
-    removeTodoFromLayout,
     saveTodoLayout,
-    sortTodosByLayout,
     type TodoLayoutState,
 } from "./todo-layout";
 import {
@@ -1156,9 +1150,6 @@ async function getTodos(rawInput: unknown) {
             activeTodos = activeTodos.filter((todo) => requestedStatuses.has(todo.status));
         }
 
-        const layout = await loadTodoLayout();
-        activeTodos = sortTodosByLayout(activeTodos, layout);
-
         const sanitized = sanitizeTodoListForClient(activeTodos);
         todosLogger.info(`Retrieved ${sanitized.length} todos`);
         return sanitized;
@@ -1324,8 +1315,6 @@ async function createTodo(input: {
         };
 
         const created = await getDb().create(newTodo);
-        const allTodos = await getDb().findAll();
-        await appendTodoToLayout(created, new Set(allTodos.map((todo) => todo.id)));
 
         const sanitized = sanitizeTodoForClient(created);
         todosLogger.info(`Created todo: ${sanitized.id}`);
@@ -1614,17 +1603,9 @@ async function updateTodo(input: {
             throw new Error(`Todo with ID ${input.todoId} not found`);
         }
 
-        const previousColumnKey = getTodoLayoutColumnKey(currentTodo);
-        const nextColumnKey = getTodoLayoutColumnKey(updated);
-        const columnChanged = previousColumnKey !== nextColumnKey;
         const projectChanged = !isSubtask && updates.project !== undefined && updates.project !== canonicalizeTodoProject(currentTodo.project);
 
-        // Single findAll for both layout move and child propagation
-        const allTodos = (columnChanged || projectChanged) ? await getDb().findAll() : undefined;
-
-        if (columnChanged && allTodos) {
-            await moveTodoInLayout(updated.id, updated, new Set(allTodos.map((todo) => todo.id)));
-        }
+        const allTodos = projectChanged ? await getDb().findAll() : undefined;
 
         // Propagate project change to children when a top-level todo's project changes
         if (projectChanged && allTodos) {
@@ -1681,13 +1662,6 @@ async function deleteTodo(input: { todoId: string }) {
             todosLogger.warn(`Todo not found for deletion: ${input.todoId}`);
             throw new Error(`Todo with ID ${input.todoId} not found`);
         }
-
-        const allTodos = await getDb().findAll();
-        const allRemainingIds = new Set(allTodos.map((todo) => todo.id));
-        for (const child of children) {
-            await removeTodoFromLayout(child.id, allRemainingIds);
-        }
-        await removeTodoFromLayout(input.todoId, allRemainingIds);
 
         todosLogger.info(`Deleted todo: ${input.todoId} (and ${children.length} subtask(s))`);
         return { success: true };
@@ -1784,22 +1758,10 @@ async function getProjects() {
     }
 }
 
-async function reorderTodos(input: {
+async function reorderTodos(_input: {
     reorders: { todoId: string; order: number }[];
 }) {
-    todosLogger.info(`Reordering ${input.reorders.length} todos`);
-
-    try {
-        const todos = await getDb().findAll();
-        const todoById = new Map(todos.map((todo) => [todo.id, todo]));
-        const { changed, movedIds } = await applyTodoReorders(input.reorders, todoById);
-
-        todosLogger.info(`Successfully reordered todos`, { changed, movedIds });
-        return { success: true };
-    } catch (error) {
-        todosLogger.error(`Failed to reorder todos`, { error });
-        throw error;
-    }
+    return { success: true };
 }
 
 async function archiveTodo(input: { todoId: string }) {
@@ -1944,9 +1906,6 @@ async function getArchivedTodos(input: { project?: string }) {
         if (projectFilter) {
             archivedTodos = archivedTodos.filter((todo) => canonicalizeTodoProject(todo.project) === projectFilter);
         }
-
-        const layout = await loadTodoLayout();
-        archivedTodos = sortTodosByLayout(archivedTodos, layout);
 
         const sanitized = sanitizeTodoListForClient(archivedTodos);
         todosLogger.info(`Retrieved ${sanitized.length} archived todos`);
