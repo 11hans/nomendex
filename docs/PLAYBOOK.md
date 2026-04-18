@@ -343,6 +343,7 @@ Access settings from the gear icon at the bottom of the sidebar:
 - **Preferences** — chat-input behavior and other user preferences
 - **Theme** — customize the app's appearance
 - **API Keys** — store Claude, GitHub, and other secrets locally
+  - See [Claude Agent SDK Setup](claude-agent-sdk-setup.md) for detailed API key configuration and architecture
 - **Storage** — workspace and local storage information
 - **About** — app metadata and version information
 
