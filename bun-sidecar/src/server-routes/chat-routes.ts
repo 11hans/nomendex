@@ -59,10 +59,13 @@ function buildAgentContext(workspaceFolder: string): string {
         month: "long",
         day: "numeric",
     });
+    const serverPort = parseInt(process.env.PORT || "1234", 10);
+    const apiBaseUrl = `http://localhost:${serverPort}`;
 
     return `<agent-context>
 Today is ${dayOfWeek}, ${dateStr}.
 You are working in the folder: ${workspaceFolder}
+The Nomendex API server is running at: ${apiBaseUrl} (use this base URL for all /api/* calls — do not assume a default port).
 
 ## AskUserQuestion tool
 You have access to the AskUserQuestion tool which presents the user with multiple-choice questions in a clickable UI. Use it instead of plain-text questions whenever the user needs to choose between 2-4 concrete options. This is much faster for the user than typing an answer.
