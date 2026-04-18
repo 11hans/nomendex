@@ -13,6 +13,7 @@ import { uiRendererServer } from "@/mcp-servers/ui-renderer";
 import { acquireFileLock, getActiveNoteFileNameForPath, releaseFileLockForToolUse } from "@/services/file-locks";
 import { buildBpagentSubagents } from "@/features/bpagent-pack/subagents";
 import { buildBpagentSystemPrompt, readVaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
+import { buildDailyContextBlock } from "@/features/bpagent-pack/daily-context";
 import { buildMemoryPromptBlock } from "@/features/agent-memory/fx";
 import { buildAgentMemoryMcpServer } from "@/mcp-servers/agent-memory";
 import { triggerPostSessionExtraction, loadExtractionConfig } from "@/features/agent-memory/extraction/orchestrator";
@@ -678,6 +679,19 @@ export const chatRoutes = {
                     const vaultConfig = await readVaultConfig(notesPath);
                     const serverPort = parseInt(process.env.PORT || "1234", 10);
                     let bpagentPrompt = `${buildAgentContext(notesPath)}\n\n${buildBpagentSystemPrompt(notesPath, vaultConfig, serverPort)}`;
+
+                    // Pre-compute daily-notes context so /daily, /weekly, /review skills
+                    // don't need to probe the filesystem for date / pattern / streak.
+                    try {
+                        const dailyBlock = await buildDailyContextBlock(notesPath, vaultConfig);
+                        if (dailyBlock) {
+                            bpagentPrompt = `${bpagentPrompt}\n\n${dailyBlock}`;
+                        }
+                    } catch (err) {
+                        chatLogger.warn("Failed to build daily context block", {
+                            error: err instanceof Error ? err.message : String(err),
+                        });
+                    }
 
                     // Load extraction config — used for MCP read-only mode and prompt note
                     const extractionConfig = await loadExtractionConfig().catch(() => ({

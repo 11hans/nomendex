@@ -1420,7 +1420,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 12
+version: 13
 source: nomendex
 ---
 
@@ -1444,17 +1444,19 @@ Or simply ask:
 
 ## Daily Note Creation
 
-### Detection Rules
-1. **Read \`vault-config.json\` first** if present and use the mapped daily notes folder
-2. **Inspect existing daily-note files** to detect the real folder, nesting, and filename format
-3. **Inspect the daily template** only after checking real notes
-4. **Reuse the detected convention exactly** - never create a parallel folder or alternate date format
-5. **If no convention exists yet**, say so explicitly and ask before choosing one
+### Pre-computed context
+The system injects a \`<daily-context>\` block into your prompt with today's ISO date,
+the resolved \`daily_notes_dir\`, the detected \`filename_pattern\`, today's expected
+filename + \`exists\` flag, and the latest existing note (with \`streak\` when present).
+
+**Always use \`<daily-context>\` as the source of truth.** Do not re-scan the filesystem,
+re-read \`vault-config.json\`, or re-derive today's date — it is already resolved for you.
+Only fall back to manual detection if the block is missing or \`filename_pattern: unknown\`.
 
 ### What Happens
-1. **Detects today's real daily-note path**
-   - If today's note exists: opens the existing note
-   - If today's note is missing: proposes creation using the detected convention
+1. **Use the \`today_note\` field from \`<daily-context>\`**
+   - If \`exists: true\`: open the existing note at the given path
+   - If \`exists: false\`: propose creation at the given path using the given filename pattern
 
 2. **Template Processing**
    - Replaces \`{{date}}\` with today's date
