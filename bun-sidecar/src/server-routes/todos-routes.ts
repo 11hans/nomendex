@@ -26,10 +26,10 @@ import { DayTypeSchema } from "@/features/timeblocking/types";
 import { applyTimeblockingPlan, previewTimeblockingPlan } from "@/features/timeblocking/service";
 import { applyTaskPlannerPlan, previewTaskPlannerPlan } from "@/features/timeblocking/task-planner";
 import { addTodoSSEClient, broadcastTodoEvent, type TodoEvent } from "@/services/todo-events";
-import { TodoKindSchema, TodoSourceSchema, RecurrenceSchema } from "@/features/todos/todo-types";
+import { TodoKindSchema, TodoSourceSchema, TodoStatusSchema, RecurrenceSchema } from "@/features/todos/todo-types";
 import { rewriteTodoDraft } from "@/features/todos/rewrite";
 
-const TodoStatusSchema = z.enum(["todo", "planned", "in_progress", "done", "later"]);
+
 const PrioritySchema = z.enum(["high", "medium", "low", "none"]);
 const CalendarReminderPresetSchema = z.enum(["30-15", "none"]);
 const nullToUndefined = (value: unknown) => value === null ? undefined : value;

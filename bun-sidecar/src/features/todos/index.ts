@@ -5,7 +5,7 @@ import { TodosBrowserView } from "./browser-view";
 import { ArchivedBrowserView } from "./archived-view";
 import { InboxListView } from "./inbox-view";
 import { FunctionStubs } from "@/types/Functions";
-import { TodoKindSchema, TodoSchema, TodoSourceSchema, RecurrenceSchema } from "./todo-types";
+import { TodoKindSchema, TodoSchema, TodoSourceSchema, TodoStatusSchema, RecurrenceSchema } from "./todo-types";
 import { AttachmentSchema } from "@/types/attachments";
 import { BoardConfigSchema } from "./board-types";
 
@@ -25,8 +25,8 @@ export const GetTodosInputSchema = z.object({
     kinds: z.array(TodoKindSchema).optional(),
     source: TodoSourceSchema.optional(),
     sources: z.array(TodoSourceSchema).optional(),
-    status: z.enum(["todo", "in_progress", "done", "later"]).optional(),
-    statuses: z.array(z.enum(["todo", "in_progress", "done", "later"])).optional(),
+    status: TodoStatusSchema.optional(),
+    statuses: z.array(TodoStatusSchema).optional(),
     /** When set, only return subtasks of this parent todo ID. */
     parentTodoId: z.string().optional(),
     /** When true, include subtasks (todos with a parentTodoId) in results. Default: false (top-level only). */
@@ -57,7 +57,7 @@ export const functionStubs = {
             project: z.string().optional(),
             kind: TodoKindSchema.optional(),
             source: TodoSourceSchema.optional(),
-            status: z.enum(["todo", "in_progress", "done", "later"]).optional(),
+            status: TodoStatusSchema.optional(),
             tags: z.array(z.string()).optional(),
             scheduledStart: z.string().nullable().optional(),
             scheduledEnd: z.string().nullable().optional(),
@@ -80,7 +80,7 @@ export const functionStubs = {
                 description: z.string().optional(),
                 kind: TodoKindSchema.optional(),
                 source: TodoSourceSchema.optional(),
-                status: z.enum(["todo", "in_progress", "done", "later"]).optional(),
+                status: TodoStatusSchema.optional(),
                 project: z.string().optional(),
                 archived: z.boolean().optional(),
                 tags: z.array(z.string()).optional(),

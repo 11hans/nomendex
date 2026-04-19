@@ -1433,177 +1433,61 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 14
+version: 15
 source: nomendex
 ---
 
 # Daily Workflow Skill
 
-Creates daily notes and provides structured workflows for morning planning, midday check-ins, and evening shutdowns.
+Morning planning, midday check-in, evening shutdown. The bpagent system prompt holds the semantic rules (Item Types, Today Workset Algorithm, Todo Safety Rules, Scheduling Rules). This skill is the daily-specific workflow on top of them.
 
 ## Usage
+Invoke with \`/daily\` or phrases like "start morning", "evening shutdown", "today's plan".
 
-Invoke with \`/daily\` or ask BPagent to create today's note or help with daily routines.
+## Pre-computed context
+A \`<daily-context>\` block is injected with: today's ISO date, \`daily_notes_dir\`, \`filename_pattern\`, \`today_note { filename, path, exists }\`, \`latest_note { filename, streak }\`.
 
-### Create Today's Note
-\`\`\`
-/daily
-\`\`\`
+**Use it as the source of truth.** Do not re-scan the filesystem, re-read \`vault-config.json\`, or re-derive today's date. Fall back to manual detection only if the block is missing or \`filename_pattern: "unknown"\`.
 
-Or simply ask:
-- "Create today's daily note"
-- "Start my morning routine"
-- "Help me with evening shutdown"
+### Template variables
+\`{{date}}\`, \`{{date:dddd}}\`, \`{{date:MMMM DD, YYYY}}\`, \`{{date-1:YYYY-MM-DD}}\` (yesterday), \`{{date+1:YYYY-MM-DD}}\` (tomorrow), \`{{time}}\`.
 
-## Daily Note Creation
+---
 
-### Pre-computed context
-The system injects a \`<daily-context>\` block into your prompt with today's ISO date,
-the resolved \`daily_notes_dir\`, the detected \`filename_pattern\`, today's expected
-filename + \`exists\` flag, and the latest existing note (with \`streak\` when present).
+## Morning Routine (5–10 min)
 
-**Always use \`<daily-context>\` as the source of truth.** Do not re-scan the filesystem,
-re-read \`vault-config.json\`, or re-derive today's date — it is already resolved for you.
-Only fall back to manual detection if the block is missing or \`filename_pattern: unknown\`.
+Read-only by default. Propose first; mutate only after explicit confirmation.
 
-### What Happens
-1. **Use the \`today_note\` field from \`<daily-context>\`**
-   - If \`exists: true\`: open the existing note at the given path
-   - If \`exists: false\`: propose creation at the given path using the given filename pattern
+### Steps
+1. Open \`today_note.path\`. If \`exists: false\`, propose creation at that path with the given filename pattern.
+2. **Load today's events + timeblocks** (chat-only, two separate sections). Substitute a real ISO date — never send the literal \`TODAYT00:00\`:
+   \`\`\`bash
+   curl -s -X POST "http://localhost:<port>/api/todos/list" \\
+     -d '{"kinds":["event"],"scheduledOverlap":{"start":"YYYY-MM-DDT00:00:00","end":"YYYY-MM-DDT23:59:59"}}'
+   \`\`\`
+   Split by \`source\`, sort by \`scheduledStart\` asc:
+   - \`source === "user"\` → \`## 📅 Dnešní events\`
+   - \`source === "timeblock-generator"\` (or legacy tag \`timeblock\`) → \`## 🧱 Dnešní timebloky\`
 
-2. **Template Processing**
-   - Replaces \`{{date}}\` with today's date
-   - Replaces \`{{date:format}}\` with formatted dates
-   - Handles date arithmetic (e.g., \`{{date-1}}\` for yesterday)
+   If either group is empty, say so explicitly and continue. When the user expresses timeblock/event intent during morning, route to \`/timeblocking\`.
+3. **Pull incomplete tasks** from yesterday's real daily note if one exists.
+4. **Build the workset** in bucket order (see bpagent prompt → Today Workset Algorithm). Surface Multi-day Context separately.
+5. If the user names a focus project, surface its open todos before unrelated candidates:
+   \`\`\`bash
+   curl -s -X POST "http://localhost:<port>/api/todos/list" \\
+     -d '{"project":"<name>","statuses":["todo","planned","in_progress"]}'
+   \`\`\`
+6. **Surface goal progress**: \`POST /api/goals/list { "status": "active" }\`, then \`POST /api/goals/graph { goalId }\` for each. Use weekly/monthly notes only as narrative context, and say so if they are template stubs.
+7. **Ask focus questions** ("What's your ONE thing? What might get in the way?") before editing anything.
+8. **Save workset snapshot** to the daily note under \`## Today's Workset\`: the \`[[todo:id|Title]]\` list PLUS \`<!-- workset: id1, id2, ... -->\` HTML comment listing only the IDs. Actionable single-day todos only — no events, no timeblocks, no Multi-day Context. This snapshot is the evening baseline.
+9. **Propose new todos** via API if planning reveals a need — never write new \`[ ]\` checkboxes in the note.
+10. **Sunday/review-day nudge**: if today is the user's \`reviewDay\` (from \`vault-config.json\`, default Sunday), offer \`/weekly\` at the end of the morning.
 
-3. **Automatic Organization**
-   - Uses the mapped or detected daily-notes folder
-   - Reuses the vault's existing filename pattern
-   - Preserves template structure without creating a second convention
-
-### Template Variables
-Your daily template can use:
-- \`{{date}}\` - Today's date in default format
-- \`{{date:dddd}}\` - Day name (e.g., Monday)
-- \`{{date:MMMM DD, YYYY}}\` - Formatted date
-- \`{{date-1:YYYY-MM-DD}}\` - Yesterday's date
-- \`{{date+1:YYYY-MM-DD}}\` - Tomorrow's date
-- \`{{time}}\` - Current time
-
-## Morning Routine (5-10 minutes)
-
-Morning planning is **read-only by default**. Summarize and propose a plan first. Only create or update notes and todos after explicit confirmation or a clear instruction to do so.
-
-### Todo Safety Rules
-- **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
-- **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
-- **Timeblock semantics**: Generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) are calendar blocks, not actionable tasks. Show them in a separate \`Dnešní rozvrh\` section, never in the workset snapshot, completion-rate math, or batch reschedule.
-- **Timeblock completion**: Never mark a generated timeblock event as \`done\`. If the user explicitly wants to convert it into an actionable task, first remove timeblock semantics and then confirm any status change.
-- **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
-- **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
-
-### Scheduling Semantics
-
-In Nomendex default mode, scheduling is task-first:
-
-- **Actionable todo**: a concrete piece of work that can be completed
-- **Legacy timeblock event**: generated \`kind: "event"\` (\`source: "timeblock-generator"\`) used only when explicitly requested
-
-Rules:
-- Use existing actionable todos as the source of truth.
-- For planning, update \`scheduledStart\`/\`scheduledEnd\` on actionable todos (day-only or exact-time).
-- Do not create container events by default.
-- Never merge multiple actionable tasks into one actionable todo solely for calendar compactness.
-- Keep legacy generated timeblock events out of workset snapshots, carry-forward logic, completion-rate math, and done/reschedule flows unless the user explicitly edits legacy schedule data.
-
-### Scheduling Decision Guide
-
-- **One concrete thing, one concrete time** -> schedule that actionable todo with \`scheduledStart\`/\`scheduledEnd\`
-- **Multiple concrete tasks planned for one day** -> keep separate actionable todos and schedule each explicitly
-- **Pure reservation without actionable task** -> ask whether to create a real actionable todo or skip scheduling change
-- **Legacy event mode request** -> confirm explicit opt-in before creating any \`kind: "event"\` entity
-
-### Non-Obvious Scheduling Confirmation
-
-Before creating or updating todos when timing, grouping, or block structure is inferred by the agent, first present a short proposal and wait for confirmation.
-
-This includes:
-- grouping several chores into one block
-- choosing exact start/end times
-- deciding exact times vs day-only scheduling on existing todos
-- splitting or replacing an existing block after partial progress
-
-Do not mutate immediately unless the user explicitly gave exact timing and structure.
-
-### Dnešní events + Dnešní timebloky (chat-only)
-Before building the actionable workset, load today's event candidates via \`POST /api/todos/list\` with:
-
-\`\`\`json
-{
-  "kinds": ["event"],
-  "scheduledOverlap": { "start": "TODAYT00:00", "end": "TODAYT23:59" }
-}
-\`\`\`
-
-Split the result into two groups by \`source\`:
-- **\`source === "user"\`** → external fixed-time obligations (meetings, appointments). Render as \`## 📅 Dnešní events\`.
-- **\`source === "timeblock-generator"\`** (or legacy tag \`timeblock\`) → user-reserved focus time. Render as \`## 🧱 Dnešní timebloky\`, right after events.
-
-Rules:
-- Sort both groups by \`scheduledStart\` ascending.
-- Both sections are **chat-only**. Do not write them into today's daily note.
-- If either group is empty, say so explicitly and continue.
-- Ask whether anything in the schedule needs moving only if the user signals a change.
-- When the user expresses timeblock intent ("dopoledne pracuju na X") or event intent ("14:00 schůzka s Y") during the morning, route to \`/timeblocking\` (see "Timeblock Creation Workflow" and "Event Creation").
-
-### Today Workset Algorithm
-Build today's workset via \`/todos\` using these buckets:
-
-1. **Overdue** - todos with \`dueDate\` before today (deadline bucket)
-2. **Due Today** - todos with \`dueDate\` today (deadline bucket)
-3. **Scheduled / In Progress** - single-day todos whose \`scheduledStart\` includes today or earlier (use non-multi-day \`scheduledEnd\` ranges when available), plus non-multi-day \`in_progress\` items not already shown
-4. **Multi-day Context** - todos whose \`scheduledStart\`/\`scheduledEnd\` are more than 1 local calendar day apart; show separately as context only
-5. **Focused Project** - if the user says "today I want to focus mainly on Nomendex" (or another project), load that project's open todos before unrelated candidates
-6. **Other Candidates** - Today/Now custom-column todos after loading real board config, then remaining open todos
-
-Rules:
-- Treat "calendar" or "schedule" as schedule/calendar queries targeting todos with \`scheduledStart\`/\`scheduledEnd\`.
-- Never guess a Today column ID like \`col-today\`; load the project board config first.
-- If weekly or monthly goal files are template stubs, say so explicitly and do not invent live context from them.
-- Use project-note **Next Actions** only as a fallback when live todos do not provide enough operational detail.
-- \`Multi-day Context\` is informational only and never belongs in the actionable workset snapshot.
-
-### Automated Steps
-1. Detect today's real daily-note path and open it only if it already exists or the user explicitly asked to create/open it
-2. Load today's events and timeblocks: fetch \`kinds: ["event"]\` overlapping today, split by \`source\` — render external events as chat-only \`## 📅 Dnešní events\` first, then user timeblocks as \`## 🧱 Dnešní timebloky\`
-3. Pull incomplete tasks from yesterday's real daily note if one exists
-4. Build today's actionable single-day todo workset using the bucket order above
-5. Surface \`Multi-day Context\` separately and keep it out of the actionable workset snapshot
-6. Keep both user events and generated timeblocks out of the actionable workset snapshot even if they are scheduled today
-7. If the user names a focus project, surface that project's open todos before unrelated work
-8. **Save workset snapshot** — after the workset is finalized, write only the actionable single-day todo list with \`[[todo:id|Title]]\` wiki-links into today's daily note under \`## Today's Workset\`, plus a hidden HTML comment listing the todo IDs: \`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`. Never include \`Multi-day Context\`, events, or timeblocks in this snapshot. This snapshot is the evening flow's baseline for completion rate. Place it right after the \`## Today's Workset\` heading (or at the top of the note if the section doesn't exist). If the daily note hasn't been created yet, include both when creating it.
-9. Read typed goal progress from Goals API first; use weekly/monthly notes only as strategic narrative context
-10. If the user expresses timeblock or event intent during planning, route creation through \`/timeblocking\` instead of creating an actionable todo
-11. Ask focus questions and propose a plan before editing anything
-
-### Context Surfacing
-Before interactive prompts, automatically surface:
-- **📅 Dnešní events** — external fixed-time obligations (\`kind: "event"\`, \`source: "user"\`) overlapping today
-- **🧱 Dnešní timebloky** — user-reserved focus time (\`kind: "event"\`, \`source: "timeblock-generator"\`, tag \`timeblock\`) overlapping today
-- **Overdue** todos
-- **Due Today** todos
-- **Started / In Progress** todos
-- **Multi-day Context** todos
-- **Focused Project** open todos if the user named a project
-- **Other Candidates** from Today/Now columns or remaining open work
-- **Strategic Context** from weekly/monthly goals only when those files contain real content
-- **Goal Progress** from \`POST /api/goals/list { "status": "active" }\` + \`POST /api/goals/graph { "goalId": "..." }\` for each active goal
-
-Display as a brief context block at the top of the morning routine using \`[[todo:id|Title]]\` wiki-links (never checkboxes):
+### Example context block
 \`\`\`markdown
 ## 📅 Dnešní events
-| Čas | Event | Místo / kontext |
-|-----|-------|-----------------|
+| Čas | Event | Kontext |
+|-----|-------|---------|
 | 10:00 | Stand-up | Zoom |
 | 14:00 | Schůzka s Petrem | kavárna Liberal |
 
@@ -1611,221 +1495,117 @@ Display as a brief context block at the top of the morning routine using \`[[tod
 | Čas | Blok | Projekt |
 |-----|------|---------|
 | 09:00–12:00 | Nomendex — práce | Nomendex |
-| 19:30–21:30 | 🔵 Deep Work | — |
 
 ### Today's Context
-- **Overdue:**
-  - [[todo:abc-123|Fix bug from yesterday]] · [ProjectA] · high · due 3/25
-- **Due Today:**
-  - [[todo:def-456|Send meter reading]] · [Ops] · medium · due 3/26
-- **Started / In Progress:**
-  - [[todo:ghi-789|Draft reply to Tomas]] · [Work] · in_progress
-- **Multi-day Context:**
-  - [[todo:aaa-111|Pohotovost]] · id: aaa-111 · 2026-03-31 → 2026-04-02 · [Ops] · in_progress
-- **Focused Project - Nomendex:**
-  - [[todo:jkl-012|Observe BPagent and note UI bugs]] · medium
-  - [[todo:mno-345|Fix kanban sorting placement]] · high
-- **Other Candidates:**
-  - [[todo:pqr-678|Pohotovost]] · id: pqr-678 · 2026-03-31 → 2026-03-31 · [Ops] · low
-  - [[todo:qrs-679|30min run]] · [Health] · low
-- **Goal Progress** (from Goals API):
-  - Career & Professional: ████▢▢▢▢▢▢ 40% (rollup)
-  - Health & Wellness: 12/72 tréninků (17%)
-  - Personal Growth: ██▢▢▢▢▢▢▢▢ 15% (manual)
-- **Strategic Context:**
-  - Monthly focus: Nomendex audit + Q2 planning
-  - Weekly review: template stub, no live ONE Big Thing yet
+- **Overdue:** [[todo:abc-123|Fix bug from yesterday]] · [ProjectA] · due 3/25
+- **Due Today:** [[todo:def-456|Send meter reading]] · [Ops]
+- **Scheduled / In Progress:** [[todo:ghi-789|Draft reply to Tomas]] · in_progress
+- **Multi-day Context:** [[todo:aaa-111|Pohotovost]] · id: aaa-111 · 2026-03-31 → 2026-04-02
+- **Focused Project - Nomendex:** [[todo:jkl-012|Observe BPagent UI bugs]]
+- **Goal Progress:** Career 40% · Health 12/72 · Personal Growth 15%
 \`\`\`
 
-### Interactive Prompts
-- "What's your ONE thing for today?"
-- "What might get in the way?"
-- "How do you want to feel at end of day?"
-
-### New Todo Proposals
-When the morning routine reveals a need for new todos, propose them to the user for confirmation before creating via API. Never write new checkboxes in the daily note.
-\`\`\`
-Proposed new todos:
-1. "Draft API spec" · project: MyApp · priority: high · scheduledStart: today
-2. "Review chapter 3" · project: Personal · priority: medium · scheduledStart: today
-Create all? (or specify which ones)
-\`\`\`
-
-### Morning Checklist
-- Daily note path detected
-- Today's events + timeblocks surfaced in chat only (two separate sections)
-- Today workset reviewed (overdue, due today, started, multi-day context, focused project, other candidates)
-- Read-only single-day workset with \`[[todo:id|Title]]\` wiki-links written to daily note
-- Workset snapshot saved (\`<!-- workset: ... -->\`) — excludes events and timeblocks
+### Morning checklist
+- \`today_note\` resolved from \`<daily-context>\`
+- Events + timeblocks surfaced in chat only
+- Workset in bucket order, Multi-day Context separate
+- Snapshot (\`<!-- workset: ... -->\` + \`[[todo:id]]\` list) saved in note
 - Yesterday's incomplete tasks reviewed
-- ONE priority identified
-- Any explicit new timeblock/event intents routed through \`/timeblocking\`
-- Potential obstacles identified
+- ONE priority asked
+- Timeblock/event intents routed through \`/timeblocking\`
+- \`/weekly\` offered if today is review day
 
-## Midday Check-in (2-3 minutes)
+---
 
-### Quick Review
-1. Check morning task completion
-2. Compare actual vs planned time use
-3. Assess energy level
-4. Identify afternoon priorities
+## Midday Check-in (2–3 min)
 
-### Adjustments
-- Reschedule incomplete morning tasks
-- Add urgent items that emerged
-- Reorder by current energy level
-- Note any blockers
+1. Compare morning workset with current todo states.
+2. Assess energy, identify afternoon priority, reorder if needed.
+3. Prompts: "How's your energy?", "What's most important this afternoon?", "What can you drop today?"
 
-### Midday Questions
-- "How's your energy right now?"
-- "What's the most important thing for this afternoon?"
-- "What can you let go of today?"
+If the user reports partial completion, apply the bpagent **Partial completion** rule: confirm exactly which tasks finished, mark each individually, leave the rest open, schedule remaining work as new todos if needed. Never repurpose a past scheduled item.
 
-### Partial Progress Replanning
+---
 
-If a user reports that only part of a planned block was completed:
+## Evening Shutdown (5 min)
 
-- first confirm exactly which actionable tasks were completed and which remain
-- mark completed actionable todos individually
-- leave incomplete actionable todos open
-- preserve the original timeblock event as historical schedule context
-- create a new generated timeblock event for the remaining work if more scheduled time is needed
-- never repurpose a previously scheduled item so that it stops representing what actually happened earlier in the day
+### Completion Scoring
 
-If the earlier block was incorrectly represented by one combined actionable todo, correct the model by:
-- extracting completed work into explicit completed actionable items when needed
-- creating new actionable items for remaining distinct work
-- creating a separate remainder generated timeblock event for the new time slot
+**Step 1 — Planned set.** Read \`<!-- workset: id1, id2, ... -->\` from today's daily note. Those IDs are the baseline. Reclassify any snapshot todo with a multi-day range (\`scheduledStart\`/\`scheduledEnd\` more than 1 local calendar day apart) into Multi-day Context and remove it from the planned set.
 
-## Evening Shutdown (5 minutes)
+If no snapshot (morning skipped), fall back to: single-day todos with \`dueDate\` today, \`scheduledStart\` covering today, or in a Today/Now custom column. Note in output that completion rate may be less precise.
 
-### Completion Scoring Protocol
+Always exclude generated timeblock events from the planned set.
 
-#### Step 1: Determine today's planned workset
-Read the morning workset snapshot from today's daily note:
-\`<!-- workset: todo-id1, todo-id2, todo-id3 -->\`
-If the snapshot exists, those IDs are the baseline ("planned today"). Before computing completion, reclassify any snapshot todo whose \`scheduledStart\`/\`scheduledEnd\` are more than 1 local calendar day apart into \`Multi-day Context\` and remove it from the planned set.
-If no snapshot exists (morning flow was skipped), fall back to an API-based heuristic: single-day todos with \`dueDate\` today, \`scheduledStart\` covering today, or in a Today/Now custom column. Note in the output that the morning workset was not recorded and the completion rate may be less precise. Show multi-day scheduled todos separately as \`Multi-day Context\`.
-Always exclude generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) from both the planned set and the fallback heuristic.
+**Step 2 — Completion data.**
+\`\`\`bash
+curl -s -X POST "http://localhost:<port>/api/todos/list" -d '{}'
+curl -s -X POST "http://localhost:<port>/api/todos/archived" -d '{}'
+\`\`\`
+A todo counts as \`completed_today\` iff \`status === "done"\` AND \`completedAt\` is within today's local date. Include both active and archived (completed then archived still counts). **Use \`completedAt\`, not \`updatedAt\`.**
 
-#### Step 2: Fetch completion data
-- Fetch active todos via \`/api/todos/list\`.
-- Fetch archived todos via \`/api/todos/archived\`.
-- Define **completed_today** as: \`status === "done"\` AND \`completedAt\` falls within today's local date (midnight to midnight). Include both active and archived todos — a todo completed today and then archived still counts.
-- **CRITICAL**: Use \`completedAt\`, NOT \`updatedAt\`. A todo edited today but completed yesterday is NOT completed today.
+**Step 3 — Classify.**
+- \`Planned today\` = snapshot IDs minus reclassified Multi-day Context.
+- \`Ongoing\` = \`in_progress\` NOT in the snapshot (multi-day carry-forward).
+- \`Multi-day Context\` = any todo with a multi-day range, regardless of snapshot presence.
+- Ongoing, Multi-day, and timeblock events never enter the numerator or denominator.
 
-#### Step 3: Classify ongoing vs planned
-- **Planned today**: todos whose IDs appear in the morning workset snapshot, after removing anything reclassified into \`Multi-day Context\`.
-- Exclude generated timeblock events even if they accidentally appear in the snapshot or fallback set.
-- **Ongoing**: \`in_progress\` todos whose IDs are NOT in the morning workset. These are multi-day work items carried forward.
-- **Multi-day Context**: todos whose \`scheduledStart\`/\`scheduledEnd\` are more than 1 local calendar day apart, regardless of whether they were previously shown in the morning snapshot.
-- Ongoing todos, \`Multi-day Context\`, and generated timeblock events do NOT enter the completion rate denominator or numerator. Show them in separate sections when relevant.
+**Step 4 — Rate.**
+\`completion_rate = |completed_today ∩ planned_today| / |planned_today|\`
+Bonus completions (done today but not in snapshot) are shown separately as "Extra wins".
 
-#### Step 4: Calculate completion rate
-\`completion_rate = completed_today ∩ planned_today / |planned_today|\`
-Only todos from the planned single-day workset count. Bonus completions (todos not in the morning workset but completed today) are shown separately as "Extra wins". \`Multi-day Context\`, \`Ongoing\`, and generated timeblock events never count toward the denominator or numerator.
-
-#### Step 5: Double-check and batch actions
-Present a single batch summary comparing morning workset with current API state:
-
+**Step 5 — Batch confirm.** Present one summary:
 \`\`\`
 ✓ Completed (3/7):
 - [[todo:abc-123|Fix bug]] — done at 14:30
-- [[todo:def-456|Send reading]] — done at 16:00
-- [[todo:ghi-789|Draft reply]] — done at 17:20
 
 ⬜ Not completed (single-day planned only, 3/6):
 - [[todo:jkl-012|Pohotovost]] · id: jkl-012 · 2026-03-31 → 2026-03-31 — still todo
-- [[todo:pqr-678|Morava]] · id: pqr-678 · 2026-03-31 → 2026-03-31 — still todo
-- [[todo:stu-901|Review PR]] — still todo
 
-↔ Multi-day Context (not in today's rate or reschedule):
-- [[todo:mno-345|Pohotovost]] · id: mno-345 · 2026-03-31 → 2026-04-03 — still in_progress
+↔ Multi-day Context (not counted):
+- [[todo:mno-345|Pohotovost]] · id: mno-345 · 2026-03-31 → 2026-04-03 — in_progress
 
 Should any of the incomplete ones be marked as done?
 \`\`\`
+After confirmation, update via API.
 
-After user responds:
-- Mark confirmed todos as done via API (sets \`completedAt\`)
-- For remaining incomplete single-day planned todos, propose batch reschedule:
-\`\`\`
-Reschedule these 3 to tomorrow (scheduledStart → YYYY-MM-DD)?
-- [[todo:jkl-012|Pohotovost]] · id: jkl-012 · 2026-03-31 → 2026-03-31
-- [[todo:pqr-678|Morava]] · id: pqr-678 · 2026-03-31 → 2026-03-31
-- [[todo:stu-901|Review PR]]
-Confirm? (or specify which ones to skip/drop)
-\`\`\`
-- Before each reschedule call, re-fetch that todo via \`POST /api/todos/get { todoId }\`.
-- If refreshed \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown, stop for that todo, show the refreshed state, and ask again.
-- Execute reschedule via API only after the fresh re-check and confirmation.
+**Step 6 — Batch reschedule.** For remaining incomplete single-day planned todos with \`scheduledStart\` today, propose \`scheduledStart → tomorrow\`. Before each \`update\`, re-fetch via \`POST /api/todos/get { todoId }\`. If refreshed state drifted — stop for that todo, show fresh state, ask again.
 
-#### Step 6: Legacy reconcile (optional, historical notes only)
-If today's daily note contains legacy \`[x]\` checkboxes (from before API-only migration):
-- Daily note \`[x]\` items with NO matching API todo → mention as ad-hoc completions: "Want to capture these as API todos?"
-- Do NOT create new checkboxes. This step is read-only.
+**Step 7 — Legacy reconcile (read-only).** If the note has legacy \`[x]\` checkboxes with no matching API todo, mention them as ad-hoc completions ("Want to capture these as API todos?"). Never create new checkboxes.
 
 ### Timeblock Retrospective Linking
-
-For each of today's timeblocks, persist which todos were worked on inside. Procedure: **infer → confirm → persist** (see \`/timeblocking\` → "Timeblock Retrospective Linking" for full detail).
-
-1. Load today's timeblocks: \`POST /api/todos/list { "kinds": ["event"], "scheduledOverlap": { "start": "TODAYT00:00", "end": "TODAYT23:59" } }\`, keep only \`source === "timeblock-generator"\` or legacy tag \`timeblock\`.
-2. **Skip** any timeblock whose \`description\` already contains \`<!-- timeblock-worked-todos -->\` (already linked).
-3. For each remaining timeblock, infer candidate todos: \`completedAt\` or \`scheduledStart\` inside the timeblock's \`scheduledStart\`–\`scheduledEnd\`, AND matching \`project\` (case-insensitive). If the timeblock has no \`project\`, drop that filter and flag candidates as lower-confidence.
-4. Show the list to the user and ask for add/remove confirmation.
-5. After confirmation, append/replace the \`<!-- timeblock-worked-todos -->\` ... \`<!-- /timeblock-worked-todos -->\` block inside the timeblock's \`description\` via \`POST /api/todos/update\`. Preserve any surrounding \`description\` content.
-6. Do NOT mark any contained todo as \`done\` based on inference — that is handled in Step 5 of Completion Scoring. Do NOT mark the timeblock itself as \`done\`.
+For each of today's timeblocks (\`source === "timeblock-generator"\` or legacy tag \`timeblock\`) lacking \`<!-- timeblock-worked-todos -->\` in \`description\`, run the full infer → confirm → persist procedure from the bpagent prompt. Do NOT mark contained todos \`done\` based on inference (handled in Completion Scoring Step 5). Do NOT mark the timeblock itself \`done\`.
 
 ### Capture
-1. Add notes and learnings to daily note (plain text, no checkboxes)
-2. Fill in the **Pracovní zápisek** section — co se řešilo, co se naučilo, otevřené otázky/blockers
-3. Log energy levels (1-10)
-4. Record gratitude items
+1. Plain-text notes and learnings (no checkboxes).
+2. \`## Pracovní zápisek\` — co se řešilo, co se naučilo, blockers.
+3. Energy level (1–10), gratitude items.
 
-### Goal & Project Attention Summary
-Automatically generate an end-of-day summary showing which goals and projects received attention:
+### Today's Cascade Impact
 \`\`\`markdown
 ### Today's Cascade Impact
 - **Planned completion:** 5/7 (71.4%)
-  - [Nomendex] 2/3 todos
-  - [Health] 1/1 todo
-  - [Work] 2/3 todos
-- **Extra wins:** 1 (unplanned todo completed)
-- **Ongoing (not in today's rate):** 2 in_progress
-  - [[todo:abc-123|Redesign homepage]] · [Work] · day 3
-  - [[todo:def-456|API refactor]] · [Nomendex] · day 5
-- **Multi-day Context (not in today's rate or reschedule):** 1
-  - [[todo:ghi-789|Pohotovost]] · id: ghi-789 · 2026-03-31 → 2026-04-03 · [Nomendex]
+  - [Nomendex] 2/3 · [Health] 1/1 · [Work] 2/3
+- **Extra wins:** 1
+- **Ongoing (not counted):** 2 in_progress
+- **Multi-day Context (not counted):** 1
 - **Rescheduled to tomorrow:** 2
-  - [[todo:jkl-012|Observe UI bugs]] · [Nomendex]
-  - [[todo:pqr-678|30min run]] · [Health]
-- **Goals touched** (from \`resolvedGoalRefs\` on completed todos):
-  - Career & Professional: 2 tasks (████▢▢▢▢▢▢ 22% overall)
-  - Health & Wellness: 1 task (13/72 metric)
-- **Projects advanced:** [[ProjectA]] (3 tasks), [[ProjectB]] (1 task)
-- **Insight:** Focused day on Nomendex — consider closing the API refactor this week
+- **Goals touched** (from \`resolvedGoalRefs\` on completed todos): Career 2 tasks, Health 1 task
+- **Projects advanced:** [[ProjectA]] 3, [[ProjectB]] 1
 \`\`\`
 
-### Reflect & Prepare (parallel)
-These run in parallel — reflection does not wait for reconcile to complete:
+### Reflect (in parallel with reconcile)
+What went well? What could be better? What did I learn? What am I grateful for?
 
-**Reflect:**
-- What went well today?
-- What could be better?
-- What did I learn?
-- What am I grateful for?
+### Prepare
+- Tomorrow's priority (preview from rescheduled + upcoming todos).
+- Commit changes (\`/push\`).
 
-**Prepare:**
-1. Identify tomorrow's priority (preview from rescheduled todos)
-2. Incomplete tasks already rescheduled via API in double-check step
-3. Commit changes to git (\`/push\`)
-
-### Shutdown Checklist
-- Todos double-checked with user (batch confirm done/reschedule)
-- Completion rate calculated (from \`completedAt\`, not \`updatedAt\`)
-- Incomplete single-day todos rescheduled to tomorrow via API after fresh \`/api/todos/get\` checks
-- Timeblock retrospective linking run for today's timeblocks (\`<!-- timeblock-worked-todos -->\` blocks persisted)
-- Reflection completed
-- Tomorrow's priority identified
+### Shutdown checklist
+- Batch confirm + reschedule done (via fresh \`/api/todos/get\`)
+- Completion rate from \`completedAt\`
+- Timeblock retrospective linking run for today's timeblocks
+- Reflection + tomorrow's priority captured
 - Changes committed
 
 ## Daily Note Structure
@@ -1876,123 +1656,22 @@ Standard daily note template. The \`## Today's Workset\` section is populated by
 - **Tomorrow's priority:**
 \`\`\`
 
-## Time Block Strategies
-
-### Energy-Based
-- High energy tasks in morning
-- Administrative work after lunch
-- Creative work when naturally alert
-
-### Context-Based
-- Batch similar tasks together
-- Minimize context switching
-- Protect deep work blocks
-
 ## Configuration
 
-Detect these from the real vault instead of assuming them:
+Detect these from the real vault instead of assuming:
 - Daily notes folder from \`vault-config.json\` or existing notes
 - Template location from the mapped templates folder
-- Filename pattern from existing daily notes
-- Folder nesting from existing notes (flat or year/month)
+- Filename pattern from existing daily notes (e.g. \`YYYY-MM-DD\`, \`M-D-YYYY\`, \`daily-notes/YYYY/MM/YYYY-MM-DD\`). Reuse the user's existing convention exactly.
 
-### Common Filename Patterns
-- \`M-D-YYYY\`
-- \`YYYY-MM-DD\`
-- Nested patterns such as \`daily-notes/2026/03/2026-03-16.md\`
-- Reuse the user's existing convention exactly
+## Session Tasks
 
-## Task-Based Progress Tracking
+Use session tasks (TaskCreate/TaskUpdate) to surface progress during multi-step routines. Tasks are session-scoped — persistent work lives in the todos API only.
 
-The daily skill uses session tasks to show progress during multi-step routines.
+**Morning:** inspect note → fetch today's todos → pull incomplete from yesterday → save workset snapshot → surface goals → set time blocks.
 
-### Morning Routine Tasks
+**Evening:** compare snapshot vs current state → batch confirm + reschedule → calculate completion rate → prepare tomorrow → reflect.
 
-Create tasks at skill start:
-
-\`\`\`
-TaskCreate:
-  subject: "Inspect today's daily note"
-  description: "Detect the real daily-note path and open it if it already exists"
-  activeForm: "Inspecting today's daily note..."
-
-TaskCreate:
-  subject: "Fetch today's todos"
-  description: "Build overdue, due-today, started, focused-project, and other-candidate buckets via /todos"
-  activeForm: "Building today's todo workset..."
-
-TaskCreate:
-  subject: "Pull incomplete tasks"
-  description: "Carry forward uncompleted tasks from yesterday"
-  activeForm: "Pulling incomplete tasks from yesterday..."
-
-TaskCreate:
-  subject: "Save workset snapshot"
-  description: "Write <!-- workset: id1, id2, ... --> into today's daily note as the evening baseline"
-  activeForm: "Saving workset snapshot..."
-
-TaskCreate:
-  subject: "Surface relevant goals"
-  description: "Fetch typed goal progress via Goals API, then read weekly/monthly notes only for strategic narrative context when they contain real content"
-  activeForm: "Checking strategic goal context..."
-
-TaskCreate:
-  subject: "Set time blocks"
-  description: "Establish time blocks based on energy and priorities"
-  activeForm: "Setting time blocks..."
-\`\`\`
-
-### Dependencies
-
-Morning routine tasks run sequentially:
-\`\`\`
-TaskUpdate: "Pull incomplete tasks", addBlockedBy: [inspect-daily-note-id]
-TaskUpdate: "Save workset snapshot", addBlockedBy: [fetch-todos-id]
-TaskUpdate: "Surface relevant goals", addBlockedBy: [pull-incomplete-tasks-id]
-TaskUpdate: "Set time blocks", addBlockedBy: [surface-relevant-goals-id]
-\`\`\`
-
-### Evening Shutdown Tasks
-
-\`\`\`
-TaskCreate:
-  subject: "Double-check todos"
-  description: "Compare morning workset snapshot with current API state, present batch summary of completed vs incomplete"
-  activeForm: "Comparing workset with current todo states..."
-
-TaskCreate:
-  subject: "Batch confirm & reschedule"
-  description: "Ask user to confirm done items and reschedule incomplete todos to tomorrow via API"
-  activeForm: "Processing batch confirmations..."
-
-TaskCreate:
-  subject: "Calculate completion rate"
-  description: "Read morning workset snapshot, fetch active + archived todos, compute completion from completedAt, classify ongoing separately"
-  activeForm: "Calculating completion rate..."
-
-TaskCreate:
-  subject: "Generate reflection prompts"
-  description: "Prompt for wins, challenges, learnings, gratitude"
-  activeForm: "Generating reflection prompts..."
-
-TaskCreate:
-  subject: "Prepare tomorrow's preview"
-  description: "Identify tomorrow's priority from rescheduled and upcoming todos"
-  activeForm: "Preparing tomorrow's preview..."
-\`\`\`
-
-### Evening Dependencies
-
-\`\`\`
-"Batch confirm & reschedule" depends on "Double-check todos" (needs the comparison data)
-"Calculate completion rate" depends on "Batch confirm & reschedule" (needs final todo states after user confirms)
-"Prepare tomorrow's preview" depends on "Calculate completion rate" (needs to know what's left)
-"Generate reflection prompts" runs independently (can start any time)
-\`\`\`
-
-Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
-
-Task tools provide visibility into what's happening during longer operations. Tasks are session-scoped and don't persist between BPagent sessions—your actual work items are managed exclusively through the Nomendex todos API.
+Run sequentially, mark \`in_progress\` at start and \`completed\` when done.
 
 ## Integration
 
@@ -3052,7 +2731,7 @@ Rules:
 After creation, surface the project's open todos so the user can pick what to work on inside:
 > Vytvořen timeblock Nomendex 9–12. Chceš vidět otevřené Nomendex todos?
 
-If yes: \`POST /api/todos/list { "project": "Nomendex", "status": ["todo","planned","in_progress"] }\`. Do NOT auto-assign them to the block.
+If yes: \`POST /api/todos/list { "project": "Nomendex", "statuses": ["todo","planned","in_progress"] }\`. Do NOT auto-assign them to the block.
 
 ---
 

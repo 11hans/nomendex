@@ -31,13 +31,16 @@ export function formatRecurrence(recurrence: Recurrence): string {
 export type TodoKind = z.infer<typeof TodoKindSchema>;
 export type TodoSource = z.infer<typeof TodoSourceSchema>;
 
+export const TodoStatusSchema = z.enum(["todo", "planned", "in_progress", "done", "later"]);
+export type TodoStatus = z.infer<typeof TodoStatusSchema>;
+
 export const TodoSchema = z.object({
     id: z.string(),
     title: z.string(),
     description: z.string().optional(),
     kind: TodoKindSchema,
     source: TodoSourceSchema,
-    status: z.enum(["todo", "planned", "in_progress", "done", "later"]),
+    status: TodoStatusSchema,
     customColumnId: z.string().optional(), // ID sloupce z BoardConfig
     createdAt: z.string(),
     updatedAt: z.string(),
