@@ -503,12 +503,15 @@ export function shouldRejectEventLifecycleChange(input: {
         return true;
     }
 
+    const isActiveEventStatus = (status: Todo["status"] | undefined): boolean =>
+        status === "todo" || status === "planned";
+
     if (input.statusChanged) {
-        return (input.nextStatus ?? "todo") !== "todo";
+        return !isActiveEventStatus(input.nextStatus ?? "todo");
     }
 
     if (input.kindChanged) {
-        return (input.nextStatus ?? input.currentStatus ?? "todo") !== "todo";
+        return !isActiveEventStatus(input.nextStatus ?? input.currentStatus ?? "todo");
     }
 
     return false;
@@ -1250,7 +1253,7 @@ async function createTodo(input: {
             kindChanged: true,
             statusChanged: input.status !== undefined,
         })) {
-            throw new Error("Events can only be active or archived. Create them with status 'todo'.");
+            throw new Error("Events can only be active (status 'todo' or 'planned') or archived.");
         }
 
         const status = requestedStatus;
@@ -1502,7 +1505,7 @@ async function updateTodo(input: {
             kindChanged: wantsKindUpdate,
             statusChanged: wantsStatusUpdate,
         })) {
-            throw new Error("Events can only be active or archived. Use status 'todo' for active events.");
+            throw new Error("Events can only be active (status 'todo' or 'planned') or archived.");
         }
 
         if (hasOwnKey(input.updates, "scheduledStart")) {

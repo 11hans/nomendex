@@ -1,5 +1,5 @@
 import type { Todo } from "./todo-types";
-import { isTaskTodo } from "./todo-kind-utils";
+import { isEventTodo, isTaskTodo } from "./todo-kind-utils";
 import { canonicalizeTodoProject } from "@/features/projects/inbox-project";
 import type {
     DueBucket,
@@ -99,12 +99,18 @@ export function matchesDueFilter(todo: Todo, filter: TodoDueFilter): boolean {
 
     const bucket = classifyDueBucket(getEffectiveDate(todo));
 
+    const isEvent = isEventTodo(todo);
+
     switch (filter) {
         case "overdue":
+            // A past event isn't "late" — it already happened. Events never appear in Overdue.
+            if (isEvent) return false;
             return bucket === "overdue";
         case "today":
             return bucket === "today";
         case "today_or_overdue":
+            // Events scheduled today still match; past events are excluded.
+            if (isEvent) return bucket === "today";
             return bucket === "today" || bucket === "overdue";
         case "next_7_days":
             return bucket === "next_7_days";

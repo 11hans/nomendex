@@ -140,6 +140,30 @@ describe("shouldRejectEventLifecycleChange", () => {
             statusChanged: true,
         })).toBe(false);
     });
+
+    test("allows moving an event to planned status", () => {
+        expect(shouldRejectEventLifecycleChange({
+            currentKind: "event",
+            nextKind: "event",
+            currentStatus: "todo",
+            nextStatus: "planned",
+            completedAtProvided: false,
+            kindChanged: false,
+            statusChanged: true,
+        })).toBe(false);
+    });
+
+    test("rejects moving an event to in_progress", () => {
+        expect(shouldRejectEventLifecycleChange({
+            currentKind: "event",
+            nextKind: "event",
+            currentStatus: "todo",
+            nextStatus: "in_progress",
+            completedAtProvided: false,
+            kindChanged: false,
+            statusChanged: true,
+        })).toBe(true);
+    });
 });
 
 describe("getExpiredTimeblockIds", () => {

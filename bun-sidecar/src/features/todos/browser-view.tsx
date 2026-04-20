@@ -887,7 +887,7 @@ export function TodosBrowserView({
     }, []);
 
     const rejectEventStatusMove = useCallback(() => {
-        toast.error("Events stay active. Move them by schedule or archive them.");
+        toast.error("Events can only be in 'todo' or 'planned' columns. Archive them to remove from the board.");
     }, []);
 
     const handleDragOver = useCallback((_event: DragOverEvent) => {
@@ -933,7 +933,7 @@ export function TodosBrowserView({
                         const targetColumn = boardConfig.columns.find(c => c.id === newColumnId);
                         const newStatus = targetColumn?.status ?? "todo";
 
-                        if (isEventTodo(activeTodo) && newStatus !== "todo") {
+                        if (isEventTodo(activeTodo) && newStatus !== "todo" && newStatus !== "planned") {
                             rejectEventStatusMove();
                             return;
                         }
@@ -956,7 +956,7 @@ export function TodosBrowserView({
                     // Legacy mode - update status
                     const newStatus = newColumnId as "todo" | "planned" | "in_progress" | "done" | "later";
                     if (newStatus !== activeTodo.status) {
-                        if (isEventTodo(activeTodo) && newStatus !== "todo") {
+                        if (isEventTodo(activeTodo) && newStatus !== "todo" && newStatus !== "planned") {
                             rejectEventStatusMove();
                             return;
                         }
@@ -994,7 +994,7 @@ export function TodosBrowserView({
                         const targetColumn = boardConfig.columns.find(c => c.id === overColumnId);
                         const newStatus = targetColumn?.status ?? "todo";
 
-                        if (isEventTodo(activeTodo) && newStatus !== "todo") {
+                        if (isEventTodo(activeTodo) && newStatus !== "todo" && newStatus !== "planned") {
                             rejectEventStatusMove();
                             return;
                         }
@@ -1015,7 +1015,7 @@ export function TodosBrowserView({
                     } else {
                         // Legacy mode - update status AND position
                         const targetStatus = overTodo.status;
-                        if (isEventTodo(activeTodo) && targetStatus !== "todo") {
+                        if (isEventTodo(activeTodo) && targetStatus !== "todo" && targetStatus !== "planned") {
                             rejectEventStatusMove();
                             return;
                         }
@@ -1503,7 +1503,7 @@ export function TodosBrowserView({
         if (boardConfig) {
             // Custom mode - change customColumnId and status (fallback to "todo" for no-status columns)
             const newStatus = nextCol.status ?? "todo";
-            if (isEventTodo(selectedTodo) && newStatus !== "todo") {
+            if (isEventTodo(selectedTodo) && newStatus !== "todo" && newStatus !== "planned") {
                 rejectEventStatusMove();
                 return;
             }
@@ -1527,7 +1527,7 @@ export function TodosBrowserView({
         } else {
             // Legacy mode - change status
             const newStatus = nextCol.id as "todo" | "planned" | "in_progress" | "done" | "later";
-            if (isEventTodo(selectedTodo) && newStatus !== "todo") {
+            if (isEventTodo(selectedTodo) && newStatus !== "todo" && newStatus !== "planned") {
                 rejectEventStatusMove();
                 return;
             }
@@ -1562,7 +1562,7 @@ export function TodosBrowserView({
         if (boardConfig) {
             // Custom mode - change customColumnId and status (fallback to "todo" for no-status columns)
             const newStatus = prevCol.status ?? "todo";
-            if (isEventTodo(selectedTodo) && newStatus !== "todo") {
+            if (isEventTodo(selectedTodo) && newStatus !== "todo" && newStatus !== "planned") {
                 rejectEventStatusMove();
                 return;
             }
@@ -1586,7 +1586,7 @@ export function TodosBrowserView({
         } else {
             // Legacy mode - change status
             const newStatus = prevCol.id as "todo" | "planned" | "in_progress" | "done" | "later";
-            if (isEventTodo(selectedTodo) && newStatus !== "todo") {
+            if (isEventTodo(selectedTodo) && newStatus !== "todo" && newStatus !== "planned") {
                 rejectEventStatusMove();
                 return;
             }

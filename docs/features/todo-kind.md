@@ -13,7 +13,7 @@ source: z.enum(["user", "timeblock-generator"])  // required, default "user"
 | kind | Meaning |
 |------|---------|
 | `task` | Actionable work item. Has full lifecycle: todo → in_progress → done. Counts toward completion stats. |
-| `event` | Calendar occurrence. Status is always `todo` (active) or archived. Cannot be completed. |
+| `event` | Calendar occurrence. Status is `todo` (confirmed) or `planned` (drafted) or archived. Cannot be completed. |
 
 | source | Meaning |
 |--------|---------|
@@ -22,8 +22,10 @@ source: z.enum(["user", "timeblock-generator"])  // required, default "user"
 
 ## Lifecycle rules
 
-- **Events cannot be completed.** Status must stay `todo`. Attempting to set status to `done`, `in_progress`, or `later` on an event is rejected by the API with a 400 error.
+- **Events cannot be completed.** Status must be `todo` or `planned`. Attempting to set status to `done`, `in_progress`, or `later` on an event is rejected by the API with a 400 error.
 - **Events cannot have `completedAt`.** The field is only set for tasks transitioning to `done`.
+- **`planned` vs `todo` for events** is purely a board-placement distinction (e.g. drag into a "Planned" custom kanban column). Both statuses mean "active event"; the calendar bridge syncs either to Apple Calendar based on `scheduledStart`/`scheduledEnd`, not status.
+- **Past events are not "overdue".** `matchesDueFilter` excludes events from the `overdue` case, and from the past side of `today_or_overdue`. An event whose `scheduledStart` has passed does not appear in the Overdue system list.
 - **Switching kind from task to event** resets status to `todo` and clears `dueDate` and `priority` (handled by `applyTodoKindToDraft` in create/edit UI).
 - **Switching kind from event to task** is allowed without restrictions.
 
@@ -72,7 +74,7 @@ POST /api/todos/update
 }
 ```
 
-Updating an event's status to anything other than `todo` is rejected.
+Updating an event's status to anything other than `todo` or `planned` is rejected.
 
 ### List filtering
 
