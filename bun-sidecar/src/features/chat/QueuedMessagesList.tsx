@@ -7,10 +7,8 @@ import {
     DndContext,
     DragEndEvent,
     closestCenter,
-    PointerSensor,
-    useSensor,
-    useSensors,
 } from "@dnd-kit/core";
+import { useDragDropSensors } from "@/hooks/useDragDropSensors";
 import {
     SortableContext,
     verticalListSortingStrategy,
@@ -197,13 +195,7 @@ export function QueuedMessagesList({
 }: QueuedMessagesListProps) {
     const { currentTheme } = useTheme();
 
-    const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: {
-                distance: 5,
-            },
-        })
-    );
+    const sensors = useDragDropSensors({ distance: 5 });
 
     const handleDragEnd = useCallback((event: DragEndEvent) => {
         const { active, over } = event;

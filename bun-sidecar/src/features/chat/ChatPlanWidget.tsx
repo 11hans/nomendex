@@ -2,10 +2,6 @@ import { useState } from "react";
 import {
     DndContext,
     closestCenter,
-    PointerSensor,
-    KeyboardSensor,
-    useSensor,
-    useSensors,
     type DragEndEvent,
 } from "@dnd-kit/core";
 import {
@@ -13,8 +9,8 @@ import {
     verticalListSortingStrategy,
     arrayMove,
     useSortable,
-    sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
+import { useDragDropSensors } from "@/hooks/useDragDropSensors";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -98,10 +94,7 @@ export function ChatPlanWidget({ items, onSend, onDismiss }: ChatPlanWidgetProps
     const { styles } = currentTheme;
     const [ordered, setOrdered] = useState<PlanItem[]>(items);
 
-    const sensors = useSensors(
-        useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-    );
+    const sensors = useDragDropSensors({ distance: 5 });
 
     function handleDragEnd(event: DragEndEvent) {
         const { active, over } = event;

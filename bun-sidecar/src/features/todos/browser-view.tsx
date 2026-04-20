@@ -37,11 +37,9 @@ import {
     DragOverlay,
     DragStartEvent,
     closestCenter,
-    PointerSensor,
-    useSensor,
-    useSensors,
     useDndContext,
 } from "@dnd-kit/core";
+import { useDragDropSensors } from "@/hooks/useDragDropSensors";
 import {
     SortableContext,
     verticalListSortingStrategy,
@@ -374,14 +372,8 @@ export function TodosBrowserView({
 
     // Drag and drop state
     const [draggedTodo, setDraggedTodo] = useState<Todo | null>(null);
-    const [draggedTodoId, setDraggedTodoId] = useState<string | null>(null);
-    const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: {
-                distance: 8,
-            },
-        })
-    );
+    const draggedTodoId = draggedTodo?.id ?? null;
+    const sensors = useDragDropSensors();
 
     useEffect(() => {
         if (!externalFilterCriteria) return;
@@ -877,13 +869,11 @@ export function TodosBrowserView({
     // Drag and drop handlers
     const handleDragStart = useCallback((event: DragStartEvent) => {
         const todo = todos.find(t => t.id === event.active.id);
-        setDraggedTodoId(String(event.active.id));
         setDraggedTodo(todo || null);
     }, [todos]);
 
     const handleDragCancel = useCallback((_event: DragCancelEvent) => {
         setDraggedTodo(null);
-        setDraggedTodoId(null);
     }, []);
 
     const rejectEventStatusMove = useCallback(() => {
@@ -894,149 +884,82 @@ export function TodosBrowserView({
         // We handle drag over for cross-column drops
     }, []);
 
+    const applyTodoMoveOptimistically = useCallback(async (
+        activeId: string,
+        updates: Partial<Todo>,
+    ) => {
+        const snapshot = todos;
+        const previous = snapshot.find(t => t.id === activeId);
+        if (!previous) return;
+
+        setTodos(prev => prev.map(t => (t.id === activeId ? { ...t, ...updates } : t)));
+
+        try {
+            await todosAPI.updateTodo({ todoId: activeId, updates });
+        } catch (error) {
+            console.error("Failed to move todo:", error);
+            setTodos(prev => prev.map(t => (t.id === activeId ? previous : t)));
+            toast.error("Failed to move task");
+        }
+    }, [todos, todosAPI]);
+
     const handleDragEnd = useCallback(async (event: DragEndEvent) => {
         const { active, over } = event;
         setDraggedTodo(null);
-        setDraggedTodoId(null);
 
         if (!over) return;
 
-        try {
-            const activeId = active.id as string;
-            const overId = over.id as string;
+        const activeId = active.id as string;
+        const overId = over.id as string;
 
-            if (overId.startsWith("project-group:")) {
-                const targetGroupName = overId.substring("project-group:".length);
-                const draggedTodo = todos.find((todo) => todo.id === activeId);
-                if (!draggedTodo) return;
-                await moveTodoToProject(draggedTodo, targetGroupName);
+        if (overId.startsWith("project-group:")) {
+            const targetGroupName = overId.substring("project-group:".length);
+            const draggedTodo = todos.find((todo) => todo.id === activeId);
+            if (!draggedTodo) return;
+            await moveTodoToProject(draggedTodo, targetGroupName);
+            return;
+        }
+
+        const activeTodo = todos.find(t => t.id === activeId);
+        if (!activeTodo) return;
+
+        // Resolve target column id (cross-column drop on column or on card in another column)
+        let targetColumnId: string | null = null;
+        if (overId.startsWith('column-')) {
+            targetColumnId = overId.replace('column-', '');
+        } else {
+            const overTodo = todos.find(t => t.id === overId);
+            if (!overTodo) return;
+            const overCol = getColumnForTodo(overTodo);
+            if (overCol !== getColumnForTodo(activeTodo)) {
+                targetColumnId = overCol;
+            }
+        }
+
+        if (!targetColumnId) return; // same-column reorder is a no-op for now
+        if (targetColumnId === getColumnForTodo(activeTodo)) return;
+
+        if (boardConfig) {
+            const targetColumn = boardConfig.columns.find(c => c.id === targetColumnId);
+            const newStatus = targetColumn?.status ?? "todo";
+            if (isEventTodo(activeTodo) && newStatus !== "todo" && newStatus !== "planned") {
+                rejectEventStatusMove();
                 return;
             }
-
-            // Find the dragged todo
-            const activeIndex = todos.findIndex(t => t.id === activeId);
-            if (activeIndex === -1) return;
-
-            const activeTodo = todos[activeIndex];
-            if (!activeTodo) return;
-
-            // Determine if this is a cross-column drop or same-column reorder
-            if (overId.startsWith('column-')) {
-                // Cross-column drop - change status or customColumnId depending on mode
-                const newColumnId = overId.replace('column-', '');
-
-                if (boardConfig) {
-                    // Custom board mode - update customColumnId and optionally status
-                    const currentColumnId = getColumnForTodo(activeTodo);
-                    if (newColumnId !== currentColumnId) {
-                        // Determine target status: column's status, or "todo" for no-status columns
-                        const targetColumn = boardConfig.columns.find(c => c.id === newColumnId);
-                        const newStatus = targetColumn?.status ?? "todo";
-
-                        if (isEventTodo(activeTodo) && newStatus !== "todo" && newStatus !== "planned") {
-                            rejectEventStatusMove();
-                            return;
-                        }
-
-                        try {
-                            await todosAPI.updateTodo({
-                                todoId: activeId,
-                                updates: {
-                                    customColumnId: newColumnId,
-                                    status: newStatus,
-                                },
-                            });
-                            await loadTodos();
-                        } catch (error) {
-                            console.error("Failed to update todo column:", error);
-                            await loadTodos();
-                        }
-                    }
-                } else {
-                    // Legacy mode - update status
-                    const newStatus = newColumnId as "todo" | "planned" | "in_progress" | "done" | "later";
-                    if (newStatus !== activeTodo.status) {
-                        if (isEventTodo(activeTodo) && newStatus !== "todo" && newStatus !== "planned") {
-                            rejectEventStatusMove();
-                            return;
-                        }
-
-                        try {
-                            await todosAPI.updateTodo({
-                                todoId: activeId,
-                                updates: { status: newStatus },
-                            });
-                            await loadTodos();
-                        } catch (error) {
-                            console.error("Failed to update todo status:", error);
-                            await loadTodos();
-                        }
-                    }
-                }
-            } else {
-                // Dropping on a specific card - either same column reorder or cross-column with position
-                const overIndex = todos.findIndex(t => t.id === overId);
-                if (overIndex === -1) return;
-
-                const overTodo = todos[overIndex];
-                if (!overTodo) return;
-
-                // Determine cross-column based on mode
-                const activeColumnId = getColumnForTodo(activeTodo);
-                const overColumnId = getColumnForTodo(overTodo);
-                const isCrossColumn = activeColumnId !== overColumnId;
-
-                if (isCrossColumn) {
-                    // Cross-column drop onto a specific card
-                    if (boardConfig) {
-                        // Custom board mode - update customColumnId and position
-                        // Determine target status: column's status, or "todo" for no-status columns
-                        const targetColumn = boardConfig.columns.find(c => c.id === overColumnId);
-                        const newStatus = targetColumn?.status ?? "todo";
-
-                        if (isEventTodo(activeTodo) && newStatus !== "todo" && newStatus !== "planned") {
-                            rejectEventStatusMove();
-                            return;
-                        }
-
-                        try {
-                            await todosAPI.updateTodo({
-                                todoId: activeId,
-                                updates: {
-                                    customColumnId: overColumnId,
-                                    status: newStatus,
-                                },
-                            });
-                            await loadTodos();
-                        } catch (error) {
-                            console.error("Failed to move todo:", error);
-                            await loadTodos();
-                        }
-                    } else {
-                        // Legacy mode - update status AND position
-                        const targetStatus = overTodo.status;
-                        if (isEventTodo(activeTodo) && targetStatus !== "todo" && targetStatus !== "planned") {
-                            rejectEventStatusMove();
-                            return;
-                        }
-                        try {
-                            await todosAPI.updateTodo({
-                                todoId: activeId,
-                                updates: { status: targetStatus },
-                            });
-                            await loadTodos();
-                        } catch (error) {
-                            console.error("Failed to move todo:", error);
-                            await loadTodos();
-                        }
-                    }
-                }
+            await applyTodoMoveOptimistically(activeId, {
+                customColumnId: targetColumnId,
+                status: newStatus,
+            });
+        } else {
+            const newStatus = targetColumnId as "todo" | "planned" | "in_progress" | "done" | "later";
+            if (newStatus === activeTodo.status) return;
+            if (isEventTodo(activeTodo) && newStatus !== "todo" && newStatus !== "planned") {
+                rejectEventStatusMove();
+                return;
             }
-        } catch (error) {
-            console.error("Error in drag end handler:", error);
-            await loadTodos();
+            await applyTodoMoveOptimistically(activeId, { status: newStatus });
         }
-    }, [todos, moveTodoToProject, todosAPI, loadTodos, boardConfig, getColumnForTodo, rejectEventStatusMove]);
+    }, [todos, moveTodoToProject, boardConfig, getColumnForTodo, rejectEventStatusMove, applyTodoMoveOptimistically]);
 
     // Convenience
     // --- Dynamic Columns Logic ---
@@ -2097,6 +2020,7 @@ export function TodosBrowserView({
             <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
+                autoScroll={{ threshold: { x: 0.15, y: 0.15 }, acceleration: 12 }}
                 onDragStart={handleDragStart}
                 onDragCancel={handleDragCancel}
                 onDragOver={handleDragOver}

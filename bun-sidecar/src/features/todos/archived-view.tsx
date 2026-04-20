@@ -21,10 +21,8 @@ import {
     DragOverlay,
     DragStartEvent,
     closestCenter,
-    PointerSensor,
-    useSensor,
-    useSensors,
 } from "@dnd-kit/core";
+import { useDragDropSensors } from "@/hooks/useDragDropSensors";
 import {
     SortableContext,
     verticalListSortingStrategy,
@@ -53,13 +51,7 @@ export function ArchivedBrowserView({ project }: { project?: string | null } = {
 
     // Drag and drop state
     const [draggedTodo, setDraggedTodo] = useState<Todo | null>(null);
-    const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: {
-                distance: 8,
-            },
-        })
-    );
+    const sensors = useDragDropSensors();
 
     // Update the tab name based on the project - only once when component mounts
     useEffect(() => {

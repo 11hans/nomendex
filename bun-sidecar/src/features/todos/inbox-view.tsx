@@ -21,12 +21,10 @@ import {
     DragCancelEvent,
     DragEndEvent,
     DragStartEvent,
-    PointerSensor,
     useDraggable,
     useDroppable,
-    useSensor,
-    useSensors,
 } from "@dnd-kit/core";
+import { useDragDropSensors } from "@/hooks/useDragDropSensors";
 import { CSS } from "@dnd-kit/utilities";
 import {
     Archive,
@@ -372,13 +370,7 @@ export function InboxListView() {
     const [selectedGroup, setSelectedGroup] = useState<string>(ALL_TASKS);
     const [activeSystemListId, setActiveSystemListId] = useState<SystemListId | null>(null);
     const hasSetTabNameRef = useRef<boolean>(false);
-    const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: {
-                distance: 8,
-            },
-        })
-    );
+    const sensors = useDragDropSensors();
 
     const [newTodo, setNewTodo] = useState<{
         title: string;

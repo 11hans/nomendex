@@ -8,19 +8,15 @@ import { BoardConfig, BoardColumn } from "@/features/projects/project-types";
 import {
     DndContext,
     closestCenter,
-    KeyboardSensor,
-    PointerSensor,
-    useSensor,
-    useSensors,
     DragEndEvent,
 } from "@dnd-kit/core";
 import {
     arrayMove,
     SortableContext,
-    sortableKeyboardCoordinates,
     useSortable,
     verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { useDragDropSensors } from "@/hooks/useDragDropSensors";
 import { CSS } from "@dnd-kit/utilities";
 import { useTheme } from "@/hooks/useTheme";
 
@@ -125,16 +121,7 @@ export function BoardSettingsDialog({
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
 
-    const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: {
-                distance: 5,
-            },
-        }),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
-        })
-    );
+    const sensors = useDragDropSensors({ distance: 5 });
 
     const [prevOpen, setPrevOpen] = useState(open);
     if (open !== prevOpen) {
