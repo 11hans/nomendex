@@ -2,7 +2,7 @@ import type { Todo, RecurrenceFrequency } from "./todo-types";
 
 const TODO_KINDS = new Set(["task", "event"]);
 const TODO_SOURCES = new Set(["user", "timeblock-generator"]);
-const TODO_STATUSES = new Set(["todo", "in_progress", "done", "later"]);
+const TODO_STATUSES = new Set(["todo", "planned", "in_progress", "done", "later"]);
 const TODO_PRIORITIES = new Set(["high", "medium", "low", "none"]);
 const TODO_CALENDAR_PRESETS = new Set(["30-15", "none"]);
 
