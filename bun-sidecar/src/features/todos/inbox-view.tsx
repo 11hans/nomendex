@@ -439,7 +439,11 @@ export function InboxListView() {
     const handleSelectGroup = useCallback((groupName: string) => {
         setSelectedGroup(groupName);
         setActiveSystemListId(null);
-    }, []);
+        todoFilter.applyFilterCriteria(
+            { ...BASE_SYSTEM_CRITERIA, statusBucket: "all" },
+            { clearSearch: false },
+        );
+    }, [todoFilter.applyFilterCriteria]);
 
     const handleSelectSystemList = useCallback(
         (systemList: SystemListDefinition) => {
