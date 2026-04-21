@@ -5,7 +5,7 @@ import { todosPluginSerial } from "./index";
 import { WorkspaceTab } from "@/types/Workspace";
 import { SerializablePlugin } from "@/types/Plugin";
 import { todosAPI } from "@/hooks/useTodosAPI";
-import { syncTaskToCalendar, purgeCalendarEvents } from "./calendar-bridge";
+import { syncTaskToCalendar, purgeCalendarEvents, reconcileCalendar, removeTaskFromCalendar } from "./calendar-bridge";
 import { toast } from "sonner";
 
 interface CommandContext {
@@ -141,6 +141,49 @@ export async function getTodosCommands(context: CommandContext): Promise<Command
                 } catch (error) {
                     console.error("Sync failed", error);
                     toast.error("Failed to sync to calendar.");
+                }
+            },
+        },
+        {
+            id: "todos.reconcileCalendar",
+            name: "Reconcile Calendar",
+            description: "Remove duplicate/orphaned calendar events and refresh live todos (non-destructive)",
+            icon: "CheckCheck",
+            callback: async () => {
+                context.closeCommandMenu();
+                try {
+                    toast.info("Reconciling calendar...");
+                    const result = await reconcileCalendar();
+                    if (!result) {
+                        toast.error("Calendar reconcile unavailable.");
+                        return;
+                    }
+
+                    const allTodos = await todosAPI.getTodos();
+                    const liveById = new Map(allTodos.map(t => [t.id, t]));
+
+                    const orphanIds = result.taskIds.filter(id => !liveById.has(id));
+                    for (const id of orphanIds) {
+                        try { await removeTaskFromCalendar(id); } catch (e) { console.error("orphan remove failed", id, e); }
+                    }
+
+                    const toSync = allTodos.filter(t => t.scheduledStart || t.scheduledEnd);
+                    let refreshed = 0;
+                    for (const todo of toSync) {
+                        try {
+                            await syncTaskToCalendar(todo);
+                            refreshed++;
+                        } catch (e) {
+                            console.error("Reconcile upsert failed", todo.id, e);
+                        }
+                    }
+
+                    toast.success(
+                        `Reconcile done: ${result.removed} duplicate(s) removed, ${orphanIds.length} orphan(s) cleared, ${refreshed} todo(s) refreshed.`
+                    );
+                } catch (error) {
+                    console.error("Reconcile failed", error);
+                    toast.error("Failed to reconcile calendar.");
                 }
             },
         },

@@ -35,6 +35,14 @@ class CalendarManager {
             NotificationCenter.default.removeObserver(existing)
         }
 
+        // Clear stale caches — workspace may have switched, identifiers from
+        // a previous workspace must not leak into the new one.
+        syncQueue.async { [weak self] in
+            self?.eventIdentifierCache.removeAll()
+            self?.knownEventStates.removeAll()
+            self?.ignoredTaskIDs.removeAll()
+        }
+
         // Initial snapshot
         snapshotCurrentEvents()
 
@@ -63,22 +71,68 @@ class CalendarManager {
             let predicate = self.eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
             let events = self.eventStore.events(matching: predicate)
 
-            var newState: [String: EventState] = [:]
+            // Group by taskId so we can detect and clean up duplicates.
+            var grouped: [String: [EKEvent]] = [:]
             for event in events {
                 if let url = event.url?.absoluteString, url.hasPrefix("nomendex://task/") {
                     let taskId = String(url.dropFirst("nomendex://task/".count))
-                    newState[taskId] = EventState(
-                        title: event.title ?? "",
-                        startDate: event.startDate,
-                        endDate: event.endDate,
-                        isAllDay: event.isAllDay
-                    )
-                    // Populate identifier cache for reliable lookups
-                    self.eventIdentifierCache[taskId] = event.eventIdentifier
+                    grouped[taskId, default: []].append(event)
                 }
+            }
+
+            var newState: [String: EventState] = [:]
+            for (taskId, matches) in grouped {
+                let keeper = self.pickKeeper(matches)
+                // Remove duplicates — iCloud/CalDAV can occasionally leave extras,
+                // and multi-device races produce parallel events for the same task.
+                if matches.count > 1 {
+                    log("snapshot: found \(matches.count) events for task \(taskId), removing \(matches.count - 1) duplicate(s)")
+                    for duplicate in matches where duplicate != keeper {
+                        try? self.eventStore.remove(duplicate, span: .thisEvent)
+                    }
+                }
+                newState[taskId] = EventState(
+                    title: keeper.title ?? "",
+                    startDate: keeper.startDate,
+                    endDate: keeper.endDate,
+                    isAllDay: keeper.isAllDay
+                )
+                self.eventIdentifierCache[taskId] = keeper.eventIdentifier
             }
             self.knownEventStates = newState
         }
+    }
+
+    /// Picks the canonical event among duplicates. Preference order:
+    /// 1. The event whose identifier is already in our cache (stable for live tasks)
+    /// 2. The earliest created event (oldest wins — later ones are likely iCloud artifacts)
+    private func pickKeeper(_ events: [EKEvent]) -> EKEvent {
+        precondition(!events.isEmpty)
+        if let taskIdURL = events.first?.url?.absoluteString,
+           taskIdURL.hasPrefix("nomendex://task/") {
+            let taskId = String(taskIdURL.dropFirst("nomendex://task/".count))
+            if let cachedId = eventIdentifierCache[taskId],
+               let cachedMatch = events.first(where: { $0.eventIdentifier == cachedId }) {
+                return cachedMatch
+            }
+        }
+        return events.min(by: { (a, b) in
+            let aDate = a.creationDate ?? .distantFuture
+            let bDate = b.creationDate ?? .distantFuture
+            return aDate < bDate
+        }) ?? events[0]
+    }
+
+    /// Returns all events across Nomendex calendars whose URL points to the given task.
+    private func findAllEvents(taskId: String) -> [EKEvent] {
+        let nomendexCalendars = getNomendexCalendars()
+        guard !nomendexCalendars.isEmpty else { return [] }
+        let start = Date().addingTimeInterval(-5 * 365 * 24 * 3600)
+        let end = Date().addingTimeInterval(5 * 365 * 24 * 3600)
+        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
+        let events = eventStore.events(matching: predicate)
+        let targetURL = URL(string: "nomendex://task/\(taskId)")
+        return events.filter { $0.url == targetURL }
     }
 
     private func detectChanges() {
@@ -93,17 +147,31 @@ class CalendarManager {
         let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
         let currentEvents = eventStore.events(matching: predicate)
 
-        var currentMap: [String: (EKEvent, EventState)] = [:]
+        // Group by taskId so we can detect and clean up duplicates on-the-fly.
+        var grouped: [String: [EKEvent]] = [:]
         for event in currentEvents {
             if let url = event.url?.absoluteString, url.hasPrefix("nomendex://task/") {
                 let taskId = String(url.dropFirst("nomendex://task/".count))
-                currentMap[taskId] = (event, EventState(
-                    title: event.title ?? "",
-                    startDate: event.startDate,
-                    endDate: event.endDate,
-                    isAllDay: event.isAllDay
-                ))
+                grouped[taskId, default: []].append(event)
             }
+        }
+
+        var currentMap: [String: (EKEvent, EventState)] = [:]
+        for (taskId, matches) in grouped {
+            let keeper = pickKeeper(matches)
+            if matches.count > 1 {
+                log("detectChanges: found \(matches.count) events for task \(taskId), removing \(matches.count - 1) duplicate(s)")
+                for duplicate in matches where duplicate != keeper {
+                    try? eventStore.remove(duplicate, span: .thisEvent)
+                }
+            }
+            currentMap[taskId] = (keeper, EventState(
+                title: keeper.title ?? "",
+                startDate: keeper.startDate,
+                endDate: keeper.endDate,
+                isAllDay: keeper.isAllDay
+            ))
+            eventIdentifierCache[taskId] = keeper.eventIdentifier
         }
 
         var changesToSend: [[String: Any]] = []
@@ -159,6 +227,13 @@ class CalendarManager {
         var nextState: [String: EventState] = [:]
         for (taskId, current) in currentMap {
             nextState[taskId] = current.1
+            // Clear ignore entries for newly created events that weren't in
+            // knownEventStates (the loop above only clears entries it iterates).
+            // Without this, the echo-suppression entry for a first-time upsert
+            // leaks and the next genuine external change is silently dropped.
+            if knownEventStates[taskId] == nil {
+                ignoredTaskIDs.remove(taskId)
+            }
         }
         knownEventStates = nextState
 
@@ -200,6 +275,8 @@ class CalendarManager {
                     self.deleteEvent(taskData: taskData, webView: webView, callback: callback)
                 case "purge":
                     self.purgeOrphanedEvents(taskData: taskData, webView: webView, callback: callback)
+                case "reconcile":
+                    self.reconcileEvents(taskData: taskData, webView: webView, callback: callback)
                 default:
                     self.sendResult(webView: webView, callback: callback, success: false, error: "Unknown action: \(action)")
                 }
@@ -289,8 +366,35 @@ class CalendarManager {
             return
         }
 
-        // Find existing event across all Nomendex calendars, or create new one
-        let event = findEvent(taskId: taskId) ?? EKEvent(eventStore: eventStore)
+        // Find (and dedupe) existing events for this task. Multi-device iCloud
+        // races or lost-URL round-trips can leave multiple events for one task
+        // — clean them up opportunistically on every upsert.
+        let existing = findAllEvents(taskId: taskId)
+        var keeper: EKEvent? = nil
+        if !existing.isEmpty {
+            let picked = pickKeeper(existing)
+            if existing.count > 1 {
+                log("upsert: found \(existing.count) events for task \(taskId), removing \(existing.count - 1) duplicate(s)")
+                for duplicate in existing where duplicate != picked {
+                    ignoredTaskIDs.insert(taskId)
+                    try? eventStore.remove(duplicate, span: .thisEvent)
+                }
+            }
+            keeper = picked
+        }
+
+        // If the kept event lives in a different calendar than the target
+        // (e.g. project assignment changed), recreate it. EKEvent.calendar
+        // reassignment between sources (local ↔ iCloud) is unreliable.
+        if let current = keeper, current.calendar != calendar {
+            log("upsert: task \(taskId) moving calendar \(current.calendar?.title ?? "?") → \(calendar.title), recreating")
+            ignoredTaskIDs.insert(taskId)
+            try? eventStore.remove(current, span: .thisEvent)
+            eventIdentifierCache.removeValue(forKey: taskId)
+            keeper = nil
+        }
+
+        let event = keeper ?? EKEvent(eventStore: eventStore)
         event.calendar = calendar
 
         // Clear existing alarms to avoid duplicates
@@ -513,13 +617,73 @@ class CalendarManager {
         }
     }
 
-    private func sendResult(webView: WKWebView?, callback: String?, success: Bool, error: String?) {
+    private func sendResult(webView: WKWebView?, callback: String?, success: Bool, error: String?, data: [String: Any]? = nil) {
         guard let callback = callback, let wv = webView else { return }
 
+        var payload: [String: Any] = ["success": success]
+        payload["error"] = error ?? NSNull()
+        if let data = data {
+            for (k, v) in data { payload[k] = v }
+        }
+
         DispatchQueue.main.async {
-            let errorStr = error.map { "\"\($0.replacingOccurrences(of: "\"", with: "\\\""))\"" } ?? "null"
-            let js = "window.\(callback)({success: \(success), error: \(errorStr)})"
+            let jsonString: String
+            do {
+                let bytes = try JSONSerialization.data(withJSONObject: payload)
+                jsonString = String(data: bytes, encoding: .utf8) ?? "{\"success\":false,\"error\":\"encode failed\"}"
+            } catch {
+                jsonString = "{\"success\":false,\"error\":\"encode failed\"}"
+            }
+            let js = "window.\(callback)(\(jsonString))"
             wv.evaluateJavaScript(js, completionHandler: nil)
         }
+    }
+
+    // MARK: - Reconcile
+
+    /// Scans all Nomendex calendars, removes duplicate events per taskId, and
+    /// returns the list of taskIds that have at least one event. The frontend
+    /// can then remove orphans (events whose task no longer exists) and upsert
+    /// live todos to refresh stale metadata — without the destructive purge.
+    private func reconcileEvents(taskData: [String: Any], webView: WKWebView?, callback: String?) {
+        eventStore.reset()
+        let nomendexCalendars = getNomendexCalendars()
+        guard !nomendexCalendars.isEmpty else {
+            sendResult(webView: webView, callback: callback, success: true, error: nil, data: ["taskIds": [] as [String], "removed": 0])
+            return
+        }
+
+        let start = Date().addingTimeInterval(-5 * 365 * 24 * 3600)
+        let end = Date().addingTimeInterval(5 * 365 * 24 * 3600)
+        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
+        let events = eventStore.events(matching: predicate)
+
+        var grouped: [String: [EKEvent]] = [:]
+        for event in events {
+            if let url = event.url?.absoluteString, url.hasPrefix("nomendex://task/") {
+                let taskId = String(url.dropFirst("nomendex://task/".count))
+                grouped[taskId, default: []].append(event)
+            }
+        }
+
+        var removed = 0
+        var liveTaskIds: [String] = []
+        for (taskId, matches) in grouped {
+            let keeper = pickKeeper(matches)
+            for duplicate in matches where duplicate != keeper {
+                ignoredTaskIDs.insert(taskId)
+                do {
+                    try eventStore.remove(duplicate, span: .thisEvent)
+                    removed += 1
+                } catch {
+                    log("reconcile: failed to remove duplicate for \(taskId): \(error)")
+                }
+            }
+            eventIdentifierCache[taskId] = keeper.eventIdentifier
+            liveTaskIds.append(taskId)
+        }
+
+        log("reconcile: \(liveTaskIds.count) tasks present, \(removed) duplicates removed")
+        sendResult(webView: webView, callback: callback, success: true, error: nil, data: ["taskIds": liveTaskIds, "removed": removed])
     }
 }

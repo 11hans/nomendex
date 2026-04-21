@@ -50,14 +50,20 @@ The bridge functions are no-ops when:
 - Not running inside the native macOS app (no `window.webkit`)
 - Task has no `scheduledStart` and no `scheduledEnd`
 
-### Manual Sync (Force Sync)
+### Manual Sync
 
-Users can manually trigger a full synchronization of all tasks that have dates configured. This is especially useful after importing tasks or making bulk changes outside of the Nomendex UI.
+Two commands are available in the Command Palette (`Cmd+K`):
 
-- Open **Command Palette** (`Cmd+K`)
-- Run **"Force Sync All to Calendar"**
+- **"Reconcile Calendar"** — non-destructive. Deduplicates events per `taskId` across all Nomendex calendars, removes orphans (events whose task no longer exists), and upserts all live todos to refresh their metadata. Use this as the first fix when duplicates appear.
+- **"Force Sync All to Calendar"** — destructive. Wipes and recreates all Nomendex calendars from scratch. Use after bulk imports or when Reconcile isn't enough.
 
-Force sync performs a **delete-and-recreate** cycle:
+#### Reconcile Calendar
+
+1. JS sends `action: "reconcile"` to Swift.
+2. Swift scans Nomendex calendars, groups events by `taskId`, keeps one (cache match preferred, else oldest `creationDate`) and deletes the rest. Returns `{ taskIds, removed }`.
+3. JS removes orphans (calendar taskIds not present in the todo store) and upserts every live todo with dates.
+
+#### Force Sync (delete-and-recreate)
 1. Sends a `purge` action to Swift which deletes all Nomendex calendars (e.g. "Nomendex Tasks", "Nomendex - ProjectName")
 2. Upserts each task that has `scheduledStart`/`scheduledEnd` (and includes `dueDate` for metadata) — this recreates the calendars and events from scratch
    - Only tasks that carry scheduled info are synced; we no longer treat `dueDate` alone as enough to create a calendar event.
@@ -152,6 +158,18 @@ window.webkit.messageHandlers.calendarSync.postMessage({
 });
 ```
 
+### `reconcileCalendar()`
+
+Non-destructive. Asks Swift to dedupe duplicate events per `taskId` and returns the list of taskIds that still have an event.
+
+```typescript
+window.webkit.messageHandlers.calendarSync.postMessage({
+    action: "reconcile",
+    callback: "__calendarSyncCallback",
+});
+// callback receives: { success, error, taskIds: string[], removed: number }
+```
+
 All three functions:
 - Return a `Promise<void>` that resolves when Swift calls back
 - Have a 5-second timeout to prevent dangling promises
@@ -176,14 +194,17 @@ class CalendarManager {
 
 | Method | Description |
 |--------|-------------|
-| `syncTask(_:webView:callback:)` | Entry point — routes to upsert/delete/purge on `syncQueue` |
+| `syncTask(_:webView:callback:)` | Entry point — routes to upsert/delete/purge/reconcile on `syncQueue` |
 | `requestAccess(completion:)` | Requests calendar permission (macOS 14+ API) |
 | `getOrCreateCalendar(projectName:)` | Finds or creates a Nomendex calendar |
-| `upsertEvent(taskData:webView:callback:)` | Creates or updates a calendar event |
+| `upsertEvent(taskData:webView:callback:)` | Creates or updates a calendar event (dedups and handles calendar moves) |
 | `deleteEvent(taskData:webView:callback:)` | Removes event by task ID lookup |
 | `purgeOrphanedEvents(taskData:webView:callback:)` | Deletes and recreates all Nomendex calendars (force sync) while preserving calendar colors |
-| `findEvent(taskId:)` | Looks up event by cached identifier or `nomendex://task/{id}` URL |
-| `detectChanges()` | Compares calendar state to snapshot, sends changes to JS |
+| `reconcileEvents(taskData:webView:callback:)` | Deduplicates events per `taskId`, returns live taskIds to JS |
+| `findEvent(taskId:)` | Looks up event by cached identifier or `nomendex://task/{id}` URL (cleans up duplicates on fallback) |
+| `findAllEvents(taskId:)` | Scans Nomendex calendars and returns all events whose URL matches the task |
+| `pickKeeper(_:)` | Chooses the canonical event among duplicates (cached identifier wins; otherwise oldest `creationDate`) |
+| `detectChanges()` | Compares calendar state to snapshot, dedupes on-the-fly, sends changes to JS |
 
 ### Thread Safety
 
@@ -200,6 +221,19 @@ Only `evaluateJavaScript` and `sendResult` dispatch to `.main` (required by WKWe
 - Populated at startup from `snapshotCurrentEvents`
 - Updated after each `eventStore.save()`
 - Cleared on purge
+- Cleared on `startObserving` (workspace switch) — previous-workspace identifiers must not leak
+
+### Duplicate Handling
+
+iCloud/CalDAV round-trips, multi-device races, and lost `url` fields can leave multiple events pointing at the same `taskId`. Every path that enumerates Nomendex events now dedupes:
+
+- `snapshotCurrentEvents` and `detectChanges` group matches by `taskId`, keep one via `pickKeeper`, and `eventStore.remove` the rest.
+- `upsertEvent` runs `findAllEvents` before save, dedupes if needed, and if the keeper lives in a different calendar than the target (e.g. after a project assignment change), removes the old event and creates a fresh one — in-place `event.calendar` reassignment is unreliable across source boundaries (local ↔ iCloud).
+- `reconcileEvents` performs the same dedup and reports `{ taskIds, removed }` to the JS side, which then upserts live todos and removes orphans.
+
+### Echo Suppression (`ignoredTaskIDs`)
+
+`ignoredTaskIDs` is populated before every self-originated `save`/`remove` so the resulting `EKEventStoreChanged` notification doesn't bounce back as an inbound change. `detectChanges` clears entries while iterating `knownEventStates` **and** when it sees a new `taskId` in `currentMap` that wasn't in the previous snapshot (first-time upserts); otherwise an entry could leak and silently drop the next genuine external change for that task.
 
 During purge:
 - calendar colors are captured before delete

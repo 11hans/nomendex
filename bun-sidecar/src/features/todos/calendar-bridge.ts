@@ -5,6 +5,11 @@ interface CalendarSyncResult {
     error: string | null;
 }
 
+interface ReconcileResult extends CalendarSyncResult {
+    taskIds?: string[];
+    removed?: number;
+}
+
 function isCalendarAvailable(): boolean {
     return !!window.webkit?.messageHandlers?.calendarSync;
 }
@@ -74,6 +79,44 @@ export async function removeTaskFromCalendar(taskId: string): Promise<boolean> {
     const op = calendarSyncQueue.then(() => doRemoveTaskFromCalendar(taskId));
     calendarSyncQueue = op.catch(() => false);
     return op;
+}
+
+/** Deduplicates events per taskId across Nomendex calendars and returns the set of taskIds
+ *  that still have at least one event. Non-destructive — does not wipe calendars. */
+export async function reconcileCalendar(): Promise<{ taskIds: string[]; removed: number } | null> {
+    if (!isCalendarAvailable()) return null;
+    const op = calendarSyncQueue.then(() => doReconcileCalendar());
+    calendarSyncQueue = op.then((r) => r !== null).catch(() => false);
+    return op;
+}
+
+function doReconcileCalendar(): Promise<{ taskIds: string[]; removed: number } | null> {
+    return new Promise((resolve) => {
+        const callbackName = `__calendarSyncCallback_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        (window as unknown as Record<string, unknown>)[callbackName] = (result: ReconcileResult) => {
+            if (!result.success && result.error) {
+                console.warn("[calendar-bridge] reconcile error:", result.error);
+            }
+            delete (window as unknown as Record<string, unknown>)[callbackName];
+            if (!result.success) {
+                resolve(null);
+                return;
+            }
+            resolve({ taskIds: result.taskIds ?? [], removed: result.removed ?? 0 });
+        };
+
+        window.webkit!.messageHandlers!.calendarSync!.postMessage({
+            action: "reconcile",
+            callback: callbackName,
+        });
+
+        setTimeout(() => {
+            if ((window as unknown as Record<string, unknown>)[callbackName]) {
+                delete (window as unknown as Record<string, unknown>)[callbackName];
+                resolve(null);
+            }
+        }, 10000);
+    });
 }
 
 /** Deletes all Nomendex calendars (wipe before force sync). Calendars are recreated by upsert. */
