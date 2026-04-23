@@ -2,6 +2,8 @@
 // These replace the generic /api/plugin-registry endpoint
 
 import { functions, resolveNoteByBaseName } from "@/features/notes/fx";
+import { streamQuickAction, NoClaudeCliError } from "@/features/notes/quick-action";
+import type { QuickActionId } from "@/features/notes/quick-action-types";
 import {
     getBacklinksForNote,
     getAllPhantomLinks,
@@ -328,6 +330,57 @@ export const notesRoutes = {
             });
         },
     },
+    // Quick action — one-shot streaming (Haiku, no tools, no session)
+    "/api/notes/quick-action": {
+        async POST(req: Request) {
+            const { actionId, customPrompt, selectionText } = (await req.json()) as {
+                actionId?: QuickActionId;
+                customPrompt?: string;
+                selectionText: string;
+            };
+
+            const hasAction = !!actionId;
+            const hasPrompt = !!customPrompt?.trim();
+            if (!hasAction && !hasPrompt) {
+                return Response.json(
+                    { error: "actionId or customPrompt is required" },
+                    { status: 400 },
+                );
+            }
+            // Quick actions operate on selection; custom prompts may run without one (empty-line trigger).
+            if (hasAction && !selectionText?.trim()) {
+                return Response.json(
+                    { error: "selectionText is required for quick actions" },
+                    { status: 400 },
+                );
+            }
+
+            try {
+                const stream = streamQuickAction({
+                    actionId,
+                    customPrompt,
+                    selectionText,
+                    signal: req.signal,
+                });
+
+                return new Response(stream, {
+                    headers: {
+                        "Content-Type": "text/event-stream",
+                        "Cache-Control": "no-cache",
+                        Connection: "keep-alive",
+                    },
+                });
+            } catch (err) {
+                if (err instanceof NoClaudeCliError) {
+                    return Response.json({ error: err.message }, { status: 503 });
+                }
+                const msg = err instanceof Error ? err.message : String(err);
+                const status = (err as { statusCode?: number }).statusCode ?? 500;
+                return Response.json({ error: msg }, { status });
+            }
+        },
+    },
+
     // Agent editing hooks management
     "/api/notes/agent-editing/status": {
         async GET() {

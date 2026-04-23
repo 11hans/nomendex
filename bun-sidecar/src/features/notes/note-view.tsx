@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { todosAPI } from "@/hooks/useTodosAPI";
@@ -58,6 +59,24 @@ import "@/components/prosemirror/search.css";
 import { createSpellcheckPlugin, runSpellcheck, clearSpellcheck } from "@/components/prosemirror/spellcheck";
 import { SpellcheckPopup } from "@/components/prosemirror/spellcheck/SpellcheckPopup";
 import "@/components/prosemirror/spellcheck/spellcheck.css";
+import {
+    createInNoteAgentPlugin,
+    openAgentBlock,
+    updateAgentBlock,
+    closeAgentBlock,
+    addAgentBlockToolCall,
+    computeAfterPos,
+    inNoteAgentPluginKey,
+    META_SET_TOOLBAR,
+    type ToolbarState,
+    type AgentBlockData,
+} from "./in-note-agent-plugin";
+import { InNoteAgentBlock } from "./InNoteAgentBlock";
+import { InNoteFloatingToolbar } from "./InNoteFloatingToolbar";
+import type { QuickActionId } from "./quick-action-types";
+import type { AgentConfig } from "@/features/agents/index";
+import { agentsAPI } from "@/hooks/useAgentsAPI";
+import { chatPluginSerial } from "@/features/chat/index";
 
 interface NotesViewProps {
     noteFileName: string;
@@ -79,7 +98,7 @@ export function NotesView(props: NotesViewProps) {
     if (!tabId) {
         throw new Error("tabId is required");
     }
-    const { activeTab, setTabName, openTab, replaceTabWithNewView } = useWorkspaceContext();
+    const { activeTab, setTabName, openTab, replaceTabWithNewView, addNewTab } = useWorkspaceContext();
     const { loading, error, setLoading, setError } = usePlugin();
     const [note, setNote] = useState<Note | null>(null);
     const [content, setContent] = useState("");
@@ -105,6 +124,15 @@ export function NotesView(props: NotesViewProps) {
         selectedIndex: 0,
     });
     const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+    // In-note agent state
+    const [agentToolbarState, setAgentToolbarState] = useState<ToolbarState | null>(null);
+    const lastToolbarRef = useRef<ToolbarState | null>(null);
+    const [askAiOpenSignal, setAskAiOpenSignal] = useState(0);
+    const [agentBlocksState, setAgentBlocksState] = useState<Map<string, AgentBlockData>>(new Map());
+    const [availableAgents, setAvailableAgents] = useState<AgentConfig[]>([]);
+    const widgetDomCacheRef = useRef<Map<string, HTMLDivElement>>(new Map());
+    const streamControllersRef = useRef<Map<string, AbortController>>(new Map());
 
     const editorRef = useRef<HTMLDivElement>(null);
     const plainTextareaRef = useRef<HTMLTextAreaElement>(null);
@@ -144,6 +172,72 @@ export function NotesView(props: NotesViewProps) {
         notesAPIRef.current = notesAPI;
     }, [notesAPI]);
 
+    // Load available agents for the toolbar dropdown
+    useEffect(() => {
+        agentsAPI.listAgents().then(setAvailableAgents).catch(() => {/* non-fatal */});
+    }, []);
+
+    // ⌘J: force-open the Ask AI popover at the current cursor
+    useEffect(() => {
+        const handler = (e: KeyboardEvent) => {
+            if (!(e.metaKey || e.ctrlKey)) return;
+            if (e.key !== "j" && e.key !== "J") return;
+            const view = viewRef.current;
+            if (!view) return;
+            // Only trigger when the editor has focus or contains the event target
+            const target = e.target as Node | null;
+            if (target && !view.dom.contains(target) && target !== document.body) return;
+
+            e.preventDefault();
+            const { from, to } = view.state.selection;
+            let coords: { top: number; bottom: number; left: number };
+            try {
+                coords = view.coordsAtPos(from);
+            } catch {
+                return;
+            }
+            const selectedText = from === to ? "" : view.state.doc.textBetween(from, to, " ").trim();
+            const toolbar: ToolbarState = { from, to, selectedText, coords };
+            view.dispatch(view.state.tr.setMeta(inNoteAgentPluginKey, { type: META_SET_TOOLBAR, toolbar }));
+            lastToolbarRef.current = toolbar;
+            setAskAiOpenSignal((n) => n + 1);
+        };
+        document.addEventListener("keydown", handler);
+        return () => document.removeEventListener("keydown", handler);
+    }, []);
+
+    // Stable widget DOM factory — called by ProseMirror plugin decorations
+    const getOrCreateWidget = useCallback((blockId: string): HTMLDivElement => {
+        let dom = widgetDomCacheRef.current.get(blockId);
+        if (!dom) {
+            dom = document.createElement("div");
+            dom.setAttribute("data-agent-block", blockId);
+            widgetDomCacheRef.current.set(blockId, dom);
+        }
+        return dom;
+    }, []);
+
+    // Clean up widget DOM cache when blocks are removed
+    useEffect(() => {
+        for (const blockId of widgetDomCacheRef.current.keys()) {
+            if (!agentBlocksState.has(blockId)) {
+                widgetDomCacheRef.current.delete(blockId);
+            }
+        }
+    }, [agentBlocksState]);
+
+    // Cancel all streams when switching notes
+    useEffect(() => {
+        const controllers = streamControllersRef.current;
+        return () => {
+            for (const controller of controllers.values()) {
+                controller.abort();
+            }
+            controllers.clear();
+        };
+    }, [noteFileName]);
+
+
     useEffect(() => {
         const view = viewRef.current;
         if (!view) return;
@@ -151,6 +245,342 @@ export function NotesView(props: NotesViewProps) {
             editable: () => !isLocked,
         });
     }, [isLocked]);
+
+    // ─── In-note agent helpers ────────────────────────────────────────────────
+
+    const startAgentStream = useCallback((params: {
+        blockId: string;
+        mode: "quick" | "agent";
+        actionId?: QuickActionId;
+        customPrompt?: string;
+        agentId?: string;
+        selectionText: string;
+    }) => {
+        const { blockId, mode, selectionText } = params;
+        const view = viewRef.current;
+        if (!view) return;
+
+        const fetchParams = mode === "quick"
+            ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ actionId: params.actionId, customPrompt: params.customPrompt, selectionText }) }
+            : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: selectionText, agentId: params.agentId, transient: true }) };
+
+        const endpoint = mode === "quick" ? "/api/notes/quick-action" : "/api/chat";
+        const controller = new AbortController();
+        streamControllersRef.current.set(blockId, controller);
+
+        (async () => {
+            try {
+                const response = await fetch(endpoint, { ...fetchParams, signal: controller.signal });
+                if (!response.ok || !response.body) {
+                    const err = await response.json().catch(() => ({ error: "Request failed" }));
+                    if (view && !controller.signal.aborted) {
+                        updateAgentBlock(view, blockId, { status: "error", error: (err as { error?: string }).error ?? "Request failed" });
+                    }
+                    return;
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = "";
+                let accText = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    if (controller.signal.aborted) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const parts = buffer.split("\n\n");
+                    buffer = parts.pop() ?? "";
+
+                    for (const part of parts) {
+                        for (const line of part.split("\n")) {
+                            if (!line.startsWith("data: ")) continue;
+                            let ev: Record<string, unknown>;
+                            try { ev = JSON.parse(line.slice(6)) as Record<string, unknown>; } catch { continue; }
+
+                            if (ev.type === "text_delta") {
+                                accText += ev.text as string;
+                                if (!controller.signal.aborted && viewRef.current) {
+                                    updateAgentBlock(viewRef.current, blockId, { text: accText });
+                                }
+                            } else if (ev.type === "message") {
+                                const sdkMsg = ev.data as Record<string, unknown> | undefined;
+                                if (sdkMsg?.type === "stream_event") {
+                                    const event = sdkMsg.event as Record<string, unknown> | undefined;
+                                    if (event?.type === "content_block_delta" && (event.delta as Record<string, unknown>)?.type === "text_delta") {
+                                        const text = (event.delta as { text?: string }).text ?? "";
+                                        if (text) {
+                                            accText += text;
+                                            if (!controller.signal.aborted && viewRef.current) {
+                                                updateAgentBlock(viewRef.current, blockId, { text: accText });
+                                            }
+                                        }
+                                    } else if (event?.type === "content_block_start") {
+                                        const cb = event.content_block as Record<string, unknown> | undefined;
+                                        if (cb?.type === "tool_use" && typeof cb.id === "string" && typeof cb.name === "string") {
+                                            if (!controller.signal.aborted && viewRef.current) {
+                                                addAgentBlockToolCall(viewRef.current, blockId, { id: cb.id, name: cb.name });
+                                            }
+                                        }
+                                    }
+                                } else if (sdkMsg?.type === "assistant") {
+                                    const content = (sdkMsg.message as { content?: Array<Record<string, unknown>> })?.content;
+                                    if (Array.isArray(content)) {
+                                        for (const b of content) {
+                                            if (b.type === "tool_use" && typeof b.id === "string" && typeof b.name === "string") {
+                                                if (!controller.signal.aborted && viewRef.current) {
+                                                    addAgentBlockToolCall(viewRef.current, blockId, { id: b.id, name: b.name });
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if (ev.type === "permission_request") {
+                                if (!controller.signal.aborted && viewRef.current) {
+                                    updateAgentBlock(viewRef.current, blockId, {
+                                        status: "awaiting_permission",
+                                        permissionPending: {
+                                            permissionId: ev.permissionId as string,
+                                            toolName: ev.toolName as string,
+                                            input: ev.input,
+                                        },
+                                    });
+                                }
+                            } else if (ev.type === "error") {
+                                if (!controller.signal.aborted && viewRef.current) {
+                                    updateAgentBlock(viewRef.current, blockId, { status: "error", error: ev.error as string });
+                                }
+                                return;
+                            } else if (ev.type === "done" || ev.type === "cancelled") {
+                                if (!controller.signal.aborted && viewRef.current) {
+                                    updateAgentBlock(viewRef.current, blockId, { status: "done" });
+                                }
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                if (!controller.signal.aborted && viewRef.current) {
+                    updateAgentBlock(viewRef.current, blockId, { status: "done" });
+                }
+            } catch (err) {
+                if (!controller.signal.aborted && viewRef.current) {
+                    updateAgentBlock(viewRef.current, blockId, { status: "error", error: err instanceof Error ? err.message : String(err) });
+                }
+            } finally {
+                streamControllersRef.current.delete(blockId);
+            }
+        })();
+    }, []);
+
+    const handleQuickAction = useCallback((actionId: QuickActionId) => {
+        const view = viewRef.current;
+        if (!view) return;
+        let { from, to } = view.state.selection;
+        if (from === to && lastToolbarRef.current) {
+            from = lastToolbarRef.current.from;
+            to = lastToolbarRef.current.to;
+        }
+        if (from === to) return;
+        const selectedText = view.state.doc.textBetween(from, to, " ").trim();
+        if (!selectedText) return;
+
+        const blockId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const afterPos = computeAfterPos(view.state.doc, to);
+
+        openAgentBlock(view, { blockId, actionId, agentId: null, from, to, afterPos, selectedText });
+        startAgentStream({ blockId, mode: "quick", actionId, selectionText: selectedText });
+    }, [startAgentStream]);
+
+    const handleAgentAction = useCallback((agentId: string) => {
+        const view = viewRef.current;
+        if (!view) return;
+        let { from, to } = view.state.selection;
+        if (from === to && lastToolbarRef.current) {
+            from = lastToolbarRef.current.from;
+            to = lastToolbarRef.current.to;
+        }
+        const selectedText = from === to ? "" : view.state.doc.textBetween(from, to, " ").trim();
+
+        const blockId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const afterPos = computeAfterPos(view.state.doc, to);
+
+        openAgentBlock(view, { blockId, actionId: null, agentId, from, to, afterPos, selectedText });
+        startAgentStream({ blockId, mode: "agent", agentId, selectionText: selectedText });
+    }, [startAgentStream]);
+
+    const handleCustomPrompt = useCallback((prompt: string) => {
+        const view = viewRef.current;
+        if (!view) return;
+        let { from, to } = view.state.selection;
+        if (from === to && lastToolbarRef.current) {
+            from = lastToolbarRef.current.from;
+            to = lastToolbarRef.current.to;
+        }
+        // §4: empty-line trigger is allowed (from === to) — generate from prompt alone
+        const selectedText = from === to ? "" : view.state.doc.textBetween(from, to, " ").trim();
+
+        const blockId = `agent-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const afterPos = computeAfterPos(view.state.doc, to);
+
+        openAgentBlock(view, { blockId, actionId: null, agentId: null, customPrompt: prompt, from, to, afterPos, selectedText });
+        startAgentStream({ blockId, mode: "quick", customPrompt: prompt, selectionText: selectedText });
+    }, [startAgentStream]);
+
+    const handleBlockRetry = useCallback((blockId: string) => {
+        const view = viewRef.current;
+        if (!view) return;
+        const block = agentBlocksState.get(blockId);
+        if (!block) return;
+
+        // Cancel existing stream and reset block text
+        streamControllersRef.current.get(blockId)?.abort();
+        streamControllersRef.current.delete(blockId);
+        updateAgentBlock(view, blockId, { status: "streaming", text: "", error: null });
+
+        // Read the current (mapped) original selection
+        const docSize = view.state.doc.content.size;
+        const from = Math.max(0, Math.min(block.originalFrom, docSize));
+        const to = Math.max(from, Math.min(block.originalTo, docSize));
+        const selectionText = view.state.doc.textBetween(from, to, " ").trim();
+        if (!selectionText) return;
+
+        if (block.agentId) {
+            startAgentStream({ blockId, mode: "agent", agentId: block.agentId, selectionText });
+        } else if (block.customPrompt) {
+            startAgentStream({ blockId, mode: "quick", customPrompt: block.customPrompt, selectionText });
+        } else if (block.actionId) {
+            startAgentStream({ blockId, mode: "quick", actionId: block.actionId, selectionText });
+        }
+    }, [agentBlocksState, startAgentStream]);
+
+    const handleBlockRefine = useCallback((blockId: string, instruction: string) => {
+        const view = viewRef.current;
+        if (!view) return;
+        const block = agentBlocksState.get(blockId);
+        if (!block || !block.text) return;
+
+        const previousOutput = block.text;
+
+        // Cancel existing stream and reset block — refine treats previous output as the new input
+        streamControllersRef.current.get(blockId)?.abort();
+        streamControllersRef.current.delete(blockId);
+        updateAgentBlock(view, blockId, {
+            status: "streaming",
+            text: "",
+            error: null,
+        });
+
+        // Always quick-action via customPrompt — refine is one-shot regardless of original mode
+        startAgentStream({
+            blockId,
+            mode: "quick",
+            customPrompt: instruction,
+            selectionText: previousOutput,
+        });
+    }, [agentBlocksState, startAgentStream]);
+
+    const handleBlockAccept = useCallback((blockId: string) => {
+        const view = viewRef.current;
+        if (!view) return;
+        const block = agentBlocksState.get(blockId);
+        if (!block || !block.text) return;
+
+        const { originalFrom, originalTo, text } = block;
+        // Validate positions are still valid
+        const docSize = view.state.doc.content.size;
+        if (originalFrom < 0 || originalTo > docSize || originalFrom > originalTo) return;
+
+        const tr = view.state.tr.replaceWith(originalFrom, originalTo, view.state.schema.text(text));
+        view.dispatch(tr);
+        closeAgentBlock(view, blockId);
+    }, [agentBlocksState]);
+
+    const handleBlockInsertBelow = useCallback((blockId: string) => {
+        const view = viewRef.current;
+        if (!view) return;
+        const block = agentBlocksState.get(blockId);
+        if (!block || !block.text) return;
+
+        const { afterPos, text } = block;
+        const docSize = view.state.doc.content.size;
+        if (afterPos < 0 || afterPos > docSize) return;
+
+        const schema = view.state.schema;
+        // Create a paragraph node with the text
+        const paragraphNode = schema.nodes.paragraph?.createAndFill(null, schema.text(text));
+        if (!paragraphNode) return;
+
+        const tr = view.state.tr.insert(afterPos, paragraphNode);
+        view.dispatch(tr);
+        closeAgentBlock(view, blockId);
+    }, [agentBlocksState]);
+
+    const handleBlockStop = useCallback((blockId: string) => {
+        streamControllersRef.current.get(blockId)?.abort();
+        streamControllersRef.current.delete(blockId);
+        const view = viewRef.current;
+        if (view) updateAgentBlock(view, blockId, { status: "done" });
+    }, []);
+
+    const handleBlockDiscard = useCallback((blockId: string) => {
+        streamControllersRef.current.get(blockId)?.abort();
+        streamControllersRef.current.delete(blockId);
+        const view = viewRef.current;
+        if (view) closeAgentBlock(view, blockId);
+    }, []);
+
+    const handleBlockContinueInChat = useCallback((blockId: string) => {
+        const block = agentBlocksState.get(blockId);
+        if (!block) return;
+
+        const editorView = viewRef.current;
+        const originalText = editorView?.state.doc.textBetween(block.originalFrom, block.originalTo, " ") ?? "";
+        const seededPrompt = block.text
+            ? `<context>\nOriginal text:\n${originalText}\n\nPrevious response:\n${block.text}\n</context>`
+            : originalText;
+
+        addNewTab({
+            pluginMeta: chatPluginSerial,
+            view: "chat",
+            props: {
+                agentId: block.agentId ?? undefined,
+                initialPrompt: seededPrompt,
+            },
+        });
+
+        handleBlockDiscard(blockId);
+    }, [agentBlocksState, addNewTab, handleBlockDiscard]);
+
+    const handlePermissionAllow = useCallback((blockId: string) => {
+        const block = agentBlocksState.get(blockId);
+        if (!block?.permissionPending) return;
+        const { permissionId } = block.permissionPending;
+        const view = viewRef.current;
+        if (view) updateAgentBlock(view, blockId, { status: "streaming", permissionPending: null });
+        fetch("/api/chat/permission-response", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ permissionId, decision: "allow" }),
+        }).catch(() => {/* best-effort */});
+    }, [agentBlocksState]);
+
+    const handlePermissionDeny = useCallback((blockId: string) => {
+        const block = agentBlocksState.get(blockId);
+        if (!block?.permissionPending) return;
+        const { permissionId } = block.permissionPending;
+        const view = viewRef.current;
+        if (view) updateAgentBlock(view, blockId, { status: "done", permissionPending: null });
+        fetch("/api/chat/permission-response", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ permissionId, decision: "deny" }),
+        }).catch(() => {/* best-effort */});
+    }, [agentBlocksState]);
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     // Subscribe to wiki link click events and navigate
     useEffect(() => {
@@ -905,6 +1335,16 @@ export function NotesView(props: NotesViewProps) {
         // Spellcheck plugin for spell checking
         const spellcheckPlugin = createSpellcheckPlugin();
 
+        // In-note agent plugin for AI assistance on selected text
+        const inNoteAgentPlugin = createInNoteAgentPlugin({
+            onToolbarChange: (tb) => {
+                if (tb) lastToolbarRef.current = tb;
+                setAgentToolbarState(tb);
+            },
+            onBlocksChange: setAgentBlocksState,
+            getOrCreateWidget,
+        });
+
         let state = EditorState.create({
             doc,
             plugins: [
@@ -918,6 +1358,7 @@ export function NotesView(props: NotesViewProps) {
                 tagDecorationPlugin, // Tag decorations and atomic deletion
                 searchPlugin, // Search highlighting
                 spellcheckPlugin, // Spellcheck
+                inNoteAgentPlugin, // In-note AI agent
             ],
         });
 
@@ -1553,6 +1994,7 @@ export function NotesView(props: NotesViewProps) {
     const folderPath = pathSegments.slice(0, -1);
 
     return (
+        <>
         <div
             className={cn("h-full overflow-hidden", !compact && "p-2")}
             style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
@@ -1804,6 +2246,27 @@ export function NotesView(props: NotesViewProps) {
                                     {viewRef.current && (
                                         <SpellcheckPopup view={viewRef.current} />
                                     )}
+                                    {/* In-note agent block portals — rendered into ProseMirror widget DOM nodes */}
+                                    {[...agentBlocksState.entries()].map(([blockId, block]) => {
+                                        const dom = widgetDomCacheRef.current.get(blockId);
+                                        if (!dom) return null;
+                                        return createPortal(
+                                            <InNoteAgentBlock
+                                                key={blockId}
+                                                block={block}
+                                                onAccept={handleBlockAccept}
+                                                onInsertBelow={handleBlockInsertBelow}
+                                                onDiscard={handleBlockDiscard}
+                                                onContinueInChat={handleBlockContinueInChat}
+                                                onPermissionAllow={handlePermissionAllow}
+                                                onPermissionDeny={handlePermissionDeny}
+                                                onRetry={handleBlockRetry}
+                                                onRefine={handleBlockRefine}
+                                                onStop={handleBlockStop}
+                                            />,
+                                            dom,
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ) : (
@@ -1935,6 +2398,20 @@ export function NotesView(props: NotesViewProps) {
             </div>
         </div>
         </div>
+
+        {/* In-note agent floating toolbar — portal to document.body */}
+        {isRichTextMode && (
+            <InNoteFloatingToolbar
+                toolbar={agentToolbarState}
+                agents={availableAgents}
+                activeBlockIds={new Set(agentBlocksState.keys())}
+                onQuickAction={handleQuickAction}
+                onAgentAction={handleAgentAction}
+                onCustomPrompt={handleCustomPrompt}
+                externalOpenSignal={askAiOpenSignal}
+            />
+        )}
+        </>
     );
 }
 

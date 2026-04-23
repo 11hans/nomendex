@@ -511,6 +511,9 @@
   .my-1\.5 {
     margin-block: calc(var(--spacing) * 1.5);
   }
+  .my-2 {
+    margin-block: calc(var(--spacing) * 2);
+  }
   .-mt-4 {
     margin-top: calc(var(--spacing) * -4);
   }
@@ -597,6 +600,9 @@
   }
   .-ml-4 {
     margin-left: calc(var(--spacing) * -4);
+  }
+  .ml-0\.5 {
+    margin-left: calc(var(--spacing) * 0.5);
   }
   .ml-1 {
     margin-left: calc(var(--spacing) * 1);
@@ -885,6 +891,9 @@
   }
   .max-h-\[300px\] {
     max-height: 300px;
+  }
+  .max-h-\[320px\] {
+    max-height: 320px;
   }
   .max-h-\[420px\] {
     max-height: 420px;
@@ -2311,6 +2320,9 @@
   .align-middle {
     vertical-align: middle;
   }
+  .align-text-bottom {
+    vertical-align: text-bottom;
+  }
   .font-mono {
     font-family: var(--font-mono);
   }
@@ -2514,6 +2526,9 @@
   }
   .text-red-400 {
     color: var(--color-red-400);
+  }
+  .text-red-500 {
+    color: var(--color-red-500);
   }
   .text-red-700 {
     color: var(--color-red-700);
@@ -7186,6 +7201,37 @@ button.prompt-tag span {
   }
   50.01%,	100% {
     opacity: 0;
+  }
+}
+.in-note-agent-source-pending {
+  opacity: 0.4;
+  transition: opacity 200ms ease-out;
+}
+.in-note-agent-diff-removed {
+  color: #dc2626;
+  text-decoration: line-through;
+  text-decoration-color: rgba(220, 38, 38, 0.6);
+  background-color: rgba(220, 38, 38, 0.08);
+  padding: 0 1px;
+  border-radius: 2px;
+}
+.in-note-agent-diff-added {
+  color: #16a34a;
+  background-color: rgba(22, 163, 74, 0.1);
+  padding: 0 1px;
+  border-radius: 2px;
+}
+.in-note-agent-block-mount {
+  animation: in-note-agent-mount 150ms ease-out;
+}
+@keyframes in-note-agent-mount {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 @property --tw-translate-x {

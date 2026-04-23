@@ -440,12 +440,13 @@ export const chatRoutes = {
                 const body = await req.json();
                 console.log("[API] Request body:", body);
 
-                const { message, images, sessionId, agentId: requestAgentId, maxThinkingTokens } = body as {
+                const { message, images, sessionId, agentId: requestAgentId, maxThinkingTokens, transient } = body as {
                     message: string;
                     images?: string[];
                     sessionId?: string;
                     agentId?: string;
                     maxThinkingTokens?: number;
+                    transient?: boolean;
                 };
 
                 if (!message && (!images || images.length === 0)) {
@@ -663,7 +664,8 @@ export const chatRoutes = {
                 } = {
                     model: agentConfig.model,
                     cwd: targetDir,
-                    resume: sessionId,
+                    // transient sessions never resume — each call starts a fresh context
+                    resume: transient ? undefined : sessionId,
                     maxTurns: 100,
                     includePartialMessages: true,
                     mcpServers,
@@ -1015,7 +1017,7 @@ export const chatRoutes = {
                         console.log(`[API] Cleaned up query tracking: ${currentTrackingId}`);
                     }
 
-                    if (resultReceived && agentConfig.id === "bpagent" && newSessionId) {
+                    if (resultReceived && agentConfig.id === "bpagent" && newSessionId && !transient) {
                         const sid = newSessionId;
                         (async () => {
                             try {
@@ -1054,8 +1056,9 @@ export const chatRoutes = {
 
                     pushToQueue({
                         type: "done",
-                        sessionId: newSessionId,
+                        sessionId: transient ? undefined : newSessionId,
                         agentId: agentConfig.id,
+                        transient: transient ?? false,
                     });
                     streamClosed = true;
                 };
