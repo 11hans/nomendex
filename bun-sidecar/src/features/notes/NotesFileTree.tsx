@@ -51,11 +51,15 @@ interface TreeNode {
 }
 
 // Helper: Extract first H1 heading from content
+function unescapeMarkdown(text: string): string {
+    return text.replace(/\\(.)/g, "$1");
+}
+
 function extractTitle(content: string): string | null {
     const h1Match = content.match(/^#\s+(.+)$/m);
-    if (h1Match) return h1Match[1].trim();
+    if (h1Match) return unescapeMarkdown(h1Match[1].trim());
     const h2Match = content.match(/^##\s+(.+)$/m);
-    if (h2Match) return h2Match[1].trim();
+    if (h2Match) return unescapeMarkdown(h2Match[1].trim());
     return null;
 }
 
