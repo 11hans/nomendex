@@ -18,6 +18,14 @@ import { buildMemoryPromptBlock } from "@/features/agent-memory/fx";
 import { buildAgentMemoryMcpServer } from "@/mcp-servers/agent-memory";
 import { triggerPostSessionExtraction, loadExtractionConfig } from "@/features/agent-memory/extraction/orchestrator";
 import { sdkMessagesToTurns } from "@/features/agent-memory/extraction/history-utils";
+import {
+    DEV_COST_HUD_ENABLED,
+    buildAssistantTurnEvent,
+    buildResultEvent,
+    extractAssistantUsage,
+    extractResultUsage,
+    logUsageEvent,
+} from "@/dev/usage-logger";
 
 // Create logger for chat routes
 const chatLogger = createServiceLogger("CHAT");
@@ -960,6 +968,56 @@ export const chatRoutes = {
                                 console.log(`[API]   Content blocks: ${content.map((b) => b.type).join(", ")}`);
                             } else if (msg.type === "result") {
                                 console.log(`[API]   Result received`);
+                            }
+
+                            // Dev cost telemetry: log + optionally emit HUD event. No-op when disabled.
+                            if (DEV_COST_HUD_ENABLED) {
+                                if (msg.type === "assistant") {
+                                    const extracted = extractAssistantUsage(msg);
+                                    if (extracted) {
+                                        const ev = buildAssistantTurnEvent({
+                                            sessionId: newSessionId || currentTrackingId,
+                                            agentId: agentConfig.id,
+                                            model: extracted.model || agentConfig.model,
+                                            turnIndex: messageCount,
+                                            usage: extracted.usage,
+                                            toolsUsed: extracted.toolsUsed,
+                                            messagePreview: typeof message === "string" ? message.slice(0, 80) : undefined,
+                                        });
+                                        void logUsageEvent(ev);
+                                        pushToQueue({
+                                            type: "usage",
+                                            scope: "assistant_turn",
+                                            sessionId: newSessionId,
+                                            queryTrackingId: currentTrackingId,
+                                            agentId: agentConfig.id,
+                                            usage: ev,
+                                        });
+                                    }
+                                } else if (msg.type === "result") {
+                                    const extracted = extractResultUsage(msg);
+                                    if (extracted) {
+                                        const ev = buildResultEvent({
+                                            sessionId: newSessionId || currentTrackingId,
+                                            agentId: agentConfig.id,
+                                            model: agentConfig.model,
+                                            turnIndex: messageCount,
+                                            usage: extracted.usage,
+                                            costUsd: extracted.costUsd,
+                                            durationMs: extracted.durationMs,
+                                            numTurns: extracted.numTurns,
+                                        });
+                                        void logUsageEvent(ev);
+                                        pushToQueue({
+                                            type: "usage",
+                                            scope: "result",
+                                            sessionId: newSessionId,
+                                            queryTrackingId: currentTrackingId,
+                                            agentId: agentConfig.id,
+                                            usage: ev,
+                                        });
+                                    }
+                                }
                             }
 
                             pushToQueue({

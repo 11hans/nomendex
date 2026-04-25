@@ -15,10 +15,22 @@ export type ToolCall = {
   errorText?: string;
 };
 
+export type TurnUsage = {
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  thinkingTokens: number;
+  model: string;
+  toolsUsed: string[];
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   blocks: ContentBlock[];
+  usage?: TurnUsage;
 };
 
 export type SessionMetadata = {

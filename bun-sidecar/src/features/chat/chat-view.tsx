@@ -1094,6 +1094,62 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                     );
                                 }
                             }
+                        } else if (data.type === "usage") {
+                            const u = data.usage as {
+                                costUsdListPrice: number;
+                                inputTokens: number;
+                                outputTokens: number;
+                                cacheReadTokens: number;
+                                cacheCreationTokens: number;
+                                thinkingTokens: number;
+                                model: string;
+                                toolsUsed: string[];
+                                kind: "assistant_turn" | "result";
+                            };
+                            setMessages((prev) =>
+                                prev.map((m) => {
+                                    if (m.id !== assistantMessageId) return m;
+                                    const prevUsage = m.usage ?? {
+                                        costUsd: 0,
+                                        inputTokens: 0,
+                                        outputTokens: 0,
+                                        cacheReadTokens: 0,
+                                        cacheCreationTokens: 0,
+                                        thinkingTokens: 0,
+                                        model: u.model,
+                                        toolsUsed: [],
+                                    };
+                                    if (u.kind === "result") {
+                                        // Final total from SDK — authoritative; keep accumulated tool list.
+                                        return {
+                                            ...m,
+                                            usage: {
+                                                ...prevUsage,
+                                                costUsd: u.costUsdListPrice,
+                                                inputTokens: u.inputTokens,
+                                                outputTokens: u.outputTokens,
+                                                cacheReadTokens: u.cacheReadTokens,
+                                                cacheCreationTokens: u.cacheCreationTokens,
+                                                model: u.model || prevUsage.model,
+                                            },
+                                        };
+                                    }
+                                    // Accumulate per-turn until result lands.
+                                    return {
+                                        ...m,
+                                        usage: {
+                                            costUsd: prevUsage.costUsd + u.costUsdListPrice,
+                                            inputTokens: prevUsage.inputTokens + u.inputTokens,
+                                            outputTokens: prevUsage.outputTokens + u.outputTokens,
+                                            cacheReadTokens: prevUsage.cacheReadTokens + u.cacheReadTokens,
+                                            cacheCreationTokens: prevUsage.cacheCreationTokens + u.cacheCreationTokens,
+                                            thinkingTokens: prevUsage.thinkingTokens + u.thinkingTokens,
+                                            model: u.model || prevUsage.model,
+                                            toolsUsed: [...prevUsage.toolsUsed, ...u.toolsUsed],
+                                        },
+                                    };
+                                })
+                            );
                         } else if (data.type === "permission_request") {
                             const permission = {
                                 permissionId: data.permissionId,
@@ -1375,6 +1431,17 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                                 onDismiss={() => setPlanItems(null)}
                                             />
                                         )}
+                                        {message.usage && (() => {
+                                            const u = message.usage;
+                                            const totalIn = u.inputTokens + u.cacheReadTokens + u.cacheCreationTokens;
+                                            const cacheRatio = totalIn > 0 ? Math.round((u.cacheReadTokens / totalIn) * 100) : 0;
+                                            const fmtTok = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
+                                            return (
+                                                <div className="mt-1 font-mono text-[10px] text-muted-foreground/70 select-text">
+                                                    ${u.costUsd.toFixed(4)} · {fmtTok(u.inputTokens)} in · {fmtTok(u.outputTokens)} out · cache {cacheRatio}% ({fmtTok(u.cacheReadTokens)}r/{fmtTok(u.cacheCreationTokens)}w){u.thinkingTokens > 0 ? ` · think ~${fmtTok(u.thinkingTokens)}` : ""}
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
                                 );
                             })}

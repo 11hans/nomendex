@@ -38,8 +38,14 @@ bun x tailwindcss -i ./src/input.css -o ./src/output.css
 popd >/dev/null
 echo "[sidecar] Tailwind CSS build completed"
 
+EXTRA_DEFINES=()
+if [ "${NOMENDEX_BUILD_VARIANT:-}" = "dev" ]; then
+  echo "[sidecar] dev variant: enabling cost tracking (NOMENDEX_DEV_COST_HUD=1)"
+  EXTRA_DEFINES+=(--define "process.env.NOMENDEX_DEV_COST_HUD='1'")
+fi
+
 echo "[sidecar] compiling server with direct HTML imports to single binary..."
-bun build "$BUN_SIDECAR_DIR/src/server.ts" --compile --target=bun --define "process.env.NODE_ENV='production'" --outfile mac-app/build/sidecar/sidecar
+bun build "$BUN_SIDECAR_DIR/src/server.ts" --compile --target=bun --define "process.env.NODE_ENV='production'" ${EXTRA_DEFINES[@]+"${EXTRA_DEFINES[@]}"} --outfile mac-app/build/sidecar/sidecar
 
 echo "[sidecar] done: mac-app/build/sidecar/sidecar"
 

@@ -8,9 +8,9 @@ echo "Building and installing Nomendex Dev..."
 echo "Removing existing dev app from /Applications..."
 rm -rf "/Applications/Nomendex Dev.app"
 
-# Build the new bundle
-echo "Building new bundle..."
-cd mac-app && make && cd ..
+# Build the new bundle (dev variant enables cost tracking in the sidecar)
+echo "Building new bundle (dev variant)..."
+cd mac-app && NOMENDEX_BUILD_VARIANT=dev make && cd ..
 
 # Copy and rename to Dev
 echo "Installing to /Applications/Nomendex Dev.app..."
