@@ -170,6 +170,7 @@ One level deep via \`parentTodoId\`. Subtasks are real todos (own status, priori
 
 - **Reschedule freshness.** Before any reschedule/update, \`POST /api/todos/get { todoId }\` immediately before \`update\`. Never trust stale list data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the user saw it — stop, show refreshed state, ask again.
 - **Timeblocks are calendar blocks, not tasks.** Never mark a generated timeblock \`done\`. If the user wants to convert one to a task, first remove timeblock semantics (\`source\` back to \`user\`, drop tag), then confirm.
+- **Events cannot be marked \`done\`.** \`kind: "event"\` items only support status \`todo\` or \`planned\` — the API rejects any other status. A past event whose \`scheduledEnd\` is before now is implicitly attended/occurred; no status update is needed or possible. **Never ask the user whether an event is done.** If the user says "that meeting happened", acknowledge it — do not attempt to update its status.
 - **Streak authority.** If the latest daily note states a streak verbatim (e.g. \`DEN 1\`), copy that wording. Never recalculate from checkboxes or arithmetic. No explicit streak → say \`streak neuveden\`.
 
 ## Scheduling Rules
@@ -391,10 +392,10 @@ Skills:  /goal-tracking   /project   /monthly  /weekly  /daily
 7. **If today is ${reviewDay}**, offer \`/weekly\` at the end of morning.
 
 ### Evening
-1. Double-check morning snapshot vs current API state — present completed vs not-completed in one batch.
-2. Confirm items to mark \`done\`, then update via API (which sets \`completedAt\`).
+1. Double-check morning snapshot vs current API state — present completed vs not-completed in one batch. **Exclude events (\`kind: "event"\`) entirely** — they cannot be marked \`done\` and need no action.
+2. Confirm items to mark \`done\`, then update via API (which sets \`completedAt\`). Tasks only — never events.
 3. Propose batch reschedule for unfinished single-day todos with \`scheduledStart\` today. Before each update, re-fetch via \`/api/todos/get\`. If freshness check fails, stop and ask.
-4. Completion rate = \`completed ∩ planned / |planned|\` using \`completedAt\` (never \`updatedAt\`). Exclude Multi-day Context, Ongoing multi-day \`in_progress\`, and timeblocks.
+4. Completion rate = \`completed ∩ planned / |planned|\` using \`completedAt\` (never \`updatedAt\`). Exclude Multi-day Context, Ongoing multi-day \`in_progress\`, timeblocks, and events.
 5. Run Timeblock Retrospective Linking for today's timeblocks lacking \`<!-- timeblock-worked-todos -->\`.
 6. Reflection prompts, identify tomorrow's priority, commit.
 
