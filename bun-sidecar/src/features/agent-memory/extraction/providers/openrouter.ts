@@ -2,6 +2,7 @@ import { createServiceLogger } from "@/lib/logger";
 import { buildExtractionSystemPrompt, buildExtractionUserContent, parseExtractionResponse } from "../prompt";
 import { MemoryCandidateSchema, ExtractionResponseSchema } from "../types";
 import type { MemoryExtractionProvider, MemoryExtractionInput, MemoryCandidate } from "../types";
+import { DEV_COST_HUD_ENABLED, buildExtractionEvent, logUsageEvent } from "@/dev/usage-logger";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -34,6 +35,7 @@ export class OpenRouterExtractionProvider implements MemoryExtractionProvider {
             max_tokens: DEFAULT_MAX_TOKENS,
         };
 
+        const startedAt = Date.now();
         const response = await fetch(OPENROUTER_API_URL, {
             method: "POST",
             headers: {
@@ -45,6 +47,7 @@ export class OpenRouterExtractionProvider implements MemoryExtractionProvider {
             body: JSON.stringify(body),
             signal: AbortSignal.timeout(this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS),
         });
+        const durationMs = Date.now() - startedAt;
 
         if (!response.ok) {
             const errorText = await response.text().catch(() => "(unreadable)");
@@ -68,6 +71,25 @@ export class OpenRouterExtractionProvider implements MemoryExtractionProvider {
             totalTokens: usage?.total_tokens,
             sessionId: input.sessionId,
         });
+
+        if (DEV_COST_HUD_ENABLED) {
+            // OpenRouter pricing isn't tracked in pricing.ts (varies per third-party model),
+            // so we log token counts and force cost to 0 rather than misreport.
+            void logUsageEvent(buildExtractionEvent({
+                sessionId: input.sessionId,
+                agentId: input.agentId,
+                model: this.config.model,
+                provider: "openrouter",
+                usage: {
+                    inputTokens: usage?.prompt_tokens ?? 0,
+                    outputTokens: usage?.completion_tokens ?? 0,
+                    cacheReadTokens: 0,
+                    cacheCreationTokens: 0,
+                },
+                durationMs,
+                costUsdOverride: 0,
+            }));
+        }
 
         return parseCandidates(content, input.sessionId);
     }

@@ -30,7 +30,7 @@ async function ensureLogPath(): Promise<void> {
     }
 }
 
-export type UsageEventKind = "assistant_turn" | "result";
+export type UsageEventKind = "assistant_turn" | "result" | "extraction";
 
 export type UsageEvent = {
     timestamp: string;
@@ -45,6 +45,10 @@ export type UsageEvent = {
     cacheCreationTokens: number;
     thinkingTokens: number;
     costUsdListPrice: number;
+    // For kind="result": sum of all assistant_turn costUsdListPrice values for the same
+    // query run. The SDK's total_cost_usd in result excludes some sub-agent / tool turns,
+    // so this rollup is the truthful figure for HUD + dashboards.
+    costUsdRollup?: number;
     durationMs?: number;
     numTurns?: number;
     toolsUsed: string[];
@@ -175,6 +179,39 @@ export function buildAssistantTurnEvent(args: {
     };
 }
 
+// Post-session memory extraction is a one-shot LLM call that goes through the AI SDK
+// (or OpenRouter REST), bypassing the Claude Agent SDK's normal stream. Without this
+// helper, extraction tokens never reach usage.jsonl and the Cost HUD undercounts spend.
+export function buildExtractionEvent(args: {
+    sessionId: string;
+    agentId: string;
+    model: string;
+    provider: "claude" | "openrouter";
+    usage: TokenBreakdown & { thinkingTokens?: number };
+    durationMs?: number;
+    // Optional override — used when the provider price isn't in pricing.ts
+    // (e.g. OpenRouter model that we don't track), so cost ends up as 0 rather than wrong.
+    costUsdOverride?: number;
+}): Omit<UsageEvent, "gitBranch" | "gitSha"> {
+    const cost = args.costUsdOverride ?? computeCostUsd(args.model, args.usage);
+    return {
+        timestamp: new Date().toISOString(),
+        sessionId: args.sessionId,
+        agentId: args.agentId,
+        model: args.model,
+        turnIndex: 0,
+        kind: "extraction",
+        inputTokens: args.usage.inputTokens,
+        outputTokens: args.usage.outputTokens,
+        cacheReadTokens: args.usage.cacheReadTokens,
+        cacheCreationTokens: args.usage.cacheCreationTokens,
+        thinkingTokens: args.usage.thinkingTokens ?? 0,
+        costUsdListPrice: cost,
+        durationMs: args.durationMs,
+        toolsUsed: [args.provider],
+    };
+}
+
 export function buildResultEvent(args: {
     sessionId: string;
     agentId: string;
@@ -182,6 +219,7 @@ export function buildResultEvent(args: {
     turnIndex: number;
     usage: TokenBreakdown;
     costUsd: number;
+    costUsdRollup?: number;
     durationMs?: number;
     numTurns?: number;
 }): Omit<UsageEvent, "gitBranch" | "gitSha"> {
@@ -198,6 +236,7 @@ export function buildResultEvent(args: {
         cacheCreationTokens: args.usage.cacheCreationTokens,
         thinkingTokens: 0,
         costUsdListPrice: args.costUsd,
+        costUsdRollup: args.costUsdRollup,
         durationMs: args.durationMs,
         numTurns: args.numTurns,
         toolsUsed: [],

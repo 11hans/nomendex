@@ -691,20 +691,6 @@ export const chatRoutes = {
                     const notesPath = getNotesPath();
                     const vaultConfig = await readVaultConfig(notesPath);
                     const serverPort = parseInt(process.env.PORT || "1234", 10);
-                    let bpagentPrompt = `${buildAgentContext(notesPath)}\n\n${buildBpagentSystemPrompt(notesPath, vaultConfig, serverPort)}`;
-
-                    // Pre-compute daily-notes context so /daily, /weekly, /review skills
-                    // don't need to probe the filesystem for date / pattern / streak.
-                    try {
-                        const dailyBlock = await buildDailyContextBlock(notesPath, vaultConfig);
-                        if (dailyBlock) {
-                            bpagentPrompt = `${bpagentPrompt}\n\n${dailyBlock}`;
-                        }
-                    } catch (err) {
-                        chatLogger.warn("Failed to build daily context block", {
-                            error: err instanceof Error ? err.message : String(err),
-                        });
-                    }
 
                     // Load extraction config — used for MCP read-only mode and prompt note
                     const extractionConfig = await loadExtractionConfig().catch(() => ({
@@ -713,7 +699,38 @@ export const chatRoutes = {
                     }));
                     const extractionEnabled = extractionConfig.provider !== "disabled";
 
-                    // Inject memory recall into system prompt (non-fatal on error)
+                    // Order from most → least cache-stable so the Anthropic prompt cache
+                    // can hit on a long static prefix across sessions and days.
+                    // Putting the date (agentContext) first invalidates the entire prefix daily.
+                    const promptParts: string[] = [];
+
+                    // 1. Static template (~15k tokens) — same across all sessions/days for a workspace.
+                    promptParts.push(buildBpagentSystemPrompt(notesPath, vaultConfig, serverPort));
+
+                    // 2. Workspace-stable extraction-mode note — only flips when the user toggles the setting.
+                    if (extractionEnabled) {
+                        promptParts.push("## Memory\n\nYour conversations are automatically analyzed for memories after each session ends. You do NOT need to call memory_save manually. Use memory_search and memory_list_recent to recall what you know.");
+                    } else {
+                        promptParts.push("## Memory\n\nUse memory_save proactively to preserve important context, preferences, decisions, and goals that should survive across sessions.");
+                    }
+
+                    // 3. Semi-dynamic daily-notes context (changes once per day at most).
+                    try {
+                        const dailyBlock = await buildDailyContextBlock(notesPath, vaultConfig);
+                        if (dailyBlock) {
+                            promptParts.push(dailyBlock);
+                        }
+                    } catch (err) {
+                        chatLogger.warn("Failed to build daily context block", {
+                            error: err instanceof Error ? err.message : String(err),
+                        });
+                    }
+
+                    // 4. Dynamic agent context (today's date) — moved to the tail so the
+                    //    cacheable prefix above survives across days.
+                    promptParts.push(buildAgentContext(notesPath));
+
+                    // 5. Per-query memory recall — most volatile, goes last.
                     try {
                         const memoryBlock = await buildMemoryPromptBlock({
                             agentId: agentConfig.id,
@@ -721,7 +738,7 @@ export const chatRoutes = {
                             maxItems: 5,
                         });
                         if (memoryBlock) {
-                            bpagentPrompt = `${bpagentPrompt}\n\n${memoryBlock}`;
+                            promptParts.push(memoryBlock);
                             chatLogger.info("BPagent session: injected memory prompt block");
                         }
                     } catch (memError) {
@@ -730,14 +747,7 @@ export const chatRoutes = {
                         });
                     }
 
-                    // Inform agent about memory extraction mode
-                    if (extractionEnabled) {
-                        bpagentPrompt = `${bpagentPrompt}\n\n## Memory\n\nYour conversations are automatically analyzed for memories after each session ends. You do NOT need to call memory_save manually. Use memory_search and memory_list_recent to recall what you know.`;
-                    } else {
-                        bpagentPrompt = `${bpagentPrompt}\n\n## Memory\n\nUse memory_save proactively to preserve important context, preferences, decisions, and goals that should survive across sessions.`;
-                    }
-
-                    sdkOptions.systemPrompt = bpagentPrompt;
+                    sdkOptions.systemPrompt = promptParts.join("\n\n");
 
                     // Inject agent memory MCP server — read-only when extraction is handling writes
                     mcpServers["agent-memory"] = buildAgentMemoryMcpServer({
@@ -895,6 +905,10 @@ export const chatRoutes = {
                     const startTime = Date.now();
                     let currentTrackingId = queryTrackingId;
                     let resultReceived = false;
+                    // Sum of every assistant_turn cost in this query — emitted as
+                    // costUsdRollup on the result event because SDK's total_cost_usd
+                    // omits sub-agent / tool turns.
+                    let assistantTurnCostSum = 0;
 
                     console.log("[API] Starting SDK iterator consumption (outside stream)...");
 
@@ -984,6 +998,7 @@ export const chatRoutes = {
                                             toolsUsed: extracted.toolsUsed,
                                             messagePreview: typeof message === "string" ? message.slice(0, 80) : undefined,
                                         });
+                                        assistantTurnCostSum += ev.costUsdListPrice;
                                         void logUsageEvent(ev);
                                         pushToQueue({
                                             type: "usage",
@@ -1004,6 +1019,7 @@ export const chatRoutes = {
                                             turnIndex: messageCount,
                                             usage: extracted.usage,
                                             costUsd: extracted.costUsd,
+                                            costUsdRollup: assistantTurnCostSum,
                                             durationMs: extracted.durationMs,
                                             numTurns: extracted.numTurns,
                                         });

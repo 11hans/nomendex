@@ -1097,6 +1097,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                         } else if (data.type === "usage") {
                             const u = data.usage as {
                                 costUsdListPrice: number;
+                                costUsdRollup?: number;
                                 inputTokens: number;
                                 outputTokens: number;
                                 cacheReadTokens: number;
@@ -1120,12 +1121,17 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                         toolsUsed: [],
                                     };
                                     if (u.kind === "result") {
-                                        // Final total from SDK — authoritative; keep accumulated tool list.
+                                        // SDK's total_cost_usd in result skips sub-agent / tool turns.
+                                        // costUsdRollup (when present) sums every assistant_turn — use it
+                                        // if it's higher than the SDK figure. Falls back to prevUsage
+                                        // accumulated cost if neither exceeds it.
+                                        const rollupCost = u.costUsdRollup ?? 0;
+                                        const finalCost = Math.max(u.costUsdListPrice, rollupCost, prevUsage.costUsd);
                                         return {
                                             ...m,
                                             usage: {
                                                 ...prevUsage,
-                                                costUsd: u.costUsdListPrice,
+                                                costUsd: finalCost,
                                                 inputTokens: u.inputTokens,
                                                 outputTokens: u.outputTokens,
                                                 cacheReadTokens: u.cacheReadTokens,
