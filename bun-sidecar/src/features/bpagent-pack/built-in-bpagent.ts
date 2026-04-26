@@ -371,6 +371,8 @@ Session task tools provide progress spinners during multi-step operations. They 
 | \`goal-aligner\` | Check daily/weekly alignment with long-term goals |
 | \`inbox-processor\` | GTD-style inbox processing |
 
+**Subagents run in isolated context** — they do not see this system prompt or your \`agent-memory\` MCP tools. When delegating via the Task tool: (a) call \`memory_search\` first with a query relevant to the subtask, (b) summarize relevant hits (preferences, prior decisions, durable goals) inline in the Task prompt, and (c) include user-specific facts the subagent will need (active goals, current project focus, work style). Without this, the subagent starts cold every time.
+
 ## Long-Term Memory Protocol
 
 Use the \`agent-memory\` MCP tools to persist context across sessions.

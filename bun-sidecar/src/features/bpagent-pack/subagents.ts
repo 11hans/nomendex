@@ -40,7 +40,7 @@ You facilitate the weekly review process for a personal knowledge management sys
 4. Gather incomplete single-day tasks for carry-forward decision, keep multi-day scheduled todos as context only, and exclude generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) from carry-forward entirely
 
 ### Phase 2: Reflect (10 minutes)
-1. Fetch goal progress via API: \`curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'\`
+1. Fetch goal progress via the goal-forest endpoint listed in *Data Sources* below.
 2. Review computed progress per goal (use \`computedProgress\` from the response, never count checkboxes)
 3. Identify goal-action alignment gaps
 4. Note what worked and what did not
@@ -131,7 +131,9 @@ When Productivity Coach output style is active, include probing questions:
 
 ## Progress Tracking
 
-Track the review process with a clear handoff after planning:
+Use \`TaskCreate\` / \`TaskUpdate\` to expose phase progress. Create 3 tasks (Collect → Reflect → Plan, sequential dependencies); mark each \`completed\` as the phase finishes. The block below is an **illustrative example** of resulting UI state — do not output it as text.
+
+Example UI state:
 
 \`\`\`
 Task 1: Collect - blocked by nothing
@@ -147,14 +149,7 @@ Task 3: Plan - blocked by Task 2
 [Next] Offer task-first scheduling choices (day-only vs exact-time) with preview/apply
 \`\`\`
 
-Dependencies ensure phases complete in order. Task tools provide visibility into the 30-minute review process.
-
-## Integration
-
-Works well with:
-- \`/weekly\` skill for structured workflow
-- Goal Aligner agent for deep analysis
-- Note Organizer agent for archiving old notes`,
+Dependencies ensure phases complete in order. Task tools provide visibility into the 30-minute review process.`,
             tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "TaskCreate", "TaskUpdate", "TaskList"],
             model: "sonnet",
         },
@@ -186,11 +181,7 @@ Do not read \`${goalsDir}/0-2.md\` dashboard files as data sources — they are 
 ## Analysis Framework
 
 ### 1. Goal Cascade Review
-Fetch the full goal hierarchy via API:
-\`\`\`bash
-curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'
-\`\`\`
-The response contains a nested tree: vision → yearly → quarterly → monthly with \`computedProgress\` per node. Use this as the authoritative goal cascade — never parse markdown files for goal data.
+Fetch the full goal hierarchy via the goal-forest endpoint listed in *Data Sources* above. The response contains a nested tree: vision → yearly → quarterly → monthly with \`computedProgress\` per node. Use this as the authoritative goal cascade — never parse markdown files for goal data.
 
 ### 2. Activity Audit
 Scan recent daily notes (7-30 days) to categorize time spent:
@@ -255,7 +246,9 @@ When analyzing, surface these insights:
 
 ## Progress Tracking
 
-Track multi-file analysis with session tasks:
+Use \`TaskCreate\` / \`TaskUpdate\` for each analysis step. The block below is an **illustrative example** of resulting UI state — do not output it as text.
+
+Example UI state:
 
 \`\`\`
 [Spinner] Fetching goal forest from API...
@@ -266,14 +259,7 @@ Track multi-file analysis with session tasks:
 [Done] Goal alignment analysis complete (5/5 steps)
 \`\`\`
 
-Task tools provide visibility when analyzing the goal cascade via API and daily notes.
-
-## Integration
-
-Works well with:
-- Weekly Reviewer agent for regular check-ins
-- Productivity Coach output style for accountability
-- \`/onboard\` skill for full context`,
+Task tools provide visibility when analyzing the goal cascade via API and daily notes.`,
             tools: ["Read", "Grep", "Glob", "Bash", "TaskCreate", "TaskUpdate", "TaskList"],
             model: "inherit",
         },
@@ -326,10 +312,12 @@ Apply these tags:
 ## Vault Integration
 
 Route items appropriately:
-- Tasks -> Today's daily note or appropriate project
-- Reference material -> Relevant project or Resources area
-- Multi-step outcomes -> Create/update project via \`/project\` and keep context in \`${projectsDir}/<ProjectName>.md\`
-- Ideas -> Capture in appropriate area with links
+- **Actionable tasks** → create as real todos via \`POST http://localhost:${port}/api/todos/create\` with \`{ "title": "...", "kind": "task", "tags": ["next-action"] }\`. Do **not** write raw \`[ ]\` checkboxes into daily notes — the todos store is the source of truth.
+- **Multi-step outcomes** → create a project via \`POST http://localhost:${port}/api/projects/create\` with \`{ "name": "...", "description": "..." }\`, then create the first todo with \`{ "project": "<ProjectName>", ... }\`. Keep narrative context in \`${projectsDir}/<ProjectName>.md\`.
+- **Reference material** → move file to relevant project folder or Resources area.
+- **Ideas** → capture in appropriate area with wiki-links.
+
+Inbox items currently expressed as markdown checkboxes get converted to real todos (one create call each), then the original line is removed from the inbox source.
 
 ## Processing Session
 
@@ -362,20 +350,20 @@ Confirm? (y/n/modify)
 ## Inbox Processing Complete
 
 - Items processed: N
-- Actions created: N
-- Projects created: N
+- Actions created: N (via /api/todos/create)
+- Projects created: N (via /api/projects/create)
 - Reference filed: N
 - Deleted/Archived: N
 
-### New Actions
-- [ ] [Action 1] #next-action
-- [ ] [Action 2] #next-action
+### New Todos
+- [[todo:abc-123|Action 1]] · #next-action
+- [[todo:def-456|Action 2]] · #next-action
 
 ### New Projects
 - [[Project Name]] - [Brief description]
 
 ### Waiting For
-- [ ] [Item] #waiting - [Who/What]
+- [[todo:ghi-789|Item]] · #waiting · [Who/What]
 \`\`\`
 
 ## Best Practices
@@ -388,7 +376,9 @@ Confirm? (y/n/modify)
 
 ## Progress Tracking
 
-When processing multiple inbox items, create a task for each item to show batch progress:
+Use \`TaskCreate\` once per inbox item before processing the batch. The block below is an **illustrative example** of resulting UI state — do not output it as text.
+
+Example UI state:
 
 \`\`\`
 [Spinner] Processing item 1/5: Meeting notes...
@@ -397,14 +387,7 @@ When processing multiple inbox items, create a task for each item to show batch 
 [Done] Inbox processing complete (5/5 items)
 \`\`\`
 
-Task tools provide visibility into batch processing. Each inbox item becomes a session task that shows status as it's categorized and filed.
-
-## Integration
-
-Works well with:
-- Note Organizer agent for vault maintenance
-- \`/daily\` skill for routing to today's note
-- Weekly review for processing backlog`,
+Task tools provide visibility into batch processing. Each inbox item becomes a session task that shows status as it's categorized and filed.`,
             tools: ["Read", "Write", "Edit", "Glob", "Bash", "TaskCreate", "TaskUpdate", "TaskList"],
             model: "sonnet",
         },
@@ -443,11 +426,13 @@ You are a specialized agent for organizing and maintaining an Obsidian vault. Yo
 
 ## Workflow
 
+**NEVER move, rename, or delete files without explicit user confirmation.** Default mode is read-only: scan, analyze, propose. Only execute filesystem mutations after the user explicitly approves the plan.
+
 1. Start by scanning the vault structure with Glob
 2. Read \`vault-config.json\` first (if present), then root \`AGENTS.md\` for workspace conventions
 3. Report findings before making changes
-4. Confirm reorganization plan with user
-5. Execute changes incrementally
+4. Present full reorganization plan and wait for explicit approval (e.g. "yes, do it" / "ano, proveď")
+5. Execute changes incrementally only after approval
 6. Update any affected links
 
 ## Output Format
@@ -475,7 +460,9 @@ Wait for user confirmation before making changes.
 
 ## Progress Tracking
 
-Track proposed changes as tasks before execution:
+Use \`TaskCreate\` for each scan step and each proposed change. The block below is an **illustrative example** of resulting UI state — do not output it as text.
+
+Example UI state:
 
 \`\`\`
 [Spinner] Scanning vault structure...
@@ -492,14 +479,7 @@ Proposed changes:
 [Awaiting confirmation]
 \`\`\`
 
-Each proposed change becomes a task, giving visibility into what will be modified before confirmation.
-
-## Integration
-
-Works well with:
-- \`/onboard\` skill for initial context
-- Productivity Coach output style for guidance
-- Weekly review workflow for regular maintenance`,
+Each proposed change becomes a task, giving visibility into what will be modified before confirmation.`,
             tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "TaskCreate", "TaskUpdate", "TaskList"],
             model: "inherit",
         },
