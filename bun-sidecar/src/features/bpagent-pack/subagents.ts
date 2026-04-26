@@ -156,7 +156,7 @@ Works well with:
 - Goal Aligner agent for deep analysis
 - Note Organizer agent for archiving old notes`,
             tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "TaskCreate", "TaskUpdate", "TaskList"],
-            model: "inherit",
+            model: "sonnet",
         },
 
         "goal-aligner": {
@@ -406,7 +406,7 @@ Works well with:
 - \`/daily\` skill for routing to today's note
 - Weekly review for processing backlog`,
             tools: ["Read", "Write", "Edit", "Glob", "Bash", "TaskCreate", "TaskUpdate", "TaskList"],
-            model: "inherit",
+            model: "sonnet",
         },
 
         "note-organizer": {
