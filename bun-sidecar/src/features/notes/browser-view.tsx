@@ -11,6 +11,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Search, FileText, FilePlus, FolderPlus } from "lucide-react";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
+import { subscribe } from "@/lib/events";
 import { Note, NoteFolder, notesPluginSerial } from "./index";
 import { NotesView } from "./note-view";
 import { NotesFileTree } from "./NotesFileTree";
@@ -115,6 +116,14 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
         fetchNotes();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [notesAPI, setLoading, setError, loadFolders, showHiddenFiles]);
+
+    useEffect(() => {
+        return subscribe("notes:fileChanged", () => {
+            notesAPI.getNotes({ showHiddenFiles }).then(result => {
+                setNotes(result);
+            });
+        });
+    }, [notesAPI, showHiddenFiles]);
 
     const handleCreateNote = async () => {
         const finalFileName = normalizeNoteFileName(newNoteName);
