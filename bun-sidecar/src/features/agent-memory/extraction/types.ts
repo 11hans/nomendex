@@ -25,6 +25,12 @@ export const MemoryCandidateSchema = z.object({
     tags: z.array(z.string().max(100)).max(20).default([]),
     importance: z.number().min(0).max(1).default(0.5),
     confidence: z.number().min(0).max(1).default(0.8),
+    /**
+     * Optional description of an earlier memory this candidate corrects.
+     * The orchestrator resolves this to a concrete memory id via search and
+     * passes it as `supersedes` to saveAgentMemory.
+     */
+    corrects: z.string().max(500).optional(),
 });
 export type MemoryCandidate = z.infer<typeof MemoryCandidateSchema>;
 

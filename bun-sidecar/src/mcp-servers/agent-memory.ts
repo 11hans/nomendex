@@ -67,6 +67,7 @@ Duplicate detection is automatic - saving the same fact again will merge rather 
                     confidence: z.number().min(0).max(1).optional().describe("Confidence score 0-1 (default: 0.8)"),
                     ttlDays: z.number().optional().describe("Days until expiry (default depends on kind)"),
                     sourceRef: z.string().optional().describe("Reference to source (note path, todo id, etc.)"),
+                    supersedes: z.array(z.string()).optional().describe("IDs of older memories this one replaces. Listed memories will be archived (hidden but recoverable). Use when correcting an outdated or wrong memory."),
                 },
                 async (args) => {
                     const result = await saveAgentMemory({
@@ -81,6 +82,7 @@ Duplicate detection is automatic - saving the same fact again will merge rather 
                         ttlDays: args.ttlDays,
                         sourceType: "chat",
                         sourceRef: args.sourceRef,
+                        supersedes: args.supersedes,
                     });
 
                     return {
@@ -91,6 +93,7 @@ Duplicate detection is automatic - saving the same fact again will merge rather 
                                 deduped: result.deduped,
                                 id: result.record.id,
                                 fingerprint: result.record.fingerprint,
+                                supersededIds: result.supersededIds,
                             }),
                         }],
                     };

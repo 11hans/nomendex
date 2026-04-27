@@ -57,6 +57,9 @@ function normalizeRecord(raw: Record<string, unknown>): AgentMemoryRecord | null
             accessCount: typeof raw.accessCount === "number" && Number.isFinite(raw.accessCount)
                 ? Math.max(0, Math.floor(raw.accessCount))
                 : 0,
+            supersedes: Array.isArray(raw.supersedes)
+                ? raw.supersedes.filter((s): s is string => typeof s === "string")
+                : [],
         };
         return AgentMemoryRecordSchema.parse(patched);
     } catch (error) {
@@ -516,7 +519,8 @@ export async function saveAgentMemory(input: {
     sourceType?: "chat" | "note" | "todo" | "manual" | "system";
     sourceRef?: string;
     ttlDays?: number;
-}): Promise<{ record: AgentMemoryRecord; deduped: boolean }> {
+    supersedes?: string[];
+}): Promise<{ record: AgentMemoryRecord; deduped: boolean; supersededIds: string[] }> {
     const {
         agentId,
         scope,
@@ -529,6 +533,7 @@ export async function saveAgentMemory(input: {
         sourceType,
         sourceRef,
         ttlDays,
+        supersedes = [],
     } = input;
 
     const fingerprint = computeFingerprint(title, text, kind, scope);
@@ -540,22 +545,54 @@ export async function saveAgentMemory(input: {
         (r) => r.fingerprint === fingerprint && r.agentId === agentId && r.scope === scope
     );
 
+    // Resolve which supersedes targets we are allowed to archive: must exist,
+    // belong to this agent (or be workspace-scoped), and not be self-referential.
+    const supersededIds: string[] = [];
+    if (supersedes.length > 0) {
+        const byId = new Map(all.map((r) => [r.id, r]));
+        for (const targetId of supersedes) {
+            const target = byId.get(targetId);
+            if (!target) continue;
+            if (target.scope === "agent" && target.agentId !== agentId) continue;
+            supersededIds.push(targetId);
+        }
+        for (const targetId of supersededIds) {
+            try {
+                await getDb().update(targetId, {
+                    archived: true,
+                    updatedAt: now,
+                } as Partial<AgentMemoryRecord>);
+            } catch (err) {
+                logger.warn("Failed to archive superseded memory", {
+                    targetId,
+                    error: err instanceof Error ? err.message : String(err),
+                });
+            }
+        }
+    }
+
     if (existing) {
-        // Merge
+        // Merge — append any new supersedes onto the existing record.
         const mergedTags = [...new Set([...existing.tags, ...tags])];
+        const mergedSupersedes = [...new Set([...(existing.supersedes ?? []), ...supersededIds])];
         const updated = await getDb().update(existing.id, {
             updatedAt: now,
             lastAccessedAt: now,
             importance: Math.max(existing.importance, importance),
             confidence: Math.max(existing.confidence, confidence),
             tags: mergedTags,
+            supersedes: mergedSupersedes,
             // Update text/title if they changed meaningfully
             title,
             text,
         } as Partial<AgentMemoryRecord>);
 
-        logger.info("Deduped memory record", { id: existing.id, fingerprint });
-        return { record: updated || existing, deduped: true };
+        logger.info("Deduped memory record", {
+            id: existing.id,
+            fingerprint,
+            supersededCount: supersededIds.length,
+        });
+        return { record: updated || existing, deduped: true, supersededIds };
     }
 
     // Compute expiry
@@ -584,11 +621,18 @@ export async function saveAgentMemory(input: {
         lastAccessedAt: now,
         expiresAt,
         accessCount: 0,
+        supersedes: supersededIds,
     };
 
     await getDb().create(record);
-    logger.info("Saved new memory record", { id, kind, scope, fingerprint });
-    return { record, deduped: false };
+    logger.info("Saved new memory record", {
+        id,
+        kind,
+        scope,
+        fingerprint,
+        supersededCount: supersededIds.length,
+    });
+    return { record, deduped: false, supersededIds };
 }
 
 export async function deleteAgentMemory(input: {
@@ -744,6 +788,7 @@ export async function syncAgentMemoryFromVault(input: {
             updatedAt: now,
             lastAccessedAt: now,
             accessCount: 0,
+            supersedes: [],
         };
         await getDb().create(record);
         created++;
@@ -967,6 +1012,7 @@ export async function saveMemoryFromMarkdown(input: {
             lastAccessedAt: now,
             expiresAt: computedExpiresAt,
             accessCount: 0,
+            supersedes: [],
         };
 
         await getDb().create(record);

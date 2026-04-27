@@ -3,7 +3,7 @@ import { createServiceLogger } from "@/lib/logger";
 import { secrets } from "@/lib/secrets";
 import { getNomendexPath, hasActiveWorkspace } from "@/storage/root-path";
 import { WorkspaceStateSchema } from "@/types/Workspace";
-import { saveAgentMemory } from "../fx";
+import { saveAgentMemory, searchAgentMemory } from "../fx";
 import { OpenRouterExtractionProvider } from "./providers/openrouter";
 import { ClaudeExtractionProvider } from "./providers/claude";
 import type { MemoryExtractionInput, MemoryExtractionConfig, MemoryExtractionProvider } from "./types";
@@ -167,6 +167,27 @@ export async function triggerPostSessionExtraction(
 
     for (const candidate of candidates) {
         try {
+            // Resolve `corrects` to concrete memory ids by searching the user's memory.
+            // Only the top match is considered, and only if it shares the candidate's
+            // scope (agent vs workspace) — we never cross those boundaries.
+            let supersedes: string[] | undefined;
+            if (candidate.corrects && candidate.corrects.trim().length > 0) {
+                const hits = await searchAgentMemory({
+                    agentId: input.agentId,
+                    query: candidate.corrects,
+                    scopes: [candidate.scope],
+                    limit: 1,
+                });
+                if (hits.length > 0) {
+                    supersedes = [hits[0].id];
+                } else {
+                    logger.debug("Extraction `corrects` produced no match", {
+                        corrects: candidate.corrects,
+                        sessionId: input.sessionId,
+                    });
+                }
+            }
+
             const result = await saveAgentMemory({
                 agentId: input.agentId,
                 scope: candidate.scope,
@@ -178,6 +199,7 @@ export async function triggerPostSessionExtraction(
                 confidence: candidate.confidence,
                 sourceType: "chat",
                 sourceRef: input.sessionId,
+                supersedes,
             });
 
             if (result.deduped) {

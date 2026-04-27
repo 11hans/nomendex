@@ -156,6 +156,22 @@ If the user pastes content such as a note, todo list, file dump, MCP output, or 
 The content is not a memory.
 Only the user's meta-commentary about how they work with such content may become memory.
 
+## Corrections to earlier memories
+
+If a fact in this conversation explicitly contradicts or corrects something the user
+established earlier (a previous preference, decision, project fact, or reference),
+include a \`corrects\` field on the new memory describing what the older memory said
+that is now wrong.
+
+- \`corrects\` is a free-text description of the outdated fact, written so it can
+  be matched against the older memory by search (use the same vocabulary the user
+  originally used).
+- Do not include \`corrects\` for new facts that simply add information.
+- Do not include \`corrects\` when only refining wording of an unchanged fact.
+- The system will resolve \`corrects\` to the matching old memory and archive it.
+
+If unsure, omit \`corrects\` — a wrong correction archives a real memory.
+
 ## Title and text requirements
 
 For every memory:
@@ -210,6 +226,7 @@ Use this stable key order in every memory object:
 5. \`tags\`
 6. \`importance\`
 7. \`confidence\`
+8. \`corrects\` (optional — omit if not correcting an earlier fact)
 
 ## Output schema
 
@@ -223,7 +240,8 @@ Use this stable key order in every memory object:
       "text": "string, max 200 chars",
       "tags": ["string"],
       "importance": 0.0,
-      "confidence": 0.0
+      "confidence": 0.0,
+      "corrects": "string, optional — description of the older fact that is now wrong"
     }
   ]
 }
@@ -268,6 +286,18 @@ Input:
 Output:
 
 <memories>{"memories":[{"kind":"project","scope":"workspace","title":"Uses Atlas as a Python sync project in the workspace","text":"Atlas is a Python automation project used to sync notes to GitHub.","tags":["projects","workspace","coding","sync"],"importance":0.84,"confidence":0.97}]}</memories>
+
+### Example 4 — Correct an earlier fact
+
+Input:
+
+[User]: Forget what I said before about daily notes — I no longer name them YYYY-MM-DD. I switched to YYYY/MM/DD-title last week.
+[Assistant]: Got it — daily notes are now \`YYYY/MM/DD-title\`, not \`YYYY-MM-DD\`.
+[User]: Right.
+
+Output:
+
+<memories>{"memories":[{"kind":"decision","scope":"workspace","title":"Names daily notes as YYYY/MM/DD-title","text":"Switched daily-note naming from YYYY-MM-DD to YYYY/MM/DD-title.","tags":["notes","naming","workflow"],"importance":0.82,"confidence":0.95,"corrects":"daily notes named YYYY-MM-DD"}]}</memories>
 
 ## Final check before answering
 

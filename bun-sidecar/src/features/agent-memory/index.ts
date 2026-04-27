@@ -34,6 +34,7 @@ export const AgentMemoryRecordSchema = z.object({
     expiresAt: z.string().nullish(),
     archived: z.boolean().optional(),
     accessCount: z.number().int().min(0).default(0),
+    supersedes: z.array(z.string()).default([]),
 });
 export type AgentMemoryRecord = z.infer<typeof AgentMemoryRecordSchema>;
 
