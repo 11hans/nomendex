@@ -54,6 +54,9 @@ function normalizeRecord(raw: Record<string, unknown>): AgentMemoryRecord | null
             confidence: typeof raw.confidence === "number" ? Math.max(0, Math.min(1, raw.confidence)) : 0.8,
             scope: raw.scope || "agent",
             kind: raw.kind || "context",
+            accessCount: typeof raw.accessCount === "number" && Number.isFinite(raw.accessCount)
+                ? Math.max(0, Math.floor(raw.accessCount))
+                : 0,
         };
         return AgentMemoryRecordSchema.parse(patched);
     } catch (error) {
@@ -372,52 +375,77 @@ export async function initializeAgentMemoryService(): Promise<void> {
     }
 }
 
+// --- Adaptive decay scoring (Boop-style) ---
+// score factors in importance, recency of access, and reinforcement from access count.
+// Records with importance >= PERMANENT_IMPORTANCE_THRESHOLD are exempt from decay-based cleanup.
+const DAY_MS = 24 * 60 * 60 * 1000;
+const BASE_HALF_LIFE_DAYS = 30;
+const DECAY_BETA = 1;
+const PERMANENT_IMPORTANCE_THRESHOLD = 0.7;
+const ARCHIVE_SCORE_THRESHOLD = 0.15;
+const PRUNE_SCORE_THRESHOLD = 0.05;
+
 /**
- * Returns the importance-based TTL in days for records that have no explicit expiresAt.
- * - importance >= 0.7 → permanent (no cleanup)
- * - importance 0.4–0.69 → 180 days since last update
- * - importance < 0.4 → 60 days since last update
+ * Compute a memory's current relevance score in [0, 1].
+ * - importance × exp(-lambda × daysSinceAccess), with lambda derived from an importance-adjusted half-life.
+ * - Reinforcement from accessCount via log1p so each additional access matters less.
  */
-function importanceBasedTtlDays(importance: number): number | undefined {
-    if (importance >= 0.7) return undefined; // permanent
-    if (importance >= 0.4) return 180;
-    return 60;
+export function computeMemoryScore(record: AgentMemoryRecord, nowMs: number = Date.now()): number {
+    const lastAccessedMs = new Date(record.lastAccessedAt).getTime();
+    const daysSinceAccess = Math.max(0, (nowMs - lastAccessedMs) / DAY_MS);
+    const adaptiveHalfLife = BASE_HALF_LIFE_DAYS * (1 + record.importance);
+    const lambda = (Math.LN2 / adaptiveHalfLife) * DECAY_BETA;
+    const decayed = record.importance * Math.exp(-lambda * daysSinceAccess);
+    const reinforcement = 1 + Math.log1p(record.accessCount) * 0.1;
+    return Math.max(0, Math.min(1, decayed * reinforcement));
 }
 
+/**
+ * Cleanup pass: prune very low-score records, archive low-score ones.
+ * Permanent tier (importance >= 0.7) is never pruned or archived by decay,
+ * but still respects an explicit expiresAt.
+ */
 async function cleanupExpired(): Promise<void> {
     try {
         const all = await loadAllNormalized();
         const now = Date.now();
         const nowIso = new Date(now).toISOString();
-        let cleaned = 0;
+        let pruned = 0;
+        let archivedCount = 0;
 
         for (const record of all) {
-            // 1. Explicit TTL expiry
+            // Explicit TTL always wins (hard delete).
             if (record.expiresAt && record.expiresAt < nowIso) {
                 await getDb().delete(record.id);
-                cleaned++;
+                pruned++;
                 continue;
             }
 
-            // 2. Importance-based cleanup for records without explicit expiry
-            if (!record.expiresAt) {
-                const ttlDays = importanceBasedTtlDays(record.importance);
-                if (ttlDays !== undefined) {
-                    const cutoffMs = now - ttlDays * 24 * 60 * 60 * 1000;
-                    const updatedMs = new Date(record.updatedAt).getTime();
-                    if (updatedMs < cutoffMs) {
-                        await getDb().delete(record.id);
-                        cleaned++;
-                    }
-                }
+            // Permanent tier — exempt from decay-based lifecycle.
+            if (record.importance >= PERMANENT_IMPORTANCE_THRESHOLD) continue;
+
+            const score = computeMemoryScore(record, now);
+
+            if (score < PRUNE_SCORE_THRESHOLD) {
+                await getDb().delete(record.id);
+                pruned++;
+                continue;
+            }
+
+            if (score < ARCHIVE_SCORE_THRESHOLD && !record.archived) {
+                await getDb().update(record.id, {
+                    archived: true,
+                    updatedAt: nowIso,
+                } as Partial<AgentMemoryRecord>);
+                archivedCount++;
             }
         }
 
-        if (cleaned > 0) {
-            logger.info(`Cleaned up ${cleaned} expired memory records`);
+        if (pruned > 0 || archivedCount > 0) {
+            logger.info(`Memory cleanup: pruned ${pruned}, archived ${archivedCount}`);
         }
     } catch (error) {
-        logger.warn("Failed to clean up expired memories", {
+        logger.warn("Failed to clean up memories", {
             error: error instanceof Error ? error.message : String(error),
         });
     }
@@ -460,12 +488,17 @@ export async function searchAgentMemory(input: {
     const scored = visible.map((r) => ({ record: r, score: scoreRecord(r, queryTokens) }));
     scored.sort((a, b) => b.score - a.score);
 
-    // Update lastAccessedAt for returned results
+    // Update lastAccessedAt + accessCount for returned results
     const results = scored.slice(0, limit).map((s) => s.record);
     const now = new Date().toISOString();
     for (const r of results) {
-        // Fire-and-forget update
-        getDb().update(r.id, { lastAccessedAt: now } as Partial<AgentMemoryRecord>).catch(() => {});
+        const nextCount = (r.accessCount ?? 0) + 1;
+        // Fire-and-forget update; mutate in-memory copy so callers see the bump too.
+        r.lastAccessedAt = now;
+        r.accessCount = nextCount;
+        getDb()
+            .update(r.id, { lastAccessedAt: now, accessCount: nextCount } as Partial<AgentMemoryRecord>)
+            .catch(() => {});
     }
 
     return results;
@@ -550,6 +583,7 @@ export async function saveAgentMemory(input: {
         updatedAt: now,
         lastAccessedAt: now,
         expiresAt,
+        accessCount: 0,
     };
 
     await getDb().create(record);
@@ -709,6 +743,7 @@ export async function syncAgentMemoryFromVault(input: {
             createdAt: now,
             updatedAt: now,
             lastAccessedAt: now,
+            accessCount: 0,
         };
         await getDb().create(record);
         created++;
@@ -931,6 +966,7 @@ export async function saveMemoryFromMarkdown(input: {
             updatedAt: now,
             lastAccessedAt: now,
             expiresAt: computedExpiresAt,
+            accessCount: 0,
         };
 
         await getDb().create(record);
