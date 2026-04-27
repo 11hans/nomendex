@@ -1,6 +1,5 @@
 import { query, type SDKMessage, type McpServerConfig, type HookCallback, type PreToolUseHookInput, type AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { existsSync, mkdirSync } from "node:fs";
-import { appendFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { getRootPath, getNomendexPath, getUploadsPath, getNotesPath } from "@/storage/root-path";
 import { getAgent, getPreferences, savePreferences, addAllowedTool, getAgentAllowedTools } from "@/features/agents/fx";
@@ -339,26 +338,68 @@ async function readJSONL<T>(filePath: string): Promise<T[]> {
         .map((line) => JSON.parse(line));
 }
 
-async function appendJSONL(filePath: string, data: object): Promise<void> {
+// Per-file serialization queue to prevent concurrent read-modify-write races.
+// React strict-mode double effects and rapid reconnection during streaming
+// were producing duplicate session entries via the previous read-then-append flow.
+const fileMutexes = new Map<string, Promise<void>>();
+
+async function withFileMutex<T>(filePath: string, fn: () => Promise<T>): Promise<T> {
+    const previous = fileMutexes.get(filePath) ?? Promise.resolve();
+    let resolve: () => void;
+    const next = new Promise<void>((r) => { resolve = r; });
+    fileMutexes.set(filePath, previous.then(() => next));
+    try {
+        await previous;
+        return await fn();
+    } finally {
+        resolve!();
+        if (fileMutexes.get(filePath) === next) {
+            fileMutexes.delete(filePath);
+        }
+    }
+}
+
+function dedupeSessionsById(sessions: SessionMetadata[]): SessionMetadata[] {
+    const map = new Map<string, SessionMetadata>();
+    for (const session of sessions) {
+        const existing = map.get(session.id);
+        if (!existing || new Date(session.updatedAt) >= new Date(existing.updatedAt)) {
+            map.set(session.id, session);
+        }
+    }
+    return Array.from(map.values());
+}
+
+async function writeSessionsFile(filePath: string, sessions: SessionMetadata[]): Promise<void> {
     const dir = dirname(filePath);
     if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true });
     }
-    const line = JSON.stringify(data) + "\n";
-    await appendFile(filePath, line);
+    const content = sessions.length > 0
+        ? sessions.map((s) => JSON.stringify(s)).join("\n") + "\n"
+        : "";
+    await Bun.write(filePath, content);
 }
 
-async function updateJSONL<T extends { id: string }>(
-    filePath: string,
-    id: string,
-    updater: (item: T) => T
-): Promise<void> {
-    const items = await readJSONL<T>(filePath);
-    const updatedItems = items.map((item) =>
-        item.id === id ? updater(item) : item
-    );
-    const content = updatedItems.map((item) => JSON.stringify(item)).join("\n") + "\n";
-    await Bun.write(filePath, content);
+// Slash commands whose output materially depends on the bpagent system prompt.
+// `daily-notes`, `obsidian-vault-ops`, `check-links`, `search` are general-purpose and
+// remain agent-agnostic. `todos`, `projects`, `manage-skills` work fine on default.
+const BPAGENT_SLASH_COMMANDS = new Set([
+    "daily",
+    "weekly",
+    "monthly",
+    "review",
+    "project",
+    "adopt",
+    "timeblocking",
+    "goal-tracking",
+]);
+
+function isBpagentSlashCommand(message: string | undefined): boolean {
+    if (!message) return false;
+    const match = message.trim().match(/^\/([a-z][a-z0-9-]*)/i);
+    if (!match) return false;
+    return BPAGENT_SLASH_COMMANDS.has(match[1].toLowerCase());
 }
 
 function extractSessionIdFromSdkMessage(msg: SDKMessage): string | undefined {
@@ -485,6 +526,16 @@ export const chatRoutes = {
                 } else {
                     // New session - use last used agent
                     agentId = (await getPreferences()).lastUsedAgentId;
+                }
+
+                // Defensive routing: bpagent-context slash commands need the bpagent system prompt
+                // (operating principles, item-type semantics, daily workflow). The default agent has
+                // skills installed but lacks that context, so /daily etc. produce truncated output.
+                // If a new session starts with such a command on the default agent (typically a tab
+                // race where lastUsedAgentId still pointed at default), reroute to bpagent.
+                if (!sessionId && agentId === "default" && isBpagentSlashCommand(message)) {
+                    console.log("[API] Auto-routing bpagent slash command to bpagent (was default)");
+                    agentId = "bpagent";
                 }
 
                 // Load agent configuration
@@ -1306,23 +1357,25 @@ export const chatRoutes = {
                     );
                 }
 
-                // Check if session already exists to prevent duplicates
-                const existingSessions = await readJSONL<SessionMetadata>(getSessionsFile());
-                if (existingSessions.some((s) => s.id === id)) {
-                    console.log("[API] Session already exists, skipping save:", id);
-                    return Response.json({ success: true, session: existingSessions.find((s) => s.id === id) });
-                }
+                const sessionsFile = getSessionsFile();
+                const session = await withFileMutex(sessionsFile, async () => {
+                    const existing = await readJSONL<SessionMetadata>(sessionsFile);
+                    const alreadySaved = existing.find((s) => s.id === id);
+                    if (alreadySaved) {
+                        // Self-heal: if older runs left duplicate rows in the file, dedupe them now.
+                        const deduped = dedupeSessionsById(existing);
+                        if (deduped.length !== existing.length) {
+                            await writeSessionsFile(sessionsFile, deduped);
+                        }
+                        console.log("[API] Session already exists, skipping save:", id);
+                        return alreadySaved;
+                    }
 
-                const session: SessionMetadata = {
-                    id,
-                    title,
-                    createdAt,
-                    updatedAt,
-                    messageCount,
-                    agentId,
-                };
-
-                await appendJSONL(getSessionsFile(), session);
+                    const next: SessionMetadata = { id, title, createdAt, updatedAt, messageCount, agentId };
+                    const merged = dedupeSessionsById([...existing, next]);
+                    await writeSessionsFile(sessionsFile, merged);
+                    return next;
+                });
                 console.log("[API] Saved session:", id);
 
                 return Response.json({ success: true, session });
@@ -1438,12 +1491,21 @@ export const chatRoutes = {
                     );
                 }
 
-                await updateJSONL<SessionMetadata>(getSessionsFile(), id, (session) => ({
-                    ...session,
-                    ...(title && { title }),
-                    ...(messageCount !== undefined && { messageCount }),
-                    updatedAt: new Date().toISOString(),
-                }));
+                const sessionsFile = getSessionsFile();
+                await withFileMutex(sessionsFile, async () => {
+                    const items = await readJSONL<SessionMetadata>(sessionsFile);
+                    const updated = items.map((session) =>
+                        session.id === id
+                            ? {
+                                ...session,
+                                ...(title && { title }),
+                                ...(messageCount !== undefined && { messageCount }),
+                                updatedAt: new Date().toISOString(),
+                            }
+                            : session,
+                    );
+                    await writeSessionsFile(sessionsFile, dedupeSessionsById(updated));
+                });
 
                 console.log("[API] Updated session:", id);
                 return Response.json({ success: true });
@@ -1471,10 +1533,12 @@ export const chatRoutes = {
                 }
 
                 // Remove from metadata file (soft delete - keeps Claude history file)
-                const allSessions = await readJSONL<SessionMetadata>(getSessionsFile());
-                const remainingSessions = allSessions.filter(s => s.id !== id);
-                const content = remainingSessions.map(s => JSON.stringify(s)).join("\n") + (remainingSessions.length > 0 ? "\n" : "");
-                await Bun.write(getSessionsFile(), content);
+                const sessionsFile = getSessionsFile();
+                await withFileMutex(sessionsFile, async () => {
+                    const allSessions = await readJSONL<SessionMetadata>(sessionsFile);
+                    const remaining = dedupeSessionsById(allSessions.filter((s) => s.id !== id));
+                    await writeSessionsFile(sessionsFile, remaining);
+                });
 
                 chatLogger.info("Removed session from metadata (soft delete)", { id });
                 return Response.json({ success: true });

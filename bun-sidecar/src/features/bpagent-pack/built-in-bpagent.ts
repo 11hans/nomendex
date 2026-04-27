@@ -179,9 +179,10 @@ One level deep via \`parentTodoId\`. Subtasks are real todos (own status, priori
 
 ## Todo Safety Rules
 
-- **Reschedule freshness.** Before any reschedule/update, \`POST /api/todos/get { todoId }\` immediately before \`update\`. Never trust stale list data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the user saw it — stop, show refreshed state, ask again.
+- **Reschedule freshness.** Before mutating a todo, you need fresh data. **Skip the GET if you fetched this same todo within the last 60 seconds** (e.g. it came from a list call you just made — trust that). Otherwise \`POST /api/todos/get { todoId }\` immediately before \`update\`. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the user saw it — stop, show refreshed state, ask again.
 - **Timeblocks are calendar blocks, not tasks.** Never mark a generated timeblock \`done\`. If the user wants to convert one to a task, first remove timeblock semantics (\`source\` back to \`user\`, drop tag), then confirm.
 - **Events cannot be marked \`done\`.** \`kind: "event"\` items only support status \`todo\` or \`planned\` — the API rejects any other status. A past event whose \`scheduledEnd\` is before now is implicitly attended/occurred; no status update is needed or possible. **Never ask the user whether an event is done.** If the user says "that meeting happened", acknowledge it — do not attempt to update its status.
+- **Retiring events from active view.** When an event is no longer relevant (past, cancelled, or the user wants it off the active list), set \`archived: true\` via \`POST /api/todos/update { "todoId": "...", "updates": { "archived": true } }\`. **Do not** try \`status: "done"\` first — it will fail. Use \`archived\` directly.
 - **Streak authority.** If the latest daily note states a streak verbatim (e.g. \`DEN 1\`), copy that wording. Never recalculate from checkboxes or arithmetic. No explicit streak → say \`streak neuveden\`.
 
 ## Scheduling Rules
@@ -404,13 +405,16 @@ Skills:  /goal-tracking   /project   /monthly  /weekly  /daily
 6. Save workset snapshot \`<!-- workset: id1, id2, ... -->\` in the daily note — actionable single-day todos only, excluding events, timeblocks, and Multi-day Context.
 7. **If today is ${reviewDay}**, offer \`/weekly\` at the end of morning.
 
+**Daily-note fallback.** If today's note exists but lacks a \`<!-- workset: ... -->\` snapshot (e.g. it was created by a different agent that doesn't run morning), don't apologize or recap the gap. Quietly fall back to "todos with \`scheduledStart\` today" as the implicit workset and proceed.
+
 ### Evening
-1. Double-check morning snapshot vs current API state — present completed vs not-completed in one batch. **Exclude events (\`kind: "event"\`) entirely** — they cannot be marked \`done\` and need no action.
-2. Confirm items to mark \`done\`, then update via API (which sets \`completedAt\`). Tasks only — never events.
-3. Propose batch reschedule for unfinished single-day todos with \`scheduledStart\` today. Before each update, re-fetch via \`/api/todos/get\`. If freshness check fails, stop and ask.
-4. Completion rate = \`completed ∩ planned / |planned|\` using \`completedAt\` (never \`updatedAt\`). Exclude Multi-day Context, Ongoing multi-day \`in_progress\`, timeblocks, and events.
-5. Run Timeblock Retrospective Linking for today's timeblocks lacking \`<!-- timeblock-worked-todos -->\`.
-6. Reflection prompts, identify tomorrow's priority, commit.
+1. **Auto-archive stale events first.** For any \`kind: "event"\` whose \`scheduledEnd\` is more than 2 days before today, set \`archived: true\` without asking. These are past obligations cluttering the active view.
+2. Double-check morning snapshot vs current API state — present completed vs not-completed in one batch. **Exclude events (\`kind: "event"\`) entirely** — they cannot be marked \`done\` and need no action.
+3. Confirm items to mark \`done\`, then update via API (which sets \`completedAt\`). Tasks only — never events.
+4. Propose batch reschedule for unfinished single-day todos with \`scheduledStart\` today. Before each update, apply the **Reschedule freshness** rule from Todo Safety Rules.
+5. **Completion rate = \`completed_today ∩ planned_today / |planned_today|\`.** A task counts in the numerator only if \`completedAt\` is on today's local date — tasks completed yesterday or earlier are **not** retroactive wins for today's rate. If the user finished a leftover task from yesterday, list it as an "extra win" outside the rate calculation. Exclude Multi-day Context, Ongoing multi-day \`in_progress\`, timeblocks, and events from both numerator and denominator.
+6. Run Timeblock Retrospective Linking for today's timeblocks lacking \`<!-- timeblock-worked-todos -->\`.
+7. Reflection prompts, identify tomorrow's priority, commit.
 
 ### Weekly (${reviewDay})
 Run \`/weekly\`: review projects, compute goal progress, plan next week. Offer task-first scheduling (ask day-only vs exact-time; preview diff before apply). Archive stale notes.

@@ -54,6 +54,42 @@ describe("matchesScheduledOverlap", () => {
             end: "2026-04-06T09:00",
         })).toBe(false);
     });
+
+    test("accepts ISO range with seconds (e.g. T00:00:00)", () => {
+        const todo = makeTodo({
+            scheduledStart: "2026-04-06T18:00",
+            scheduledEnd: "2026-04-06T19:00",
+        });
+
+        expect(matchesScheduledOverlap(todo, {
+            start: "2026-04-06T00:00:00",
+            end: "2026-04-06T23:59:59",
+        })).toBe(true);
+    });
+
+    test("accepts ISO range with milliseconds and Z suffix", () => {
+        const todo = makeTodo({
+            scheduledStart: "2026-04-06T18:00",
+        });
+
+        expect(matchesScheduledOverlap(todo, {
+            start: "2026-04-06T00:00:00.000Z",
+            end: "2026-04-06T23:59:59.999Z",
+        })).toBe(true);
+    });
+
+    test("throws a 400-tagged error on malformed range", () => {
+        try {
+            matchesScheduledOverlap(makeTodo(), {
+                start: "not-a-date",
+                end: "2026-04-06T23:59:59",
+            });
+            throw new Error("expected matchesScheduledOverlap to throw");
+        } catch (error) {
+            expect((error as Error).message).toContain("Invalid scheduledOverlap range");
+            expect((error as Error & { statusCode?: number }).statusCode).toBe(400);
+        }
+    });
 });
 
 describe("collectRequestedStatuses", () => {

@@ -310,7 +310,10 @@ function normalizeSourceField(value: unknown): TodoSource | undefined {
 // getTodoKind, getTodoSource, isEventTodo, isTimeblockTodo — imported from ./todo-kind-utils
 
 function parseLocalScheduleDate(value: string): Date | undefined {
-    const dateTimeMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+    // Accepts YYYY-MM-DDTHH:MM, with optional :SS, optional .fff fractional seconds,
+    // and optional Z or ±HH:MM / ±HHMM timezone suffix. Always interpreted as local time —
+    // any timezone suffix is ignored (legacy callers send local-clock times).
+    const dateTimeMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$/);
     if (dateTimeMatch) {
         const [, yearStr, monthStr, dayStr, hourStr, minuteStr] = dateTimeMatch;
         const year = Number(yearStr);
@@ -427,7 +430,11 @@ export function matchesScheduledOverlap(
     const overlapStart = parseLocalScheduleDate(overlap.start);
     const overlapEnd = parseLocalScheduleDate(overlap.end);
     if (!overlapStart || !overlapEnd) {
-        throw new Error("Invalid scheduledOverlap range");
+        const err = new Error(
+            `Invalid scheduledOverlap range — expected YYYY-MM-DD or YYYY-MM-DDTHH:MM[:SS] (got start=${JSON.stringify(overlap.start)}, end=${JSON.stringify(overlap.end)})`,
+        );
+        (err as Error & { statusCode: number }).statusCode = 400;
+        throw err;
     }
 
     const queryInterval = overlapStart.getTime() <= overlapEnd.getTime()

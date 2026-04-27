@@ -244,8 +244,12 @@ export const todosRoutes = {
             } catch (error) {
                 return jsonValidationError(error);
             }
-            const result = await getTodos(args);
-            return Response.json(result);
+            try {
+                const result = await getTodos(args);
+                return Response.json(result);
+            } catch (error) {
+                return jsonError(error);
+            }
         },
     },
     "/api/todos/get": {
