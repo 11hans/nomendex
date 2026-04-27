@@ -200,6 +200,7 @@ export async function triggerPostSessionExtraction(
                 sourceType: "chat",
                 sourceRef: input.sessionId,
                 supersedes,
+                corrects: candidate.corrects,
             });
 
             if (result.deduped) {

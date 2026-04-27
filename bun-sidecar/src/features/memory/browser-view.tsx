@@ -32,7 +32,7 @@ import type { AgentMemoryRecord, MemoryKind } from "@/features/agent-memory";
 import { notesPluginSerial } from "@/features/notes";
 
 const THE_VAULT_WORKSPACE_PATH = "/Users/honza/Library/Mobile Documents/iCloud~md~obsidian/Documents/TheVault";
-const ALL_KINDS: MemoryKind[] = ["preference", "goal", "project", "decision", "context", "reference"];
+const ALL_KINDS: MemoryKind[] = ["preference", "goal", "project", "decision", "context", "reference", "correction"];
 const KIND_LABELS: Record<MemoryKind, string> = {
     preference: "Preference",
     goal: "Goal",
@@ -40,6 +40,7 @@ const KIND_LABELS: Record<MemoryKind, string> = {
     decision: "Decision",
     context: "Context",
     reference: "Reference",
+    correction: "Correction",
 };
 
 function getKindTone(kind: MemoryKind, styles: Theme["styles"]): string {
@@ -54,6 +55,8 @@ function getKindTone(kind: MemoryKind, styles: Theme["styles"]): string {
             return styles.contentPrimary;
         case "reference":
             return styles.contentTertiary;
+        case "correction":
+            return styles.semanticDestructive;
         case "context":
         default:
             return styles.contentSecondary;

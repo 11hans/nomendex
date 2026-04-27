@@ -67,6 +67,7 @@ Use exactly one of these kinds:
 - \`decision\`: A one-time committed choice that replaced a previous state (e.g. "switched from flat to folder-based notes", "chose GTD over ad-hoc task management")
 - \`context\`: A recurring focus area or ongoing concern that spans multiple sessions; not a single-session task or in-progress item
 - \`reference\`: A durable reference worth remembering, such as an important path, workspace location, project name, or recurring resource
+- \`correction\`: The user explicitly took back something they said earlier. Use this only when the user clearly negates or replaces a previous statement (e.g. "Actually I prefer React, not Vue", "I no longer use folder X", "scratch that — the deadline is Friday, not Thursday"). Correction memories almost always win against earlier facts on the same topic.
 
 **Preference vs. decision:** If the behavior has always been true for this user, use \`preference\`. If a choice was made and something changed as a result, use \`decision\`.
 
@@ -158,19 +159,29 @@ Only the user's meta-commentary about how they work with such content may become
 
 ## Corrections to earlier memories
 
-If a fact in this conversation explicitly contradicts or corrects something the user
-established earlier (a previous preference, decision, project fact, or reference),
-include a \`corrects\` field on the new memory describing what the older memory said
-that is now wrong.
+When the user explicitly takes back a previous statement — not when they simply
+refine or expand it — emit a memory with \`kind: "correction"\` and follow these
+rules:
 
-- \`corrects\` is a free-text description of the outdated fact, written so it can
-  be matched against the older memory by search (use the same vocabulary the user
-  originally used).
-- Do not include \`corrects\` for new facts that simply add information.
-- Do not include \`corrects\` when only refining wording of an unchanged fact.
-- The system will resolve \`corrects\` to the matching old memory and archive it.
+1. Set \`kind: "correction"\`.
+2. Write \`text\` in this exact two-part format:
+   \`CORRECTION: <new fact>. Previously: <what the user said before>.\`
+3. Set the \`corrects\` field to a short free-text description of the outdated
+   fact, written using the same vocabulary the user originally used so the
+   system can match it against the stored memory and archive it.
+4. \`title\` should describe the new fact (not the act of correcting).
+5. Use the same \`scope\` the original memory would have used.
 
-If unsure, omit \`corrects\` — a wrong correction archives a real memory.
+For non-correction kinds, you may still set \`corrects\` if a fact contradicts
+something the user established earlier — this archives the older memory but
+keeps the new one as a regular preference / decision / project fact.
+
+Do not use \`kind: "correction"\` for:
+- new facts that simply add information,
+- refinements of wording when meaning is unchanged,
+- any case where you are not sure the user explicitly negated the prior fact.
+
+If unsure, omit both — a wrong correction archives a real memory.
 
 ## Title and text requirements
 
@@ -234,7 +245,7 @@ Use this stable key order in every memory object:
 {
   "memories": [
     {
-      "kind": "preference | goal | project | decision | context | reference",
+      "kind": "preference | goal | project | decision | context | reference | correction",
       "scope": "agent | workspace",
       "title": "string, max 80 chars",
       "text": "string, max 200 chars",
@@ -297,7 +308,7 @@ Input:
 
 Output:
 
-<memories>{"memories":[{"kind":"decision","scope":"workspace","title":"Names daily notes as YYYY/MM/DD-title","text":"Switched daily-note naming from YYYY-MM-DD to YYYY/MM/DD-title.","tags":["notes","naming","workflow"],"importance":0.82,"confidence":0.95,"corrects":"daily notes named YYYY-MM-DD"}]}</memories>
+<memories>{"memories":[{"kind":"correction","scope":"workspace","title":"Names daily notes as YYYY/MM/DD-title","text":"CORRECTION: Daily notes are named YYYY/MM/DD-title. Previously: daily notes were named YYYY-MM-DD.","tags":["notes","naming","workflow"],"importance":0.82,"confidence":0.95,"corrects":"daily notes named YYYY-MM-DD"}]}</memories>
 
 ## Final check before answering
 

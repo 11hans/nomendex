@@ -315,6 +315,11 @@ function computeRecencyScore(updatedAt: string): number {
     return Math.exp((-Math.LN2 * ageMs) / halfLifeMs);
 }
 
+// Correction memories almost always win against same-topic peers — they encode
+// "the user explicitly took back what they said before." Bump their final score
+// so a correction outranks a stale preference/decision at the same recency.
+const CORRECTION_SCORE_BOOST = 0.15;
+
 function scoreRecord(record: AgentMemoryRecord, queryTokens: string[]): number {
     const titleTextTokens = tokenize(`${record.title} ${record.text}`);
     const tagTokens = record.tags.map((t) => t.toLowerCase());
@@ -336,7 +341,8 @@ function scoreRecord(record: AgentMemoryRecord, queryTokens: string[]): number {
     const importance = record.importance;
 
     // score = 0.55*textMatch + 0.20*tagMatch + 0.15*recency + 0.10*importance
-    return 0.55 * textMatch + 0.20 * tagMatch + 0.15 * recency + 0.10 * importance;
+    const base = 0.55 * textMatch + 0.20 * tagMatch + 0.15 * recency + 0.10 * importance;
+    return record.kind === "correction" ? base + CORRECTION_SCORE_BOOST : base;
 }
 
 // --- Public API ---
@@ -425,7 +431,10 @@ async function cleanupExpired(): Promise<void> {
             }
 
             // Permanent tier — exempt from decay-based lifecycle.
+            // Corrections also stay permanent: they encode the user's most recent
+            // override of an earlier fact and must outlive low-traffic windows.
             if (record.importance >= PERMANENT_IMPORTANCE_THRESHOLD) continue;
+            if (record.kind === "correction") continue;
 
             const score = computeMemoryScore(record, now);
 
@@ -477,14 +486,12 @@ export async function searchAgentMemory(input: {
     const queryTokens = tokenize(query);
 
     if (queryTokens.length === 0) {
-        // Empty query: sort by importance + recency
-        return visible
-            .sort((a, b) => {
-                const sa = 0.6 * a.importance + 0.4 * computeRecencyScore(a.updatedAt);
-                const sb = 0.6 * b.importance + 0.4 * computeRecencyScore(b.updatedAt);
-                return sb - sa;
-            })
-            .slice(0, limit);
+        // Empty query: sort by importance + recency, with a correction boost.
+        const score = (r: AgentMemoryRecord) => {
+            const base = 0.6 * r.importance + 0.4 * computeRecencyScore(r.updatedAt);
+            return r.kind === "correction" ? base + CORRECTION_SCORE_BOOST : base;
+        };
+        return visible.sort((a, b) => score(b) - score(a)).slice(0, limit);
     }
 
     // Score and rank
@@ -520,6 +527,7 @@ export async function saveAgentMemory(input: {
     sourceRef?: string;
     ttlDays?: number;
     supersedes?: string[];
+    corrects?: string;
 }): Promise<{ record: AgentMemoryRecord; deduped: boolean; supersededIds: string[] }> {
     const {
         agentId,
@@ -534,6 +542,7 @@ export async function saveAgentMemory(input: {
         sourceRef,
         ttlDays,
         supersedes = [],
+        corrects,
     } = input;
 
     const fingerprint = computeFingerprint(title, text, kind, scope);
@@ -622,6 +631,7 @@ export async function saveAgentMemory(input: {
         expiresAt,
         accessCount: 0,
         supersedes: supersededIds,
+        corrects,
     };
 
     await getDb().create(record);
