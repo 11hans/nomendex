@@ -64,6 +64,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         todoViewPreferences: {},
         memoryExtraction: { provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free", consolidationModel: "anthropic/claude-sonnet-4-6" },
         embeddings: { provider: "disabled" },
+        appleCalendarSync: true,
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -860,6 +861,14 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         [updateWorkspace]
     );
 
+    // Apple Calendar sync
+    const setAppleCalendarSync = useCallback(
+        (enabled: boolean) => {
+            updateWorkspace((prev) => ({ ...prev, appleCalendarSync: enabled }));
+        },
+        [updateWorkspace]
+    );
+
 
 
     // === Pane Operations ===
@@ -1229,6 +1238,10 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         // Embeddings (semantic search)
         embeddings: workspace.embeddings,
         setEmbeddings,
+
+        // Apple Calendar sync
+        appleCalendarSync: workspace.appleCalendarSync,
+        setAppleCalendarSync,
 
 
 

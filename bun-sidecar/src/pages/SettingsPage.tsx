@@ -9,11 +9,12 @@ import { useTheme } from "@/hooks/useTheme";
 import { triggerNativeUpdate } from "@/hooks/useUpdateNotification";
 import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { RotateCcw, Eye, EyeOff, Check, X, Key, RefreshCw, Info, Plus, Trash2, FolderOpen, Brain, Loader2, ExternalLink } from "lucide-react";
+import { RotateCcw, Eye, EyeOff, Check, X, Key, RefreshCw, Info, Plus, Trash2, FolderOpen, Brain, Loader2, ExternalLink, CalendarDays } from "lucide-react";
 import { Input } from "../components/ui/input";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Switch } from "../components/ui/switch";
 import type { NotesLocation } from "@/types/Workspace";
 
 type SecretInfo = {
@@ -614,7 +615,7 @@ function SettingsContent() {
     const [recordingKeys, setRecordingKeys] = useState<string[]>([]);
     const { setTheme, themes, currentTheme } = useTheme();
     const { shortcuts, updateShortcut, resetShortcut, resetAllShortcuts } = useKeyboardShortcuts();
-    const { chatInputEnterToSend, setChatInputEnterToSend, workspace } = useWorkspaceContext();
+    const { chatInputEnterToSend, setChatInputEnterToSend, workspace, appleCalendarSync, setAppleCalendarSync } = useWorkspaceContext();
 
     // Local state for pending preference change
     const [pendingEnterToSend, setPendingEnterToSend] = useState<boolean | null>(null);
@@ -1086,7 +1087,30 @@ function SettingsContent() {
                         </Card>
                     </TabsContent>
 
-                    <TabsContent value="preferences" className="mt-0">
+                    <TabsContent value="preferences" className="mt-0 space-y-3">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <CalendarDays className="h-4 w-4" />
+                                    Apple Calendar
+                                </CardTitle>
+                                <CardDescription>Sync todos with scheduled dates to Apple Calendar</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <Label className="text-caption">Apple Calendar sync</Label>
+                                        <p className="text-sm text-muted-foreground">
+                                            When enabled, todos with scheduled dates are synced to the "Nomendex Tasks" calendar
+                                        </p>
+                                    </div>
+                                    <Switch
+                                        checked={appleCalendarSync}
+                                        onCheckedChange={setAppleCalendarSync}
+                                    />
+                                </div>
+                            </CardContent>
+                        </Card>
                         <Card>
                             <CardHeader>
                                 <CardTitle>Chat Input Preferences</CardTitle>

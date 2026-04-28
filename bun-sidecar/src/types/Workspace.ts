@@ -73,6 +73,7 @@ export const WorkspaceStateSchema = z.object({
     embeddings: z.object({
         provider: z.enum(["disabled", "voyage"]).default("disabled"),
     }).default({ provider: "disabled" }),
+    appleCalendarSync: z.boolean().default(true),
 });
 
 export type WorkspaceTab = z.infer<typeof WorkspaceTabSchema>;

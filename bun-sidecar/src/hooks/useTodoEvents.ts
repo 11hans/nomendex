@@ -4,6 +4,7 @@ import { removeTaskFromCalendar, syncTaskToCalendar } from "@/features/todos/cal
 import { stripUnexpectedNulls } from "@/features/todos/todo-sanitize";
 import type { Todo } from "@/features/todos/todo-types";
 import type { TodoEvent } from "@/services/todo-events";
+import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_DELAY_MS = 30000;
@@ -47,9 +48,12 @@ const calendarTodosAPI = {
 export function useTodoEvents(): void {
     const reconnectAttemptRef = useRef(0);
     const eventSourceRef = useRef<EventSource | null>(null);
+    const { appleCalendarSync } = useWorkspaceContext();
 
     useEffect(() => {
-        initCalendarChangeListener(calendarTodosAPI);
+        if (appleCalendarSync) {
+            initCalendarChangeListener(calendarTodosAPI);
+        }
 
         let cancelled = false;
 
@@ -67,14 +71,14 @@ export function useTodoEvents(): void {
                 void (async () => {
                     try {
                         const data = JSON.parse(event.data) as TodoEvent;
-                        if (data.type === "delete") {
-                            await removeTaskFromCalendar(data.todoId);
-                        // } else if (data.todo.archived) {
-                        //     await removeTaskFromCalendar(data.todo.id);
-                        } else {
-                            await syncTaskToCalendar(data.todo as Todo);
+                        if (appleCalendarSync) {
+                            if (data.type === "delete") {
+                                await removeTaskFromCalendar(data.todoId);
+                            } else {
+                                await syncTaskToCalendar(data.todo as Todo);
+                            }
+                            window.dispatchEvent(new CustomEvent("calendar-sync-update"));
                         }
-                        window.dispatchEvent(new CustomEvent("calendar-sync-update"));
                     } catch {
                         // Ignore malformed payloads/keepalives and transient sync failures.
                     }
@@ -103,5 +107,5 @@ export function useTodoEvents(): void {
             eventSourceRef.current?.close();
             eventSourceRef.current = null;
         };
-    }, []);
+    }, [appleCalendarSync]);
 }

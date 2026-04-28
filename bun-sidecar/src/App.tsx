@@ -179,11 +179,11 @@ export function App() {
                 <NativeKeyboardBridge />
                 <UpdateNotificationBridge />
                 <NoteEventsBridge />
-                <TodoEventsBridge />
                 <BrowserRouter>
                     <RoutingProvider>
                         <WorkspaceGuard>
                             <WorkspaceProvider>
+                                <TodoEventsBridge />
                                 <SkillUpdatesBridge />
                                 <KeyboardShortcutsProvider>
                                     <GHSyncProvider>
