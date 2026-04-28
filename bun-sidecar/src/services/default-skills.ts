@@ -779,7 +779,7 @@ Set a fixed \`height\` parameter to disable auto-resize.
       "SKILL.md": `---
 name: daily-notes
 description: Manages daily notes using vault-config folder mapping and the vault's existing naming convention. Use when the user asks to view recent notes, create daily notes, read today's notes, summarize the week, or references dates.
-version: 4
+version: 5
 source: nomendex
 ---
 
@@ -1028,7 +1028,32 @@ cmd_get_today() {
     mkdir -p "$(dirname "$NOTE_PATH")"
 
     if [[ ! -f "$NOTE_PATH" ]]; then
-        touch "$NOTE_PATH"
+        local TEMPLATE_FILE=""
+        local config_file="$NOTES_DIR/vault-config.json"
+        if [[ -f "$config_file" ]] && command -v jq >/dev/null 2>&1; then
+            local templates_dir
+            templates_dir=$(jq -r '.folderMapping.templates // empty' "$config_file" 2>/dev/null)
+            if [[ -n "$templates_dir" && -d "$NOTES_DIR/$templates_dir" ]]; then
+                TEMPLATE_FILE=$(find "$NOTES_DIR/$templates_dir" -type f -iname "*daily*" 2>/dev/null | head -n 1)
+            fi
+        fi
+
+        if [[ -n "$TEMPLATE_FILE" && -s "$TEMPLATE_FILE" ]]; then
+            local YESTERDAY TOMORROW
+            if [[ "$OSTYPE" == "darwin"* ]]; then
+                YESTERDAY=$(format_date "$(date -v-1d '+%Y-%m-%d')")
+                TOMORROW=$(format_date "$(date -v+1d '+%Y-%m-%d')")
+            else
+                YESTERDAY=$(format_date "$(date -d 'yesterday' '+%Y-%m-%d')")
+                TOMORROW=$(format_date "$(date -d 'tomorrow' '+%Y-%m-%d')")
+            fi
+            sed -e "s|{{date}}|$TODAY|g" \
+                -e "s|{{yesterday}}|$YESTERDAY|g" \
+                -e "s|{{tomorrow}}|$TOMORROW|g" \
+                "$TEMPLATE_FILE" > "$NOTE_PATH"
+        else
+            touch "$NOTE_PATH"
+        fi
         echo "Created: $NOTE_PATH" >&2
     fi
 
@@ -1531,15 +1556,12 @@ If the user reports partial completion, apply the bpagent **Partial completion**
 
 ### Step 0 — Bootstrap today's note
 
-Before anything else, ensure today's daily note exists with proper structure:
-
 1. Get the workspace notes path: \`curl -s http://localhost:$PORT/api/workspace/paths | jq -r '.data.notes'\`
-2. Run \`NOTES_DIR=<notes_path> .claude/skills/daily-notes/daily-note.sh get-today\` to get/create today's note path.
-3. If the returned path points to an **empty file** (newly created), write the full template from \`## Daily Note Structure\` to that path:
-   - Replace \`{{date}}\` with today's display date using the vault's existing filename convention (e.g. \`4-28-2026\` for M-D-YYYY format).
-   - Leave all section bodies blank — the shutdown steps will fill them in.
-4. **Do NOT skip this step.** Without proper section structure, shutdown writes unstructured output instead of filling the correct sections.
+2. Run \`NOTES_DIR=<notes_path> .claude/skills/daily-notes/daily-note.sh get-today\`
+   — this creates today's note **from the vault template** (with all sections) if it doesn't exist yet.
+3. Read the returned file. If the note was just created, its sections are empty stubs — shutdown will fill them in.
 
+> Template scaffolding is handled by the script. Do NOT write template content manually.
 > This step is a no-op when morning already ran (file is already populated).
 
 ### Completion Scoring
@@ -1590,9 +1612,9 @@ After confirmation, update via API.
 For each of today's timeblocks (\`source === "timeblock-generator"\` or legacy tag \`timeblock\`) lacking \`<!-- timeblock-worked-todos -->\` in \`description\`, run the full infer → confirm → persist procedure from the bpagent prompt. Do NOT mark contained todos \`done\` based on inference (handled in Completion Scoring Step 5). Do NOT mark the timeblock itself \`done\`.
 
 ### Capture
-1. Plain-text notes and learnings (no checkboxes).
-2. \`## Pracovní zápisek\` — co se řešilo, co se naučilo, blockers.
-3. Energy level (1–10), gratitude items.
+1. Fill \`## Pracovní zápisek\` — co se řešilo, co se naučilo, otevřené otázky/blockers.
+2. Fill \`## Evening Reflection 🌙\` — What went well, What could be better, Tomorrow's focus, Gratitude.
+3. Update the **Energy / Mood / Sleep** line at the bottom of the note.
 
 ### Today's Cascade Impact
 \`\`\`markdown
@@ -1607,9 +1629,6 @@ For each of today's timeblocks (\`source === "timeblock-generator"\` or legacy t
 - **Projects advanced:** [[ProjectA]] 3, [[ProjectB]] 1
 \`\`\`
 
-### Reflect (in parallel with reconcile)
-What went well? What could be better? What did I learn? What am I grateful for?
-
 ### Prepare
 - Tomorrow's priority (preview from rescheduled + upcoming todos).
 - Commit changes (\`/push\`).
@@ -1623,51 +1642,21 @@ What went well? What could be better? What did I learn? What am I grateful for?
 
 ## Daily Note Structure
 
-Standard daily note template. The \`## Today's Workset\` section is populated by the morning routine with read-only \`[[todo:id|Title]]\` wiki-links from the API. Never write \`[ ]\` or \`[x]\` checkboxes in new daily notes.
+The physical template lives in the vault's \`Templates/\` folder (detected via \`vault-config.json → folderMapping.templates\`). The \`daily-note.sh get-today\` script writes this template automatically when creating a new note — never recreate it manually.
 
-\`\`\`markdown
-# {{date}}
+| Section | Filled by |
+|---------|-----------|
+| \`## Morning Setup ☀️\` (ONE Big Thing, Schedule & Time Blocks, Carried Over) | Morning routine |
+| \`## Today's Focus\` (todos by project with \`- [x]\`) | Morning routine |
+| \`## Notes & Captures\` (Decisions, Ideas, Learned) | Morning / ad-hoc |
+| \`## Pracovní zápisek\` | Evening shutdown |
+| \`## Evening Reflection 🌙\` (What went well, Better, Tomorrow, Gratitude) | Evening shutdown |
+| \`**Energy / Mood / Sleep**\` line | Evening shutdown |
+| \`## Links\` (← yesterday \| tomorrow →) | Written by template on creation |
 
-## Focus
-> What's the ONE thing that would make today successful?
+When morning was skipped, leave \`## Morning Setup ☀️\` and \`## Today's Focus\` as empty template stubs.
 
-## Time Blocks
-- Morning (9-12):
-- Afternoon (12-5):
-- Evening (5+):
-
-## Today's Workset
-<!-- workset: todo-id1, todo-id2, todo-id3 -->
-
-**Overdue:**
-- [[todo:id|Title]] · [Project] · priority · due date
-
-**Due Today:**
-- [[todo:id|Title]] · [Project] · priority
-
-**Scheduled / In Progress:**
-- [[todo:id|Title]] · [Project] · status
-
-**Other:**
-- [[todo:id|Title]] · [Project] · priority
-
-## Notes
-[Capture thoughts, meeting notes, ideas]
-
-## Pracovní zápisek
-<!-- Každodenní zápisek z práce — co se řešilo, co se naučilo. Základ pro zpětnou analýzu a knowledge base. -->
-- **Co jsem řešil:**
-- **Co jsem se naučil:**
-- **Otevřené otázky / blockers:**
-
-## Reflection
-- **Wins:**
-- **Challenges:**
-- **Learned:**
-- **Grateful for:**
-- **Energy:** /10
-- **Tomorrow's priority:**
-\`\`\`
+> **Today's Workset snapshot** (the \`<!-- workset: -->\` comment + \`[[todo:id]]\` list) is appended inside \`## Morning Setup ☀️\` during morning planning. If morning was skipped, this comment is absent — use the fallback in Step 1 of Completion Scoring.
 
 ## Configuration
 
