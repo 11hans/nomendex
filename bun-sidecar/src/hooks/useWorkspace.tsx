@@ -62,7 +62,8 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         chatInputEnterToSend: true,
         showHiddenFiles: false,
         todoViewPreferences: {},
-        memoryExtraction: { provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free" },
+        memoryExtraction: { provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free", consolidationModel: "anthropic/claude-sonnet-4-6" },
+        embeddings: { provider: "disabled" },
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -851,6 +852,14 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         [updateWorkspace]
     );
 
+    // Embeddings (semantic search) config
+    const setEmbeddings = useCallback(
+        (config: WorkspaceState["embeddings"]) => {
+            updateWorkspace((prev) => ({ ...prev, embeddings: config }));
+        },
+        [updateWorkspace]
+    );
+
 
 
     // === Pane Operations ===
@@ -1216,6 +1225,10 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         // Memory extraction
         memoryExtraction: workspace.memoryExtraction,
         setMemoryExtraction,
+
+        // Embeddings (semantic search)
+        embeddings: workspace.embeddings,
+        setEmbeddings,
 
 
 

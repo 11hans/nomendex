@@ -68,7 +68,11 @@ export const WorkspaceStateSchema = z.object({
     memoryExtraction: z.object({
         provider: z.enum(["disabled", "openrouter", "claude"]).default("disabled"),
         openRouterModel: z.string().default("xiaomi/mimo-v2-flash:free"),
-    }).default({ provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free" }),
+        consolidationModel: z.string().default("anthropic/claude-sonnet-4-6"),
+    }).default({ provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free", consolidationModel: "anthropic/claude-sonnet-4-6" }),
+    embeddings: z.object({
+        provider: z.enum(["disabled", "voyage"]).default("disabled"),
+    }).default({ provider: "disabled" }),
 });
 
 export type WorkspaceTab = z.infer<typeof WorkspaceTabSchema>;

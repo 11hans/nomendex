@@ -84,6 +84,6 @@ export async function initializeWorkspaceServices(): Promise<void> {
     } else {
         startupLog.info("Skipping feature services (no active workspace)");
         // Tear down services that may have been running for a previous workspace
-        disposeAgentMemoryService();
+        await disposeAgentMemoryService();
     }
 }

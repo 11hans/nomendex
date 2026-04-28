@@ -31,7 +31,6 @@ import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
 import type { AgentMemoryRecord, MemoryKind } from "@/features/agent-memory";
 import { notesPluginSerial } from "@/features/notes";
 
-const THE_VAULT_WORKSPACE_PATH = "/Users/honza/Library/Mobile Documents/iCloud~md~obsidian/Documents/TheVault";
 const ALL_KINDS: MemoryKind[] = ["preference", "goal", "project", "decision", "context", "reference", "correction"];
 const KIND_LABELS: Record<MemoryKind, string> = {
     preference: "Preference",
@@ -167,6 +166,19 @@ function MemoryTab({ tabId }: { tabId: string }) {
     }, []);
 
     const verifyTheVaultWorkspace = useCallback(async (): Promise<boolean> => {
+        const pinResponse = await fetch("/api/agent-memory/vault-pin");
+        const pinPayload = pinResponse.ok
+            ? (await pinResponse.json() as { vaultWorkspacePath?: string | null })
+            : { vaultWorkspacePath: null };
+        const pinnedPath = pinPayload.vaultWorkspacePath ?? null;
+
+        if (!pinnedPath) {
+            // No vault pin configured — any workspace is valid.
+            setIsTheVaultWorkspace(true);
+            setShowWorkspaceManagerCta(false);
+            return true;
+        }
+
         const response = await fetch("/api/workspaces/active");
         if (!response.ok) {
             throw new Error(`Failed to resolve active workspace (${response.status})`);
@@ -185,15 +197,15 @@ function MemoryTab({ tabId }: { tabId: string }) {
         const activeWorkspacePath = payload.data?.path ?? null;
         const isTarget =
             typeof activeWorkspacePath === "string"
-            && normalizeWorkspacePath(activeWorkspacePath) === normalizeWorkspacePath(THE_VAULT_WORKSPACE_PATH);
+            && normalizeWorkspacePath(activeWorkspacePath) === normalizeWorkspacePath(pinnedPath);
 
         setIsTheVaultWorkspace(isTarget);
         setShowWorkspaceManagerCta(!isTarget);
 
         if (!isTarget) {
-            const activeLabel = activeWorkspacePath ?? "není nastaven";
+            const activeLabel = activeWorkspacePath ?? "not set";
             setListError(
-                `Memory se načítá jen z TheVault (${THE_VAULT_WORKSPACE_PATH}). Aktuální workspace: ${activeLabel}.`
+                `Vault sync is pinned to ${pinnedPath}. Active workspace: ${activeLabel}.`
             );
             setMemories([]);
             setTotal(0);

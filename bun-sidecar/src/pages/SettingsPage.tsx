@@ -81,7 +81,7 @@ function MemoryExtractionSettings() {
             });
             const data = await res.json() as { success?: boolean; hasApiKey?: boolean; error?: string };
             if (!res.ok) throw new Error(data.error ?? "Save failed");
-            setMemoryExtraction({ provider, openRouterModel: model });
+            setMemoryExtraction({ ...memoryExtraction, provider, openRouterModel: model });
             if (typeof data.hasApiKey === "boolean") setHasApiKey(data.hasApiKey);
             if (apiKey) setApiKey("");
             setSaved(true);
@@ -281,6 +281,142 @@ function MemoryExtractionSettings() {
                 </CardContent>
             </Card>
         </div>
+    );
+}
+
+function MemoryEmbeddingsSettings() {
+    const { embeddings, setEmbeddings } = useWorkspaceContext();
+    const { currentTheme } = useTheme();
+
+    const [provider, setProvider] = useState(embeddings.provider);
+    const [apiKey, setApiKey] = useState("");
+    const [showKey, setShowKey] = useState(false);
+    const [hasApiKey, setHasApiKey] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [saved, setSaved] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        fetch("/api/memory-embeddings/config")
+            .then((r) => r.json())
+            .then((data: { hasApiKey?: boolean }) => {
+                if (typeof data.hasApiKey === "boolean") setHasApiKey(data.hasApiKey);
+            })
+            .catch(() => {});
+    }, []);
+
+    const handleSave = async () => {
+        setSaving(true);
+        setSaved(false);
+        setError(null);
+        try {
+            const body: Record<string, string | null> = { provider };
+            if (apiKey) body.voyageApiKey = apiKey;
+            const res = await fetch("/api/memory-embeddings/config", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json() as { success?: boolean; hasApiKey?: boolean; error?: string };
+            if (!res.ok) throw new Error(data.error ?? "Save failed");
+            setEmbeddings({ provider });
+            if (typeof data.hasApiKey === "boolean") setHasApiKey(data.hasApiKey);
+            if (apiKey) setApiKey("");
+            setSaved(true);
+            setTimeout(() => setSaved(false), 2000);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Save failed");
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const isDirty = provider !== embeddings.provider || apiKey.length > 0;
+    const needsKey = provider === "voyage" && !hasApiKey && !apiKey;
+
+    return (
+        <Card className="rounded-lg border-border shadow-none">
+            <CardHeader className="p-3 pb-2">
+                <CardTitle className="flex items-center gap-2">
+                    <Brain className="h-4 w-4" />
+                    Semantic Search (Embeddings)
+                </CardTitle>
+                <CardDescription>
+                    Optional vector search for memory recall via Voyage AI. Memory contents leave your workspace when enabled.
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div className="space-y-1.5">
+                    <Label>Provider</Label>
+                    <Select value={provider} onValueChange={(v) => setProvider(v as typeof provider)}>
+                        <SelectTrigger className="h-7 w-48">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="disabled">Disabled</SelectItem>
+                            <SelectItem value="voyage">Voyage AI</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    {provider === "disabled" && (
+                        <p className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
+                            Only keyword search is used. Memory contents stay in your workspace.
+                        </p>
+                    )}
+                    {provider === "voyage" && (
+                        <p className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
+                            Uses voyage-3-lite (512 dims). Roughly $0.01 one-time per 1000 memories. Search falls back to keyword if the API fails.
+                        </p>
+                    )}
+                </div>
+
+                {provider === "voyage" && (
+                    <div className="space-y-1.5">
+                        <Label>Voyage API Key</Label>
+                        <div className="relative">
+                            <Input
+                                type={showKey ? "text" : "password"}
+                                placeholder={hasApiKey ? "pa-••••••••••••••••••••" : "pa-..."}
+                                value={apiKey}
+                                onChange={(e) => setApiKey(e.target.value)}
+                                className="h-7 pr-8 font-mono"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowKey((v) => !v)}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                            >
+                                {showKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                            </button>
+                        </div>
+                        <p className="text-caption flex items-center gap-1" style={{ color: currentTheme.styles.contentTertiary }}>
+                            {hasApiKey && !apiKey ? (
+                                <><Check className="h-3 w-3 text-green-500" /> API key configured</>
+                            ) : (
+                                <>Get a key at voyageai.com</>
+                            )}
+                        </p>
+                    </div>
+                )}
+
+                <div className="flex items-center gap-2 pt-1">
+                    <Button
+                        size="sm"
+                        className="h-7 px-3"
+                        onClick={handleSave}
+                        disabled={saving || !isDirty || needsKey}
+                    >
+                        {saving ? <Loader2 className="h-3 w-3 mr-1.5 animate-spin" /> : saved ? <Check className="h-3 w-3 mr-1.5" /> : null}
+                        {saved ? "Saved" : "Save"}
+                    </Button>
+                </div>
+
+                {error && (
+                    <div className="text-caption p-2 rounded border border-red-200 bg-red-50 text-red-700">
+                        {error}
+                    </div>
+                )}
+            </CardContent>
+        </Card>
     );
 }
 
@@ -1525,6 +1661,9 @@ function SettingsContent() {
 
                     <TabsContent value="memory" className="mt-0">
                         <MemoryExtractionSettings />
+                        <div className="mt-3">
+                            <MemoryEmbeddingsSettings />
+                        </div>
                     </TabsContent>
 
                     <TabsContent value="storage" className="mt-0">

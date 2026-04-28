@@ -99,6 +99,7 @@ export const memoryExtractionRoutes = {
                 const updated = {
                     ...state,
                     memoryExtraction: {
+                        ...state.memoryExtraction,
                         provider: providerResult.data,
                         openRouterModel: typeof body.openRouterModel === "string" && body.openRouterModel.trim()
                             ? body.openRouterModel.trim()

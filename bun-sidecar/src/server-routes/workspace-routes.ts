@@ -3,6 +3,7 @@ import { Result, ErrorCodes } from "../types/Result";
 import { WorkspaceState, WorkspaceStateSchema, WorkspaceTab } from "../types/Workspace";
 import { getNomendexPath, getRootPath, getNotesPath, getTodosPath, getUploadsPath, getSkillsPath, hasActiveWorkspace, initializePaths } from "../storage/root-path";
 import { initializeNotesService } from "@/features/notes/fx";
+import { invalidateEmbeddingsConfig } from "@/features/agent-memory/embeddings";
 import path from "path";
 import { copyFile, mkdir } from "node:fs/promises";
 import { INBOX_PROJECT_NAME } from "@/features/projects/inbox-project";
@@ -183,7 +184,8 @@ export const workspaceRoutes = {
                         chatInputEnterToSend: true,
                         showHiddenFiles: false,
                         todoViewPreferences: {},
-                        memoryExtraction: { provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free" },
+                        memoryExtraction: { provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free", consolidationModel: "anthropic/claude-sonnet-4-6" },
+                        embeddings: { provider: "disabled" },
                     };
                     await Bun.write(`${getNomendexPath()}/workspace.json`, JSON.stringify(defaultWorkspace, null, 2));
 
@@ -222,6 +224,7 @@ export const workspaceRoutes = {
                 const workspaceValidated = WorkspaceStateSchema.parse(workspace);
                 const normalizedWorkspace = normalizeWorkspaceStateForInboxConsolidation(workspaceValidated).workspace;
                 await Bun.write(`${getNomendexPath()}/workspace.json`, JSON.stringify(normalizedWorkspace, null, 2));
+                invalidateEmbeddingsConfig();
 
                 const response: Result<{ success: boolean }> = {
                     success: true,

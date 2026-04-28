@@ -3,22 +3,44 @@ import { load as parseYaml } from "js-yaml";
 import path from "node:path";
 import { stat } from "node:fs/promises";
 import { FileDatabase } from "@/storage/FileDatabase";
-import { getAgentMemoryPath, getNotesPath, getActiveWorkspacePath } from "@/storage/root-path";
+import { getAgentMemoryPath, getNomendexPath, getNotesPath, getActiveWorkspacePath } from "@/storage/root-path";
 import { createServiceLogger } from "@/lib/logger";
 import { AgentMemoryRecordSchema, MemoryKindSchema, MemoryScopeSchema } from "./index";
 import type { AgentMemoryRecord, MemoryScope, MemoryKind } from "./index";
 import { DEFAULT_TTL_DAYS } from "./index";
 import { readVaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
+import {
+    initEmbeddings,
+    disposeEmbeddings,
+    flushEmbeddings,
+    embed,
+    embedQuery,
+    toEmbedText,
+    getEmbedding,
+    setEmbedding,
+    removeEmbedding,
+    getAllEmbeddings,
+    backfillMissingEmbeddings,
+    embeddingsAvailable,
+    dot,
+} from "./embeddings";
 
 const logger = createServiceLogger("AGENT_MEMORY");
 
 let db: FileDatabase<AgentMemoryRecord> | null = null;
-let cleanupTimer: ReturnType<typeof setInterval> | null = null;
-const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+let maintenanceDispose: (() => void) | null = null;
 const VAULT_MEMORY_TEXT_LIMIT = 9_000;
 const DEFAULT_MAX_PROJECT_FILES = 120;
 const MAX_GOAL_FILES = 60;
-export const THE_VAULT_WORKSPACE_PATH = "/Users/honza/Library/Mobile Documents/iCloud~md~obsidian/Documents/TheVault";
+/**
+ * Optional pin: when `NOMENDEX_VAULT_WORKSPACE_PATH` is set, vault sync only runs
+ * if the active workspace matches that path. When unset, vault sync runs against
+ * the current workspace — no pinning, distribution-friendly.
+ */
+export function getVaultWorkspacePath(): string | null {
+    const raw = process.env.NOMENDEX_VAULT_WORKSPACE_PATH;
+    return raw && raw.trim() ? raw.trim() : null;
+}
 
 export class MemoryWorkspaceMismatchError extends Error {
     code = "WRONG_WORKSPACE" as const;
@@ -26,7 +48,7 @@ export class MemoryWorkspaceMismatchError extends Error {
     activeWorkspacePath: string | null;
 
     constructor(params: { expectedWorkspacePath: string; activeWorkspacePath: string | null }) {
-        super("Memory se načítá jen z TheVault. Přepni aktivní workspace na TheVault.");
+        super("Vault sync is pinned to a specific workspace. Switch to that workspace or unset NOMENDEX_VAULT_WORKSPACE_PATH.");
         this.name = "MemoryWorkspaceMismatchError";
         this.expectedWorkspacePath = params.expectedWorkspacePath;
         this.activeWorkspacePath = params.activeWorkspacePath;
@@ -74,7 +96,7 @@ function normalizeRecord(raw: Record<string, unknown>): AgentMemoryRecord | null
 /**
  * Load all records from disk with normalization. Corrupt records are skipped.
  */
-async function loadAllNormalized(): Promise<AgentMemoryRecord[]> {
+export async function loadAllNormalized(): Promise<AgentMemoryRecord[]> {
     const rawRecords = await getDb().findAll();
     const results: AgentMemoryRecord[] = [];
     for (const raw of rawRecords) {
@@ -318,9 +340,16 @@ function computeRecencyScore(updatedAt: string): number {
 // Correction memories almost always win against same-topic peers — they encode
 // "the user explicitly took back what they said before." Bump their final score
 // so a correction outranks a stale preference/decision at the same recency.
+// IMPORTANT: boost must be applied AFTER hybrid combine, not inside scoreRecordBase,
+// otherwise it would be diluted by 0.4× and become ineffective.
 const CORRECTION_SCORE_BOOST = 0.15;
 
-function scoreRecord(record: AgentMemoryRecord, queryTokens: string[]): number {
+/**
+ * Base keyword score WITHOUT correction boost.
+ * Used by searchAgentMemory for hybrid scoring, where the boost is applied
+ * after the hybrid combine to prevent dilution.
+ */
+export function scoreRecordBase(record: AgentMemoryRecord, queryTokens: string[]): number {
     const titleTextTokens = tokenize(`${record.title} ${record.text}`);
     const tagTokens = record.tags.map((t) => t.toLowerCase());
 
@@ -340,22 +369,54 @@ function scoreRecord(record: AgentMemoryRecord, queryTokens: string[]): number {
     const recency = computeRecencyScore(record.updatedAt);
     const importance = record.importance;
 
-    // score = 0.55*textMatch + 0.20*tagMatch + 0.15*recency + 0.10*importance
-    const base = 0.55 * textMatch + 0.20 * tagMatch + 0.15 * recency + 0.10 * importance;
+    return 0.55 * textMatch + 0.20 * tagMatch + 0.15 * recency + 0.10 * importance;
+}
+
+/**
+ * Full keyword score WITH correction boost.
+ * Used by listManagedMemories where no hybrid scoring is applied.
+ */
+function scoreRecord(record: AgentMemoryRecord, queryTokens: string[]): number {
+    const base = scoreRecordBase(record, queryTokens);
     return record.kind === "correction" ? base + CORRECTION_SCORE_BOOST : base;
+}
+
+/**
+ * Internal helper: apply a partial update to a memory record.
+ * Used by maintenance routines (repairSupersedes, archiveMemory).
+ * Returns the updated record or null if not found.
+ */
+export async function updateMemoryFields(
+    id: string,
+    partial: Partial<AgentMemoryRecord>,
+): Promise<AgentMemoryRecord | null> {
+    const updated = await getDb().update(id, partial as Partial<AgentMemoryRecord>);
+    return updated ?? null;
+}
+
+/**
+ * Internal helper: hard-delete a memory record (and its embedding).
+ * Used by maintenance AI consolidation for prune proposals.
+ */
+export async function deleteMemoryRaw(id: string): Promise<boolean> {
+    const ok = await getDb().delete(id);
+    if (ok) removeEmbedding(id);
+    return ok;
 }
 
 // --- Public API ---
 
 /**
- * Tear down the memory service: stop the cleanup timer and release the DB reference.
+ * Tear down the memory service: stop the cleanup timer, flush embeddings, and release the DB reference.
  * Safe to call even if the service was never initialized.
  */
-export function disposeAgentMemoryService(): void {
-    if (cleanupTimer) {
-        clearInterval(cleanupTimer);
-        cleanupTimer = null;
+export async function disposeAgentMemoryService(): Promise<void> {
+    if (maintenanceDispose) {
+        try { maintenanceDispose(); } catch { /* ignore */ }
+        maintenanceDispose = null;
     }
+    await flushEmbeddings();
+    disposeEmbeddings();
     db = null;
     logger.info("Agent memory service disposed");
 }
@@ -364,24 +425,44 @@ export async function initializeAgentMemoryService(): Promise<void> {
     const basePath = getAgentMemoryPath();
     db = new FileDatabase<AgentMemoryRecord>(basePath);
     await db.initialize();
+
+    // Initialize embeddings store (non-blocking — just reads existing files)
+    const nomendexPath = getNomendexPath();
+    await initEmbeddings(nomendexPath);
+
     logger.info("Agent memory service initialized", { path: basePath });
 
-    // Run cleanup on init
+    // Run cleanup on init (prunes expired, archives low-score)
     await cleanupExpired();
 
-    // Schedule periodic cleanup (actual timer, not just lazy check)
-    if (cleanupTimer) clearInterval(cleanupTimer);
-    cleanupTimer = setInterval(() => {
-        cleanupExpired().catch((err) => {
-            logger.warn("Periodic cleanup failed", {
-                error: err instanceof Error ? err.message : String(err),
-            });
-        });
-    }, CLEANUP_INTERVAL_MS);
-    // Don't hold the process open for the timer
-    if (cleanupTimer && typeof cleanupTimer === "object" && "unref" in cleanupTimer) {
-        cleanupTimer.unref();
+    // Single load shared by orphan sweep + backfill (avoids reading the DB twice).
+    const allRecords = await loadAllNormalized();
+    const allIds = new Set(allRecords.map((r) => r.id));
+
+    // Integrity sweep: remove orphaned embeddings (ids in store but not in db)
+    for (const eid of getAllEmbeddings().keys()) {
+        if (!allIds.has(eid)) {
+            removeEmbedding(eid);
+        }
     }
+
+    // Fire-and-forget background backfill for records missing embeddings.
+    // Snapshot allRecords now — this won't see records created after init returns,
+    // which is fine: those records embed themselves on save.
+    void backfillMissingEmbeddings(allRecords).catch((err) => {
+        logger.warn("Background backfill failed", {
+            error: err instanceof Error ? err.message : String(err),
+        });
+    });
+
+    // Schedule daily maintenance (cleanup + repair + integrity + optional AI consolidation).
+    // Lazy import keeps fx.ts ↔ maintenance.ts boundary clean (maintenance imports fx).
+    if (maintenanceDispose) {
+        try { maintenanceDispose(); } catch { /* ignore */ }
+        maintenanceDispose = null;
+    }
+    const { startDailyMaintenance } = await import("./maintenance");
+    maintenanceDispose = startDailyMaintenance(22);
 }
 
 // --- Adaptive decay scoring (Boop-style) ---
@@ -414,7 +495,7 @@ export function computeMemoryScore(record: AgentMemoryRecord, nowMs: number = Da
  * Permanent tier (importance >= 0.7) is never pruned or archived by decay,
  * but still respects an explicit expiresAt.
  */
-async function cleanupExpired(): Promise<void> {
+export async function cleanupExpired(): Promise<void> {
     try {
         const all = await loadAllNormalized();
         const now = Date.now();
@@ -426,6 +507,7 @@ async function cleanupExpired(): Promise<void> {
             // Explicit TTL always wins (hard delete).
             if (record.expiresAt && record.expiresAt < nowIso) {
                 await getDb().delete(record.id);
+                removeEmbedding(record.id);
                 pruned++;
                 continue;
             }
@@ -440,6 +522,7 @@ async function cleanupExpired(): Promise<void> {
 
             if (score < PRUNE_SCORE_THRESHOLD) {
                 await getDb().delete(record.id);
+                removeEmbedding(record.id);
                 pruned++;
                 continue;
             }
@@ -494,8 +577,27 @@ export async function searchAgentMemory(input: {
         return visible.sort((a, b) => score(b) - score(a)).slice(0, limit);
     }
 
+    // Hybrid scoring: try vector search, fall back to keyword-only
+    const useVector = await embeddingsAvailable();
+    const queryVec = useVector ? await embedQuery(query) : null;
+    const useHybrid = queryVec !== null;
+
     // Score and rank
-    const scored = visible.map((r) => ({ record: r, score: scoreRecord(r, queryTokens) }));
+    const scored = visible.map((r) => {
+        const kw = scoreRecordBase(r, queryTokens);
+
+        let combined: number;
+        if (useHybrid) {
+            const vec = getEmbedding(r.id);
+            const sim = vec ? Math.max(0, dot(queryVec!, vec)) : 0;
+            combined = 0.6 * sim + 0.4 * kw;
+        } else {
+            combined = kw;
+        }
+
+        if (r.kind === "correction") combined += CORRECTION_SCORE_BOOST;
+        return { record: r, score: combined };
+    });
     scored.sort((a, b) => b.score - a.score);
 
     // Update lastAccessedAt + accessCount for returned results
@@ -584,6 +686,7 @@ export async function saveAgentMemory(input: {
         // Merge — append any new supersedes onto the existing record.
         const mergedTags = [...new Set([...existing.tags, ...tags])];
         const mergedSupersedes = [...new Set([...(existing.supersedes ?? []), ...supersededIds])];
+        const textChanged = existing.fingerprint !== fingerprint || existing.title !== title || existing.text !== text;
         const updated = await getDb().update(existing.id, {
             updatedAt: now,
             lastAccessedAt: now,
@@ -595,6 +698,13 @@ export async function saveAgentMemory(input: {
             title,
             text,
         } as Partial<AgentMemoryRecord>);
+
+        // Re-embed only if content actually changed (fire-and-forget; best-effort).
+        if (textChanged) {
+            void embed(toEmbedText(updated || existing)).then((vec) => {
+                if (vec) setEmbedding(existing.id, vec);
+            }).catch(() => {});
+        }
 
         logger.info("Deduped memory record", {
             id: existing.id,
@@ -635,6 +745,14 @@ export async function saveAgentMemory(input: {
     };
 
     await getDb().create(record);
+
+    // Embed the new record asynchronously
+    void embed(toEmbedText(record)).then((vec) => {
+        if (vec) setEmbedding(record.id, vec);
+    }).catch(() => {
+        // Embedding is best-effort; search degrades gracefully
+    });
+
     logger.info("Saved new memory record", {
         id,
         kind,
@@ -658,7 +776,10 @@ export async function deleteAgentMemory(input: {
     if (!record) return false;
     if (record.agentId !== agentId && record.scope !== "workspace") return false;
 
-    return getDb().delete(memoryId);
+    return getDb().delete(memoryId).then((result) => {
+        if (result) removeEmbedding(memoryId);
+        return result;
+    });
 }
 
 export async function listRecentAgentMemory(input: {
@@ -699,9 +820,12 @@ export async function syncAgentMemoryFromVault(input: {
 }> {
     const { agentId, maxProjectFiles = DEFAULT_MAX_PROJECT_FILES } = input;
     const activeWorkspacePath = getActiveWorkspacePath();
-    const expectedWorkspacePath = THE_VAULT_WORKSPACE_PATH;
+    const expectedWorkspacePath = getVaultWorkspacePath();
 
-    if (!activeWorkspacePath || normalizeAbsolutePath(activeWorkspacePath) !== normalizeAbsolutePath(expectedWorkspacePath)) {
+    if (expectedWorkspacePath && (
+        !activeWorkspacePath ||
+        normalizeAbsolutePath(activeWorkspacePath) !== normalizeAbsolutePath(expectedWorkspacePath)
+    )) {
         throw new MemoryWorkspaceMismatchError({
             expectedWorkspacePath,
             activeWorkspacePath,
@@ -776,6 +900,14 @@ export async function syncAgentMemoryFromVault(input: {
                 updatedAt: now,
                 lastAccessedAt: now,
             } as Partial<AgentMemoryRecord>);
+
+            // Re-embed if content changed (fire-and-forget so vault sync stays fast).
+            if (existing.fingerprint !== item.fingerprint) {
+                void embed(toEmbedText({ title: item.title, text: item.text })).then((vec) => {
+                    if (vec) setEmbedding(existing.id, vec);
+                }).catch(() => {});
+            }
+
             updated++;
             continue;
         }
@@ -801,6 +933,12 @@ export async function syncAgentMemoryFromVault(input: {
             supersedes: [],
         };
         await getDb().create(record);
+
+        // Embed the new vault record
+        void embed(toEmbedText(record)).then((vec) => {
+            if (vec) setEmbedding(record.id, vec);
+        }).catch(() => {});
+
         created++;
     }
 
@@ -994,6 +1132,13 @@ export async function saveMemoryFromMarkdown(input: {
 
         const updated = await getDb().update(memoryId, updatePayload);
 
+        // Re-embed if content changed (fire-and-forget; embedding is best-effort).
+        if (existing.fingerprint !== fingerprint) {
+            void embed(toEmbedText(updated || existing)).then((vec) => {
+                if (vec) setEmbedding(memoryId, vec);
+            }).catch(() => {});
+        }
+
         logger.info("Updated memory from markdown", { id: memoryId });
         return { record: updated || existing };
     } else {
@@ -1026,6 +1171,12 @@ export async function saveMemoryFromMarkdown(input: {
         };
 
         await getDb().create(record);
+
+        // Embed the new record
+        void embed(toEmbedText(record)).then((vec) => {
+            if (vec) setEmbedding(record.id, vec);
+        }).catch(() => {});
+
         logger.info("Created memory from markdown", { id, kind, scope });
         return { record };
     }

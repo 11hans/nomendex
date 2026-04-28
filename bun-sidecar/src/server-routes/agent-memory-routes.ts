@@ -10,6 +10,7 @@ import {
     saveMemoryFromMarkdown,
     syncAgentMemoryFromVault,
     MemoryWorkspaceMismatchError,
+    getVaultWorkspacePath,
 } from "@/features/agent-memory/fx";
 import { MemoryScopeSchema, MemoryKindSchema } from "@/features/agent-memory/index";
 
@@ -110,6 +111,11 @@ const ManageSyncVaultInputSchema = z.object({
 });
 
 export const agentMemoryRoutes = {
+    "/api/agent-memory/vault-pin": {
+        async GET() {
+            return Response.json({ vaultWorkspacePath: getVaultWorkspacePath() });
+        },
+    },
     "/api/agent-memory/search": {
         async POST(req: Request) {
             try {
