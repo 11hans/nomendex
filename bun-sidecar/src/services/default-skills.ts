@@ -1433,7 +1433,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 15
+version: 16
 source: nomendex
 ---
 
@@ -1528,6 +1528,19 @@ If the user reports partial completion, apply the bpagent **Partial completion**
 ---
 
 ## Evening Shutdown (5 min)
+
+### Step 0 — Bootstrap today's note
+
+Before anything else, ensure today's daily note exists with proper structure:
+
+1. Get the workspace notes path: \`curl -s http://localhost:$PORT/api/workspace/paths | jq -r '.data.notes'\`
+2. Run \`NOTES_DIR=<notes_path> .claude/skills/daily-notes/daily-note.sh get-today\` to get/create today's note path.
+3. If the returned path points to an **empty file** (newly created), write the full template from \`## Daily Note Structure\` to that path:
+   - Replace \`{{date}}\` with today's display date using the vault's existing filename convention (e.g. \`4-28-2026\` for M-D-YYYY format).
+   - Leave all section bodies blank — the shutdown steps will fill them in.
+4. **Do NOT skip this step.** Without proper section structure, shutdown writes unstructured output instead of filling the correct sections.
+
+> This step is a no-op when morning already ran (file is already populated).
 
 ### Completion Scoring
 
