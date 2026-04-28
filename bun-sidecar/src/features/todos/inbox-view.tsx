@@ -324,7 +324,7 @@ function DraggableTodoRow({
                     }`}
                 />
 
-                <span className="truncate text-xs" style={{ color: contentPrimary }}>{todo.title}</span>
+                <span className="truncate text-xs min-w-0 flex-1" style={{ color: contentPrimary }}>{todo.title}</span>
 
                 <span className="ml-auto flex items-center gap-2 shrink-0" style={{ color: contentTertiary }}>
                     {isEvent && <span className="text-[10px] uppercase tracking-[0.08em]">event</span>}

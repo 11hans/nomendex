@@ -240,7 +240,7 @@ export function TodoCard({
                                                 className="size-3.5"
                                             />
                                             <span
-                                                className="text-xs truncate"
+                                                className="text-xs truncate min-w-0 flex-1"
                                                 style={{
                                                     color: item.checked ? currentTheme.styles.contentTertiary : currentTheme.styles.contentPrimary,
                                                     textDecoration: item.checked ? 'line-through' : 'none',

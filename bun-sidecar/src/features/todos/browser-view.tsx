@@ -1781,7 +1781,7 @@ export function TodosBrowserView({
                     className="size-3 shrink-0"
                 />
                 <span
-                    className="text-xs truncate flex-1 py-1"
+                    className="text-xs truncate min-w-0 flex-1 py-1"
                     style={{
                         color: isSubtaskDone ? currentTheme.styles.contentTertiary : currentTheme.styles.contentSecondary,
                         textDecoration: isSubtaskDone ? "line-through" : "none",
