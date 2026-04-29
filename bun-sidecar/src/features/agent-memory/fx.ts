@@ -701,8 +701,8 @@ export async function saveAgentMemory(input: {
 
         // Re-embed only if content actually changed (fire-and-forget; best-effort).
         if (textChanged) {
-            void embed(toEmbedText(updated || existing)).then((vec) => {
-                if (vec) setEmbedding(existing.id, vec);
+            void embed(toEmbedText(updated || existing)).then(async (vec) => {
+                if (vec) { setEmbedding(existing.id, vec); await flushEmbeddings(); }
             }).catch(() => {});
         }
 
@@ -747,8 +747,8 @@ export async function saveAgentMemory(input: {
     await getDb().create(record);
 
     // Embed the new record asynchronously
-    void embed(toEmbedText(record)).then((vec) => {
-        if (vec) setEmbedding(record.id, vec);
+    void embed(toEmbedText(record)).then(async (vec) => {
+        if (vec) { setEmbedding(record.id, vec); await flushEmbeddings(); }
     }).catch(() => {
         // Embedding is best-effort; search degrades gracefully
     });
@@ -903,8 +903,8 @@ export async function syncAgentMemoryFromVault(input: {
 
             // Re-embed if content changed (fire-and-forget so vault sync stays fast).
             if (existing.fingerprint !== item.fingerprint) {
-                void embed(toEmbedText({ title: item.title, text: item.text })).then((vec) => {
-                    if (vec) setEmbedding(existing.id, vec);
+                void embed(toEmbedText({ title: item.title, text: item.text })).then(async (vec) => {
+                    if (vec) { setEmbedding(existing.id, vec); await flushEmbeddings(); }
                 }).catch(() => {});
             }
 
@@ -935,8 +935,8 @@ export async function syncAgentMemoryFromVault(input: {
         await getDb().create(record);
 
         // Embed the new vault record
-        void embed(toEmbedText(record)).then((vec) => {
-            if (vec) setEmbedding(record.id, vec);
+        void embed(toEmbedText(record)).then(async (vec) => {
+            if (vec) { setEmbedding(record.id, vec); await flushEmbeddings(); }
         }).catch(() => {});
 
         created++;
@@ -1134,8 +1134,8 @@ export async function saveMemoryFromMarkdown(input: {
 
         // Re-embed if content changed (fire-and-forget; embedding is best-effort).
         if (existing.fingerprint !== fingerprint) {
-            void embed(toEmbedText(updated || existing)).then((vec) => {
-                if (vec) setEmbedding(memoryId, vec);
+            void embed(toEmbedText(updated || existing)).then(async (vec) => {
+                if (vec) { setEmbedding(memoryId, vec); await flushEmbeddings(); }
             }).catch(() => {});
         }
 
@@ -1173,8 +1173,8 @@ export async function saveMemoryFromMarkdown(input: {
         await getDb().create(record);
 
         // Embed the new record
-        void embed(toEmbedText(record)).then((vec) => {
-            if (vec) setEmbedding(record.id, vec);
+        void embed(toEmbedText(record)).then(async (vec) => {
+            if (vec) { setEmbedding(record.id, vec); await flushEmbeddings(); }
         }).catch(() => {});
 
         logger.info("Created memory from markdown", { id, kind, scope });
