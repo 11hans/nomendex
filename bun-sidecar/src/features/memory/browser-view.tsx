@@ -26,9 +26,10 @@ import {
     DialogTitle,
     DialogFooter,
 } from "@/components/ui/dialog";
-import { Brain, Search, Plus, Save, Undo2, Trash2, ExternalLink, Calendar } from "lucide-react";
+import { Brain, Search, Plus, Save, Undo2, Trash2, ExternalLink, Calendar, Sparkles } from "lucide-react";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
 import type { AgentMemoryRecord, MemoryKind } from "@/features/agent-memory";
+import type { ConsolidationReport } from "@/features/agent-memory/maintenance";
 import { notesPluginSerial } from "@/features/notes";
 
 const ALL_KINDS: MemoryKind[] = ["preference", "goal", "project", "decision", "context", "reference", "correction"];
@@ -135,6 +136,9 @@ function MemoryTab({ tabId }: { tabId: string }) {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
 
+    const [isConsolidating, setIsConsolidating] = useState(false);
+    const [consolidationResult, setConsolidationResult] = useState<ConsolidationReport | null>(null);
+
     const searchInputRef = useRef<HTMLInputElement>(null);
     const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const didInitialSyncRef = useRef(false);
@@ -217,6 +221,30 @@ function MemoryTab({ tabId }: { tabId: string }) {
 
         return isTarget;
     }, []);
+
+    const handleRunConsolidation = useCallback(async () => {
+        try {
+            setIsConsolidating(true);
+            setConsolidationResult(null);
+            const report = await api.runConsolidation();
+            setConsolidationResult(report);
+            if (report.provider !== "skipped") {
+                await loadMemories(searchQuery, kindFilter !== "all" ? [kindFilter as MemoryKind] : undefined);
+            }
+        } catch (err) {
+            setConsolidationResult({
+                provider: "skipped",
+                proposals: 0,
+                pruned: 0,
+                superseded: 0,
+                merged: 0,
+                failed: 0,
+                reason: err instanceof Error ? err.message : "unknown error",
+            });
+        } finally {
+            setIsConsolidating(false);
+        }
+    }, [api, loadMemories, searchQuery, kindFilter]);
 
     // Initial load: sync vault-derived memories first, then load list.
     useEffect(() => {
@@ -393,7 +421,17 @@ function MemoryTab({ tabId }: { tabId: string }) {
                             <span className="text-caption" style={{ color: styles.contentTertiary }}>
                                 {total} items
                             </span>
-                            <div className="ml-auto">
+                            <div className="ml-auto flex items-center gap-1">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => { void handleRunConsolidation(); }}
+                                    className="h-7 rounded-md px-2 text-xs font-medium"
+                                    disabled={!isTheVaultWorkspace || isConsolidating}
+                                    title="Run AI consolidation (prune/merge/supersede)"
+                                >
+                                    <Sparkles className="size-3" />
+                                </Button>
                                 <Button
                                     variant="default"
                                     size="sm"
@@ -409,6 +447,24 @@ function MemoryTab({ tabId }: { tabId: string }) {
                         <p className="mt-1 text-caption" style={{ color: styles.contentTertiary }}>
                             editable markdown memories with YAML frontmatter
                         </p>
+
+                        {/* Consolidation status */}
+                        {isConsolidating && (
+                            <p className="mt-1 text-caption" style={{ color: styles.contentTertiary }}>
+                                running consolidation...
+                            </p>
+                        )}
+                        {!isConsolidating && consolidationResult && (
+                            <p className="mt-1 text-caption" style={{
+                                color: consolidationResult.provider === "skipped"
+                                    ? styles.contentTertiary
+                                    : styles.semanticSuccess,
+                            }}>
+                                {consolidationResult.provider === "skipped"
+                                    ? `consolidation skipped${consolidationResult.reason ? `: ${consolidationResult.reason}` : ""}`
+                                    : `consolidation done — pruned ${consolidationResult.pruned}, merged ${consolidationResult.merged}, superseded ${consolidationResult.superseded}`}
+                            </p>
+                        )}
 
                         {/* Search */}
                         <div className="relative mt-2">

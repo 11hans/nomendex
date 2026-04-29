@@ -1,4 +1,5 @@
 import type { AgentMemoryRecord, MemoryKind } from "@/features/agent-memory";
+import type { ConsolidationReport } from "@/features/agent-memory/maintenance";
 
 const AGENT_ID = "bpagent";
 
@@ -52,6 +53,8 @@ export const agentMemoryAPI = {
             archived: number;
             skipped: number;
         }>("sync-vault", args),
+
+    runConsolidation: () => fetchAPI<ConsolidationReport>("run-consolidation"),
 };
 
 export function useAgentMemoryAPI() {

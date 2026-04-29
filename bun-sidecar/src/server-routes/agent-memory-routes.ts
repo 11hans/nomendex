@@ -13,6 +13,7 @@ import {
     getVaultWorkspacePath,
 } from "@/features/agent-memory/fx";
 import { MemoryScopeSchema, MemoryKindSchema } from "@/features/agent-memory/index";
+import { runAIConsolidation } from "@/features/agent-memory/maintenance";
 
 /**
  * Agent IDs that are allowed to use memory.
@@ -264,6 +265,23 @@ export const agentMemoryRoutes = {
                 validateAgentId(body.agentId);
                 const result = await deleteAgentMemory(body);
                 return Response.json({ deleted: result });
+            } catch (error) {
+                const status = errorStatus(error);
+                return Response.json(
+                    { error: error instanceof Error ? error.message : String(error) },
+                    { status }
+                );
+            }
+        },
+    },
+
+    "/api/agent-memory/manage/run-consolidation": {
+        async POST(req: Request) {
+            try {
+                const body = z.object({ agentId: z.string() }).parse(await req.json());
+                validateAgentId(body.agentId);
+                const report = await runAIConsolidation();
+                return Response.json(report);
             } catch (error) {
                 const status = errorStatus(error);
                 return Response.json(
