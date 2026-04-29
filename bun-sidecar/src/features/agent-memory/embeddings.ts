@@ -10,7 +10,7 @@ const logger = createServiceLogger("EMBEDDINGS");
 // --- Constants ---
 const VOYAGE_BASE_URL = "https://api.voyageai.com/v1";
 const VOYAGE_MODEL = "voyage-3-large";
-const EMBEDDING_DIM = 2048;
+const EMBEDDING_DIM = 1024;
 const MIN_TEXT_LENGTH = 20;
 const MAX_INPUT_TOKENS = 8000;
 const BATCH_SIZE = 128;
