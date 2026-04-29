@@ -204,7 +204,6 @@ export async function embed(text: string, signal?: AbortSignal): Promise<Float32
             body: JSON.stringify({
                 model: VOYAGE_MODEL,
                 input: [input],
-                encoding_format: "float",
             }),
             signal: signal || apiAbortController?.signal || undefined,
         });
@@ -287,7 +286,6 @@ export async function embedBatch(
                     body: JSON.stringify({
                         model: VOYAGE_MODEL,
                         input: validTexts.map((v) => v.text),
-                        encoding_format: "float",
                     }),
                     signal: signal || apiAbortController?.signal || undefined,
                 });
