@@ -79,6 +79,38 @@ export async function getGoalById(input: { goalId: string }): Promise<GoalRecord
     return goal;
 }
 
+const VALID_PARENT_HORIZON: Record<GoalRecord["horizon"], GoalRecord["horizon"] | null> = {
+    vision: null,
+    yearly: "vision",
+    quarterly: "yearly",
+    monthly: "quarterly",
+};
+
+async function validateHierarchy(
+    horizon: GoalRecord["horizon"],
+    parentGoalId: string | null | undefined,
+    selfId?: string,
+): Promise<void> {
+    const expectedParentHorizon = VALID_PARENT_HORIZON[horizon];
+
+    if (parentGoalId) {
+        const parent = await getDb().findById(parentGoalId);
+        if (!parent) {
+            throw new Error(`Parent goal "${parentGoalId}" not found`);
+        }
+        if (parent.id === selfId) {
+            throw new Error("A goal cannot be its own parent");
+        }
+        if (expectedParentHorizon && parent.horizon !== expectedParentHorizon) {
+            throw new Error(
+                `A ${horizon} goal must have a ${expectedParentHorizon} parent, but "${parent.title}" is ${parent.horizon}`,
+            );
+        }
+    } else if (expectedParentHorizon) {
+        goalsLogger.warn(`Goal with horizon "${horizon}" has no parent — will appear as orphan in forest`);
+    }
+}
+
 /**
  * Create a new goal.
  */
@@ -159,6 +191,9 @@ export async function createGoal(input: {
         ...progressFields,
     };
 
+    // Validate hierarchy before creating
+    await validateHierarchy(input.horizon, input.parentGoalId ?? null);
+
     const goal = GoalRecordSchema.parse(goalData);
     const created = await getDb().create(goal);
 
@@ -180,6 +215,7 @@ export async function updateGoal(input: {
         parentGoalId?: string | null;
         targetDate?: string | null;
         tags?: string[];
+        focus?: boolean;
         mirrorNoteFile?: string | null;
         progressMode?: "rollup" | "metric" | "manual" | "milestone";
         progressCurrent?: number;
@@ -211,6 +247,13 @@ export async function updateGoal(input: {
     }
     if (mirrorNoteFile !== undefined) {
         updates.mirrorNoteFile = mirrorNoteFile ?? undefined;
+    }
+
+    // Validate hierarchy if parentGoalId or horizon is changing
+    const newHorizon = (input.updates.horizon ?? existing.horizon) as GoalRecord["horizon"];
+    const newParentId = parentGoalId !== undefined ? (parentGoalId ?? null) : (existing.parentGoalId ?? null);
+    if (input.updates.parentGoalId !== undefined || input.updates.horizon !== undefined) {
+        await validateHierarchy(newHorizon, newParentId, input.goalId);
     }
 
     // Validate the merged result against the full schema before writing

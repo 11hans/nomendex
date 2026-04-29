@@ -8,6 +8,39 @@ import { initializeDefaultSkills } from "./services/default-skills";
 import { clearFileLocks } from "./services/file-locks";
 import type { SkillUpdateCheckResult } from "./services/skills-types";
 
+const INBOX_ARCHIVE_DAYS = 14;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+async function archiveStaleInboxTodos(): Promise<void> {
+    if (!hasActiveWorkspace()) return;
+
+    try {
+        const { getTodos, updateTodo } = await import("./features/todos/fx");
+        const cutoff = Date.now() - INBOX_ARCHIVE_DAYS * MS_PER_DAY;
+        const todos = await getTodos({ project: "Inbox" });
+        const stale = todos.filter(
+            (t) => t.status === "todo" && !t.archived && t.createdAt && Date.parse(t.createdAt) < cutoff,
+        );
+        if (stale.length === 0) return;
+
+        startupLog.info(`Archiving ${stale.length} stale Inbox todos older than ${INBOX_ARCHIVE_DAYS} days`);
+        for (const todo of stale) {
+            await updateTodo({ todoId: todo.id, updates: { archived: true, status: "later" } });
+        }
+        startupLog.info("Inbox stale-todo archive complete");
+    } catch (error) {
+        startupLog.warn("Inbox auto-archive failed", {
+            error: error instanceof Error ? error.message : String(error),
+        });
+    }
+}
+
+export function scheduleInboxAutoArchive(): void {
+    archiveStaleInboxTodos().catch(() => {});
+    const interval = setInterval(() => { archiveStaleInboxTodos().catch(() => {}); }, MS_PER_DAY);
+    interval.unref();
+}
+
 /**
  * Safely create a directory with error logging.
  * Returns true if successful, false if failed.

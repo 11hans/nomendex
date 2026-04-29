@@ -1,6 +1,6 @@
 import { createServiceLogger } from "@/lib/logger";
 import { getNotesPath } from "@/storage/root-path";
-import { getGoals, getGoalById, getGoalGraph } from "./fx";
+import { getGoals, getGoalById, getGoalGraph, updateGoal } from "./fx";
 import { listProjects, getProject } from "@/features/projects/fx";
 import { getTodos } from "@/features/todos/fx";
 import { mkdir, stat } from "node:fs/promises";
@@ -250,6 +250,7 @@ export async function generateGoalMirrorNote(input: { goalId: string }): Promise
     await mkdir(goalsDir, { recursive: true });
 
     const filePath = path.join(goalsDir, `${slug}.md`);
+    const relativeFilePath = `Goals/goals/${slug}.md`;
     const managedContent = buildGoalManagedContent(graph);
     const managedHash = computeHash(managedContent);
 
@@ -259,6 +260,11 @@ export async function generateGoalMirrorNote(input: { goalId: string }): Promise
         const body = buildFullGoalBody(goal, managedContent);
         const content = serializeFrontMatter(fm, body);
         await Bun.write(filePath, content);
+
+        // Write back the mirror note path to the goal record
+        await updateGoal({ goalId: goal.id, updates: { mirrorNoteFile: relativeFilePath } }).catch((e) =>
+            syncLogger.warn(`Failed to write mirrorNoteFile back to goal ${goal.id}`, { error: e }),
+        );
 
         syncLogger.info(`Created goal mirror note: ${filePath}`);
         return { action: "created", filePath };
@@ -307,6 +313,13 @@ export async function generateGoalMirrorNote(input: { goalId: string }): Promise
     }
 
     const newContent = serializeFrontMatter(mergedFm, newBody);
+
+    // Write back mirrorNoteFile if it's not already set to this path
+    if (goal.mirrorNoteFile !== relativeFilePath) {
+        await updateGoal({ goalId: goal.id, updates: { mirrorNoteFile: relativeFilePath } }).catch((e) =>
+            syncLogger.warn(`Failed to write mirrorNoteFile back to goal ${goal.id}`, { error: e }),
+        );
+    }
 
     if (newContent === raw) {
         syncLogger.info(`Goal mirror note unchanged: ${filePath}`);

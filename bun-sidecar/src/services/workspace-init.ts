@@ -6,7 +6,7 @@ import { initializeProjectsService } from "@/features/projects/fx";
 import { initializeGoalsService } from "@/features/goals/fx";
 import { initializeAgentMemoryService, disposeAgentMemoryService } from "@/features/agent-memory/fx";
 import { secrets } from "@/lib/secrets";
-import { onStartup } from "@/onStartup";
+import { onStartup, scheduleInboxAutoArchive } from "@/onStartup";
 import { startNotesWatcher } from "@/services/notes-watcher";
 import { enableAgentEditing } from "@/services/agent-editing";
 
@@ -79,6 +79,8 @@ export async function initializeWorkspaceServices(): Promise<void> {
         await initService("agent-memory", initializeAgentMemoryService);
         await initService("notes-watcher", () => startNotesWatcher());
         await initService("agent-editing", enableAgentEditing);
+
+        scheduleInboxAutoArchive();
 
         startupLog.info("Feature services initialized");
     } else {

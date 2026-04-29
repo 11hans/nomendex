@@ -10,6 +10,7 @@ const GoalBaseSchema = z.object({
     parentGoalId: z.string().optional(),
     targetDate: z.string().optional(), // YYYY-MM-DD
     tags: z.array(z.string()).optional(),
+    focus: z.boolean().optional(),
     mirrorNoteFile: z.string().optional(),
     createdAt: z.string(),
     updatedAt: z.string(),

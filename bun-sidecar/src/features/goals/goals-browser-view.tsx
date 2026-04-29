@@ -137,6 +137,15 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
         }
     }, []);
 
+    const handleToggleFocus = useCallback(async (goalId: string, currentFocus: boolean) => {
+        try {
+            await goalsAPI.updateGoal({ goalId, updates: { focus: !currentFocus } });
+            setForest(await goalsAPI.getGoalForest());
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Failed to update focus");
+        }
+    }, []);
+
     const handleCreateGoal = useCallback(async (args: {
         title: string;
         area: string;
@@ -212,6 +221,7 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                     {([
                         { label: "Active", value: viewModel.summary.active, mode: "all" as const },
+                        { label: "Focus", value: viewModel.summary.focus, mode: "focus" as const },
                         { label: "Needs attention", value: viewModel.summary.needsAttention, mode: "needs_attention" as const },
                         { label: "Without next action", value: viewModel.summary.withoutNextAction, mode: "without_next_action" as const },
                     ]).map((item) => {
@@ -397,6 +407,19 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
                                                 onSelect={(status) => { void handleQuickStatusChange(row.goal.id, status); }}
                                                 styles={currentTheme.styles}
                                             />
+                                            {(row.goal.focus || isHovered) && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); void handleToggleFocus(row.goal.id, row.goal.focus === true); }}
+                                                    className="rounded-full px-1.5 py-0.5 text-caption transition-colors hover:ring-1 hover:ring-offset-1"
+                                                    title={row.goal.focus ? "Remove from focus" : "Add to focus"}
+                                                    style={{
+                                                        backgroundColor: row.goal.focus ? currentTheme.styles.contentAccent : currentTheme.styles.surfaceTertiary,
+                                                        color: row.goal.focus ? currentTheme.styles.surfacePrimary : currentTheme.styles.contentTertiary,
+                                                    }}
+                                                >
+                                                    {row.goal.focus ? "focus" : "+ focus"}
+                                                </button>
+                                            )}
                                             <span
                                                 className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-caption"
                                                 style={{

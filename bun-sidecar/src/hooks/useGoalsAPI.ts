@@ -44,6 +44,7 @@ export const goalsAPI = {
             parentGoalId?: string | null;
             targetDate?: string | null;
             tags?: string[];
+            focus?: boolean;
             progressMode?: GoalRecord["progressMode"];
             progressCurrent?: number;
             progressTarget?: number;

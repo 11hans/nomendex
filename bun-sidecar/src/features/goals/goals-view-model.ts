@@ -19,6 +19,7 @@ export type GoalBrowserRow = {
 
 export type GoalBrowserSummary = {
     active: number;
+    focus: number;
     needsAttention: number;
     withoutNextAction: number;
 };
@@ -145,15 +146,17 @@ function buildSummary(rows: GoalBrowserRow[]): GoalBrowserSummary {
     const needsAttention = activeRows.filter((row) =>
         ATTENTION_SUMMARY_REASONS.some((reason) => row.attentionReasons.includes(reason))
     ).length;
+    const focus = activeRows.filter((row) => row.goal.focus === true).length;
 
     return {
         active: activeRows.length,
+        focus,
         needsAttention,
         withoutNextAction,
     };
 }
 
-export type GoalBrowserFilterMode = "all" | "needs_attention" | "without_next_action";
+export type GoalBrowserFilterMode = "all" | "needs_attention" | "without_next_action" | "focus";
 
 export function goalMatchesSearch(row: GoalBrowserRow, query: string): boolean {
     const normalized = query.trim().toLowerCase();
@@ -169,6 +172,7 @@ function goalMatchesFilterMode(row: GoalBrowserRow, mode: GoalBrowserFilterMode)
     if (mode === "all") return true;
     if (mode === "needs_attention") return row.needsAttention;
     if (mode === "without_next_action") return row.attentionReasons.includes("without_next_action");
+    if (mode === "focus") return row.goal.focus === true;
     return true;
 }
 
