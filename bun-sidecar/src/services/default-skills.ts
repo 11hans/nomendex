@@ -1458,7 +1458,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 16
+version: 17
 source: nomendex
 ---
 
@@ -1496,7 +1496,14 @@ Read-only by default. Propose first; mutate only after explicit confirmation.
 
    If either group is empty, say so explicitly and continue. When the user expresses timeblock/event intent during morning, route to \`/timeblocking\`.
 3. **Pull incomplete tasks** from yesterday's real daily note if one exists.
-4. **Build the workset** in bucket order (see bpagent prompt → Today Workset Algorithm). Surface Multi-day Context separately.
+4. **Load all active todos** for the workset:
+   \`\`\`bash
+   curl -s -X POST "http://localhost:<port>/api/todos/list" \\
+     -d '{"statuses":["todo","planned","in_progress"]}'
+   \`\`\`
+   Then **build the workset** in bucket order (see bpagent prompt → Today Workset Algorithm):
+   - Apply today's ISO date for overdue / due-today / scheduled comparisons
+   - Surface Multi-day Context separately (never in actionable workset or completion math)
 5. If the user names a focus project, surface its open todos before unrelated candidates:
    \`\`\`bash
    curl -s -X POST "http://localhost:<port>/api/todos/list" \\
