@@ -600,6 +600,31 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
         }
     }, [isLoadingHistory]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Stick-to-bottom autoscroll during streaming.
+    // Track whether the viewport is pinned near the bottom; if the user scrolls
+    // up to read older content, we stop forcing scroll until they return.
+    const isPinnedToBottomRef = useRef(true);
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+        const PIN_THRESHOLD_PX = 80;
+        const update = () => {
+            const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+            isPinnedToBottomRef.current = distance < PIN_THRESHOLD_PX;
+        };
+        update();
+        el.addEventListener("scroll", update, { passive: true });
+        return () => el.removeEventListener("scroll", update);
+    }, [scrollRef]);
+
+    useEffect(() => {
+        if (!isLoading || messages.length === 0) return;
+        if (!isPinnedToBottomRef.current) return;
+        const el = scrollRef.current;
+        if (!el) return;
+        el.scrollTop = el.scrollHeight;
+    }, [messages, isLoading, scrollRef]);
+
     // Update tab name based on first message
     useEffect(() => {
         if (messages.length > 0) {
