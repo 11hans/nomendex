@@ -3,12 +3,33 @@
 import { McpServer } from "@socotra/modelcontextprotocol-sdk/server/mcp.js";
 import { StdioServerTransport } from "@socotra/modelcontextprotocol-sdk/server/stdio.js";
 import { FileDatabase } from "@/storage/FileDatabase";
-import { Todo } from "./todo-types";
+import { Todo, getEffectiveGoalRefs } from "./todo-types";
 import { createTodo, updateTodo, skipRecurrenceOccurrence } from "./fx";
 import { RecurrenceSchema, formatRecurrence } from "./todo-types";
-import { getTodosPath } from "@/storage/root-path";
+import { getNomendexPath, getTodosPath } from "@/storage/root-path";
+import path from "path";
 import { z } from "zod";
 import { canonicalizeProjectFilter, canonicalizeTodoProject, isInboxProjectName } from "@/features/projects/inbox-project";
+
+// Lightweight project→goalRef lookup. The MCP server runs as a child process
+// without the projects service, so we read projects.json directly when an agent
+// asks for a todo's effective goalRefs (which inherit from project.goalRef).
+async function loadProjectGoalRefMap(): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    try {
+        const file = Bun.file(path.join(getNomendexPath(), "projects.json"));
+        if (!(await file.exists())) return map;
+        const raw = await file.json() as { projects?: Array<{ name?: string; goalRef?: string }> };
+        for (const project of raw.projects ?? []) {
+            if (project.name && project.goalRef) {
+                map.set(project.name.toLowerCase(), project.goalRef);
+            }
+        }
+    } catch {
+        // Best-effort: agents fall back to explicit goalRefs only.
+    }
+    return map;
+}
 
 // Initialize database
 const todosDb = new FileDatabase<Todo>(getTodosPath());
@@ -101,8 +122,11 @@ function projectTodoForAgent(t: Todo) {
 
 // Full projection for get_todo — includes fields an agent may want to read
 // (description, tags, archived, completedAt, timestamps) but still trims
-// internal bookkeeping (customColumnId, resolvedGoalRefs, attachments blobs).
-function projectTodoFull(t: Todo) {
+// internal bookkeeping (customColumnId, attachments blobs).
+function projectTodoFull(t: Todo, projectGoalRefByName: Map<string, string>) {
+    const projectGoalRef = t.project
+        ? projectGoalRefByName.get(t.project.toLowerCase())
+        : undefined;
     return {
         ...projectTodoForAgent(t),
         description: t.description ?? null,
@@ -112,7 +136,9 @@ function projectTodoFull(t: Todo) {
         archived: t.archived ?? false,
         completedAt: t.completedAt ?? null,
         calendarReminderPreset: t.calendarReminderPreset ?? null,
-        goalRefs: t.goalRefs ?? [],
+        // Effective goal IDs: explicit todo.goalRefs win, otherwise inherited from
+        // project.goalRef. Closed todos always carry a frozen explicit value.
+        goalRefs: getEffectiveGoalRefs(t, projectGoalRef),
         createdAt: t.createdAt,
         updatedAt: t.updatedAt,
     };
@@ -323,13 +349,14 @@ Returns an error if the todo does not exist.`,
             );
         }
         const recurrenceNote = todo.recurrence ? ` — recurs: ${formatRecurrence(todo.recurrence)}` : "";
+        const projectGoalRefByName = await loadProjectGoalRefMap();
         return renderUIWithData(
             {
                 html: buildMutationHtml("Todo", `${todo.title} (${STATUS_LABEL[todo.status]})${recurrenceNote}`),
                 title: "Get Result",
                 height: 150,
             },
-            { todo: projectTodoFull(todo) },
+            { todo: projectTodoFull(todo, projectGoalRefByName) },
         );
     }
 );

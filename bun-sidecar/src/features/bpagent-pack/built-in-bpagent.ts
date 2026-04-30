@@ -323,7 +323,7 @@ GoalRecords are the source of truth for all goals. They are stored as \`.md\` fi
 
 ### Linkage Model
 - Projects have \`goalRef\` (single goal ID) — read from \`/api/projects/get-by-name\`, set via \`/api/projects/update { "projectId": "...", "updates": { "goalRef": "<goalId>" } }\`
-- Todos have \`goalRefs\` (explicit) and \`resolvedGoalRefs\` (inherited from project + explicit)
+- Todos have \`goalRefs\`: \`undefined\` = inherit from project.goalRef at read time, \`[]\` = explicitly no goal, \`["..."]\` = explicit goal IDs. Closed todos (done/archived) have \`goalRefs\` baked in as a frozen historical snapshot.
 - Mirror notes (\`Goals/goals/*.md\`, \`Projects/*.md\`) are readable/editable views synced from the store
 - Dashboards (\`Goals/0-2.md\`) are generated summaries — never edit directly
 

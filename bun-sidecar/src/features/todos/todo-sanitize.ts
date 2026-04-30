@@ -22,6 +22,8 @@ export function sanitizeTodoForClient(todo: Todo): Todo {
     const raw = todo as unknown as Record<string, unknown>;
     const withoutLegacyOrder = { ...todo } as Record<string, unknown>;
     delete withoutLegacyOrder.order;
+    // Legacy field — replaced by single goalRefs (see todo-types.ts).
+    delete withoutLegacyOrder.resolvedGoalRefs;
 
     const maybeKind = raw.kind;
     const maybeSource = raw.source;
@@ -66,7 +68,6 @@ export function sanitizeTodoForClient(todo: Todo): Todo {
         customColumnId: toOptionalString(raw.customColumnId),
         calendarReminderPreset,
         goalRefs: toOptionalStringArray(raw.goalRefs, true),
-        resolvedGoalRefs: toOptionalStringArray(raw.resolvedGoalRefs),
         parentTodoId: toOptionalString(raw.parentTodoId),
         recurrence: (() => {
             const r = raw.recurrence as { frequency?: unknown; interval?: unknown } | undefined;

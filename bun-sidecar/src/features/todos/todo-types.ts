@@ -59,14 +59,33 @@ export const TodoSchema = z.object({
     duration: z.number().optional(),
     attachments: z.array(AttachmentSchema).optional(),
     calendarReminderPreset: z.enum(["30-15", "none"]).optional(),
-    goalRefs: z.array(z.string()).optional(), // user/agent editable input
-    resolvedGoalRefs: z.array(z.string()).optional(), // frozen snapshot for reporting
+    // Goal links. Three states:
+    //   undefined  → inherit from project.goalRef at read time (open todos only)
+    //   []         → explicit "no goal" — never inherits
+    //   ["..."]    → explicit goal IDs
+    // On close (status=done or archived=true), undefined is frozen into a concrete
+    // value (`[projectGoalRef]` or `[]`) so the historical link survives later
+    // changes to project.goalRef.
+    goalRefs: z.array(z.string()).optional(),
     // First-class subtask support (max 1 level deep)
     parentTodoId: z.string().optional(), // set on subtasks; absent on top-level todos
     recurrence: RecurrenceSchema.optional(),
 });
 
 export type Todo = z.infer<typeof TodoSchema>;
+
+/**
+ * Resolve the effective goal IDs for a todo at read time.
+ * - Explicit goalRefs (including []) win.
+ * - Otherwise inherit from the project's goalRef.
+ */
+export function getEffectiveGoalRefs(
+    todo: Pick<Todo, "goalRefs">,
+    projectGoalRef: string | undefined,
+): string[] {
+    if (todo.goalRefs !== undefined) return todo.goalRefs;
+    return projectGoalRef ? [projectGoalRef] : [];
+}
 
 // Canonical priority config — single source of truth for labels & colors
 export const PRIORITY_CONFIG = [

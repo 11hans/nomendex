@@ -3,6 +3,7 @@ import { FileDatabase } from "@/storage/FileDatabase";
 import { getGoalsPath, hasActiveWorkspace } from "@/storage/root-path";
 import { GoalRecord, GoalRecordSchema } from "./goal-types";
 import type { Todo } from "@/features/todos/todo-types";
+import { getEffectiveGoalRefs } from "@/features/todos/todo-types";
 import { isTaskTodo } from "@/features/todos/todo-kind-utils";
 import type { ProjectConfig } from "@/features/projects/project-types";
 
@@ -384,9 +385,20 @@ export function buildGoalForestNodes(input: {
         }
     }
 
+    // Project name → goalRef map for read-time inheritance on open todos.
+    const projectGoalRefByName = new Map<string, string>();
+    for (const project of input.allProjects) {
+        if (project.name && project.goalRef) {
+            projectGoalRefByName.set(project.name.toLowerCase(), project.goalRef);
+        }
+    }
+
     const todosByGoalId = new Map<string, Todo[]>();
     for (const todo of input.allTodos) {
-        const goalRefs = todo.resolvedGoalRefs ?? [];
+        const projectGoalRef = todo.project
+            ? projectGoalRefByName.get(todo.project.toLowerCase())
+            : undefined;
+        const goalRefs = getEffectiveGoalRefs(todo, projectGoalRef);
         for (const goalId of goalRefs) {
             const existing = todosByGoalId.get(goalId);
             if (existing) {
@@ -475,9 +487,10 @@ export async function getGoalGraph(input: { goalId: string }): Promise<{
 
     // Get linked projects (projects that reference this goal via goalRef field)
     let linkedProjects: ProjectConfig[] = [];
+    let allProjects: ProjectConfig[] = [];
     try {
         const { listProjects } = await import("@/features/projects/fx");
-        const allProjects = await listProjects({ includeArchived: false });
+        allProjects = await listProjects({ includeArchived: false });
         // Check for goalRef on projects — if field doesn't exist yet, this returns empty
         linkedProjects = allProjects.filter(p => p.goalRef === input.goalId);
     } catch (error) {
@@ -492,12 +505,26 @@ export async function getGoalGraph(input: { goalId: string }): Promise<{
     } catch (error) {
         goalsLogger.warn("Failed to load todos for goal graph", { error });
     }
-    const linkedTodos = allTodos.filter(t => t.resolvedGoalRefs?.includes(input.goalId));
+
+    const projectGoalRefByName = new Map<string, string>();
+    for (const project of allProjects) {
+        if (project.name && project.goalRef) {
+            projectGoalRefByName.set(project.name.toLowerCase(), project.goalRef);
+        }
+    }
+    const todoEffectiveGoalRefs = (todo: Todo): string[] => {
+        const projectGoalRef = todo.project
+            ? projectGoalRefByName.get(todo.project.toLowerCase())
+            : undefined;
+        return getEffectiveGoalRefs(todo, projectGoalRef);
+    };
+
+    const linkedTodos = allTodos.filter(t => todoEffectiveGoalRefs(t).includes(input.goalId));
 
     // Pre-compute child progress so rollup parent uses real values
     const childrenWithProgress = childGoals.map(child => {
         const grandchildren = allGoals.filter(g => g.parentGoalId === child.id);
-        const childTodos = allTodos.filter(t => t.resolvedGoalRefs?.includes(child.id));
+        const childTodos = allTodos.filter(t => todoEffectiveGoalRefs(t).includes(child.id));
         const progress = computeGoalProgress(child, grandchildren, childTodos);
         return { ...child, _computedProgress: progress } as GoalRecord & { _computedProgress: number };
     });

@@ -902,25 +902,8 @@ export async function updateProject(input: {
     data.projects[index] = updatedProject;
     await writeProjectsFile(data);
 
-    // If goalRef changed, recompute resolvedGoalRefs on all OPEN todos in this project.
-    // Calling updateTodo with an empty updates object triggers its resolvedGoalRefs
-    // recomputation logic, which will pick up the new project goalRef.
-    if (goalRefExplicitlySet && input.updates.goalRef !== existingProject.goalRef) {
-        const projectTodos = await getTodos({});
-        const openTodosInProject = projectTodos.filter(
-            (todo) => todo.project === updatedProject.name
-                && todo.status !== "done" && !todo.archived,
-        );
-
-        for (const todo of openTodosInProject) {
-            await updateTodo({
-                todoId: todo.id,
-                updates: {},
-            });
-        }
-
-        projectsLogger.info(`Recomputed resolvedGoalRefs for ${openTodosInProject.length} open todos in project ${updatedProject.name}`);
-    }
+    // No goal-link recompute needed: open todos inherit project.goalRef at read time
+    // via getEffectiveGoalRefs(). Closed todos already hold a frozen goalRefs snapshot.
 
     projectsLogger.info(`Updated project: ${input.projectId}`);
     return updatedProject;

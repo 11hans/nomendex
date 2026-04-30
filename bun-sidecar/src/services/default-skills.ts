@@ -295,7 +295,7 @@ Follow this checklist exactly for mutating requests:
 *   ❌ **DO NOT create with customColumnId**: API ignores it. Create then Update.
 *   ❌ **DO NOT treat planning as capture**: If the user is only describing bugs, ideas, or options during planning, ask whether they want them saved as todos.
 *   ❌ **DO NOT use cached tool output**: Never inspect \`.claude/projects/.../tool-results\` instead of calling the live API.
-*   ❌ **DO NOT invent goal/project links**: In daily/evening context, NEVER say "This task probably relates to goal X" unless there is an explicit typed link (project.goalRef → goal ID, or todo.resolvedGoalRefs contains the goal ID). State only what is in the data.
+*   ❌ **DO NOT invent goal/project links**: In daily/evening context, NEVER say "This task probably relates to goal X" unless there is an explicit typed link (project.goalRef → goal ID, or the todo's effective goalRefs contain the goal ID — i.e. todo.goalRefs explicitly, or inherited from its project's goalRef). State only what is in the data.
 *   ❌ **DO NOT reschedule from stale list data**: Re-fetch the concrete todo via \`/api/todos/get\` immediately before any reschedule/update.
 *   ❌ **DO NOT batch-reschedule multi-day todos**: Show them as \`Multi-day context\` only.
 *   ❌ **DO NOT hide duplicate titles**: When titles repeat, show visible plain-text ID + \`scheduledStart\`-\`scheduledEnd\`.
@@ -1625,7 +1625,7 @@ For each of today's timeblocks (\`source === "timeblock-generator"\` or legacy t
 - **Ongoing (not counted):** 2 in_progress
 - **Multi-day Context (not counted):** 1
 - **Rescheduled to tomorrow:** 2
-- **Goals touched** (from \`resolvedGoalRefs\` on completed todos): Career 2 tasks, Health 1 task
+- **Goals touched** (from frozen \`goalRefs\` on completed todos): Career 2 tasks, Health 1 task
 - **Projects advanced:** [[ProjectA]] 3, [[ProjectB]] 1
 \`\`\`
 
@@ -1694,7 +1694,7 @@ Works with:
     files: {
       "SKILL.md": `---
 name: goal-tracking
-description: Track progress across the typed goal hierarchy (vision/yearly/quarterly/monthly), surface stalled goals, and connect projects/todos via goalRef and resolvedGoalRefs. Use for goal reviews and progress tracking.
+description: Track progress across the typed goal hierarchy (vision/yearly/quarterly/monthly), surface stalled goals, and connect projects/todos via project.goalRef and todo.goalRefs (with read-time inheritance from project). Use for goal reviews and progress tracking.
 version: 6
 source: nomendex
 ---
@@ -1710,7 +1710,7 @@ GoalRecord store (.nomendex/goals/)    ← source of truth
   vision → yearly → quarterly → monthly (parentGoalId chain)
       ↓ goalRef
   ProjectConfig (.nomendex/projects.json)
-      ↓ resolvedGoalRefs
+      ↓ inherited at read time (or explicit todo.goalRefs override)
   Todos (.nomendex/todos/)
 
 Mirror notes (Goals/goals/*.md) = readable/editable views
@@ -1721,8 +1721,7 @@ Dashboards (Goals/0-2.md) = generated summaries
 
 Linkage is through typed fields only:
 1. \`project.goalRef\` → single goal ID
-2. \`todo.goalRefs\` → explicit goal override (optional)
-3. \`todo.resolvedGoalRefs\` → computed snapshot (goalRefs or inherited from project.goalRef)
+2. \`todo.goalRefs\` → \`undefined\` inherits from project.goalRef at read time; \`[]\` means explicitly no goal; \`["..."]\` is an explicit override. On close (done/archived) the inherited value is baked in as a frozen historical snapshot.
 
 Do NOT infer goal-todo mappings from title similarity or text content.
 
@@ -1996,7 +1995,7 @@ Or ask:
 - \`/api/goals/list\` — all goals by horizon, status, area
 - \`/api/goals/graph\` — per-goal progress with children, projects, todos
 - \`/api/projects/list\` — projects with goalRef
-- \`/api/todos/list\` — todos with resolvedGoalRefs
+- \`/api/todos/list\` — todos with goalRefs (resolve via project.goalRef when goalRefs is undefined)
 
 **Secondary (markdown for narrative context):**
 - Weekly Review notes — for qualitative reflection rollup
@@ -2178,7 +2177,7 @@ Manage projects using a single source of truth:
 - Canonical project note in \`Projects/<ProjectName>.md\` (auto-managed by backend via mirror sync)
 
 Projects are the bridge between strategic goals and operational todos:
-\`GoalRecord (goalRef) → ProjectConfig → Todos (resolvedGoalRefs)\`
+\`GoalRecord (goalRef) → ProjectConfig → Todos (todo.goalRefs, inherited from project at read time)\`
 
 For day planning, live open todos are the primary operational source.
 Use the project note's **Next Actions** section only as fallback context when the todo list is missing or underspecified.
@@ -2301,7 +2300,7 @@ GoalRecord store (.nomendex/goals/)  <- "What I want to achieve" (source of trut
     | goalRef
     v
 ProjectConfig (.nomendex/projects.json)  <- "How I'll achieve it"
-    | resolvedGoalRefs (inherited)
+    | todo.goalRefs (explicit, or inherited from project at read time)
     v
 Todos (.nomendex/todos/)             <- "What I'm doing today"
 
@@ -3042,7 +3041,7 @@ All todo references use \`[[todo:id|Title]]\` wiki-links. Never write \`[ ]\`/\`
 | Health & Wellness | Pohybový návyk | 12/72 tréninků (17%) | metric |
 | Personal Growth | Denní review streak | DEN 1 (from latest daily note) | manual |
 
-### This Week's Goal Contribution (from \`resolvedGoalRefs\` on completed todos)
+### This Week's Goal Contribution (from frozen \`goalRefs\` on completed todos)
 - Career & Professional: 5 todos completed → +3% progress
 - Health & Wellness: 2 todos completed → 14/72 metric
 
@@ -3112,7 +3111,7 @@ Fetch and analyze todos from Nomendex API:
 - **Overdue detection**: Identify todos past their due date
 - **Blocker identification**: Surface todos marked as blocked
 - **Pattern analysis**: Track "Today" column usage and completion while keeping multi-day context and generated timeblock events out of day-level completion-rate math
-- **Goal mapping**: Connect completed todos to typed goals via \`resolvedGoalRefs\`
+- **Goal mapping**: Connect completed todos to typed goals via the frozen \`goalRefs\` on closed todos (or, for open todos, via explicit \`goalRefs\` falling back to inherited \`project.goalRef\`)
 - **Disambiguation**: When titles repeat, show visible plain-text ID + \`scheduledStart\`-\`scheduledEnd\`
 
 Example usage in weekly review:
@@ -3230,7 +3229,7 @@ The team lead:
    - Completion rates by project
    - Overdue and blocked todos
    - "Today" column patterns
-   - Mapping of completed todos to typed goals (via \`resolvedGoalRefs\`)
+   - Mapping of completed todos to typed goals (via the frozen \`goalRefs\` snapshot)
 6. Team lead synthesizes findings into the weekly review note
 
 This makes the review faster (parallel collection) and more thorough (dedicated analysis per area).

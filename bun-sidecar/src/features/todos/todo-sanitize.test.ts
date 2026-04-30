@@ -22,7 +22,6 @@ describe("sanitizeTodoForClient", () => {
             project: null,
             tags: null,
             goalRefs: null,
-            resolvedGoalRefs: null,
             dueDate: null,
             scheduledStart: null,
             scheduledEnd: null,
@@ -34,12 +33,16 @@ describe("sanitizeTodoForClient", () => {
         expect(sanitized.project).toBeUndefined();
         expect(sanitized.tags).toBeUndefined();
         expect(sanitized.goalRefs).toBeUndefined();
-        expect(sanitized.resolvedGoalRefs).toBeUndefined();
         expect(sanitized.dueDate).toBeUndefined();
         expect(sanitized.scheduledStart).toBeUndefined();
         expect(sanitized.scheduledEnd).toBeUndefined();
         expect(sanitized.calendarReminderPreset).toBeUndefined();
         expect(sanitized.customColumnId).toBeUndefined();
+    });
+
+    test("strips legacy resolvedGoalRefs field from sanitized output", () => {
+        const sanitized = sanitizeTodoForClient(makeTodo({ resolvedGoalRefs: ["goal-1"] }));
+        expect((sanitized as Record<string, unknown>).resolvedGoalRefs).toBeUndefined();
     });
 
     test("preserves explicit empty goalRefs as no-goal signal", () => {
@@ -51,12 +54,10 @@ describe("sanitizeTodoForClient", () => {
         const sanitized = sanitizeTodoForClient(makeTodo({
             tags: ["work", 1, null, "focus"],
             goalRefs: ["goal-1", 2],
-            resolvedGoalRefs: [true, "goal-2"],
         }));
 
         expect(sanitized.tags).toEqual(["work", "focus"]);
         expect(sanitized.goalRefs).toEqual(["goal-1"]);
-        expect(sanitized.resolvedGoalRefs).toEqual(["goal-2"]);
     });
 });
 

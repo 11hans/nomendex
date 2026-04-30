@@ -18,7 +18,6 @@ import {
     getBoardConfig,
     saveBoardConfig,
     deleteColumn,
-    recomputeAllGoalRefs,
     forceReindexTodos,
     skipRecurrenceOccurrence,
 } from "@/features/todos/fx";
@@ -431,16 +430,6 @@ export const todosRoutes = {
                 return jsonValidationError(error);
             }
             return Response.json(await deleteColumn(args));
-        },
-    },
-    "/api/todos/recompute-goal-refs": {
-        async POST() {
-            try {
-                return Response.json(await recomputeAllGoalRefs());
-            } catch (e) {
-                const msg = e instanceof Error ? e.message : String(e);
-                return Response.json({ error: msg }, { status: 500 });
-            }
         },
     },
     "/api/todos/reindex": {

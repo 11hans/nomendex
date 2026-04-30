@@ -69,6 +69,10 @@ function getTodosSubtaskNormalizationMigrationMarkerPath(): string {
     return path.join(getNomendexPath(), "migrations", "todos-subtask-normalization-v8.done");
 }
 
+function getTodosGoalRefsUnificationMigrationMarkerPath(): string {
+    return path.join(getNomendexPath(), "migrations", "todos-goalrefs-unification-v9.done");
+}
+
 /**
  * Initialize the todos service. Must be called after initializePaths().
  */
@@ -100,6 +104,8 @@ export async function initializeTodosService(): Promise<void> {
     await runTodosOrderLayoutMigrationIfNeeded();
     // One-off migration: normalize parentTodoId references (remove dangling/invalid ones).
     await runTodosSubtaskNormalizationMigrationIfNeeded();
+    // One-off migration: collapse resolvedGoalRefs into goalRefs (single field with read-time inheritance).
+    await runTodosGoalRefsUnificationMigrationIfNeeded();
     await ensureTimeblockingConfig();
     await runTimeblockHousekeepingIfNeeded();
     todosLogger.info("Todos service initialized");
@@ -1080,20 +1086,6 @@ async function runTodosSubtaskNormalizationMigrationIfNeeded(): Promise<void> {
 }
 
 /**
- * Compute resolvedGoalRefs for a todo.
- * If the todo has explicit goalRefs, use those.
- * Otherwise, inherit from the project's goalRef.
- */
-function computeResolvedGoalRefs(
-    goalRefs: string[] | null | undefined,
-    projectGoalRef: string | undefined,
-): string[] {
-    if (goalRefs != null) return goalRefs;
-    if (projectGoalRef) return [projectGoalRef];
-    return [];
-}
-
-/**
  * Look up a project's goalRef by project name.
  * Returns undefined if project not found or has no goalRef.
  */
@@ -1291,10 +1283,6 @@ async function createTodo(input: {
         const derived = scheduledEnd ? deriveDurationFromSchedule(scheduledStart, scheduledEnd) : undefined;
         const duration = derived ?? requestedDuration;
 
-        // Compute resolvedGoalRefs
-        const projectGoalRef = await getProjectGoalRef(canonicalProject);
-        const resolvedGoalRefs = computeResolvedGoalRefs(input.goalRefs, projectGoalRef);
-
         const now = new Date().toISOString();
         const newTodo: Todo = {
             id: `todo-${slug}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
@@ -1318,7 +1306,6 @@ async function createTodo(input: {
             customColumnId: input.customColumnId,
             calendarReminderPreset: input.calendarReminderPreset,
             goalRefs: input.goalRefs,
-            resolvedGoalRefs: resolvedGoalRefs.length > 0 ? resolvedGoalRefs : undefined,
             parentTodoId: resolvedParentTodoId,
             // Recurrence is top-level-only; silently drop when creating a subtask.
             recurrence: resolvedParentTodoId ? undefined : input.recurrence,
@@ -1420,7 +1407,7 @@ async function updateTodo(input: {
         }
 
         // Guard: reject goalRefs mutation on a todo that is already closed and stays closed.
-        // Closed todos have a frozen resolvedGoalRefs snapshot; mutating goalRefs would cause drift.
+        // Closed todos hold a frozen goalRefs snapshot; mutating it would distort historical reporting.
         const wouldBeClosed = (input.updates.status ?? currentTodo.status) === "done"
             || (input.updates.archived ?? currentTodo.archived) === true;
         const isAlreadyClosed = currentTodo.status === "done" || currentTodo.archived === true;
@@ -1581,8 +1568,9 @@ async function updateTodo(input: {
             currentTodo.status !== "done" &&
             Boolean(currentTodo.recurrence);
 
-        // Compute resolvedGoalRefs based on status and archived state.
-        // "closed" means status=done OR archived=true.
+        // Freeze inherited goal link on close. Open todos inherit from project.goalRef at read
+        // time (see getEffectiveGoalRefs); when a todo closes, we bake the inherited value into
+        // goalRefs so later changes to project.goalRef can't rewrite history.
         const effectiveStatus = input.updates.status ?? currentTodo.status;
         const effectiveArchived = input.updates.archived ?? currentTodo.archived;
         const isClosed = effectiveStatus === "done" || effectiveArchived === true;
@@ -1590,21 +1578,15 @@ async function updateTodo(input: {
         const isClosing = isClosed && !wasClosed;
 
         if (isClosing) {
-            // Freezing: compute and set resolvedGoalRefs as a snapshot
-            const effectiveGoalRefs = input.updates.goalRefs ?? currentTodo.goalRefs;
-            const effectiveProject = updates.project ?? currentTodo.project;
-            const projectGoalRef = await getProjectGoalRef(effectiveProject);
-            const resolved = computeResolvedGoalRefs(effectiveGoalRefs, projectGoalRef);
-            updates.resolvedGoalRefs = resolved.length > 0 ? resolved : undefined;
-        } else if (!isClosed) {
-            // Open todo: recompute resolvedGoalRefs
-            const effectiveGoalRefs = input.updates.goalRefs ?? currentTodo.goalRefs;
-            const effectiveProject = updates.project ?? currentTodo.project;
-            const projectGoalRef = await getProjectGoalRef(effectiveProject);
-            const resolved = computeResolvedGoalRefs(effectiveGoalRefs, projectGoalRef);
-            updates.resolvedGoalRefs = resolved.length > 0 ? resolved : undefined;
+            const effectiveGoalRefs = hasOwnKey(input.updates, "goalRefs")
+                ? input.updates.goalRefs
+                : currentTodo.goalRefs;
+            if (effectiveGoalRefs === undefined) {
+                const effectiveProject = updates.project ?? currentTodo.project;
+                const projectGoalRef = await getProjectGoalRef(effectiveProject);
+                updates.goalRefs = projectGoalRef ? [projectGoalRef] : [];
+            }
         }
-        // If already closed (done/archived) and staying closed, don't recompute — keep frozen
 
         const updated = await getDb().update(input.todoId, updates as Partial<Todo>);
 
@@ -1782,7 +1764,7 @@ async function archiveTodo(input: { todoId: string }) {
     for (const child of children) {
         await updateTodo({ todoId: child.id, updates: { archived: true } });
     }
-    // Route through updateTodo so resolvedGoalRefs freeze/recompute logic stays consistent.
+    // Route through updateTodo so the goalRefs freeze logic stays consistent on close.
     return updateTodo({ todoId: input.todoId, updates: { archived: true } });
 }
 
@@ -1794,77 +1776,73 @@ async function unarchiveTodo(input: { todoId: string }) {
     for (const child of children) {
         await updateTodo({ todoId: child.id, updates: { archived: false } });
     }
-    // Route through updateTodo so resolvedGoalRefs recompute logic stays consistent.
+    // Route through updateTodo so the goalRefs freeze logic stays consistent on reopen.
     return updateTodo({ todoId: input.todoId, updates: { archived: false } });
 }
 
 /**
- * Batch recompute resolvedGoalRefs for all todos.
- * - Open todos: recompute from explicit goalRefs or project.goalRef (live).
- * - Done/archived todos: only fill in if currently missing (frozen snapshot).
- * Returns counts of updated and skipped todos.
+ * Migration v9: collapse resolvedGoalRefs into goalRefs.
+ *
+ * Before this migration, todos carried two fields:
+ *   - goalRefs           — explicit user/agent input (sometimes undefined)
+ *   - resolvedGoalRefs   — computed snapshot (goalRefs OR inherited from project.goalRef)
+ *
+ * After: a single goalRefs field with read-time inheritance for open todos
+ * (see getEffectiveGoalRefs). For closed todos we must preserve the historical
+ * snapshot, so we bake the legacy resolvedGoalRefs into goalRefs when goalRefs
+ * is unset. Open todos with `goalRefs === undefined` are left as-is so they
+ * naturally inherit from project.goalRef going forward.
+ *
+ * The legacy resolvedGoalRefs property is stripped in all cases.
  */
-export async function recomputeAllGoalRefs(): Promise<{
-    updated: number;
-    skipped: number;
-    errors: number;
-}> {
-    todosLogger.info("Starting batch recompute of resolvedGoalRefs");
-    const todos = await getDb().findAll();
-
-    // Build project→goalRef map once (avoid N×M lookups)
-    const projectGoalRefMap = new Map<string, string>();
-    try {
-        const { listProjects } = await import("@/features/projects/fx");
-        const projects = await listProjects({ includeArchived: false });
-        for (const p of projects) {
-            if (p.name && p.goalRef) {
-                projectGoalRefMap.set(canonicalizeTodoProject(p.name).toLowerCase(), p.goalRef);
-            }
-        }
-    } catch {
-        todosLogger.warn("Failed to load projects for batch recompute");
+async function runTodosGoalRefsUnificationMigrationIfNeeded(): Promise<void> {
+    const markerPath = getTodosGoalRefsUnificationMigrationMarkerPath();
+    const markerFile = Bun.file(markerPath);
+    if (await markerFile.exists()) {
+        todosLogger.info("Todos goalRefs unification migration already applied, skipping");
+        return;
     }
 
-    let updated = 0;
-    let skipped = 0;
-    let errors = 0;
+    const todos = await getDb().findAll();
+    let frozenCount = 0;
+    let strippedCount = 0;
 
     for (const todo of todos) {
-        try {
-            const isClosed = todo.status === "done" || todo.archived === true;
+        const raw = todo as unknown as Record<string, unknown>;
+        const legacyResolved = Array.isArray(raw.resolvedGoalRefs)
+            ? (raw.resolvedGoalRefs as unknown[]).filter((v): v is string => typeof v === "string")
+            : undefined;
+        const hasLegacyField = "resolvedGoalRefs" in raw;
+        const isClosed = todo.status === "done" || todo.archived === true;
 
-            if (isClosed) {
-                // Frozen: closed todos never get resolvedGoalRefs recomputed.
-                // Their snapshot was taken at completion time.
-                skipped++;
-            } else {
-                // Open: always recompute
-                const projectGoalRef = todo.project
-                    ? projectGoalRefMap.get(canonicalizeTodoProject(todo.project).toLowerCase())
-                    : undefined;
-                const resolved = computeResolvedGoalRefs(todo.goalRefs, projectGoalRef);
-                const current = todo.resolvedGoalRefs ?? [];
-                const hasChange =
-                    resolved.length !== current.length ||
-                    resolved.some((r, i) => r !== current[i]);
-                if (hasChange) {
-                    await getDb().update(todo.id, {
-                        resolvedGoalRefs: resolved.length > 0 ? resolved : undefined,
-                        updatedAt: new Date().toISOString(),
-                    });
-                    updated++;
-                } else {
-                    skipped++;
-                }
-            }
-        } catch {
-            errors++;
+        const updates: Partial<Todo> & Record<string, unknown> = {};
+
+        if (isClosed && todo.goalRefs === undefined) {
+            // Always bake — leaving undefined would let getEffectiveGoalRefs() inherit
+            // from the current project.goalRef, retroactively rewriting history.
+            updates.goalRefs = legacyResolved ?? [];
+            frozenCount += 1;
+        }
+
+        if (hasLegacyField) {
+            updates.resolvedGoalRefs = undefined;
+            strippedCount += 1;
+        }
+
+        if (Object.keys(updates).length > 0) {
+            updates.updatedAt = new Date().toISOString();
+            await getDb().update(todo.id, updates as Partial<Todo>);
         }
     }
 
-    todosLogger.info(`Batch recompute done: updated=${updated}, skipped=${skipped}, errors=${errors}`);
-    return { updated, skipped, errors };
+    await mkdir(path.dirname(markerPath), { recursive: true });
+    await Bun.write(markerPath, JSON.stringify({
+        migratedAt: new Date().toISOString(),
+        frozenClosedTodos: frozenCount,
+        strippedLegacyField: strippedCount,
+    }, null, 2));
+
+    todosLogger.info(`Todos goalRefs unification migration complete (frozen=${frozenCount}, stripped=${strippedCount})`);
 }
 
 async function forceReindexTodos(): Promise<{

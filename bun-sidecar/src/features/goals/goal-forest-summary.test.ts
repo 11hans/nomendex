@@ -51,10 +51,10 @@ describe("buildGoalForestNodes", () => {
         const linkedProject = makeProject({ id: "project-1", name: "Project 1", goalRef: "goal-root" });
 
         const todos = [
-            makeTodo({ id: "todo-open-task", status: "todo", resolvedGoalRefs: ["goal-root"] }),
-            makeTodo({ id: "todo-done-task", status: "done", resolvedGoalRefs: ["goal-root"] }),
-            makeTodo({ id: "todo-event", status: "todo", kind: "event", resolvedGoalRefs: ["goal-root"] }),
-            makeTodo({ id: "todo-child", status: "in_progress", resolvedGoalRefs: ["goal-child"] }),
+            makeTodo({ id: "todo-open-task", status: "todo", goalRefs: ["goal-root"] }),
+            makeTodo({ id: "todo-done-task", status: "done", goalRefs: ["goal-root"] }),
+            makeTodo({ id: "todo-event", status: "todo", kind: "event", goalRefs: ["goal-root"] }),
+            makeTodo({ id: "todo-child", status: "in_progress", goalRefs: ["goal-child"] }),
         ];
 
         const forest = buildGoalForestNodes({
