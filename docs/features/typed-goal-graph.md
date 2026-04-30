@@ -25,7 +25,7 @@ The Typed Goal Graph introduces `GoalRecord` as a first-class entity alongside `
 GoalRecord store (.nomendex/goals/)     ← source of truth
     ↓ goalRef
 ProjectConfig (.nomendex/projects.json)  ← source of truth
-    ↓ resolvedGoalRefs
+    ↓ inherited at read time (todo.goalRefs override or project.goalRef inheritance)
 Todos (.nomendex/todos/)                 ← source of truth
     ↓
 Daily Note (markdown, narativní)         ← snapshot
@@ -88,32 +88,42 @@ Singular, not array. If a project genuinely supports multiple goals, individual 
 
 ```typescript
 Todo {
-  goalRefs?: string[]          // user/agent editable input
-  resolvedGoalRefs?: string[]  // computed snapshot for reporting
+  // Tri-state field. The same field carries both editable input and the
+  // frozen historical snapshot — there is no separate `resolvedGoalRefs`.
+  goalRefs?: string[]
 }
 ```
 
-**`resolvedGoalRefs` computation rules:**
+| `goalRefs` value | Meaning |
+|------------------|---------|
+| `undefined` | **Inherit from `project.goalRef` at read time** (open todos only). Resolved via `getEffectiveGoalRefs(todo, projectGoalRef)`. |
+| `[]` | Explicit "no goal" — never inherits. |
+| `["goal-id", ...]` | Explicit goal IDs (override of project inheritance). |
+
+**Lifecycle:**
 
 | Todo State | Behavior |
 |-----------|----------|
-| Open (`todo`, `in_progress`, `later`, not archived) | **Recomputed** on every update. Formula: `todo.goalRefs ?? [project.goalRef].filter(Boolean)` |
-| Closed (`done` or `archived`) | **Frozen** at moment of completion. Never recomputed, even if project.goalRef changes later. |
+| Open (`todo`, `in_progress`, `planned`, `later`, not archived) | `goalRefs` is **read-time resolved**. Inheritance from `project.goalRef` is computed by `getEffectiveGoalRefs()` on every read; nothing is rewritten when `project.goalRef` changes. |
+| Closing (transition to `done` or `archived`) | If `goalRefs === undefined`, it is **baked in** at this moment: `goalRefs = projectGoalRef ? [projectGoalRef] : []`. Explicit values pass through unchanged. |
+| Closed (`done` or `archived`) | `goalRefs` is **frozen**. Mutations are rejected with HTTP `409`. Reopening preserves the frozen value (no automatic un-freeze). |
 
 This means:
-- Changing `project.goalRef` automatically updates all open todos in that project
-- Historical reporting uses the snapshot from when the todo was completed
-- Reporting always reads `resolvedGoalRefs`, never computes live
+- Changing `project.goalRef` instantly affects all open todos that inherit (no batch recompute job).
+- Closed todos preserve the goal link from their completion moment; later edits to `project.goalRef` cannot rewrite history.
+- Reporting reads `getEffectiveGoalRefs(todo, projectGoalRef)` for open todos and `todo.goalRefs` directly for closed todos — both reduce to the same helper.
 
 ### Effective Goal Binding
 
 ```
-1. todo.goalRefs (explicit override, if set)
-2. project.goalRef (inherited, if todo has no explicit goalRefs)
+1. todo.goalRefs (explicit, if defined — including [] meaning "no goal")
+2. project.goalRef (inherited, only when todo.goalRefs is undefined)
 3. unlinked (if neither exists)
 ```
 
 Never infer goal relationships from text similarity or note content.
+
+> **Migration note:** records pre-v9 carried a separate `resolvedGoalRefs` field. Migration `todos-goalrefs-unification-v9` (run on workspace init) bakes the legacy snapshot into `goalRefs` for closed todos and strips the field everywhere. New code must not read `resolvedGoalRefs`.
 
 ---
 
@@ -140,7 +150,7 @@ All endpoints are `POST` with JSON body.
 | `/api/goals/graph` | `{ goalId }` | `{ goal, childGoals, linkedProjects, linkedTodos, computedProgress }` |
 | `/api/goals/graph/forest` | `{}` | `GoalTreeNode[]` with summary counts for browser/home views |
 
-Returns the full graph for a goal: child goals, projects with matching `goalRef`, todos with matching `resolvedGoalRefs`, and computed progress per `progressMode`.
+Returns the full graph for a goal: child goals, projects with matching `goalRef`, todos whose effective `goalRefs` (explicit or inherited from project) include the goal ID, and computed progress per `progressMode`.
 
 Forest endpoint (`/graph/forest`) returns the nested tree used by the Goals browser/home view. Each node includes:
 - `goal`
@@ -304,7 +314,7 @@ The BPagent system prompt (`built-in-bpagent.ts`) includes:
 
 | Skill | Change |
 |-------|--------|
-| `/daily` | Morning context surfacing includes goal progress from API. Evening cascade impact uses `resolvedGoalRefs`. |
+| `/daily` | Morning context surfacing includes goal progress from API. Evening cascade impact uses the effective `goalRefs` (frozen on completed todos). |
 | `/weekly` | Goal progress from `/api/goals/graph`. Project dashboard includes `goalRef`. Todo creation includes `goalRefs` when needed. |
 | `/monthly` | Quarterly milestone check from typed goals. Monthly goal completion from API. |
 | `/goal-tracking` | Completely rewritten to structured-first: reads goals from API, displays progress per `progressMode`, shows full cascade. |
@@ -346,9 +356,9 @@ The BPagent system prompt (`built-in-bpagent.ts`) includes:
 | `server-routes/goals-routes.ts` | API route handlers |
 | `hooks/useGoalsAPI.ts` | Frontend hook for list/get/forest/graph goals endpoints |
 | `features/projects/project-types.ts` | ProjectConfig with `goalRef` |
-| `features/todos/todo-types.ts` | Todo with `goalRefs` + `resolvedGoalRefs` |
-| `features/todos/fx.ts` | resolvedGoalRefs computation logic |
-| `features/projects/fx.ts` | goalRef change → recompute open todo refs |
+| `features/todos/todo-types.ts` | Todo with `goalRefs` (tri-state) + `getEffectiveGoalRefs()` helper |
+| `features/todos/fx.ts` | Freeze-on-close logic for `goalRefs` + v9 unification migration |
+| `features/projects/fx.ts` | Stores `project.goalRef`; no recompute on change (read-time inheritance) |
 | `features/bpagent-pack/built-in-bpagent.ts` | BPagent system prompt with goals API |
 | `services/default-skills.ts` | Updated daily/weekly/monthly/goal-tracking skills |
 | `storage/root-path.ts` | `getGoalsPath()` |

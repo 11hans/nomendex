@@ -187,7 +187,7 @@ Most entity views (Goals, Projects, Todos, Notes, Inbox, Memory, Chat) are plugi
 - `GoalRecord` store in `.nomendex/goals/` (FileDatabase, one `.md` per goal).
 - Linkage:
   - `ProjectConfig.goalRef?: string` (singular).
-  - `Todo.goalRefs?: string[]` (explicit) + `resolvedGoalRefs?: string[]` (computed snapshot, frozen when todo closes).
+  - `Todo.goalRefs?: string[]` — tri-state: `undefined` inherits `project.goalRef` at read time (via `getEffectiveGoalRefs()`), `[]` is explicit no-goal, `["..."]` is explicit override. Baked in (frozen) on close (done/archived).
 - Progress modes (discriminated union): `rollup` (avg of children, leaf-only rule), `metric` (`current/target`), `manual` (0–100), `milestone` (done children/total).
 - API: `/api/goals/{list,get,create,update,delete,graph,graph/forest,sync/*,migration/*}`.
 - UI: Goals browser (forest summary, attention heuristics) + Goal detail (inline editing, mode-aware progress editor).
@@ -404,4 +404,4 @@ For interactive buttons/triggers (especially in dialogs/popovers):
 - For Python scripts: use `uv run script.py`.
 - Do not create new documentation files unless explicitly requested.
 - Keep scope tight; avoid unsolicited feature additions.
-- When a feature has a dedicated doc in `docs/features/`, read it before making nontrivial changes — it documents invariants (e.g. subtasks max depth 1, events can't complete, `resolvedGoalRefs` freeze on close).
+- When a feature has a dedicated doc in `docs/features/`, read it before making nontrivial changes — it documents invariants (e.g. subtasks max depth 1, events can't complete, `goalRefs` freeze on close).

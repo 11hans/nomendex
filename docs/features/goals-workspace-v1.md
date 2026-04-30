@@ -90,7 +90,7 @@ Forest node response was extended additively with:
 - `doneTodoCount`
 
 Semantics:
-- `linkedTodoCount`: all linked todos for goal (`resolvedGoalRefs`)
+- `linkedTodoCount`: all linked todos for goal (resolved via `getEffectiveGoalRefs(todo, projectGoalRef)` — explicit `goalRefs` or inherited from `project.goalRef`)
 - `openTodoCount`: only **task** todos with status in `todo | in_progress | later`
 - `doneTodoCount`: only **task** todos with status `done`
 

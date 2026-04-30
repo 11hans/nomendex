@@ -5,8 +5,7 @@
 The backend already supports typed goal linkage:
 
 - `ProjectConfig.goalRef` (single goal ID)
-- `Todo.goalRefs` (explicit user override)
-- `Todo.resolvedGoalRefs` (computed linkage used for reporting)
+- `Todo.goalRefs` (tri-state: `undefined` inherits from project, `[]` is explicit no-goal, `["..."]` is explicit override; frozen on close). The effective links are read via `getEffectiveGoalRefs(todo, projectGoalRef)`.
 
 Today this is mostly agent/API-driven. End users cannot reliably set or edit these links in the UI.
 
@@ -19,7 +18,7 @@ This proposal adds full manual UI support while preserving existing typed-goal s
 1. Let users manually link a project to a goal in Projects UI.
 2. Let users manually link a todo to one or more goals at create and edit time.
 3. Make inherited vs explicit linkage visible and understandable.
-4. Preserve historical integrity (`resolvedGoalRefs` snapshot behavior for closed todos).
+4. Preserve historical integrity (frozen `goalRefs` snapshot for closed todos).
 5. Keep goal linkage explicit only. No text-based inference.
 
 ---
@@ -84,7 +83,7 @@ Closed todo rule:
 
 - Todo detail should show:
   - Explicit mode: `Inherit` / `Override` / `No goal`
-  - Resolved links (read-only chips from `resolvedGoalRefs`)
+  - Effective links (read-only chips from `getEffectiveGoalRefs(todo, projectGoalRef)`)
 - Todo card (kanban/list) can show compact badge:
   - First linked goal title + `+N` for additional refs
 
@@ -98,11 +97,11 @@ The UI must respect these exact semantics:
 - `goalRefs === []` -> explicit no-goal
 - `goalRefs === ["goal-a", ...]` -> explicit override
 
-Resolved linkage:
+Effective linkage (resolved at read time, no separate stored field):
 
-- Open todos: recompute on updates.
-- Closing transition (`open -> done/archived`): snapshot is frozen.
-- Closed and staying closed: do not recompute.
+- Open todos with `goalRefs === undefined` inherit from `project.goalRef` live — no recompute job is needed when the project's goal changes.
+- Closing transition (`open -> done/archived`): if `goalRefs` is `undefined`, it is baked in to `[projectGoalRef]` (or `[]` if the project has no goal). Explicit values pass through unchanged.
+- Closed and staying closed: `goalRefs` is frozen. Mutations are rejected with `409`.
 
 This means UI mode must map directly to wire payload:
 
@@ -145,7 +144,7 @@ Changes:
 
 Why:
 
-- Prevent mismatch between frozen `resolvedGoalRefs` and editable `goalRefs`.
+- Prevent mutation of the frozen historical `goalRefs` snapshot on closed todos.
 
 ## C) Archive/unarchive path consistency
 
@@ -310,7 +309,7 @@ Backfill:
 2. User can set todo linkage at create/edit from UI.
 3. Inherit/override/no-goal states are explicit and persisted correctly.
 4. Closed todo linkage cannot be changed in a way that breaks frozen snapshots.
-5. Goal-linked reporting still reads only `resolvedGoalRefs`.
+5. Goal-linked reporting reads through `getEffectiveGoalRefs(todo, projectGoalRef)` (frozen value for closed todos, inherited for open ones).
 6. No regressions in existing todo/project create/update flows.
 
 ---
