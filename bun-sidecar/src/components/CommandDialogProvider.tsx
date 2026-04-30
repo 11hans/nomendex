@@ -8,6 +8,7 @@ interface DialogState {
     description?: string;
     content?: React.ReactNode;
     width?: string;
+    maxHeight?: string;
     size?: "default" | "sm" | "md" | "lg" | "xl" | "2xl" | "full" | "jumbo";
 }
 
@@ -15,6 +16,7 @@ interface CommandDialogContextType {
     openDialog: (config: Omit<DialogState, "open">) => void;
     closeDialog: () => void;
 }
+
 
 const CommandDialogContext = React.createContext<CommandDialogContextType | null>(null);
 
@@ -35,8 +37,7 @@ export function CommandDialogProvider({ children }: { children: React.ReactNode 
     }, []);
 
     const closeDialog = React.useCallback(() => {
-        // Clear all dialog state when closing
-        setDialogState({ open: false, title: undefined, description: undefined, content: undefined, width: undefined, size: undefined });
+        setDialogState({ open: false, title: undefined, description: undefined, content: undefined, width: undefined, maxHeight: undefined, size: undefined });
     }, []);
 
     const isJumbo = dialogState.size === "jumbo";
@@ -47,9 +48,11 @@ export function CommandDialogProvider({ children }: { children: React.ReactNode 
             <Dialog open={dialogState.open} onOpenChange={(open) => !open && closeDialog()}>
                 <DialogContent
                     size={dialogState.size}
+                    className={dialogState.maxHeight ? "flex flex-col" : undefined}
                     style={{
                         width: dialogState.width,
                         maxWidth: dialogState.width ? "90vw" : undefined,
+                        maxHeight: dialogState.maxHeight,
                         backgroundColor: currentTheme.styles.surfacePrimary,
                         borderColor: currentTheme.styles.borderDefault,
                     }}

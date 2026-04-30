@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { OverlayScrollbar } from "@/components/OverlayScrollbar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Plus, Sparkles, X } from "lucide-react";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
@@ -138,12 +139,13 @@ export function CreateTodoDialog({
                 </Button>
             </DialogTrigger>
             <DialogContent
-                className="p-0 overflow-hidden gap-0"
+                className="p-0 overflow-hidden gap-0 flex flex-col"
                 showCloseButton={false}
                 style={{
                     backgroundColor: styles.surfacePrimary,
                     width: '720px',
                     maxWidth: '90vw',
+                    maxHeight: '90vh',
                 }}
             >
                 <div
@@ -161,6 +163,7 @@ export function CreateTodoDialog({
                     </span>
                 </div>
 
+                <OverlayScrollbar className="flex-1 min-h-0">
                 <div className="px-6 pt-5 pb-4 space-y-4">
                     <div>
                         <div className="mb-1 text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
@@ -282,9 +285,10 @@ export function CreateTodoDialog({
                         </div>
                     )}
                 </div>
+                </OverlayScrollbar>
 
                 <div
-                    className="px-6 py-3 space-y-2"
+                    className="px-6 py-3 space-y-2 shrink-0"
                     style={{
                         backgroundColor: styles.surfaceSecondary,
                         borderTop: `1px solid ${styles.borderDefault}`,

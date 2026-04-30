@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { OverlayScrollbar } from "@/components/OverlayScrollbar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -257,6 +258,7 @@ export function CreateTodoCommandDialog({ onSuccess }: CreateTodoCommandDialogPr
             style={{ backgroundColor: styles.surfacePrimary }}
         >
             {/* Content Area */}
+            <OverlayScrollbar className="flex-1 min-h-0">
             <div className="px-6 pt-6 pb-4 space-y-4">
                 <div>
                     <KindPicker value={kind} onChange={handleKindChange} />
@@ -317,10 +319,11 @@ export function CreateTodoCommandDialog({ onSuccess }: CreateTodoCommandDialogPr
                     </div>
                 )}
             </div>
+            </OverlayScrollbar>
 
             {/* Footer */}
             <div
-                className="px-6 py-3 flex items-center justify-between"
+                className="px-6 py-3 flex items-center justify-between shrink-0"
                 style={{
                     backgroundColor: styles.surfaceSecondary,
                     borderTop: `1px solid ${styles.borderDefault}`,

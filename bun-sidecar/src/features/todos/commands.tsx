@@ -9,7 +9,7 @@ import { syncTaskToCalendar, purgeCalendarEvents, reconcileCalendar, removeTaskF
 import { toast } from "sonner";
 
 interface CommandContext {
-    openDialog: (config: { title?: string; description?: string; content?: React.ReactNode; width?: string }) => void;
+    openDialog: (config: { title?: string; description?: string; content?: React.ReactNode; width?: string; maxHeight?: string }) => void;
     closeDialog: () => void;
     closeCommandMenu: () => void;
     addNewTab: (tab: { pluginMeta: SerializablePlugin; view: string; props?: Record<string, unknown> }) => WorkspaceTab | null;
@@ -103,6 +103,7 @@ export async function getTodosCommands(context: CommandContext): Promise<Command
                 context.openDialog({
                     content: <CreateTodoCommandDialog />,
                     width: '700px',
+                    maxHeight: '90vh',
                 });
             },
         },
