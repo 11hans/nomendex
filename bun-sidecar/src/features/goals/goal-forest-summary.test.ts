@@ -93,4 +93,74 @@ describe("buildGoalForestNodes", () => {
         expect(forest[0]!.openTodoCount).toBe(0);
         expect(forest[0]!.doneTodoCount).toBe(0);
     });
+
+    describe("isProgressPaused", () => {
+        test("flags rollup goal whose only children are paused/dropped and which has no open todos", () => {
+            const root = makeGoal({ id: "goal-root", progressMode: "rollup" });
+            const pausedChild = makeGoal({ id: "goal-paused", parentGoalId: "goal-root", progressMode: "rollup", status: "paused" });
+            const droppedChild = makeGoal({ id: "goal-dropped", parentGoalId: "goal-root", progressMode: "rollup", status: "dropped" });
+
+            const forest = buildGoalForestNodes({
+                allGoals: [root, pausedChild, droppedChild],
+                allProjects: [],
+                allTodos: [],
+            });
+
+            expect(forest[0]!.isProgressPaused).toBe(true);
+        });
+
+        test("does NOT flag when goal has open task todos even if all child goals are paused", () => {
+            const root = makeGoal({ id: "goal-root", progressMode: "rollup" });
+            const pausedChild = makeGoal({ id: "goal-paused", parentGoalId: "goal-root", progressMode: "rollup", status: "paused" });
+
+            const forest = buildGoalForestNodes({
+                allGoals: [root, pausedChild],
+                allProjects: [],
+                allTodos: [
+                    makeTodo({ id: "todo-open", status: "in_progress", goalRefs: ["goal-root"] }),
+                ],
+            });
+
+            expect(forest[0]!.isProgressPaused).toBe(false);
+        });
+
+        test("does NOT flag when at least one child goal is active", () => {
+            const root = makeGoal({ id: "goal-root", progressMode: "rollup" });
+            const activeChild = makeGoal({ id: "goal-active", parentGoalId: "goal-root", progressMode: "rollup", status: "active" });
+            const pausedChild = makeGoal({ id: "goal-paused", parentGoalId: "goal-root", progressMode: "rollup", status: "paused" });
+
+            const forest = buildGoalForestNodes({
+                allGoals: [root, activeChild, pausedChild],
+                allProjects: [],
+                allTodos: [],
+            });
+
+            expect(forest[0]!.isProgressPaused).toBe(false);
+        });
+
+        test("does NOT flag non-rollup progress modes", () => {
+            const root = makeGoal({ id: "goal-root", progressMode: "manual", progressValue: 50 });
+            const pausedChild = makeGoal({ id: "goal-paused", parentGoalId: "goal-root", progressMode: "rollup", status: "paused" });
+
+            const forest = buildGoalForestNodes({
+                allGoals: [root, pausedChild],
+                allProjects: [],
+                allTodos: [],
+            });
+
+            expect(forest[0]!.isProgressPaused).toBe(false);
+        });
+
+        test("does NOT flag leaf goals (no children)", () => {
+            const lone = makeGoal({ id: "goal-lone", progressMode: "rollup", status: "active" });
+
+            const forest = buildGoalForestNodes({
+                allGoals: [lone],
+                allProjects: [],
+                allTodos: [],
+            });
+
+            expect(forest[0]!.isProgressPaused).toBe(false);
+        });
+    });
 });

@@ -10,7 +10,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { toast } from "sonner";
 import type { GoalForestNodeView } from "./goals-view-types";
 import type { GoalRecord } from "./goal-types";
-import { buildGoalsBrowserViewModel, statusLabel, type GoalAttentionReason, type GoalBrowserFilterMode } from "./goals-view-model";
+import { buildGoalsBrowserViewModel, buildThisQuarterPredicate, statusLabel, type GoalAttentionReason, type GoalBrowserFilterMode } from "./goals-view-model";
 import { goalsPluginSerial } from "./plugin";
 import { CreateGoalDialog } from "./create-goal-dialog";
 
@@ -117,6 +117,11 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
         [forest, searchQuery, filterMode, hideCompleted],
     );
 
+    const thisQuarterCount = useMemo(() => {
+        const predicate = buildThisQuarterPredicate();
+        return viewModel.allRows.filter(predicate).length;
+    }, [viewModel.allRows]);
+
     const handleSummaryClick = useCallback((mode: GoalBrowserFilterMode) => {
         setFilterMode((prev) => prev === mode ? "all" : mode);
     }, []);
@@ -222,7 +227,7 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                     {([
                         { label: "Active", value: viewModel.summary.active, mode: "all" as const },
-                        { label: "This quarter", value: viewModel.allRows.filter((r) => r.goal.status === "active" && r.goal.horizon !== "vision" && r.goal.horizon !== "yearly").length, mode: "this_quarter" as const },
+                        { label: "This quarter", value: thisQuarterCount, mode: "this_quarter" as const },
                         { label: "Focus", value: viewModel.summary.focus, mode: "focus" as const },
                         { label: "Needs attention", value: viewModel.summary.needsAttention, mode: "needs_attention" as const },
                         { label: "Without next action", value: viewModel.summary.withoutNextAction, mode: "without_next_action" as const },
@@ -322,28 +327,12 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
                                             </span>
                                             <span
                                                 className="ml-auto text-caption"
-                                                style={{
-                                                    color: row.isProgressPaused
-                                                        ? currentTheme.styles.contentTertiary
-                                                        : currentTheme.styles.contentTertiary,
-                                                }}
+                                                style={{ color: currentTheme.styles.contentTertiary }}
                                             >
                                                 {row.isProgressPaused ? "Paused" : `${row.computedProgress}%`}
                                             </span>
                                         </div>
                                         <div className="mt-1 flex flex-wrap gap-1">
-                                            {row.isProgressPaused && (
-                                                <span
-                                                    key={`${row.goal.id}-paused`}
-                                                    className="rounded-full px-1.5 py-0.5 text-caption"
-                                                    style={{
-                                                        backgroundColor: currentTheme.styles.surfaceTertiary,
-                                                        color: currentTheme.styles.contentTertiary,
-                                                    }}
-                                                >
-                                                    Paused
-                                                </span>
-                                            )}
                                             {row.attentionReasons
                                                 .filter((reason) => reason !== "nearly_complete")
                                                 .map((reason) => (

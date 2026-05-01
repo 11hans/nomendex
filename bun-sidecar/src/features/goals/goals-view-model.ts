@@ -74,6 +74,16 @@ export function getHorizonLabel(horizon: GoalRecord["horizon"]): string {
     }
 }
 
+function getQuarterStart(year: number, quarter: number): string {
+    const firstDay: Record<number, string> = {
+        1: "01-01",
+        2: "04-01",
+        3: "07-01",
+        4: "10-01",
+    };
+    return `${year}-${firstDay[quarter] || "01-01"}`;
+}
+
 function getQuarterEnd(year: number, quarter: number): string {
     const lastDay: Record<number, string> = {
         1: "03-31",
@@ -98,6 +108,31 @@ function getCurrentQuarter(now: Date): number {
     if (month <= 6) return 2;
     if (month <= 9) return 3;
     return 4;
+}
+
+/**
+ * Predicate for the "This quarter" filter and count card.
+ * Active execution-horizon (quarterly/monthly) goals due in the current quarter window,
+ * plus ongoing (no targetDate) ones. Past-quarter overdue goals are intentionally
+ * excluded — they belong in "Needs attention" instead.
+ */
+function isThisQuarterRow(
+    row: GoalBrowserRow,
+    currentQuarterStart: string,
+    currentQuarterEnd: string,
+): boolean {
+    if (row.goal.status !== "active") return false;
+    if (row.goal.horizon !== "quarterly" && row.goal.horizon !== "monthly") return false;
+    if (!row.goal.targetDate) return true;
+    return row.goal.targetDate >= currentQuarterStart && row.goal.targetDate <= currentQuarterEnd;
+}
+
+export function buildThisQuarterPredicate(now: Date = new Date()): (row: GoalBrowserRow) => boolean {
+    const q = getCurrentQuarter(now);
+    const y = now.getFullYear();
+    const start = getQuarterStart(y, q);
+    const end = getQuarterEnd(y, q);
+    return (row) => isThisQuarterRow(row, start, end);
 }
 
 export function flattenGoalForest(forest: GoalForestNodeView[]): GoalForestNodeView[] {
@@ -197,16 +232,17 @@ export function goalMatchesSearch(row: GoalBrowserRow, query: string): boolean {
     );
 }
 
-function goalMatchesFilterMode(row: GoalBrowserRow, mode: GoalBrowserFilterMode, currentQuarterEnd: string): boolean {
+function goalMatchesFilterMode(
+    row: GoalBrowserRow,
+    mode: GoalBrowserFilterMode,
+    currentQuarterStart: string,
+    currentQuarterEnd: string,
+): boolean {
     if (mode === "all") return true;
     if (mode === "needs_attention") return row.needsAttention;
     if (mode === "without_next_action") return row.attentionReasons.includes("without_next_action");
     if (mode === "focus") return row.goal.focus === true;
-    if (mode === "this_quarter") {
-        if (row.goal.status !== "active") return false;
-        if (!row.goal.targetDate) return true; // ongoing, no specific date
-        return row.goal.targetDate <= currentQuarterEnd;
-    }
+    if (mode === "this_quarter") return isThisQuarterRow(row, currentQuarterStart, currentQuarterEnd);
     return true;
 }
 
@@ -230,6 +266,7 @@ export function buildGoalsBrowserViewModel(
 ): GoalBrowserViewModel {
     const currentQuarter = getCurrentQuarter(now);
     const currentYear = now.getFullYear();
+    const currentQuarterStart = getQuarterStart(currentYear, currentQuarter);
     const currentQuarterEnd = getQuarterEnd(currentYear, currentQuarter);
 
     const allRows = flattenGoalForest(forest)
@@ -244,10 +281,15 @@ export function buildGoalsBrowserViewModel(
             let isFutureQuarter = false;
             let quarterBadge: string | null = null;
             if (node.goal.horizon === "quarterly" && node.goal.targetDate) {
+                const targetYear = parseInt(node.goal.targetDate.substring(0, 4), 10);
                 const targetQuarter = getQuarterFromDate(node.goal.targetDate);
-                if (targetQuarter > currentQuarter || (node.goal.targetDate.substring(0, 4) > String(currentYear))) {
+                const isStrictlyFuture = targetYear > currentYear
+                    || (targetYear === currentYear && targetQuarter > currentQuarter);
+                if (isStrictlyFuture) {
                     isFutureQuarter = true;
-                    quarterBadge = `Q${targetQuarter}`;
+                    quarterBadge = targetYear === currentYear
+                        ? `Q${targetQuarter}`
+                        : `Q${targetQuarter} '${String(targetYear).slice(-2)}`;
                 }
             }
 
@@ -278,7 +320,7 @@ export function buildGoalsBrowserViewModel(
     const filteredRows = allRows
         .filter((row) => !hideCompleted || (row.goal.status !== "completed" && row.goal.status !== "dropped"))
         .filter((row) => goalMatchesSearch(row, searchQuery))
-        .filter((row) => goalMatchesFilterMode(row, filterMode, currentQuarterEnd));
+        .filter((row) => goalMatchesFilterMode(row, filterMode, currentQuarterStart, currentQuarterEnd));
     const attentionRows = filteredRows.filter((row) => row.needsAttention);
 
     const groups: GoalBrowserGroup[] = HORIZON_ORDER

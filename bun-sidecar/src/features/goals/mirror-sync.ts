@@ -1,6 +1,7 @@
 import { createServiceLogger } from "@/lib/logger";
 import { getNotesPath } from "@/storage/root-path";
 import { getGoals, getGoalById, getGoalGraph, updateGoal } from "./fx";
+import { slugFromTitle } from "./slug";
 import { listProjects, getProject } from "@/features/projects/fx";
 import { getTodos } from "@/features/todos/fx";
 import { mkdir, stat } from "node:fs/promises";
@@ -86,27 +87,6 @@ function extractManagedSection(body: string): { before: string; managed: string;
     const after = body.substring(endIndex + endMarker.length);
 
     return { before, managed, after };
-}
-
-/**
- * Build a slug from a goal title (matching the slug logic in fx.ts).
- */
-function slugFromTitle(title: string): string {
-    let slug = title
-        .toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9\s-]/g, "")
-        .trim()
-        .replace(/\s+/g, "-")
-        .replace(/-+/g, "-");
-
-    if (slug.length > 50) {
-        slug = slug.substring(0, 50).replace(/-$/, "");
-    }
-    if (!slug) {
-        slug = "untitled";
-    }
-    return slug;
 }
 
 function formatProgressDisplay(goal: GoalRecord, computedProgress: number): string {

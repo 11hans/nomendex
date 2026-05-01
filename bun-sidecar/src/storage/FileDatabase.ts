@@ -114,10 +114,19 @@ export class FileDatabase<T extends DatabaseRecord> {
      */
     async create(record: T): Promise<T> {
         const filePath = this.getFilePath(record.id);
-        const content = this.recordToFile(record);
+        // Strip null/undefined so optional fields don't serialize as `key: null`
+        // and then fail Zod re-validation on subsequent reads. Mirrors the strip
+        // logic in update().
+        const sanitized = { ...record };
+        for (const key of Object.keys(sanitized)) {
+            if ((sanitized as Record<string, unknown>)[key] == null) {
+                delete (sanitized as Record<string, unknown>)[key];
+            }
+        }
+        const content = this.recordToFile(sanitized as T);
 
         await Bun.write(filePath, content);
-        return record;
+        return sanitized as T;
     }
 
     /**

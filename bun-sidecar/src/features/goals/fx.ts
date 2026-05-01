@@ -6,6 +6,7 @@ import type { Todo } from "@/features/todos/todo-types";
 import { getEffectiveGoalRefs } from "@/features/todos/todo-types";
 import { isTaskTodo } from "@/features/todos/todo-kind-utils";
 import type { ProjectConfig } from "@/features/projects/project-types";
+import { slugFromTitle } from "./slug";
 import path from "path";
 
 const goalsLogger = createServiceLogger("GOALS");
@@ -24,29 +25,37 @@ export async function initializeGoalsService(): Promise<void> {
     goalsDb = new FileDatabase<GoalRecord>(getGoalsPath());
     await goalsDb.initialize();
 
+    // One-time migration sweep: repair `tags: null` left over from older goal files
+    // (root cause is fixed in FileDatabase.create now), and back-fill `mirrorNoteFile`
+    // for goals whose mirror note exists on disk but whose record never got the path
+    // written back. Both can be removed once existing workspaces have been opened once.
     let tagsNullFixed = 0;
     let mirrorNoteRepaired = 0;
     const notesPath = getNotesPath();
 
     for (const goal of await goalsDb.findAll()) {
         if ((goal as Record<string, unknown>).tags === null) {
-            await goalsDb.update(goal.id, {}).then(() => { tagsNullFixed++; }).catch(() => {});
+            try {
+                await goalsDb.update(goal.id, {});
+                tagsNullFixed++;
+            } catch (error) {
+                goalsLogger.warn(`Failed to normalize tags:null on goal ${goal.id}`, { error });
+            }
         }
 
         if (!goal.mirrorNoteFile) {
-            const slug = goal.title
-                .toLowerCase()
-                .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-                .replace(/[^a-z0-9\s-]/g, "")
-                .trim()
-                .replace(/\s+/g, "-")
-                .replace(/-+/g, "-");
+            const slug = slugFromTitle(goal.title);
             const filePath = path.join(notesPath, "Goals", "goals", `${slug}.md`);
 
             if (await Bun.file(filePath).exists()) {
-                await goalsDb.update(goal.id, {
-                    mirrorNoteFile: `Goals/goals/${slug}.md`,
-                } as Partial<GoalRecord>).then(() => { mirrorNoteRepaired++; }).catch(() => {});
+                try {
+                    await goalsDb.update(goal.id, {
+                        mirrorNoteFile: `Goals/goals/${slug}.md`,
+                    } as Partial<GoalRecord>);
+                    mirrorNoteRepaired++;
+                } catch (error) {
+                    goalsLogger.warn(`Failed to repair mirrorNoteFile on goal ${goal.id}`, { error });
+                }
             }
         }
     }
@@ -168,22 +177,7 @@ export async function createGoal(input: {
 }): Promise<GoalRecord> {
     goalsLogger.info(`Creating goal: ${input.title}`);
 
-    // Generate slug from title
-    let slug = input.title
-        .toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-z0-9\s-]/g, "")
-        .trim()
-        .replace(/\s+/g, "-")
-        .replace(/-+/g, "-");
-
-    if (slug.length > 50) {
-        slug = slug.substring(0, 50).replace(/-$/, "");
-    }
-    if (!slug) {
-        slug = Math.random().toString(36).substr(2, 6);
-    }
-
+    const slug = slugFromTitle(input.title);
     const now = new Date().toISOString();
     const id = `goal-${slug}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
 
@@ -480,7 +474,8 @@ export function buildGoalForestNodes(input: {
                 goal.progressMode === "rollup"
                 && goal.status === "active"
                 && children.length > 0
-                && !hasActiveOrCompletedChildren,
+                && !hasActiveOrCompletedChildren
+                && openTaskTodos.length === 0,
         };
     }
 
