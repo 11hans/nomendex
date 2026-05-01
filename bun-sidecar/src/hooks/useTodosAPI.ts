@@ -10,6 +10,8 @@ import {
     sanitizeTodoListForClient,
     stripUnexpectedNulls,
 } from "@/features/todos/todo-sanitize";
+import { canonicalizeTodoProject, INBOX_PROJECT_NAME } from "@/features/projects/inbox-project";
+import { emit } from "@/lib/events";
 
 interface CreateTodoInput {
     title: string;
@@ -108,8 +110,17 @@ export const todosAPI = {
         sanitizeTodoListForClient(await fetchAPI<Todo[]>("list", { parentTodoId: args.parentTodoId })),
     getTodoById: async (args: { todoId: string }) =>
         sanitizeTodoForClient(await fetchAPI<Todo>("get", args)),
-    createTodo: async (args: CreateTodoInput) =>
-        sanitizeTodoForClient(await fetchAPI<Todo>("create", stripUnexpectedNulls(args, CREATE_NULLABLE_KEYS))),
+    createTodo: async (args: CreateTodoInput) => {
+        const created = sanitizeTodoForClient(await fetchAPI<Todo>("create", stripUnexpectedNulls(args, CREATE_NULLABLE_KEYS)));
+        if (
+            created?.id
+            && !created.parentTodoId
+            && canonicalizeTodoProject(created.project) === INBOX_PROJECT_NAME
+        ) {
+            emit("todos:inboxCreated", { todoId: created.id, title: created.title });
+        }
+        return created;
+    },
     updateTodo: async (args: UpdateTodoInput) => {
         const sanitizedUpdates = stripUnexpectedNulls(args.updates, UPDATE_NULLABLE_KEYS);
         const updated = await fetchAPI<Todo>("update", { todoId: args.todoId, updates: sanitizedUpdates });
@@ -117,6 +128,7 @@ export const todosAPI = {
     },
     deleteTodo: (args: { todoId: string }) => fetchAPI<{ success: boolean }>("delete", args),
     getProjects: () => fetchAPI<string[]>("projects"),
+    getInboxCount: () => fetchAPI<{ count: number }>("inbox-count", {}),
     reorderTodos: (args: ReorderInput) => fetchAPI<{ success: boolean }>("reorder", args),
     archiveTodo: async (args: { todoId: string }) => sanitizeTodoForClient(await fetchAPI<Todo>("archive", args)),
     unarchiveTodo: async (args: { todoId: string }) => sanitizeTodoForClient(await fetchAPI<Todo>("unarchive", args)),

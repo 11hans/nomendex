@@ -1101,6 +1101,14 @@ async function getProjectGoalRef(projectName: string | undefined): Promise<strin
     }
 }
 
+async function getInboxCount(): Promise<{ count: number }> {
+    const todos = await getTodos({ project: INBOX_PROJECT_NAME });
+    const count = todos.filter(
+        (t) => !t.archived && t.status !== "done" && getTodoKind(t) === "task"
+    ).length;
+    return { count };
+}
+
 async function getTodos(rawInput: unknown) {
     const input = GetTodosInputSchema.parse(rawInput ?? {});
     const projectFilter = canonicalizeProjectFilter(input.project);
@@ -2084,7 +2092,7 @@ export const TodosPluginWithFunctions = TodosPlugin;
 
 // Export individual functions for MCP
 export {
-    getTodos, createTodo, updateTodo, deleteTodo, getTodoById,
+    getTodos, getInboxCount, createTodo, updateTodo, deleteTodo, getTodoById,
     getProjects, reorderTodos, archiveTodo, unarchiveTodo, getArchivedTodos, getTags, deleteTag,
     getBoardConfig, saveBoardConfig, deleteColumn, restoreTodoSnapshot, forceReindexTodos
 };

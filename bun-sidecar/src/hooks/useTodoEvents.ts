@@ -5,6 +5,7 @@ import { stripUnexpectedNulls } from "@/features/todos/todo-sanitize";
 import type { Todo } from "@/features/todos/todo-types";
 import type { TodoEvent } from "@/services/todo-events";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
+import { dispatchRefresh } from "@/lib/events";
 
 const RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_DELAY_MS = 30000;
@@ -71,6 +72,10 @@ export function useTodoEvents(): void {
                 void (async () => {
                     try {
                         const data = JSON.parse(event.data) as TodoEvent;
+                        dispatchRefresh({
+                            type: "todos-list",
+                            identifier: data.type === "delete" ? data.todoId : data.todo?.id,
+                        });
                         if (appleCalendarSync) {
                             if (data.type === "delete") {
                                 await removeTaskFromCalendar(data.todoId);

@@ -1222,6 +1222,9 @@
   .min-w-\[12rem\] {
     min-width: 12rem;
   }
+  .min-w-\[18px\] {
+    min-width: 18px;
+  }
   .min-w-\[52px\] {
     min-width: 52px;
   }

@@ -21,6 +21,7 @@ import { WorkspaceProvider } from "./contexts/WorkspaceContext";
 import { KeyboardShortcutsProvider } from "./contexts/KeyboardShortcutsContext";
 import { GHSyncProvider } from "./contexts/GHSyncContext";
 import { CommandDialogProvider } from "./components/CommandDialogProvider";
+import { InboxToastProvider } from "./components/InboxToastProvider";
 import { CommandMenu } from "./components/CommandMenu";
 import { NotesCommandMenu } from "./components/NotesCommandMenu";
 import { TabSwitcherMenu } from "./components/TabSwitcherMenu";
@@ -184,6 +185,7 @@ export function App() {
                         <WorkspaceGuard>
                             <WorkspaceProvider>
                                 <TodoEventsBridge />
+                                <InboxToastProvider />
                                 <SkillUpdatesBridge />
                                 <KeyboardShortcutsProvider>
                                     <GHSyncProvider>

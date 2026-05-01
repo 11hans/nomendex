@@ -8,17 +8,20 @@ import { PluginIcon } from "@/types/Plugin";
 import { getIcon } from "./PluginViewIcons";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { useGHSync } from "@/contexts/GHSyncContext";
+import { useInboxCount } from "@/hooks/useInboxCount";
 
 function NavItem({
     icon: Icon,
     label,
     onClick,
     isActive = false,
+    badge,
 }: {
     icon: React.ComponentType<{ className?: string }>;
     label: string;
     onClick: () => void;
     isActive?: boolean;
+    badge?: number;
 }) {
     return (
         <button
@@ -30,7 +33,14 @@ function NavItem({
             }`}
         >
             <Icon className="size-3.5 shrink-0" />
-            <span className="truncate">{label}</span>
+            <span className="truncate flex-1 text-left">{label}</span>
+            {badge !== undefined && badge > 0 && (
+                <span
+                    className="ml-auto px-1.5 py-0.5 rounded-full bg-secondary text-foreground text-[10px] font-medium leading-none min-w-[18px] text-center"
+                >
+                    {badge > 99 ? "99+" : badge}
+                </span>
+            )}
         </button>
     );
 }
@@ -62,6 +72,7 @@ export function WorkspaceSidebar() {
     const { sync, status: syncStatus, isReady } = useGHSync();
     const { navigate, currentPath } = useRouting();
     const [appVersion, setAppVersion] = useState("...");
+    const inboxCount = useInboxCount();
 
     useEffect(() => {
         fetch("/api/version")
@@ -117,6 +128,7 @@ export function WorkspaceSidebar() {
                 <NavItem
                     icon={Inbox}
                     label="Inbox"
+                    badge={inboxCount}
                     isActive={isWorkspaceView && activePluginId === "todos" && activeViewId === "inbox"}
                     onClick={handleOpenInbox}
                 />

@@ -4,6 +4,7 @@
 import { z } from "zod";
 import {
     getTodos,
+    getInboxCount,
     getTodoById,
     createTodo,
     updateTodo,
@@ -316,6 +317,11 @@ export const todosRoutes = {
         async POST() {
             const result = await getProjects();
             return Response.json(result);
+        },
+    },
+    "/api/todos/inbox-count": {
+        async POST() {
+            return Response.json(await getInboxCount());
         },
     },
     "/api/todos/reorder": {

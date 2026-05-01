@@ -78,6 +78,9 @@ export interface AppEventMap {
 
     // Notes file events (from SSE watcher)
     "notes:fileChanged": { fileName: string; source: "agent" | "external" };
+
+    // Todo events
+    "todos:inboxCreated": { todoId: string; title: string };
 }
 
 type AppEventType = keyof AppEventMap;
