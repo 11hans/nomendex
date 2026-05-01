@@ -73,6 +73,7 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
     const [forest, setForest] = useState<GoalForestNodeView[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [filterMode, setFilterMode] = useState<GoalBrowserFilterMode>("all");
+    const [hideCompleted, setHideCompleted] = useState(false);
     const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const [createLoading, setCreateLoading] = useState(false);
     const [hoveredGoalId, setHoveredGoalId] = useState<string | null>(null);
@@ -112,8 +113,8 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
     }, [loadForest]);
 
     const viewModel = useMemo(
-        () => buildGoalsBrowserViewModel(forest, searchQuery, filterMode),
-        [forest, searchQuery, filterMode],
+        () => buildGoalsBrowserViewModel(forest, searchQuery, filterMode, undefined, hideCompleted),
+        [forest, searchQuery, filterMode, hideCompleted],
     );
 
     const handleSummaryClick = useCallback((mode: GoalBrowserFilterMode) => {
@@ -218,9 +219,10 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
             rootClassName="goals-browser"
         >
             <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                     {([
                         { label: "Active", value: viewModel.summary.active, mode: "all" as const },
+                        { label: "This quarter", value: viewModel.allRows.filter((r) => r.goal.status === "active" && r.goal.horizon !== "vision" && r.goal.horizon !== "yearly").length, mode: "this_quarter" as const },
                         { label: "Focus", value: viewModel.summary.focus, mode: "focus" as const },
                         { label: "Needs attention", value: viewModel.summary.needsAttention, mode: "needs_attention" as const },
                         { label: "Without next action", value: viewModel.summary.withoutNextAction, mode: "without_next_action" as const },
@@ -255,6 +257,18 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
                         );
                     })}
                 </div>
+
+                <label className="flex items-center gap-2 px-1 text-caption cursor-pointer select-none">
+                    <input
+                        type="checkbox"
+                        checked={hideCompleted}
+                        onChange={(e) => setHideCompleted(e.target.checked)}
+                        className="size-3 rounded accent-current"
+                    />
+                    <span style={{ color: currentTheme.styles.contentTertiary }}>
+                        Hide completed
+                    </span>
+                </label>
 
                 {allGoalsWithoutNextAction && (
                     <div
@@ -296,6 +310,7 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
                                         style={{
                                             borderColor: currentTheme.styles.borderDefault,
                                             backgroundColor: isHovered ? currentTheme.styles.surfaceAccent : undefined,
+                                            opacity: row.goal.status === "paused" || row.goal.status === "dropped" ? 0.55 : 1,
                                         }}
                                     >
                                         <div className="flex items-center gap-2">
@@ -307,12 +322,28 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
                                             </span>
                                             <span
                                                 className="ml-auto text-caption"
-                                                style={{ color: currentTheme.styles.contentTertiary }}
+                                                style={{
+                                                    color: row.isProgressPaused
+                                                        ? currentTheme.styles.contentTertiary
+                                                        : currentTheme.styles.contentTertiary,
+                                                }}
                                             >
-                                                {row.computedProgress}%
+                                                {row.isProgressPaused ? "Paused" : `${row.computedProgress}%`}
                                             </span>
                                         </div>
                                         <div className="mt-1 flex flex-wrap gap-1">
+                                            {row.isProgressPaused && (
+                                                <span
+                                                    key={`${row.goal.id}-paused`}
+                                                    className="rounded-full px-1.5 py-0.5 text-caption"
+                                                    style={{
+                                                        backgroundColor: currentTheme.styles.surfaceTertiary,
+                                                        color: currentTheme.styles.contentTertiary,
+                                                    }}
+                                                >
+                                                    Paused
+                                                </span>
+                                            )}
                                             {row.attentionReasons
                                                 .filter((reason) => reason !== "nearly_complete")
                                                 .map((reason) => (
@@ -372,6 +403,7 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
                                             borderColor: currentTheme.styles.borderDefault,
                                             backgroundColor: isHovered ? currentTheme.styles.surfaceAccent : undefined,
                                             color: currentTheme.styles.contentPrimary,
+                                            opacity: row.goal.status === "paused" || row.goal.status === "dropped" || row.isFutureQuarter ? 0.55 : 1,
                                         }}
                                     >
                                         <div className="flex items-center gap-2 min-w-0">
@@ -385,11 +417,18 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
                                             <span
                                                 className="ml-auto rounded-full px-1.5 py-0.5 text-caption"
                                                 style={{
-                                                    backgroundColor: currentTheme.styles.surfaceTertiary,
-                                                    color: currentTheme.styles.contentSecondary,
+                                                    backgroundColor: row.isProgressPaused
+                                                        ? "transparent"
+                                                        : currentTheme.styles.surfaceTertiary,
+                                                    color: row.isProgressPaused
+                                                        ? currentTheme.styles.contentTertiary
+                                                        : currentTheme.styles.contentSecondary,
+                                                    border: row.isProgressPaused
+                                                        ? `1px solid ${currentTheme.styles.contentTertiary}`
+                                                        : "none",
                                                 }}
                                             >
-                                                {row.computedProgress}%
+                                                {row.isProgressPaused ? "Paused" : `${row.computedProgress}%`}
                                             </span>
                                         </div>
                                         <div className="mt-1 flex items-center gap-1.5 flex-wrap">
@@ -407,6 +446,18 @@ export function GoalsBrowserView({ tabId }: { tabId: string }) {
                                                 onSelect={(status) => { void handleQuickStatusChange(row.goal.id, status); }}
                                                 styles={currentTheme.styles}
                                             />
+                                            {row.quarterBadge && (
+                                                <span
+                                                    className="rounded-full px-1.5 py-0.5 text-caption"
+                                                    style={{
+                                                        backgroundColor: currentTheme.styles.surfaceTertiary,
+                                                        color: currentTheme.styles.contentTertiary,
+                                                        border: `1px dashed ${currentTheme.styles.contentTertiary}`,
+                                                    }}
+                                                >
+                                                    {row.quarterBadge}
+                                                </span>
+                                            )}
                                             {(row.goal.focus || isHovered) && (
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); void handleToggleFocus(row.goal.id, row.goal.focus === true); }}

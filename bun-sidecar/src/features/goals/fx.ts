@@ -1,11 +1,12 @@
 import { createServiceLogger } from "@/lib/logger";
 import { FileDatabase } from "@/storage/FileDatabase";
-import { getGoalsPath, hasActiveWorkspace } from "@/storage/root-path";
+import { getGoalsPath, getNotesPath, hasActiveWorkspace } from "@/storage/root-path";
 import { GoalRecord, GoalRecordSchema } from "./goal-types";
 import type { Todo } from "@/features/todos/todo-types";
 import { getEffectiveGoalRefs } from "@/features/todos/todo-types";
 import { isTaskTodo } from "@/features/todos/todo-kind-utils";
 import type { ProjectConfig } from "@/features/projects/project-types";
+import path from "path";
 
 const goalsLogger = createServiceLogger("GOALS");
 
@@ -22,6 +23,41 @@ export async function initializeGoalsService(): Promise<void> {
     }
     goalsDb = new FileDatabase<GoalRecord>(getGoalsPath());
     await goalsDb.initialize();
+
+    let tagsNullFixed = 0;
+    let mirrorNoteRepaired = 0;
+    const notesPath = getNotesPath();
+
+    for (const goal of await goalsDb.findAll()) {
+        if ((goal as Record<string, unknown>).tags === null) {
+            await goalsDb.update(goal.id, {}).then(() => { tagsNullFixed++; }).catch(() => {});
+        }
+
+        if (!goal.mirrorNoteFile) {
+            const slug = goal.title
+                .toLowerCase()
+                .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                .replace(/[^a-z0-9\s-]/g, "")
+                .trim()
+                .replace(/\s+/g, "-")
+                .replace(/-+/g, "-");
+            const filePath = path.join(notesPath, "Goals", "goals", `${slug}.md`);
+
+            if (await Bun.file(filePath).exists()) {
+                await goalsDb.update(goal.id, {
+                    mirrorNoteFile: `Goals/goals/${slug}.md`,
+                } as Partial<GoalRecord>).then(() => { mirrorNoteRepaired++; }).catch(() => {});
+            }
+        }
+    }
+
+    if (tagsNullFixed > 0) {
+        goalsLogger.info(`Normalized tags:null for ${tagsNullFixed} goals`);
+    }
+    if (mirrorNoteRepaired > 0) {
+        goalsLogger.info(`Repaired mirrorNoteFile for ${mirrorNoteRepaired} goals`);
+    }
+
     goalsLogger.info("Goals service initialized");
 }
 
@@ -258,7 +294,11 @@ export async function updateGoal(input: {
     }
 
     // Validate the merged result against the full schema before writing
-    GoalRecordSchema.parse({ ...existing, ...updates });
+    const merged = { ...existing, ...updates };
+    if (merged.tags === null) {
+        delete merged.tags;
+    }
+    GoalRecordSchema.parse(merged);
 
     const updated = await getDb().update(input.goalId, updates as Partial<GoalRecord>);
     if (!updated) {
@@ -349,6 +389,7 @@ export type GoalTreeNode = {
     openTodoCount: number;
     doneTodoCount: number;
     computedProgress: number;
+    isProgressPaused: boolean;
 };
 
 const ROOT_PARENT_KEY = "__root__";
@@ -418,6 +459,10 @@ export function buildGoalForestNodes(input: {
         const openTaskTodos = taskTodos.filter((todo) => OPEN_TODO_STATUSES.has(todo.status));
         const doneTaskTodos = taskTodos.filter((todo) => todo.status === "done");
 
+        const hasActiveOrCompletedChildren = children.some(
+            (c) => c.goal.status === "active" || c.goal.status === "completed",
+        );
+
         return {
             goal,
             children,
@@ -431,6 +476,11 @@ export function buildGoalForestNodes(input: {
                 children.map((node) => ({ ...node.goal, _computedProgress: node.computedProgress } as GoalRecord & { _computedProgress: number })),
                 linkedTodos,
             ),
+            isProgressPaused:
+                goal.progressMode === "rollup"
+                && goal.status === "active"
+                && children.length > 0
+                && !hasActiveOrCompletedChildren,
         };
     }
 

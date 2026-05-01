@@ -15,6 +15,9 @@ export type GoalBrowserRow = {
     doneTodoCount: number;
     attentionReasons: GoalAttentionReason[];
     needsAttention: boolean;
+    isProgressPaused: boolean;
+    isFutureQuarter: boolean;
+    quarterBadge: string | null;
 };
 
 export type GoalBrowserSummary = {
@@ -69,6 +72,32 @@ export function getHorizonLabel(horizon: GoalRecord["horizon"]): string {
         default:
             return horizon;
     }
+}
+
+function getQuarterEnd(year: number, quarter: number): string {
+    const lastDay: Record<number, string> = {
+        1: "03-31",
+        2: "06-30",
+        3: "09-30",
+        4: "12-31",
+    };
+    return `${year}-${lastDay[quarter] || "12-31"}`;
+}
+
+function getQuarterFromDate(dateStr: string): number {
+    const month = parseInt(dateStr.substring(5, 7), 10);
+    if (month <= 3) return 1;
+    if (month <= 6) return 2;
+    if (month <= 9) return 3;
+    return 4;
+}
+
+function getCurrentQuarter(now: Date): number {
+    const month = now.getMonth() + 1;
+    if (month <= 3) return 1;
+    if (month <= 6) return 2;
+    if (month <= 9) return 3;
+    return 4;
 }
 
 export function flattenGoalForest(forest: GoalForestNodeView[]): GoalForestNodeView[] {
@@ -156,7 +185,7 @@ function buildSummary(rows: GoalBrowserRow[]): GoalBrowserSummary {
     };
 }
 
-export type GoalBrowserFilterMode = "all" | "needs_attention" | "without_next_action" | "focus";
+export type GoalBrowserFilterMode = "all" | "needs_attention" | "without_next_action" | "focus" | "this_quarter";
 
 export function goalMatchesSearch(row: GoalBrowserRow, query: string): boolean {
     const normalized = query.trim().toLowerCase();
@@ -168,11 +197,16 @@ export function goalMatchesSearch(row: GoalBrowserRow, query: string): boolean {
     );
 }
 
-function goalMatchesFilterMode(row: GoalBrowserRow, mode: GoalBrowserFilterMode): boolean {
+function goalMatchesFilterMode(row: GoalBrowserRow, mode: GoalBrowserFilterMode, currentQuarterEnd: string): boolean {
     if (mode === "all") return true;
     if (mode === "needs_attention") return row.needsAttention;
     if (mode === "without_next_action") return row.attentionReasons.includes("without_next_action");
     if (mode === "focus") return row.goal.focus === true;
+    if (mode === "this_quarter") {
+        if (row.goal.status !== "active") return false;
+        if (!row.goal.targetDate) return true; // ongoing, no specific date
+        return row.goal.targetDate <= currentQuarterEnd;
+    }
     return true;
 }
 
@@ -192,7 +226,12 @@ export function buildGoalsBrowserViewModel(
     searchQuery: string,
     filterMode: GoalBrowserFilterMode = "all",
     now: Date = new Date(),
+    hideCompleted = false,
 ): GoalBrowserViewModel {
+    const currentQuarter = getCurrentQuarter(now);
+    const currentYear = now.getFullYear();
+    const currentQuarterEnd = getQuarterEnd(currentYear, currentQuarter);
+
     const allRows = flattenGoalForest(forest)
         .map((node) => {
             const partial = {
@@ -201,6 +240,17 @@ export function buildGoalsBrowserViewModel(
                 openTodoCount: node.openTodoCount,
             };
             const attentionReasons = computeAttentionReasons(partial, now);
+
+            let isFutureQuarter = false;
+            let quarterBadge: string | null = null;
+            if (node.goal.horizon === "quarterly" && node.goal.targetDate) {
+                const targetQuarter = getQuarterFromDate(node.goal.targetDate);
+                if (targetQuarter > currentQuarter || (node.goal.targetDate.substring(0, 4) > String(currentYear))) {
+                    isFutureQuarter = true;
+                    quarterBadge = `Q${targetQuarter}`;
+                }
+            }
+
             const row: GoalBrowserRow = {
                 goal: node.goal,
                 computedProgress: node.computedProgress,
@@ -210,6 +260,9 @@ export function buildGoalsBrowserViewModel(
                 doneTodoCount: node.doneTodoCount,
                 attentionReasons,
                 needsAttention: ATTENTION_SUMMARY_REASONS.some((reason) => attentionReasons.includes(reason)),
+                isProgressPaused: node.isProgressPaused,
+                isFutureQuarter,
+                quarterBadge,
             };
             return row;
         })
@@ -223,8 +276,9 @@ export function buildGoalsBrowserViewModel(
 
     const summary = buildSummary(allRows);
     const filteredRows = allRows
+        .filter((row) => !hideCompleted || (row.goal.status !== "completed" && row.goal.status !== "dropped"))
         .filter((row) => goalMatchesSearch(row, searchQuery))
-        .filter((row) => goalMatchesFilterMode(row, filterMode));
+        .filter((row) => goalMatchesFilterMode(row, filterMode, currentQuarterEnd));
     const attentionRows = filteredRows.filter((row) => row.needsAttention);
 
     const groups: GoalBrowserGroup[] = HORIZON_ORDER

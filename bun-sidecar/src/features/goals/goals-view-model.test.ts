@@ -31,6 +31,7 @@ function makeNode(
         openTodoCount: 0,
         doneTodoCount: 0,
         computedProgress: 0,
+        isProgressPaused: false,
         ...overrides,
     };
 }

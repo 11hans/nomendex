@@ -11,6 +11,7 @@ export type GoalForestNodeView = {
     openTodoCount: number;
     doneTodoCount: number;
     computedProgress: number;
+    isProgressPaused: boolean;
 };
 
 export type GoalGraphView = {
