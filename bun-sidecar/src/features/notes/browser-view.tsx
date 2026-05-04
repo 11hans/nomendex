@@ -2,10 +2,8 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useTheme } from "@/hooks/useTheme";
 
 import { Search, FileText, FilePlus, FolderPlus } from "lucide-react";
@@ -21,6 +19,7 @@ import { useCommandDialog } from "@/components/CommandDialogProvider";
 import { DeleteNoteDialog } from "./delete-note-dialog";
 import { DeleteFolderDialog } from "./delete-folder-dialog";
 import { RenameNoteDialog } from "./rename-note-dialog";
+import { generateUntitledNoteName } from "./untitled-name";
 
 export function NotesBrowserView({ tabId }: { tabId: string }) {
     if (!tabId) {
@@ -33,9 +32,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     const [folders, setFolders] = useState<NoteFolder[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedNote, setSelectedNote] = useState<Note | null>(null);
-    const [createDialogOpen, setCreateDialogOpen] = useState(false);
-    const [newNoteName, setNewNoteName] = useState("");
-    const [createNoteInFolderPath, setCreateNoteInFolderPath] = useState<string | null>(null);
+    const [expandFolderRequest, setExpandFolderRequest] = useState<{ path: string; nonce: number } | null>(null);
     const placement = getViewSelfPlacement(tabId);
     const { openDialog } = useCommandDialog();
 
@@ -54,11 +51,18 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     // API hook
     const notesAPI = useNotesAPI();
 
-    const normalizeNoteFileName = useCallback((rawName: string): string => {
-        const sanitized = rawName.trim().replace(/[/\\]/g, "-");
-        if (!sanitized) return "";
-        return sanitized.toLowerCase().endsWith(".md") ? sanitized : `${sanitized}.md`;
-    }, []);
+    const generateUntitledNameInFolder = useCallback(
+        (folderPath: string | null): string => {
+            const target = folderPath ?? "";
+            const inFolder = notes.filter((n) => {
+                const lastSlash = n.fileName.lastIndexOf("/");
+                const dir = lastSlash >= 0 ? n.fileName.substring(0, lastSlash) : "";
+                return dir === target;
+            });
+            return generateUntitledNoteName(inFolder.map((n) => n.fileName));
+        },
+        [notes]
+    );
 
     // Set tab name for browser view - only once when this tab is active
     useEffect(() => {
@@ -125,51 +129,45 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
         });
     }, [notesAPI, showHiddenFiles]);
 
-    const handleCreateNote = async () => {
-        const finalFileName = normalizeNoteFileName(newNoteName);
-        if (!finalFileName) return;
-        const noteTitle = finalFileName.replace(/\.md$/i, "");
-
-        try {
-            setLoading(true);
-            await notesAPI.saveNote({ fileName: finalFileName, content: `# ${noteTitle}\n\n` });
-
-            // If creating in a folder, move the note there
-            if (createNoteInFolderPath) {
-                await notesAPI.moveNoteToFolder({ fileName: finalFileName, targetFolder: createNoteInFolderPath });
-            }
-
-            const result = await notesAPI.getNotes({ showHiddenFiles });
-            setNotes(result);
-
-            setCreateDialogOpen(false);
-            setNewNoteName("");
-            setCreateNoteInFolderPath(null);
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : "Failed to create note";
-            setError(errorMessage);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleCreateNoteInFolder = useCallback((folderPath: string | null) => {
-        setCreateNoteInFolderPath(folderPath);
-        setCreateDialogOpen(true);
-    }, []);
-
     const handleOpenNote = useCallback(
-        (noteId: string) => {
+        (noteId: string, extraProps?: Record<string, unknown>) => {
             const tab = openTab({
                 pluginMeta: notesPluginSerial,
                 view: "editor",
-                props: { noteFileName: noteId },
+                props: { noteFileName: noteId, ...extraProps },
             });
             if (tab && placement === "sidebar") {
                 setSidebarTabId(tab.id);
             }
         },
         [openTab, placement, setSidebarTabId]
+    );
+
+    const handleCreateNoteInFolder = useCallback(async (folderPath: string | null) => {
+        const baseName = generateUntitledNameInFolder(folderPath);
+        try {
+            await notesAPI.saveNote({ fileName: baseName, content: "" });
+            let finalName = baseName;
+            if (folderPath) {
+                const moved = await notesAPI.moveNoteToFolder({ fileName: baseName, targetFolder: folderPath });
+                finalName = moved.fileName;
+            }
+            const result = await notesAPI.getNotes({ showHiddenFiles });
+            setNotes(result);
+            const newNote = result.find((n) => n.fileName === finalName) ?? null;
+            if (newNote) setSelectedNote(newNote);
+            if (folderPath) {
+                setExpandFolderRequest({ path: folderPath, nonce: Date.now() });
+            }
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : "Failed to create note";
+            setError(errorMessage);
+        }
+    }, [generateUntitledNameInFolder, notesAPI, showHiddenFiles, setError]);
+
+    const handleQuickCreateNote = useCallback(
+        () => handleCreateNoteInFolder(null),
+        [handleCreateNoteInFolder]
     );
 
     const requestDeleteNote = useCallback((noteFileName: string) => {
@@ -197,7 +195,6 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                 <RenameNoteDialog
                     noteFileName={noteFileName}
                     onSuccess={() => {
-                        // Refresh notes list after renaming
                         notesAPI.getNotes({ showHiddenFiles }).then(result => {
                             setNotes(result);
                         });
@@ -316,9 +313,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                 id: "notes.create",
                 name: "Create Note",
                 combo: { key: "n", cmd: true },
-                handler: () => {
-                    setCreateDialogOpen(true);
-                },
+                handler: handleQuickCreateNote,
                 category: "Actions",
                 priority: 20,
             },
@@ -356,7 +351,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
         {
             context: "plugin:notes",
             onlyWhenActive: true,
-            deps: [selectedNote, searchQuery, handleOpenNote, requestDeleteNote],
+            deps: [selectedNote, searchQuery, handleOpenNote, requestDeleteNote, handleQuickCreateNote],
         }
     );
 
@@ -367,59 +362,6 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
             tabIndex={-1}
             style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
         >
-            {/* Create Note Dialog */}
-            <Dialog open={createDialogOpen} onOpenChange={(open) => {
-                setCreateDialogOpen(open);
-                if (!open) {
-                    setNewNoteName("");
-                    setCreateNoteInFolderPath(null);
-                }
-            }}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
-                            {createNoteInFolderPath
-                                ? `New Note in "${folders.find(f => f.path === createNoteInFolderPath)?.name ?? createNoteInFolderPath}"`
-                                : "Create New Note"
-                            }
-                        </DialogTitle>
-                        <DialogDescription>Enter a name for your new note</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="note-name">Note Name</Label>
-                            <Input
-                                id="note-name"
-                                value={newNoteName}
-                                onChange={(e) => setNewNoteName(e.target.value)}
-                                placeholder="My New Note"
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                        handleCreateNote();
-                                    }
-                                }}
-                                autoFocus
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                setCreateDialogOpen(false);
-                                setNewNoteName("");
-                                setCreateNoteInFolderPath(null);
-                            }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button onClick={handleCreateNote} disabled={!newNoteName.trim()}>
-                            Create Note
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
             {/* Main Content - Split Layout */}
             <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Left Panel - File Tree */}
@@ -459,10 +401,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                                     variant="ghost"
                                     size="icon"
                                     className="h-7 w-7"
-                                    onClick={() => {
-                                        setCreateNoteInFolderPath(null);
-                                        setCreateDialogOpen(true);
-                                    }}
+                                    onClick={handleQuickCreateNote}
                                     title="New note"
                                 >
                                     <FilePlus className="h-4 w-4" />
@@ -527,6 +466,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                             onRenameNote={requestRenameNote}
                             onPreloadNote={notesAPI.preloadNote}
                             searchQuery={searchQuery}
+                            expandFolderRequest={expandFolderRequest}
                         />
                     </div>
                 </div>

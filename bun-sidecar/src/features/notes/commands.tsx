@@ -1,6 +1,5 @@
 import React from "react";
 import { Command } from "@/types/Commands";
-import { CreateNoteDialog } from "./create-note-dialog";
 import { DeleteNoteDialog } from "./delete-note-dialog";
 import { RenameNoteDialog } from "./rename-note-dialog";
 import { MoveToFolderDialog } from "./move-to-folder-dialog";
@@ -9,6 +8,8 @@ import { DailyNoteDatePickerDialog } from "./daily-note-date-picker-dialog";
 import { SearchNotesDialog } from "./search-notes-dialog";
 import { notesAPI } from "@/hooks/useNotesAPI";
 import { notesPluginSerial } from "./index";
+import { generateUntitledNoteName } from "./untitled-name";
+import { toast } from "sonner";
 import { WorkspaceTab } from "@/types/Workspace";
 import { SerializablePlugin } from "@/types/Plugin";
 import { emit } from "@/lib/events";
@@ -46,15 +47,27 @@ export function getNotesCommands(context: CommandContext): Command[] {
         {
             id: "notes.create",
             name: "Create New Note",
-            description: "Create a new note with custom name",
+            description: "Create a new blank note (opens directly)",
             icon: "Plus",
-            callback: () => {
+            callback: async () => {
                 context.closeCommandMenu();
-                context.openDialog({
-                    title: "Create New Note",
-                    description: "Enter a name for your new note",
-                    content: <CreateNoteDialog />,
-                });
+                try {
+                    const existing = await notesAPI.getNotes({});
+                    const rootNotes = existing.filter((n) => !n.fileName.includes("/"));
+                    const fileName = generateUntitledNoteName(rootNotes.map((n) => n.fileName));
+                    await notesAPI.saveNote({ fileName, content: "" });
+                    context.openTab({
+                        pluginMeta: notesPluginSerial,
+                        view: "editor",
+                        props: { noteFileName: fileName, initialMode: "markdown" },
+                    });
+                    if (context.currentPath !== "/") {
+                        context.navigate("/");
+                    }
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : "Failed to create note";
+                    toast.error(msg);
+                }
             },
         },
         {

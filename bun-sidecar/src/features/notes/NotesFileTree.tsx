@@ -39,6 +39,7 @@ interface NotesFileTreeProps {
     onRenameNote: (noteFileName: string) => void;
     onPreloadNote?: (noteFileName: string) => void;
     searchQuery?: string;
+    expandFolderRequest?: { path: string; nonce: number } | null;
 }
 
 interface TreeNode {
@@ -442,11 +443,28 @@ export function NotesFileTree({
     onRenameNote,
     onPreloadNote,
     searchQuery,
+    expandFolderRequest,
 }: NotesFileTreeProps) {
     const { currentTheme } = useTheme();
-    const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
-        () => new Set(folders.map((f) => f.path)) // Start with all expanded
-    );
+    // Tree starts fully collapsed on every mount; closing the notes tab/view
+    // discards expansion state intentionally, so the user comes back to a clean tree.
+    const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set());
+
+    // Expand a folder (and its ancestors) on demand, e.g. after creating a
+    // note inside it so the user keeps visual context. Nonce ensures the
+    // effect re-fires even if the same folder is targeted twice.
+    useEffect(() => {
+        if (!expandFolderRequest) return;
+        const { path } = expandFolderRequest;
+        setExpandedFolders((prev) => {
+            const next = new Set(prev);
+            const segments = path.split("/");
+            for (let i = 1; i <= segments.length; i++) {
+                next.add(segments.slice(0, i).join("/"));
+            }
+            return next;
+        });
+    }, [expandFolderRequest]);
 
     // Refs for keyboard navigation
     const containerRef = useRef<HTMLDivElement>(null);

@@ -85,6 +85,7 @@ interface NotesViewProps {
     compact?: boolean; // Hides header toolbar when embedded
     scrollToLine?: number; // Line number to scroll to on initial load
     onRequestFullscreen?: () => void;
+    initialMode?: "rich" | "markdown";
 }
 
 interface Heading {
@@ -94,7 +95,7 @@ interface Heading {
 }
 
 export function NotesView(props: NotesViewProps) {
-    const { noteFileName, tabId, autoFocus = true, compact = false, scrollToLine, onRequestFullscreen } = props;
+    const { noteFileName, tabId, autoFocus = true, compact = false, scrollToLine, onRequestFullscreen, initialMode } = props;
     if (!tabId) {
         throw new Error("tabId is required");
     }
@@ -106,7 +107,7 @@ export function NotesView(props: NotesViewProps) {
     const [tags, setTags] = useState<string[]>([]);
     const [project, setProject] = useState<string | null>(null);
 
-    const [isRichTextMode, setIsRichTextMode] = useState(true);
+    const [isRichTextMode, setIsRichTextMode] = useState(initialMode === "rich");
     const [headings, setHeadings] = useState<Heading[]>([]);
     const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null);
     const [focusedHeadingIndex, setFocusedHeadingIndex] = useState<number>(0);
@@ -1036,6 +1037,12 @@ export function NotesView(props: NotesViewProps) {
 
     // Update tab name to show just the document name for standalone editor tabs only.
     // The compact NotesView is embedded inside the notes browser tab and must not rename it.
+    // For Untitled notes, derive from first H1 so tab name follows what the user typed.
+    const pathWithoutExtForTab = noteFileName.replace(/\.md$/, "");
+    const fileLeafForTab = pathWithoutExtForTab.split("/").pop() || pathWithoutExtForTab;
+    const isUntitledForTab = /^Untitled(\s\d+)?$/i.test(fileLeafForTab);
+    const firstH1ForTab = headings.find((h) => h.level === 1)?.text.trim();
+    const tabDisplayName = isUntitledForTab && firstH1ForTab ? firstH1ForTab : pathWithoutExtForTab;
     useEffect(() => {
         if (compact) return;
 
@@ -1045,13 +1052,11 @@ export function NotesView(props: NotesViewProps) {
             activeTab.pluginInstance.viewId === "editor" &&
             activeTab.pluginInstance.instanceProps?.noteFileName === noteFileName;
 
-        if (isActiveEditorTab && !hasSetTabNameRef.current) {
-            // Remove .md extension for cleaner display
-            const displayName = noteFileName.replace(/\.md$/, "");
-            setTabName(tabId, displayName);
+        if (isActiveEditorTab) {
+            setTabName(tabId, tabDisplayName);
             hasSetTabNameRef.current = true;
         }
-    }, [activeTab, compact, tabId, noteFileName, setTabName]);
+    }, [activeTab, compact, tabId, noteFileName, setTabName, tabDisplayName]);
 
     useEffect(() => {
         let cancelled = false;
@@ -1992,6 +1997,9 @@ export function NotesView(props: NotesViewProps) {
     const pathSegments = pathWithoutExt.split("/");
     const fileName = pathSegments[pathSegments.length - 1] || pathWithoutExt;
     const folderPath = pathSegments.slice(0, -1);
+    const isUntitled = /^Untitled(\s\d+)?$/i.test(fileName);
+    const firstH1 = headings.find((h) => h.level === 1)?.text.trim();
+    const displayTitle = isUntitled && firstH1 ? firstH1 : fileName;
 
     return (
         <>
@@ -2044,7 +2052,7 @@ export function NotesView(props: NotesViewProps) {
                                         className="text-sm font-medium truncate"
                                         style={{ color: currentTheme.styles.contentPrimary }}
                                     >
-                                        {fileName}
+                                        {displayTitle}
                                     </h1>
                                     <p
                                         className="text-caption truncate"
