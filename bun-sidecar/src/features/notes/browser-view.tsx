@@ -105,11 +105,6 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                     loadFolders(),
                 ]);
                 setNotes(notesResult);
-
-                if (notesResult.length > 0 && !selectedNote) {
-                    const sortedNotes = notesResult.sort((a, b) => a.fileName.localeCompare(b.fileName));
-                    setSelectedNote(sortedNotes[0] || null);
-                }
             } catch (err) {
                 const errorMessage = err instanceof Error ? err.message : "Failed to fetch notes";
                 setError(errorMessage);
@@ -118,7 +113,6 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
             }
         };
         fetchNotes();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [notesAPI, setLoading, setError, loadFolders, showHiddenFiles]);
 
     useEffect(() => {
