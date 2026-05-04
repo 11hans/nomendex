@@ -18,7 +18,9 @@
       "Bash(python3 -c \"import sys,json; d=json.loads\\(sys.stdin.read\\(\\)\\); print\\(repr\\(d.get\\('result',''\\)\\)\\)\")",
       "Bash(~/.local/bin/claude --help)",
       "Bash('~/.local/bin/claude' -p '<user_input><title>fix login bug</title><description>\\(empty\\)</description></user_input>' --model claude-haiku-4-5 --append-system-prompt 'You are a rewriter of todo drafts. Return ONLY valid JSON with no explanation, no markdown, no extra text. Example: {\"title\":\"...\",\"description\":\"...\"}' --json-schema '{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"}},\"required\":[\"title\",\"description\"]}' --output-format json)",
-      "Bash(python3 -c \"import sys,json; d=json.loads\\(sys.stdin.read\\(\\)\\); print\\(d\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.loads\\(sys.stdin.read\\(\\)\\); print\\(d\\)\")",
+      "Bash(duckdb *)",
+      "Read(//Users/honza/Library/Mobile Documents/iCloud~md~obsidian/Documents/TheVault/agents/**)"
     ]
   }
 }

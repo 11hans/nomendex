@@ -720,6 +720,7 @@ export const chatRoutes = {
                     settingSources: Array<"user" | "project">;
                     agents?: Record<string, AgentDefinition>;
                     maxThinkingTokens?: number;
+                    env: Record<string, string | undefined>;
                 } = {
                     model: agentConfig.model,
                     cwd: targetDir,
@@ -730,6 +731,13 @@ export const chatRoutes = {
                     mcpServers,
                     pathToClaudeCodeExecutable: claudeCliPath,
                     settingSources: ["project"], // Load skills from project .claude/skills/, MCP servers come from mcpServers option
+                    // Cap per-turn output. SDK default is 32000 — most BPagent turns finish well under
+                    // 4K, and 8000 still leaves headroom for long Edit/Write responses while trimming
+                    // the rare 8K+ runaway. Override via CLAUDE_CODE_MAX_OUTPUT_TOKENS in environment.
+                    env: {
+                        ...process.env,
+                        CLAUDE_CODE_MAX_OUTPUT_TOKENS: process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS ?? "8000",
+                    },
                     ...(maxThinkingTokens !== undefined && { maxThinkingTokens }),
                 };
 
