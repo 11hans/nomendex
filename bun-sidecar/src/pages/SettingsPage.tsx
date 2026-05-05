@@ -9,7 +9,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { triggerNativeUpdate } from "@/hooks/useUpdateNotification";
 import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { RotateCcw, Eye, EyeOff, Check, X, Key, RefreshCw, Info, Plus, Trash2, FolderOpen, Brain, Loader2, ExternalLink, CalendarDays } from "lucide-react";
+import { RotateCcw, Eye, EyeOff, Check, X, Key, RefreshCw, Info, Plus, Trash2, FolderOpen, Brain, Loader2, ExternalLink, CalendarDays, LayoutGrid } from "lucide-react";
 import { Input } from "../components/ui/input";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Label } from "../components/ui/label";
@@ -615,7 +615,7 @@ function SettingsContent() {
     const [recordingKeys, setRecordingKeys] = useState<string[]>([]);
     const { setTheme, themes, currentTheme } = useTheme();
     const { shortcuts, updateShortcut, resetShortcut, resetAllShortcuts } = useKeyboardShortcuts();
-    const { chatInputEnterToSend, setChatInputEnterToSend, workspace, appleCalendarSync, setAppleCalendarSync } = useWorkspaceContext();
+    const { chatInputEnterToSend, setChatInputEnterToSend, workspace, appleCalendarSync, setAppleCalendarSync, updateWorkspace } = useWorkspaceContext();
 
     // Local state for pending preference change
     const [pendingEnterToSend, setPendingEnterToSend] = useState<boolean | null>(null);
@@ -1108,6 +1108,41 @@ function SettingsContent() {
                                         checked={appleCalendarSync}
                                         onCheckedChange={setAppleCalendarSync}
                                     />
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <LayoutGrid className="h-4 w-4" />
+                                    Tabs
+                                </CardTitle>
+                                <CardDescription>Configure tab behavior</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="flex items-center justify-between">
+                                    <div className="space-y-0.5">
+                                        <Label className="text-caption">Auto-close inactive tabs</Label>
+                                        <p className="text-sm text-muted-foreground">
+                                            Close tabs that haven't been viewed recently. Pinned tabs are never closed.
+                                        </p>
+                                    </div>
+                                    <Select
+                                        value={String(workspace.tabAutoCloseTimeout ?? 900)}
+                                        onValueChange={(v) => updateWorkspace({ tabAutoCloseTimeout: Number(v) })}
+                                    >
+                                        <SelectTrigger className="w-[150px] h-8 text-caption">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="0">Disabled</SelectItem>
+                                            <SelectItem value="300">5 minutes</SelectItem>
+                                            <SelectItem value="600">10 minutes</SelectItem>
+                                            <SelectItem value="900">15 minutes</SelectItem>
+                                            <SelectItem value="1800">30 minutes</SelectItem>
+                                            <SelectItem value="3600">1 hour</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             </CardContent>
                         </Card>

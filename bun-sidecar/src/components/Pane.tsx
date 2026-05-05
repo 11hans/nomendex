@@ -1,4 +1,4 @@
-import { X, Plus, Lock } from "lucide-react";
+import { X, Plus, Lock, Pin } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { Button } from "./ui/button";
@@ -8,6 +8,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Pane as PaneType, WorkspaceTab } from "@/types/Workspace";
 import { getIcon } from "./PluginViewIcons";
 import { useFileLocks } from "@/hooks/useFileLocks";
+import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 
 interface PaneProps {
     pane: PaneType;
@@ -40,8 +41,18 @@ export function Pane({
     const [dropIndicator, setDropIndicator] = useState<{ index: number; side: "left" | "right" } | null>(null);
     const { currentTheme } = useTheme();
     const { getLock } = useFileLocks();
+    const { workspace, toggleTabPinned } = useWorkspaceContext();
 
     const activeTab = pane.tabs.find((tab) => tab.id === pane.activeTabId) ?? null;
+
+    // Trigger re-renders for expiring tab visuals
+    const [, setRenderTick] = useState(0);
+    useEffect(() => {
+        const timeout = workspace.tabAutoCloseTimeout ?? 0;
+        if (timeout <= 0) return;
+        const iv = setInterval(() => setRenderTick(t => t + 1), 5000);
+        return () => clearInterval(iv);
+    }, [workspace.tabAutoCloseTimeout]);
 
     const getNoteLock = (tab: WorkspaceTab) => {
         if (tab.pluginInstance.plugin.id !== "notes") return null;
@@ -159,6 +170,15 @@ export function Pane({
     const overflowTabs = pane.tabs.slice(20);
     const hasOverflow = overflowTabs.length > 0;
 
+    const now = Date.now();
+    const tabAutoCloseTimeout = workspace.tabAutoCloseTimeout ?? 0;
+    const isTabExpiring = (tab: WorkspaceTab) =>
+        tabAutoCloseTimeout > 0 &&
+        !tab.pinned &&
+        tab.lastActiveAt > 0 &&
+        tab.id !== activeTab?.id &&
+        (now - tab.lastActiveAt) > (tabAutoCloseTimeout * 1000 - 30000);
+
     if (pane.tabs.length === 0) {
         return (
             <div
@@ -214,8 +234,7 @@ export function Pane({
                                     )}
                                     <TabsTrigger
                                         value={tab.id}
-                                        className={`rounded-none h-9 px-3 gap-1.5 flex items-center transition-colors duration-100 min-w-0 max-w-[160px] cursor-grab text-xs border-r ${isDraggingFromThisPane && draggedTabIndex === index ? "opacity-50" : ""
-                                            }`}
+                                        className={`rounded-none h-9 px-3 gap-1.5 flex items-center transition-all duration-300 min-w-0 max-w-[160px] cursor-grab text-xs border-r ${isDraggingFromThisPane && draggedTabIndex === index ? "opacity-50" : ""} ${isTabExpiring(tab) ? "opacity-40" : ""}`}
                                         style={{
                                             backgroundColor: activeTab?.id === tab.id ? currentTheme.styles.surfacePrimary : currentTheme.styles.surfaceSecondary,
                                             color: activeTab?.id === tab.id ? currentTheme.styles.contentPrimary : currentTheme.styles.contentSecondary,
@@ -245,6 +264,21 @@ export function Pane({
                                                 />
                                             </span>
                                         )}
+                                        {/* Pin button */}
+                                        <span
+                                            className={`h-4 w-4 flex items-center justify-center flex-shrink-0 cursor-pointer rounded-sm transition-all duration-100 hover:bg-[rgba(128,128,128,0.2)] ${tab.pinned ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
+                                            title={tab.pinned ? "Unpin tab" : "Pin tab"}
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                toggleTabPinned(tab.id);
+                                            }}
+                                        >
+                                            <Pin
+                                                className="size-3"
+                                                style={{ color: tab.pinned ? currentTheme.styles.borderAccent : currentTheme.styles.contentSecondary }}
+                                            />
+                                        </span>
                                         {/* Close button – visible on hover or when active */}
                                         <span
                                             className={`h-4 w-4 flex items-center justify-center flex-shrink-0 cursor-pointer rounded-sm transition-colors duration-100 hover:bg-[rgba(128,128,128,0.2)] ${activeTab?.id === tab.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}

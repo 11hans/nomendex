@@ -6,6 +6,8 @@ export const WorkspaceTabSchema = z.object({
     id: z.string(),
     title: z.string(),
     pluginInstance: PluginInstanceSchema,
+    pinned: z.boolean().default(false),
+    lastActiveAt: z.number().default(0),
 });
 
 export const McpServerStatusSchema = z.object({
@@ -74,6 +76,7 @@ export const WorkspaceStateSchema = z.object({
         provider: z.enum(["disabled", "voyage"]).default("disabled"),
     }).default({ provider: "disabled" }),
     appleCalendarSync: z.boolean().default(true),
+    tabAutoCloseTimeout: z.number().min(0).default(900),
 });
 
 export type WorkspaceTab = z.infer<typeof WorkspaceTabSchema>;

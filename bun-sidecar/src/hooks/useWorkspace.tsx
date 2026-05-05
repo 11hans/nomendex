@@ -65,6 +65,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         memoryExtraction: { provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free", consolidationModel: "anthropic/claude-sonnet-4-6" },
         embeddings: { provider: "disabled" },
         appleCalendarSync: true,
+        tabAutoCloseTimeout: 900,
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -118,7 +119,18 @@ export function useWorkspace(_initialRoute?: RouteParams) {
             const dataValidated = WorkspaceStateSchema.parse(result.data);
             console.log("[useWorkspace] Parsed workspace, chatInputEnterToSend:", dataValidated.chatInputEnterToSend);
 
-            setWorkspace(dataValidated);
+            // Reset lastActiveAt on load so stale timestamps from a previous session
+            // don't trigger auto-close immediately after startup.
+            const sessionStart = Date.now();
+            const normalized = {
+                ...dataValidated,
+                tabs: dataValidated.tabs.map(t => ({ ...t, lastActiveAt: t.lastActiveAt > 0 ? sessionStart : 0 })),
+                panes: dataValidated.panes.map(p => ({
+                    ...p,
+                    tabs: p.tabs.map(t => ({ ...t, lastActiveAt: t.lastActiveAt > 0 ? sessionStart : 0 })),
+                })),
+            };
+            setWorkspace(normalized);
         } catch (err) {
             const message = err instanceof Error ? err.message : "Failed to fetch workspace";
             console.error("[useWorkspace] Fetch failed:", err);
@@ -222,6 +234,8 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                             id: generateId("tab"),
                             title: pluginInstance.plugin.name,
                             pluginInstance,
+                            pinned: false,
+                            lastActiveAt: 0,
                         };
                         resultTab = newTab;
 
@@ -244,6 +258,8 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                         id: generateId("tab"),
                         title: pluginInstance.plugin.name,
                         pluginInstance,
+                        pinned: false,
+                        lastActiveAt: 0,
                     };
                     resultTab = newTab;
 
@@ -262,48 +278,52 @@ export function useWorkspace(_initialRoute?: RouteParams) {
     // Helper to check if a tab matches the given criteria
     const tabMatchesCriteria = (tab: WorkspaceTab, pluginMeta: SerializablePlugin, view: string, props: Record<string, unknown>): boolean => {
         const instance = tab.pluginInstance;
+
+        if (instance.plugin.id !== pluginMeta.id) return false;
+
+        const existingProps = instance.instanceProps ?? {};
         const requestedView = view || "default";
         const existingView = instance.viewId || "default";
 
-        // Match on plugin ID and view
-        if (instance.plugin.id !== pluginMeta.id || !areViewsEquivalent(pluginMeta.id, requestedView, existingView)) {
+        // Single-instance plugins — max 1 tab regardless of view/props
+        if (pluginMeta.id === "projects" || pluginMeta.id === "goals" || pluginMeta.id === "memory" || pluginMeta.id === "uploads") {
+            return true;
+        }
+
+        // Chat — max 1 tab; specific sessions still match on sessionId
+        if (pluginMeta.id === "chat") {
+            if (props.sessionId) {
+                return existingProps.sessionId === props.sessionId;
+            }
+            return true;
+        }
+
+        // Tags — match specific tag by name; no tagName → match any tags tab
+        if (pluginMeta.id === "tags") {
+            if (props.tagName) {
+                return existingProps.tagName === props.tagName;
+            }
+            return true;
+        }
+
+        // Remaining plugins require view equivalence
+        if (!areViewsEquivalent(pluginMeta.id, requestedView, existingView)) {
             return false;
         }
 
-        // Match on props - plugin-specific rules first, then shallow fallback
-        const existingProps = instance.instanceProps ?? {};
-
-        // Notes editor identity is the note file itself; UI props (e.g. scrollToLine) don't create distinct tabs
+        // Notes editor identity is the note file itself
         if (pluginMeta.id === "notes" && requestedView === "editor" && props.noteFileName) {
             return existingProps.noteFileName === props.noteFileName;
         }
 
-        // For todos: match on project and view type
+        // Todos: match on project and view type
         if (pluginMeta.id === "todos") {
-            // For browser/kanban views, match on project filter
             if (requestedView === "browser" || requestedView === "kanban") {
                 return existingProps.project === props.project;
             }
-            // For other views (projects, default), just match the view type
             return true;
         }
 
-        // For tags: match on tagName
-        if (pluginMeta.id === "tags" && requestedView === "detail" && props.tagName) {
-            return existingProps.tagName === props.tagName;
-        }
-
-        // For chat: match on sessionId
-        if (pluginMeta.id === "chat" && requestedView === "chat") {
-            // If opening an existing chat (has sessionId), match on sessionId
-            if (props.sessionId) {
-                return existingProps.sessionId === props.sessionId;
-            }
-            // If opening a new chat (no sessionId), don't match - allow multiple new chats
-            return false;
-        }
-
-        // Generic fallback for plugins/views without explicit identity rules
         return shallowEqualProps(props, existingProps);
     };
 
@@ -330,7 +350,11 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                         if (existingTab) {
                             resultTab = existingTab;
                             const newPanes = prev.panes.map((p) =>
-                                p.id === targetPaneId ? { ...p, activeTabId: existingTab.id } : p
+                                p.id === targetPaneId ? {
+                                    ...p,
+                                    activeTabId: existingTab.id,
+                                    tabs: p.tabs.map(t => t.id === existingTab.id ? { ...t, lastActiveAt: Date.now() } : t),
+                                } : p
                             );
                             return { ...prev, panes: newPanes, activePaneId: targetPaneId };
                         }
@@ -341,6 +365,8 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                             id: generateId("tab"),
                             title: pluginInstance.plugin.name,
                             pluginInstance,
+                            pinned: false,
+                            lastActiveAt: Date.now(),
                         };
                         resultTab = newTab;
 
@@ -360,6 +386,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                         return {
                             ...prev,
                             activeTabId: existingTab.id,
+                            tabs: prev.tabs.map(t => t.id === existingTab.id ? { ...t, lastActiveAt: Date.now() } : t),
                         };
                     }
 
@@ -369,6 +396,8 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                         id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                         title: pluginInstance.plugin.name,
                         pluginInstance,
+                        pinned: false,
+                        lastActiveAt: Date.now(),
                     };
                     resultTab = newTab;
                     return {
@@ -578,6 +607,8 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                                     id: currentTab.id,
                                     title: pluginInstance.plugin.name,
                                     pluginInstance,
+                                    pinned: currentTab.pinned,
+                                    lastActiveAt: currentTab.lastActiveAt,
                                 };
                                 replaced = newTab;
                                 const newPanes = prev.panes.map((p) =>
@@ -600,6 +631,8 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                         id: currentTab.id,
                         title: pluginInstance.plugin.name,
                         pluginInstance,
+                        pinned: currentTab.pinned,
+                        lastActiveAt: currentTab.lastActiveAt,
                     };
                     replaced = newTab;
                     return {
@@ -652,19 +685,27 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                 if (prev.layoutMode === "split") {
                     if (!id) return prev;
 
-                    // Find the pane containing this tab
                     const paneWithTab = prev.panes.find((p) => p.tabs.some((t) => t.id === id));
                     if (paneWithTab) {
+                        const now = Date.now();
                         const newPanes = prev.panes.map((p) =>
-                            p.id === paneWithTab.id ? { ...p, activeTabId: id } : p
+                            p.id === paneWithTab.id ? {
+                                ...p,
+                                activeTabId: id,
+                                tabs: p.tabs.map(t => t.id === id ? { ...t, lastActiveAt: now } : t),
+                            } : p
                         );
                         return { ...prev, panes: newPanes, activePaneId: paneWithTab.id };
                     }
                     return prev;
                 }
 
-                // Single mode: set legacy activeTabId
-                return { ...prev, activeTabId: id };
+                // Single mode: set legacy activeTabId and stamp lastActiveAt
+                return {
+                    ...prev,
+                    activeTabId: id,
+                    tabs: id ? prev.tabs.map(t => t.id === id ? { ...t, lastActiveAt: Date.now() } : t) : prev.tabs,
+                };
             });
         },
         [updateWorkspace]
@@ -1057,12 +1098,71 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         [updateWorkspace]
     );
 
+    // Keep a ref to the latest workspace state for use inside interval callbacks
+    const workspaceRef = useRef(workspace);
+    useEffect(() => { workspaceRef.current = workspace; });
+
+    // Auto-close inactive tabs
+    useEffect(() => {
+        if ((workspace.tabAutoCloseTimeout ?? 0) <= 0) return;
+
+        const interval = setInterval(() => {
+            const ws = workspaceRef.current;
+            if ((ws.tabAutoCloseTimeout ?? 0) <= 0) return;
+
+            const now = Date.now();
+            const timeout = ws.tabAutoCloseTimeout * 1000;
+
+            if (ws.layoutMode === "split") {
+                ws.panes.forEach(pane => {
+                    pane.tabs.forEach(tab => {
+                        if (tab.pinned || tab.lastActiveAt === 0 || tab.id === pane.activeTabId) return;
+                        if ((now - tab.lastActiveAt) > timeout) closeTabInPane(pane.id, tab.id);
+                    });
+                });
+            } else {
+                ws.tabs.forEach(tab => {
+                    if (tab.pinned || tab.lastActiveAt === 0 || tab.id === ws.activeTabId || tab.id === ws.sidebarTabId) return;
+                    if ((now - tab.lastActiveAt) > timeout) closeTab(tab.id);
+                });
+            }
+        }, 10000);
+
+        return () => clearInterval(interval);
+    }, [workspace.tabAutoCloseTimeout, closeTab, closeTabInPane]);
+
+    const toggleTabPinned = useCallback(
+        (tabId: string) => {
+            updateWorkspace((prev) => {
+                if (prev.layoutMode === "split") {
+                    return {
+                        ...prev,
+                        panes: prev.panes.map(pane => ({
+                            ...pane,
+                            tabs: pane.tabs.map(t => t.id === tabId ? { ...t, pinned: !t.pinned } : t),
+                        })),
+                    };
+                }
+                return {
+                    ...prev,
+                    tabs: prev.tabs.map(t => t.id === tabId ? { ...t, pinned: !t.pinned } : t),
+                };
+            });
+        },
+        [updateWorkspace]
+    );
+
     // Set the active tab in a specific pane
     const setActiveTabInPane = useCallback(
         (paneId: string, tabId: string | null) => {
             updateWorkspace((prev) => {
+                const now = Date.now();
                 const newPanes = prev.panes.map((pane) =>
-                    pane.id === paneId ? { ...pane, activeTabId: tabId } : pane
+                    pane.id === paneId ? {
+                        ...pane,
+                        activeTabId: tabId,
+                        tabs: tabId ? pane.tabs.map(t => t.id === tabId ? { ...t, lastActiveAt: now } : t) : pane.tabs,
+                    } : pane
                 );
                 return { ...prev, panes: newPanes, activePaneId: paneId };
             });
@@ -1088,7 +1188,11 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                 if (existingTab) {
                     resultTab = existingTab;
                     const newPanes = prev.panes.map((p) =>
-                        p.id === paneId ? { ...p, activeTabId: existingTab.id } : p
+                        p.id === paneId ? {
+                            ...p,
+                            activeTabId: existingTab.id,
+                            tabs: p.tabs.map(t => t.id === existingTab.id ? { ...t, lastActiveAt: Date.now() } : t),
+                        } : p
                     );
                     return { ...prev, panes: newPanes, activePaneId: paneId };
                 }
@@ -1099,6 +1203,8 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                     id: generateId("tab"),
                     title: pluginInstance.plugin.name,
                     pluginInstance,
+                    pinned: false,
+                    lastActiveAt: Date.now(),
                 };
                 resultTab = newTab;
 
@@ -1243,7 +1349,8 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         appleCalendarSync: workspace.appleCalendarSync,
         setAppleCalendarSync,
 
-
+        // Tab pinning
+        toggleTabPinned,
 
         // Pane operations
         panes: workspace.panes,

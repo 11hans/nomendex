@@ -187,6 +187,7 @@ export const workspaceRoutes = {
                         memoryExtraction: { provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free", consolidationModel: "anthropic/claude-sonnet-4-6" },
                         embeddings: { provider: "disabled" },
                         appleCalendarSync: true,
+                        tabAutoCloseTimeout: 900,
                     };
                     await Bun.write(`${getNomendexPath()}/workspace.json`, JSON.stringify(defaultWorkspace, null, 2));
 
