@@ -239,6 +239,17 @@ During purge:
 - calendar colors are captured before delete
 - matching recreated calendars receive original `cgColor`
 
+## Enable/Disable Toggle
+
+Apple Calendar sync can be toggled per workspace in **Settings → Apple Calendar Sync**. The setting is stored as `appleCalendarSync: boolean` in `workspace.json` (defaults to `true`).
+
+When disabled:
+- `syncTaskToCalendar` and `removeTaskFromCalendar` calls in `useTodoEvents` are skipped.
+- Incoming calendar change listener (`useEffect` in `useTodoEvents`) is not registered.
+- No data is deleted from Calendar.app — the toggle only gates future sync activity.
+
+Source: `bun-sidecar/src/hooks/useTodoEvents.ts`, `bun-sidecar/src/pages/SettingsPage.tsx`.
+
 ## Permissions
 
 - macOS prompts **"Nomendex would like to access your calendar"** on first sync

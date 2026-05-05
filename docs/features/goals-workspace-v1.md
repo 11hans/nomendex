@@ -117,15 +117,20 @@ Structure:
    - Needs attention
    - Without project
    - Without next action
+   - Focus (count of goals with `focus: true`)
 3. Attention block
    - union of `without_project`, `without_next_action`, `stale`
-4. Grouped list
+4. Filter bar
+   - Filter mode: `All | Needs Attention | Without Next Action | Focus | This Quarter`
+   - `Hide Completed` toggle — removes completed/dropped goals from list
+5. Grouped list
    - grouped by horizon only: `vision`, `yearly`, `quarterly`, `monthly`
    - `area` shown as row metadata (not grouping)
 
 Inline editing in browser:
 - **Quick status change**: each row has a clickable status pill with dropdown (Active/Completed/Paused/Dropped)
 - Status change triggers forest reload to reflect updated counts/grouping
+- **Focus toggle**: star/pin button on each row sets `goal.focus = true/false` (instant save)
 
 Create Goal dialog:
 - Fields: title, area, horizon (select), progress mode (select)
@@ -160,6 +165,30 @@ Reasons:
 - `stale`
 
 (`nearly_complete` is shown as row signal, but not counted in `Needs attention` summary.)
+
+## Filter Modes (`GoalBrowserFilterMode`)
+
+| Mode | Behavior |
+|------|----------|
+| `all` | All goals (subject to `hideCompleted`) |
+| `needs_attention` | Goals with any attention reason (`without_project`, `without_next_action`, `stale`) |
+| `without_next_action` | Active goals with `openTodoCount === 0` |
+| `focus` | Goals with `goal.focus === true` |
+| `this_quarter` | Active quarterly/monthly goals in the current calendar quarter |
+
+`hideCompleted: boolean` is a separate orthogonal toggle applied after the filter mode. When enabled, goals with `status === "completed"` or `"dropped"` are removed from the result.
+
+## Visual Signals
+
+Rows apply visual signals to communicate goal state:
+
+| Signal | Appearance |
+|--------|-----------|
+| `paused` or `dropped` status | 0.55 opacity |
+| Future quarterly milestone (Q not yet started) | Dim + dashed horizon badge (e.g. "Q3", "Q4") |
+| Rollup goal where all active children are paused | Shows grey "Paused" label instead of 0% progress |
+| `focus: true` | Focus indicator (star/pin) highlighted |
+| `nearly_complete` (80–99%) | Progress badge uses accent color |
 
 ---
 

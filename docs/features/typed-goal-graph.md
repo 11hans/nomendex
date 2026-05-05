@@ -55,6 +55,7 @@ Projects/*.md (project mirror)           ← bidirectional sync
 | `parentGoalId` | `string?` | Parent goal (monthly → quarterly → yearly → vision) |
 | `targetDate` | `string?` | Target completion date (YYYY-MM-DD) |
 | `tags` | `string[]?` | Optional tags |
+| `focus` | `boolean?` | Whether this goal is in focus (user-toggled, shown in Focus filter) |
 | `mirrorNoteFile` | `string?` | Relative path to per-goal mirror note |
 | `createdAt` | `string` | ISO timestamp |
 | `updatedAt` | `string` | ISO timestamp |

@@ -66,6 +66,23 @@ Inbox behavior still relies on project naming conventions:
 - canonical inbox project: `Inbox`
 - missing project fallback: `Inbox`
 
+## Sidebar Badge and Notifications
+
+The Inbox sidebar icon shows a **count badge** with the number of active (non-done, non-archived) inbox tasks. The count is kept live via `useInboxCount` hook, which subscribes to `todos:updated` events.
+
+When a new task arrives in Inbox (status `todo`, project `Inbox`, not yet seen), a **toast notification** is displayed. Toast deduplication prevents re-showing the same task on rapid updates.
+
+Source:
+- `bun-sidecar/src/hooks/useInboxCount.ts`
+- `bun-sidecar/src/components/InboxToastProvider.tsx`
+- `bun-sidecar/src/components/WorkspaceSidebar.tsx`
+
+## Stale Todo Auto-Archiving
+
+On workspace startup (and every 24 hours thereafter), Inbox todos older than **14 days** that are still in `todo` status and not archived are automatically archived (`archived: true, status: "later"`). This prevents the Inbox from accumulating forgotten capture items indefinitely.
+
+Constant: `INBOX_ARCHIVE_DAYS = 14` in `bun-sidecar/src/onStartup.ts`.
+
 ## Auto-Initialization
 
 On startup, app ensures Inbox project entity exists in project storage so APIs/agents can reference it.
