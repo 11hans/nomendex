@@ -8,11 +8,9 @@ export type AgentModel = z.infer<typeof ModelSchema>;
 // Curated fallback models (canonical IDs) used when dynamic model listing is unavailable.
 export const PREDEFINED_MODELS = [
     "claude-sonnet-4-6",
-    "claude-sonnet-4-5",
-    "claude-opus-4-6",
-    "claude-opus-4-1",
+    "claude-opus-4-7",
+    "claude-opus-4-5",
     "claude-haiku-4-5",
-    "claude-3-5-haiku-20241022",
 ] as const;
 
 export type PredefinedModel = (typeof PREDEFINED_MODELS)[number];
@@ -22,6 +20,7 @@ const MODEL_CANONICAL_ID_MAP: Record<string, string> = {
     "claude-sonnet-4-5-20250929": "claude-sonnet-4-5",
     "claude-haiku-4-5-20251001": "claude-haiku-4-5",
     "claude-opus-4-1-20250805": "claude-opus-4-1",
+    "claude-opus-4-5-20251101": "claude-opus-4-5",
 };
 
 // Display names for known model IDs (canonical + legacy aliases).
@@ -31,10 +30,12 @@ export const MODEL_DISPLAY_NAMES: Record<string, string> = {
     "claude-sonnet-4-5-20250929": "Claude Sonnet 4.5",
     "claude-haiku-4-5": "Claude Haiku 4.5",
     "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
+    "claude-opus-4-7": "Claude Opus 4.7",
     "claude-opus-4-6": "Claude Opus 4.6",
+    "claude-opus-4-5": "Claude Opus 4.5",
+    "claude-opus-4-5-20251101": "Claude Opus 4.5",
     "claude-opus-4-1": "Claude Opus 4.1",
     "claude-opus-4-1-20250805": "Claude Opus 4.1",
-    "claude-opus-4-5-20251101": "Claude Opus 4.5",
     "claude-opus-4-20250514": "Claude Opus 4",
     "claude-3-5-haiku-20241022": "Claude Haiku 3.5",
 };
@@ -237,7 +238,7 @@ export const DEFAULT_AGENT: AgentConfig = {
     name: "General Assistant",
     description: "A general-purpose coding assistant",
     systemPrompt: "", // Empty = uses SDK's default Claude Code system prompt
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-4-6",
     mcpServers: [], // No MCP servers enabled by default
     allowedTools: [], // No tools pre-allowed
     isDefault: true,
@@ -251,7 +252,7 @@ export const BPAGENT_AGENT: AgentConfig = {
     name: "BPagent",
     description: "Planning workflows: review, goals, projects, and note organization",
     systemPrompt: "", // Set at runtime from built-in-bpagent.ts
-    model: "claude-opus-4-6", // Default BP model, can be overridden in preferences
+    model: "claude-opus-4-7", // Default BP model, can be overridden in preferences
     mcpServers: [],
     allowedTools: [],
     isDefault: false,

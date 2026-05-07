@@ -64,7 +64,7 @@ function AgentsContent() {
     const [formName, setFormName] = useState("");
     const [formDescription, setFormDescription] = useState("");
     const [formSystemPrompt, setFormSystemPrompt] = useState("");
-    const [formModel, setFormModel] = useState<string>("claude-sonnet-4-5");
+    const [formModel, setFormModel] = useState<string>("claude-sonnet-4-6");
     const [formMcpServers, setFormMcpServers] = useState<string[]>([]);
     const [useCustomModel, setUseCustomModel] = useState(false);
     const [updatingBuiltInModelId, setUpdatingBuiltInModelId] = useState<string | null>(null);
@@ -477,7 +477,7 @@ function AgentsContent() {
                                     id="model"
                                     value={formModel}
                                     onChange={(e) => setFormModel(e.target.value)}
-                                    placeholder="e.g., claude-opus-4-6"
+                                    placeholder="e.g., claude-opus-4-7"
                                 />
                             ) : (
                                 <Select value={formModel} onValueChange={(value) => setFormModel(value)}>
