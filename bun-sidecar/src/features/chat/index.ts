@@ -22,6 +22,7 @@ export const SessionMetadataSchema = z.object({
     updatedAt: z.string(),
     messageCount: z.number(),
     agentId: z.string().optional(),
+    dailyDate: z.string().optional(),
 });
 
 export type SessionMetadata = z.infer<typeof SessionMetadataSchema>;
@@ -66,6 +67,7 @@ export const functionStubs = {
             updatedAt: z.string(),
             messageCount: z.number(),
             agentId: z.string().optional(),
+            dailyDate: z.string().optional(),
         }),
         output: z.object({ success: z.boolean() }),
     },

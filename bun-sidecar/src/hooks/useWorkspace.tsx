@@ -290,6 +290,11 @@ export function useWorkspace(_initialRoute?: RouteParams) {
             return true;
         }
 
+        // Today — one tab per calendar date (so a stale "yesterday" tab can coexist with today)
+        if (pluginMeta.id === "today") {
+            return existingProps.date === props.date;
+        }
+
         // Chat — max 1 tab; specific sessions still match on sessionId
         if (pluginMeta.id === "chat") {
             if (props.sessionId) {
@@ -330,8 +335,9 @@ export function useWorkspace(_initialRoute?: RouteParams) {
     // Opens a new tab AND sets it as active in a single atomic update
     // If a matching tab already exists, focus it instead of creating a duplicate
     // In split mode, opens the tab in the active pane
+    // autoPin: when creating a new tab, mark it pinned (for ritual tabs like Today)
     const openTab = useCallback(
-        ({ pluginMeta, view = "default", props = {} }: { pluginMeta: SerializablePlugin; view: string; props?: Record<string, unknown> }): WorkspaceTab | null => {
+        ({ pluginMeta, view = "default", props = {}, autoPin = false }: { pluginMeta: SerializablePlugin; view: string; props?: Record<string, unknown>; autoPin?: boolean }): WorkspaceTab | null => {
             let resultTab: WorkspaceTab | null = null;
 
             try {
@@ -365,7 +371,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                             id: generateId("tab"),
                             title: pluginInstance.plugin.name,
                             pluginInstance,
-                            pinned: false,
+                            pinned: autoPin,
                             lastActiveAt: Date.now(),
                         };
                         resultTab = newTab;
@@ -396,7 +402,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
                         id: `tab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                         title: pluginInstance.plugin.name,
                         pluginInstance,
-                        pinned: false,
+                        pinned: autoPin,
                         lastActiveAt: Date.now(),
                     };
                     resultTab = newTab;

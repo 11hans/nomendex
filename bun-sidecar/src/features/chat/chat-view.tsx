@@ -85,6 +85,10 @@ export type ChatViewProps = {
     sessionId?: string;
     tabId: string;
     initialPrompt?: string;
+    autoSend?: boolean;
+    forcedAgentId?: string;
+    dailyDate?: string;
+    tabNameOverride?: string;
 };
 
 const TOOL_TEXT: Record<string, { pending: string; done: string }> = {
@@ -478,7 +482,7 @@ function extractPlanTodos(content: string): PlanItem[] | null {
     return extractNumberedListPlan(content) ?? extractTablePlan(content);
 }
 
-export default function ChatView({ sessionId: initialSessionId, tabId, initialPrompt }: ChatViewProps) {
+export default function ChatView({ sessionId: initialSessionId, tabId, initialPrompt, autoSend, forcedAgentId, dailyDate, tabNameOverride }: ChatViewProps) {
     const { setTabName, updateTabProps, activeTab, setActiveTabId, chatInputEnterToSend } = useWorkspaceContext();
 
     // Capture the initial sessionId at mount time - don't react to prop changes
@@ -517,9 +521,13 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
 
     // Load session history if we have a sessionId at mount, or load agent preferences for new sessions
     // Only runs once on mount - uses ref to avoid reacting to prop changes from updateTabProps
+    const forcedAgentIdRef = useRef(forcedAgentId);
     useEffect(() => {
         if (initialSessionIdRef.current) {
             loadSessionHistory(initialSessionIdRef.current);
+        } else if (forcedAgentIdRef.current) {
+            // Caller pinned the agent (e.g. Today tab → bpagent). Skip prefs lookup.
+            setCurrentAgentId(forcedAgentIdRef.current);
         } else {
             // New session - load last used agent from preferences
             agentsAPI.getPreferences().then((prefs) => {
@@ -542,8 +550,11 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
         }
     }, [isLoadingHistory, activeTab?.id, tabId]);
 
-    // Set initial prompt if provided (for pre-populated chats)
+    // Set initial prompt if provided (for pre-populated chats).
+    // Skip when autoSend is true — the prompt is submitted directly via handleSubmit
+    // and would otherwise linger in the input box.
     useEffect(() => {
+        if (autoSend) return;
         if (initialPrompt && !isLoadingHistory && !initialSessionId && activeTab?.id === tabId) {
             // Small delay to ensure ProseMirror editor is initialized
             const timer = setTimeout(() => {
@@ -552,7 +563,24 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
             }, 150);
             return () => clearTimeout(timer);
         }
-    }, [initialPrompt, isLoadingHistory, initialSessionId, activeTab?.id, tabId]);
+    }, [autoSend, initialPrompt, isLoadingHistory, initialSessionId, activeTab?.id, tabId]);
+
+    // Auto-send: fire the initialPrompt once on first mount of a fresh session.
+    // Guarded by ref so re-renders / re-mounts don't re-submit. Caller controls
+    // idempotence at the day level (e.g. Today only sets autoSend when no session
+    // exists yet for today's date).
+    const didAutoSendRef = useRef(false);
+    useEffect(() => {
+        if (didAutoSendRef.current) return;
+        if (!autoSend || !initialPrompt) return;
+        if (isLoadingHistory || initialSessionId) return;
+        if (!currentAgentId) return; // wait until agent is resolved
+        didAutoSendRef.current = true;
+        const timer = setTimeout(() => {
+            handleSubmitRef.current?.({ text: initialPrompt, attachments: [] });
+        }, 200);
+        return () => clearTimeout(timer);
+    }, [autoSend, initialPrompt, isLoadingHistory, initialSessionId, currentAgentId]);
 
     // Re-focus when switching tabs
     useEffect(() => {
@@ -625,8 +653,12 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
         el.scrollTop = el.scrollHeight;
     }, [messages, isLoading, scrollRef]);
 
-    // Update tab name based on first message
+    // Update tab name based on first message (caller can override, e.g. Today tab shows date)
     useEffect(() => {
+        if (tabNameOverride) {
+            setTabName(tabId, tabNameOverride);
+            return;
+        }
         if (messages.length > 0) {
             const firstUserMessage = messages.find(m => m.role === "user");
             if (firstUserMessage) {
@@ -641,7 +673,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
         } else {
             setTabName(tabId, "New Chat");
         }
-    }, [messages, tabId, setTabName]);
+    }, [messages, tabId, setTabName, tabNameOverride]);
 
     async function loadSessionHistory(id: string) {
         try {
@@ -701,6 +733,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                     updatedAt: now,
                     messageCount,
                     agentId,
+                    dailyDate,
                 }),
             });
 
@@ -842,6 +875,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                     sessionId,
                     agentId: currentAgentId,
                     maxThinkingTokens,
+                    persistAgentPreference: !forcedAgentId,
                 }),
             });
 
@@ -1591,11 +1625,13 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                         />
                         <ProseMirrorPromptFooter className="justify-between">
                             <div className="flex items-center gap-1">
-                                <AgentSelector
-                                    currentAgentId={currentAgentId}
-                                    onAgentChange={setCurrentAgentId}
-                                    disabled={isLoading}
-                                />
+                                {!forcedAgentId && (
+                                    <AgentSelector
+                                        currentAgentId={currentAgentId}
+                                        onAgentChange={setCurrentAgentId}
+                                        disabled={isLoading}
+                                    />
+                                )}
                                 <ThinkingSelector
                                     value={maxThinkingTokens}
                                     onChange={setMaxThinkingTokens}

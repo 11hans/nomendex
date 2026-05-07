@@ -42,6 +42,7 @@ export function Workspace() {
         if (pluginId === "chat" && viewId === "chat") return true;
         if (pluginId === "todos" && viewId === "inbox") return true;
         if (pluginId === "notes") return true;
+        if (pluginId === "today") return true;
         return false;
     };
 

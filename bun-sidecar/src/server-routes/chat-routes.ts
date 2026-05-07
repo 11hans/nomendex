@@ -104,6 +104,7 @@ type SessionMetadata = {
     updatedAt: string;
     messageCount: number;
     agentId?: string; // Which agent config was used for this session
+    dailyDate?: string; // YYYY-MM-DD when session is bound to a Today tab
 };
 
 // Map of MCP server IDs to their secret key names
@@ -489,13 +490,14 @@ export const chatRoutes = {
                 const body = await req.json();
                 console.log("[API] Request body:", body);
 
-                const { message, images, sessionId, agentId: requestAgentId, maxThinkingTokens, transient } = body as {
+                const { message, images, sessionId, agentId: requestAgentId, maxThinkingTokens, transient, persistAgentPreference } = body as {
                     message: string;
                     images?: string[];
                     sessionId?: string;
                     agentId?: string;
                     maxThinkingTokens?: number;
                     transient?: boolean;
+                    persistAgentPreference?: boolean;
                 };
 
                 if (!message && (!images || images.length === 0)) {
@@ -544,9 +546,12 @@ export const chatRoutes = {
                 console.log("[API] Using agent:", agentConfig.name, "(", agentConfig.id, ")");
                 console.log("[API] Agent mcpServers:", agentConfig.mcpServers);
 
-                // Update last used agent preference
-                const currentPrefs = await getPreferences();
-                await savePreferences({ ...currentPrefs, lastUsedAgentId: agentConfig.id });
+                // Update last used agent preference (skipped when caller pinned the agent,
+                // e.g. Today tab forces bpagent and shouldn't override the user's general default).
+                if (persistAgentPreference !== false) {
+                    const currentPrefs = await getPreferences();
+                    await savePreferences({ ...currentPrefs, lastUsedAgentId: agentConfig.id });
+                }
 
                 const targetDir = getRootPath();
                 console.log("[API] User message:", message);
@@ -1356,7 +1361,7 @@ export const chatRoutes = {
         async POST(req: Request) {
             try {
                 const body = await req.json();
-                const { id, title, createdAt, updatedAt, messageCount, agentId } = body;
+                const { id, title, createdAt, updatedAt, messageCount, agentId, dailyDate } = body;
 
                 if (!id || !title) {
                     return Response.json(
@@ -1379,7 +1384,7 @@ export const chatRoutes = {
                         return alreadySaved;
                     }
 
-                    const next: SessionMetadata = { id, title, createdAt, updatedAt, messageCount, agentId };
+                    const next: SessionMetadata = { id, title, createdAt, updatedAt, messageCount, agentId, dailyDate };
                     const merged = dedupeSessionsById([...existing, next]);
                     await writeSessionsFile(sessionsFile, merged);
                     return next;
@@ -1393,6 +1398,25 @@ export const chatRoutes = {
                     { error: "Failed to save session" },
                     { status: 500 }
                 );
+            }
+        },
+    },
+
+    "/api/chat/sessions/by-daily-date": {
+        async POST(req: Request) {
+            try {
+                const { date } = await req.json();
+                if (!date || typeof date !== "string") {
+                    return Response.json({ error: "date is required" }, { status: 400 });
+                }
+                const sessions = await readJSONL<SessionMetadata>(getSessionsFile());
+                const match = sessions
+                    .filter((s) => s.dailyDate === date)
+                    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0];
+                return Response.json({ session: match ?? null });
+            } catch (error) {
+                console.error("[API] Error looking up session by dailyDate:", error);
+                return Response.json({ error: "Failed to look up session" }, { status: 500 });
             }
         },
     },

@@ -7,6 +7,7 @@ import { TagsPluginBase } from "@/features/tags";
 import { ProjectsPluginBase } from "@/features/projects";
 import { MemoryPluginBase } from "@/features/memory";
 import { GoalsPluginBase } from "@/features/goals/plugin";
+import { TodayPluginBase } from "@/features/today";
 
 // Registry of built-in features (simplified from plugin system)
 export const baseRegistry = {
@@ -18,6 +19,7 @@ export const baseRegistry = {
     goals: GoalsPluginBase,
     projects: ProjectsPluginBase,
     memory: MemoryPluginBase,
+    today: TodayPluginBase,
 } as const;
 
 export type BaseRegistryPlugins = typeof baseRegistry;

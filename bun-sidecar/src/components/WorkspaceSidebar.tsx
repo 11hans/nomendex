@@ -9,6 +9,7 @@ import { getIcon } from "./PluginViewIcons";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { useGHSync } from "@/contexts/GHSyncContext";
 import { useInboxCount } from "@/hooks/useInboxCount";
+import { getTodayLocalDateString } from "@/features/today/date";
 
 function NavItem({
     icon: Icon,
@@ -57,7 +58,7 @@ export function WorkspaceSidebar() {
     const plugins = Object.values(baseRegistry);
     const orderedViewPlugins = useMemo(() => {
         const pluginsById = new Map(plugins.map((plugin) => [plugin.id, plugin] as const));
-        const orderedIds = ["goals", "projects", "todos", "notes", "uploads", "tags", "memory"];
+        const orderedIds = ["today", "goals", "projects", "todos", "notes", "uploads", "tags", "memory"];
 
         const ordered = orderedIds
             .map((pluginId) => pluginsById.get(pluginId))
@@ -88,7 +89,10 @@ export function WorkspaceSidebar() {
         const view = plugin.id === "todos" || plugin.id === "projects" || plugin.id === "goals"
             ? "browser"
             : "default";
-        openTab({ pluginMeta: plugin, view, props: {} });
+        const props: Record<string, unknown> = plugin.id === "today"
+            ? { date: getTodayLocalDateString() }
+            : {};
+        openTab({ pluginMeta: plugin, view, props, autoPin: plugin.id === "today" });
     };
 
     const handleNavigate = (path: string) => {
