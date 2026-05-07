@@ -191,6 +191,21 @@ export function reconstructMessages(sdkMessages: SDKMessage[]): ChatMessage[] {
     }
   }
 
+  // Any tool call still in a pending state at the end of reconstruction never
+  // received a tool_result — the session was cancelled or interrupted before
+  // the tool finished. Mark as errored so the UI stops showing a spinner.
+  for (const message of uiMessages) {
+    if (message.role !== "assistant") continue;
+    for (const block of message.blocks) {
+      if (block.type !== "tool") continue;
+      const state = block.toolCall.state;
+      if (state === "input-streaming" || state === "input-available") {
+        block.toolCall.state = "output-error";
+        block.toolCall.errorText = "Interrupted — tool did not complete";
+      }
+    }
+  }
+
   return uiMessages;
 }
 
