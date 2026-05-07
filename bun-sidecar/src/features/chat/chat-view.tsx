@@ -77,6 +77,8 @@ type ToolCallState =
 
 type ToolBlock = Extract<ContentBlock, { type: "tool" }>;
 
+const SHOW_COST = false;
+
 type PendingPermission = {
     permissionId: string;
     toolName: string;
@@ -1521,7 +1523,7 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
                                             const fmtTok = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : `${n}`;
                                             return (
                                                 <div className="mt-1 font-mono text-[10px] text-muted-foreground/70 select-text">
-                                                    ${u.costUsd.toFixed(4)} · {fmtTok(u.inputTokens)} in · {fmtTok(u.outputTokens)} out · cache {cacheRatio}% ({fmtTok(u.cacheReadTokens)}r/{fmtTok(u.cacheCreationTokens)}w){u.thinkingTokens > 0 ? ` · think ~${fmtTok(u.thinkingTokens)}` : ""}
+                                                    {SHOW_COST ? `$${u.costUsd.toFixed(4)} · ` : ""}{fmtTok(u.inputTokens)} in · {fmtTok(u.outputTokens)} out · cache {cacheRatio}% ({fmtTok(u.cacheReadTokens)}r/{fmtTok(u.cacheCreationTokens)}w){u.thinkingTokens > 0 ? ` · think ~${fmtTok(u.thinkingTokens)}` : ""}
                                                 </div>
                                             );
                                         })()}
