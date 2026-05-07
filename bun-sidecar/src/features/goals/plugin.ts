@@ -30,7 +30,7 @@ const views = {
 export const goalsPluginSerial: SerializablePlugin = {
     id: "goals",
     name: "Goals",
-    icon: "workflow",
+    icon: "star",
 };
 
 export const GoalsPluginBase: PluginBase = {
