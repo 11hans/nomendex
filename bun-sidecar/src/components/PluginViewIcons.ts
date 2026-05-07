@@ -1,4 +1,4 @@
-import { File, Workflow, BotMessageSquare, ListTodo, Mic, Image, Hash, Brain, CalendarDays } from "lucide-react";
+import { File, Workflow, BotMessageSquare, ListTodo, Mic, Image, Hash, Brain, CalendarDays, Star } from "lucide-react";
 import { SemicolonIcon } from "./SemicolonIcon";
 import { PluginIcon } from "@/types/Plugin";
 
@@ -24,6 +24,8 @@ export function getIcon(icon: PluginIcon) {
             return Brain;
         case "calendar-days":
             return CalendarDays;
+        case "star":
+            return Star;
         default:
             throw new Error(`Unknown icon: ${icon}`);
     }
