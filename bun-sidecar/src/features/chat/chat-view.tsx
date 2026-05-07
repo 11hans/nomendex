@@ -66,6 +66,8 @@ import { AskUserQuestionBanner, parseAskUserQuestionInput } from "./AskUserQuest
 import { OverlayScrollbar } from "@/components/OverlayScrollbar";
 import { removeFileLock, upsertFileLock } from "@/hooks/useFileLocks";
 import { ChatPlanWidget, type PlanItem } from "./ChatPlanWidget";
+import { detectBashApiCalls } from "./bash-curl-detector";
+import { BashApiSummary } from "./BashApiSummary";
 
 type ToolCallState =
     | "input-streaming"
@@ -255,6 +257,22 @@ function BashToolUseItem({ block }: { block: ToolBlock }) {
             : toolCall.output != null
               ? JSON.stringify(toolCall.output, null, 2)
               : "";
+
+    // If this Bash call is hitting our own API endpoints, render a structured
+    // summary instead of the raw terminal block. Falls back to terminal when
+    // detection finds nothing actionable.
+    const apiDetection = detectBashApiCalls(command, outputText, toolCall.errorText);
+    if (apiDetection) {
+        return (
+            <BashApiSummary
+                calls={apiDetection.calls}
+                pending={pending}
+                rawCommand={command}
+                rawOutput={outputText}
+                rawErrorText={toolCall.errorText}
+            />
+        );
+    }
 
     return (
         <div className="my-1.5 max-w-xl">

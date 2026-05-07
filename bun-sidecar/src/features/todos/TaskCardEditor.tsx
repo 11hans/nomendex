@@ -250,7 +250,7 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="p-0 overflow-hidden gap-0"
+                className="p-0 overflow-hidden gap-0 duration-500 data-[state=open]:zoom-in-90 data-[state=closed]:zoom-out-95"
                 showCloseButton={false}
                 style={{
                     backgroundColor: styles.surfacePrimary,

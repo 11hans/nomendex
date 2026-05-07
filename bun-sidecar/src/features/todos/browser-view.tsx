@@ -253,12 +253,14 @@ function DroppableProjectItem({
 export function TodosBrowserView({
     project,
     selectedTodoId: initialSelectedTodoId,
+    openEditorForTodoId,
     embedded,
     externalFilterCriteria,
     kindFilter,
 }: {
     project?: string | null;
     selectedTodoId?: string | null;
+    openEditorForTodoId?: string | null;
     embedded?: boolean;
     externalFilterCriteria?: TodoFilterCriteria | null;
     kindFilter?: Todo["kind"];
@@ -357,6 +359,14 @@ export function TodosBrowserView({
 
     // Keyboard navigation state
     const [selectedTodoId, setSelectedTodoId] = useState<string | null>(initialSelectedTodoId ?? null);
+
+    // Sync external selection changes (e.g. from chat → click) into local state.
+    // Only syncs when the prop is truthy so manual deselection doesn't fight a stale prop.
+    useEffect(() => {
+        if (initialSelectedTodoId && initialSelectedTodoId !== selectedTodoId) {
+            setSelectedTodoId(initialSelectedTodoId);
+        }
+    }, [initialSelectedTodoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Helper to open create dialog with specific status OR column
     const openCreateDialogWithStatus = useCallback((status: "todo" | "planned" | "in_progress" | "done" | "later", columnId?: string) => {
@@ -647,6 +657,22 @@ export function TodosBrowserView({
             setEditDialogOpen(true);
         }
     }, [todos, subtasks]);
+
+    // Honor an external request to auto-open the editor dialog (e.g. chat → click).
+    // The prop carries an optional `#nonce` suffix to force re-trigger on repeat clicks.
+    // We delay opening so the user perceives the tab switch + card highlight first,
+    // and the dialog appears as a soft follow-up rather than slamming in.
+    const lastOpenEditorRequestRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!openEditorForTodoId) return;
+        if (todos.length === 0) return; // wait for todos to load so handleOpenTodo finds it
+        if (lastOpenEditorRequestRef.current === openEditorForTodoId) return;
+        lastOpenEditorRequestRef.current = openEditorForTodoId;
+        const targetId = openEditorForTodoId.split("#")[0];
+        if (!targetId) return;
+        const timer = window.setTimeout(() => handleOpenTodo(targetId), 380);
+        return () => window.clearTimeout(timer);
+    }, [openEditorForTodoId, todos, handleOpenTodo]);
 
     const handleSaveTodo = async (updatedTodo: Todo) => {
         setEditSaving(true);

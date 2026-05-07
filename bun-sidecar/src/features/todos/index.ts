@@ -159,6 +159,10 @@ export type TodosViewProps = z.infer<typeof todosViewPropsSchema>;
 export const todosBrowserViewPropsSchema = z.object({
     project: z.string().optional(),
     selectedTodoId: z.string().optional(),
+    // External request to auto-open the TaskCardEditor dialog for this todo
+    // (e.g. when navigated to from chat). Carries an optional unique suffix
+    // after `#` so re-clicking the same todo re-triggers the dialog.
+    openEditorForTodoId: z.string().optional(),
 });
 export type TodosBrowserViewProps = z.infer<typeof todosBrowserViewPropsSchema>;
 
