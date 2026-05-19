@@ -8,6 +8,7 @@ import { listUserMcpServers, expandEnvVars } from "@/features/mcp-servers/fx";
 import type { AgentConfig } from "@/features/agents/index";
 import { createServiceLogger } from "@/lib/logger";
 import { secrets } from "@/lib/secrets";
+import { getRaindropQuery, getRaindropUserId, eventMetadata } from "@/lib/raindrop-client";
 import { uiRendererServer } from "@/mcp-servers/ui-renderer";
 import { acquireFileLock, getActiveNoteFileNameForPath, releaseFileLockForToolUse } from "@/services/file-locks";
 import { buildBpagentSubagents } from "@/features/bpagent-pack/subagents";
@@ -858,6 +859,7 @@ export const chatRoutes = {
                 let queryIterator: AsyncIterable<SDKMessage>;
                 // Generate a temporary ID for tracking if no session yet
                 const queryTrackingId = sessionId || `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                let raindropFlushForSession: () => Promise<void> = async () => {};
 
                 try {
                     console.log("[API] Calling query()...");
@@ -920,7 +922,11 @@ export const chatRoutes = {
                         promptInput = message || "";
                     }
 
-                    queryIterator = query({
+                    const { query: tracedQuery, flush: raindropFlush } = await getRaindropQuery(query);
+                    raindropFlushForSession = raindropFlush;
+                    const raindropUserId = await getRaindropUserId();
+
+                    const queryArgs = {
                         prompt: promptInput,
                         options: {
                             ...sdkOptions,
@@ -935,7 +941,24 @@ export const chatRoutes = {
                                 chatLogger.error("SDK STDERR", { data });
                             },
                         },
-                    });
+                    };
+
+                    queryIterator = raindropUserId
+                        ? tracedQuery(
+                              queryArgs,
+                              eventMetadata({
+                                  userId: raindropUserId,
+                                  eventName: `chat.${agentConfig.id}`,
+                                  convoId: sessionId,
+                                  properties: {
+                                      agentId: agentConfig.id,
+                                      agentName: agentConfig.name,
+                                      model: agentConfig.model,
+                                      sessionId: sessionId ?? "new",
+                                  },
+                              }),
+                          )
+                        : tracedQuery(queryArgs);
 
                     // Track this query for potential cancellation
                     activeQueries.set(queryTrackingId, {
@@ -1153,6 +1176,8 @@ export const chatRoutes = {
                         // Clean up active query tracking
                         activeQueries.delete(currentTrackingId);
                         console.log(`[API] Cleaned up query tracking: ${currentTrackingId}`);
+                        // Flush any buffered Raindrop traces/events for this session.
+                        await raindropFlushForSession();
                     }
 
                     if (resultReceived && agentConfig.id === "bpagent" && newSessionId && !transient) {

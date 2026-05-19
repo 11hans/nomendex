@@ -54,6 +54,7 @@
         "@radix-ui/react-toggle-group": "^1.1.11",
         "@radix-ui/react-tooltip": "^1.2.8",
         "@radix-ui/react-use-controllable-state": "^1.2.2",
+        "@raindrop-ai/claude-agent-sdk": "^0.0.13",
         "@socotra/modelcontextprotocol-sdk": "^1.21.0",
         "@types/uuid": "^10.0.0",
         "@types/winston": "^2.4.4",
