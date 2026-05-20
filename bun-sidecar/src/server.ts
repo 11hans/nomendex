@@ -56,18 +56,31 @@ const terminalSessions = new Map<string, TerminalSession>();
 const wsToSessionMap = new Map<ServerWebSocket<TerminalWSData>, string>();
 
 // Initialize workspace paths, secrets, and feature services.
-// Do NOT re-throw on failure — the server must always start so the frontend
-// can render an actionable error screen instead of a blank page.
-startupLog.info('Initializing workspace services...');
+// Run in background so the HTTP server can start immediately — the macOS host
+// has an 8s health-check budget, and TCC-blocked iCloud workspaces can take
+// ~30s of retries before initializeWorkspaceServices() resolves. Blocking the
+// boot caused the WebView to give up with "Could not connect" before the
+// frontend ever had a chance to render the error banner.
 let startupError: string | null = null;
-try {
-    await initializeWorkspaceServices();
-    startupLog.info('Workspace services initialized successfully');
-} catch (error) {
-    startupError = error instanceof Error ? error.message : String(error);
-    startupLog.error('Failed to initialize workspace services', { error: startupError });
-    startupLog.warn('Server starting in degraded mode');
+let startupState: "initializing" | "ready" | "failed" = "initializing";
+
+async function runInitialization() {
+    startupLog.info('Initializing workspace services...');
+    try {
+        await initializeWorkspaceServices();
+        startupError = null;
+        startupState = "ready";
+        startupLog.info('Workspace services initialized successfully');
+    } catch (error) {
+        startupError = error instanceof Error ? error.message : String(error);
+        startupState = "failed";
+        startupLog.error('Failed to initialize workspace services', { error: startupError });
+        startupLog.warn('Server running in degraded mode');
+    }
 }
+
+// Kick off init in background; do not await.
+runInitialization();
 
 const server = serve<WSData>({
     port: process.env.PORT ? parseInt(process.env.PORT) : 1234,
@@ -83,10 +96,15 @@ const server = serve<WSData>({
             },
         },
 
-        // Startup status — lets the frontend detect degraded mode
+        // Startup status — lets the frontend detect degraded mode.
+        // Returns 503 while still initializing so the frontend poll keeps retrying
+        // (its .catch handler treats network errors / non-2xx as "keep waiting").
         "/api/startup-status": {
             GET() {
-                if (startupError) {
+                if (startupState === "initializing") {
+                    return Response.json({ ok: false, state: "initializing" }, { status: 503 });
+                }
+                if (startupState === "failed") {
                     return Response.json({ ok: false, state: "failed", error: startupError });
                 }
                 return Response.json({ ok: true, state: "ready" });
@@ -96,13 +114,19 @@ const server = serve<WSData>({
         // Retry workspace init after a transient failure (e.g. iCloud not yet mounted)
         "/api/startup-status/retry": {
             async POST() {
+                if (startupState === "initializing") {
+                    return Response.json({ ok: false, state: "initializing" }, { status: 503 });
+                }
+                startupState = "initializing";
                 try {
                     await initializeWorkspaceServices();
                     startupError = null;
+                    startupState = "ready";
                     startupLog.info('Startup retry succeeded');
                     return Response.json({ ok: true, state: "ready" });
                 } catch (error) {
                     startupError = error instanceof Error ? error.message : String(error);
+                    startupState = "failed";
                     startupLog.error('Startup retry failed', { error: startupError });
                     return Response.json({ ok: false, state: "failed", error: startupError });
                 }

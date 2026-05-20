@@ -95,9 +95,15 @@ function WorkspaceGuard({ children }: { children: React.ReactNode }) {
         let cancelled = false;
         const checkStatus = () => {
             fetch("/api/startup-status")
-                .then((r) => r.json())
-                .then((data: { ok: boolean; error?: string }) => {
+                .then(async (r) => {
+                    const data = (await r.json()) as { ok: boolean; state?: string; error?: string };
                     if (cancelled) return;
+                    // Sidecar still initializing (e.g. iCloud TCC probe in retry loop).
+                    // Keep polling so the UI doesn't flash a misleading error.
+                    if (data.state === "initializing") {
+                        setTimeout(checkStatus, 500);
+                        return;
+                    }
                     if (!data.ok) setStartupError(data.error ?? "Unknown startup error");
                     setStartupChecked(true);
                 })
@@ -129,6 +135,29 @@ function WorkspaceGuard({ children }: { children: React.ReactNode }) {
         }
     };
 
+    // Re-grant TCC access by re-picking the vault folder via NSOpenPanel.
+    // macOS treats a user-selected folder as a fresh permission grant, which
+    // works around the known bug where Privacy settings show "allowed" but
+    // tccd doesn't actually apply the grant (especially for iCloud paths).
+    const handleRegrantAccess = () => {
+        type SetDataRoot = (path: string) => void;
+        type WebkitWindow = Window & {
+            webkit?: { messageHandlers?: { chooseDataRoot?: { postMessage: (data: Record<string, never>) => void } } };
+            __setDataRoot?: SetDataRoot;
+        };
+        const w = window as WebkitWindow;
+        w.__setDataRoot = () => {
+            delete w.__setDataRoot;
+            handleRetry();
+        };
+        w.webkit?.messageHandlers?.chooseDataRoot?.postMessage({});
+    };
+
+    const isNativeHost = Boolean(
+        (window as Window & { webkit?: { messageHandlers?: { chooseDataRoot?: unknown } } })
+            .webkit?.messageHandlers?.chooseDataRoot,
+    );
+
     if (loading || !startupChecked) {
         return (
             <div className="flex items-center justify-center h-screen">
@@ -145,6 +174,7 @@ function WorkspaceGuard({ children }: { children: React.ReactNode }) {
                 <div className="text-muted-foreground text-xs max-w-md space-y-1 text-left">
                     <p><strong>1. iCloud not yet mounted</strong> — wait a moment then click Retry.</p>
                     <p><strong>2. macOS revoked file access</strong> — System Settings → Privacy &amp; Security → Files and Folders → enable Nomendex.</p>
+                    <p><strong>3. Privacy shows allowed but it still fails</strong> — click <em>Re-grant access</em> and re-select the same folder. macOS sometimes desyncs the TCC grant for iCloud paths.</p>
                 </div>
                 <div className="flex gap-2 flex-wrap justify-center">
                     <button
@@ -154,6 +184,15 @@ function WorkspaceGuard({ children }: { children: React.ReactNode }) {
                     >
                         {retrying ? "Retrying…" : "Retry"}
                     </button>
+                    {isNativeHost && (
+                        <button
+                            onClick={handleRegrantAccess}
+                            disabled={retrying}
+                            className="px-4 py-2 rounded border border-border text-sm font-medium hover:bg-accent disabled:opacity-50"
+                        >
+                            Re-grant access
+                        </button>
+                    )}
                     <button
                         onClick={() => window.open("x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders")}
                         className="px-4 py-2 rounded border border-border text-sm font-medium hover:bg-accent"

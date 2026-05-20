@@ -1,6 +1,6 @@
 import { startupLog } from "./lib/logger";
 import { getRootPath, getNomendexPath, getTodosPath, getNotesPath, getUploadsPath, getSkillsPath, hasActiveWorkspace, getActiveWorkspacePath } from "./storage/root-path";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, stat, readdir } from "node:fs/promises";
 import { initializeBacklinksWithData } from "./features/notes/backlinks-service";
 import { initializeTagsWithData } from "./features/notes/tags-service";
 import { scanAndExtractAll } from "./features/notes/notes-indexer";
@@ -130,6 +130,57 @@ export async function onStartup(): Promise<SkillUpdateCheckResult | null> {
             startupLog.error("Startup cannot continue - workspace path invalid or inaccessible");
             startupLog.info("=== Startup Sequence Failed ===");
             throw new Error(`Workspace path not accessible: ${workspacePath}`);
+        }
+    }
+
+    // TCC probe: stat() succeeds on iCloud paths even when macOS Privacy & Security
+    // blocks read access to the contents (common after reboot — tccd hasn't applied
+    // the Files-and-Folders grant yet). Without this probe, individual services
+    // would silently fall back to empty data and the user sees random 500s in the UI
+    // instead of a clear "grant access" message.
+    startupLog.info("Probing workspace read access...");
+    {
+        const RETRY_DELAYS_MS = [0, 2000, 5000, 10000, 15000];
+        let lastError: unknown;
+        let readable = false;
+
+        for (let attempt = 0; attempt < RETRY_DELAYS_MS.length; attempt++) {
+            const delay = RETRY_DELAYS_MS[attempt]!;
+            if (delay > 0) {
+                startupLog.info(`Workspace not yet readable - retrying in ${delay / 1000}s (attempt ${attempt + 1}/${RETRY_DELAYS_MS.length})`, { path: workspacePath });
+                await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+
+            try {
+                await readdir(workspacePath!);
+                readable = true;
+                startupLog.info("Workspace read access confirmed", { attempt: attempt + 1 });
+                break;
+            } catch (error) {
+                lastError = error;
+                const code = (error as NodeJS.ErrnoException).code;
+                if (code !== "EPERM" && code !== "EACCES") {
+                    break;
+                }
+            }
+        }
+
+        if (!readable) {
+            const code = (lastError as NodeJS.ErrnoException | undefined)?.code;
+            const message = lastError instanceof Error ? lastError.message : String(lastError);
+            startupLog.error("Workspace read access denied after retries", {
+                path: workspacePath,
+                code,
+                error: message,
+            });
+            startupLog.info("=== Startup Sequence Failed ===");
+            if (code === "EPERM" || code === "EACCES") {
+                throw new Error(
+                    `macOS denied read access to workspace folder (${code}): ${workspacePath}. ` +
+                    `Grant Nomendex access in System Settings → Privacy & Security → Files and Folders, then retry.`,
+                );
+            }
+            throw new Error(`Workspace not readable: ${message}`);
         }
     }
 
