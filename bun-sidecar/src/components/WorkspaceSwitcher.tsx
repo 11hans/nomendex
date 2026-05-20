@@ -9,6 +9,7 @@ import {
 import { FolderOpen, Plus, Check, Settings, ChevronDown } from "lucide-react";
 import { useWorkspaceSwitcher } from "@/hooks/useWorkspaceSwitcher";
 import { useTheme } from "@/hooks/useTheme";
+import { useCommandDialog } from "./CommandDialogProvider";
 import { FolderPickerDialog } from "./FolderPickerDialog";
 import { WorkspaceManager } from "./WorkspaceManager";
 import { WorkspaceWarningDialog } from "./WorkspaceWarningDialog";
@@ -18,17 +19,24 @@ export function WorkspaceSwitcher() {
         useWorkspaceSwitcher();
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
+    const { openDialog } = useCommandDialog();
     const [folderPickerOpen, setFolderPickerOpen] = useState(false);
-    const [managerOpen, setManagerOpen] = useState(false);
     const [warningDialogOpen, setWarningDialogOpen] = useState(false);
     const [pendingPath, setPendingPath] = useState<string | null>(null);
 
-    // Check if we're running in native macOS app
     const isNativeApp = Boolean(
         (window as Window & { webkit?: { messageHandlers?: { chooseDataRoot?: unknown } } }).webkit?.messageHandlers?.chooseDataRoot
     );
 
-    // Set up callback for native folder picker
+    const openManager = useCallback(() => {
+        openDialog({
+            title: "Workspace Manager",
+            description: "Switch, rename, or remove your workspaces.",
+            content: <WorkspaceManager />,
+            size: "jumbo",
+        });
+    }, [openDialog]);
+
     const handleSetDataRoot = useCallback(
         (path: string) => {
             setPendingPath(path);
@@ -45,18 +53,16 @@ export function WorkspaceSwitcher() {
     }, [handleSetDataRoot]);
 
     useEffect(() => {
-        const handler = () => setManagerOpen(true);
+        const handler = () => openManager();
         window.addEventListener("workspace:openManager", handler);
         return () => window.removeEventListener("workspace:openManager", handler);
-    }, []);
+    }, [openManager]);
 
     const handleAddWorkspace = () => {
         if (isNativeApp) {
-            // Use native folder picker in macOS app
             const webkit = window.webkit as { messageHandlers?: { chooseDataRoot?: { postMessage: (data: Record<string, never>) => void } } } | undefined;
             webkit?.messageHandlers?.chooseDataRoot?.postMessage({});
         } else {
-            // Use web-based folder picker in browser/dev mode
             setFolderPickerOpen(true);
         }
     };
@@ -122,7 +128,7 @@ export function WorkspaceSwitcher() {
                     <span>Add Workspace...</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                    onClick={() => setManagerOpen(true)}
+                    onClick={openManager}
                     className="cursor-pointer"
                     style={{ color: styles.contentPrimary }}
                 >
@@ -130,11 +136,6 @@ export function WorkspaceSwitcher() {
                     <span>Manage Workspaces...</span>
                 </DropdownMenuItem>
             </DropdownMenuContent>
-
-            <WorkspaceManager
-                open={managerOpen}
-                onOpenChange={setManagerOpen}
-            />
 
             <FolderPickerDialog
                 open={folderPickerOpen}

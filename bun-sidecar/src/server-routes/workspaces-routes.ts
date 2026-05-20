@@ -196,6 +196,41 @@ export const workspacesRoutes = {
         },
     },
 
+    // Reveal a workspace folder in Finder
+    "/api/workspaces/reveal-in-finder": {
+        async POST(req: Request) {
+            try {
+                const { path } = (await req.json()) as { path: string };
+
+                if (!path) {
+                    const response: Result = {
+                        success: false,
+                        code: ErrorCodes.BAD_REQUEST,
+                        message: "path is required",
+                    };
+                    return Response.json(response, { status: 400 });
+                }
+
+                Bun.spawn(["open", path]);
+
+                const response: Result<{ success: boolean }> = {
+                    success: true,
+                    data: { success: true },
+                };
+                return Response.json(response);
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                const response: Result = {
+                    success: false,
+                    code: ErrorCodes.INTERNAL_SERVER_ERROR,
+                    message: `Failed to reveal in finder: ${message}`,
+                    error,
+                };
+                return Response.json(response, { status: 500 });
+            }
+        },
+    },
+
     // Open terminal with Claude Code in workspace directory
     "/api/workspaces/open-terminal": {
         async POST(req: Request) {
