@@ -9,7 +9,6 @@ import { getIcon } from "./PluginViewIcons";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { useGHSync } from "@/contexts/GHSyncContext";
 import { useInboxCount } from "@/hooks/useInboxCount";
-import { getTodayLocalDateString } from "@/features/today/date";
 
 function NavItem({
     icon: Icon,
@@ -89,9 +88,7 @@ export function WorkspaceSidebar() {
         const view = plugin.id === "todos" || plugin.id === "projects" || plugin.id === "goals"
             ? "browser"
             : "default";
-        const props: Record<string, unknown> = plugin.id === "today"
-            ? { date: getTodayLocalDateString() }
-            : {};
+        const props: Record<string, unknown> = {};
         openTab({ pluginMeta: plugin, view, props, autoPin: plugin.id === "today" });
     };
 

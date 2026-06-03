@@ -189,7 +189,7 @@ export function Workspace() {
                                         )}
                                         <TabsTrigger
                                             value={tab.id}
-                                            className={`rounded-none h-9 px-3 gap-1.5 flex items-center transition-all duration-300 min-w-0 max-w-[160px] cursor-grab text-xs border-r border-r-border border-b-0 ${draggedTabIndex === index ? "opacity-50" : ""} ${isTabExpiring(tab) ? "opacity-40" : ""} ${activeTab?.id === tab.id ? "bg-bg text-text font-medium border-t-2 border-t-accent" : "bg-bg-secondary text-text-secondary font-normal border-t-2 border-t-transparent"}`}
+                                            className={`rounded-none h-9 px-3 gap-1.5 flex flex-none items-center transition-all duration-300 min-w-0 max-w-[280px] cursor-grab text-xs border-r border-r-border border-b-0 ${draggedTabIndex === index ? "opacity-50" : ""} ${isTabExpiring(tab) ? "opacity-40" : ""} ${activeTab?.id === tab.id ? "bg-bg text-text font-medium border-t-2 border-t-accent" : "bg-bg-secondary text-text-secondary font-normal border-t-2 border-t-transparent"}`}
                                             draggable
                                             onDragStart={(e) => handleTabDragStart(e, tab, index)}
                                             onDragEnd={handleTabDragEnd}

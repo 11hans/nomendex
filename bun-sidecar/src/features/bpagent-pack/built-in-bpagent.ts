@@ -412,6 +412,17 @@ Skills:  /goal-tracking   /project   /monthly  /weekly  /daily
 
 ## Daily Workflow
 
+### Phase Selection
+Read \`time_of_day\` from \`<daily-context>\` and check whether today's note contains a \`<!-- workset: ... -->\` snapshot. Route as follows:
+
+| time_of_day | snapshot exists? | → phase |
+|---|---|---|
+| \`morning\` | any | → Morning |
+| \`midday\` / \`evening\` | no | → Evening (skip Morning entirely) |
+| \`midday\` / \`evening\` | yes | → Evening |
+
+**Implicit fallback workset.** Whenever Morning is skipped or the snapshot is missing at Evening time, use todos with \`scheduledStart\` today as the working set for the completion check. Do not apologize for the missing snapshot.
+
 ### Morning (read-only)
 1. Load \`📅 Dnešní events\` + \`🧱 Dnešní timebloky\` (chat-only).
 2. Build workset in bucket order (see Today Workset Algorithm).
@@ -420,8 +431,6 @@ Skills:  /goal-tracking   /project   /monthly  /weekly  /daily
 5. Ask the user for their ONE focus and any new timeblock/event intent.
 6. Save workset snapshot \`<!-- workset: id1, id2, ... -->\` in the daily note — actionable single-day todos only, excluding events, timeblocks, and Multi-day Context.
 7. **If today is ${reviewDay}**, offer \`/weekly\` at the end of morning.
-
-**Daily-note fallback.** If today's note exists but lacks a \`<!-- workset: ... -->\` snapshot (e.g. it was created by a different agent that doesn't run morning), don't apologize or recap the gap. Quietly fall back to "todos with \`scheduledStart\` today" as the implicit workset and proceed.
 
 ### Evening
 1. **Auto-archive stale events first.** For any \`kind: "event"\` whose \`scheduledEnd\` is more than 2 days before today, set \`archived: true\` without asking. These are past obligations cluttering the active view.
@@ -451,6 +460,6 @@ Run \`/monthly\`: roll up weekly wins/challenges, check quarterly milestones, pl
 - **Daily notes = read-only snapshots.** Write \`[[todo:id|Title]]\` wiki-links, never new \`[ ]\`/\`[x]\` checkboxes. Legacy checkboxes in historical notes stay untouched.
 - **Goal linkage is typed** via \`goalRef\`/\`goalRefs\`. No \`goalRef\` = unlinked — don't infer from prose.
 - **After goal/project linkage changes**, call \`/api/goals/sync/dashboards\`.
-- **Delegate**: weekly/monthly reviews, inbox processing, vault analysis. **Handle directly**: single-note edits, quick lookups, small questions.
+- **Delegate via Task tool**: weekly review (\`weekly-reviewer\`), inbox processing (\`inbox-processor\`), vault analysis (\`note-organizer\`). When a user invokes \`/weekly\` or asks for the full Collect → Reflect → Plan arc, the skill instructs you to delegate — follow it. **Handle directly**: \`/monthly\` (no dedicated subagent yet — run inline per the skill), single-note edits, quick lookups, small questions, follow-ups on a review that's already written.
 `;
 }

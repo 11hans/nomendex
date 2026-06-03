@@ -22,20 +22,27 @@ type ClientEntry = {
 const clientByKey = new Map<string, ClientEntry>();
 const WORKSHOP_ONLY_KEY = "__workshop__";
 
-function getOrCreateClient(writeKey: string | undefined): ClientEntry {
+// Explicit Workshop daemon URL. We pass this rather than relying on the SDK's
+// NODE_ENV-gated auto-detect, which silently no-ops in the packaged mac-app
+// build (the embedded sidecar doesn't inherit NODE_ENV=development).
+const WORKSHOP_DAEMON_URL = "http://localhost:5899/v1/";
+
+function getOrCreateClient(writeKey: string | undefined, workshopEnabled: boolean): ClientEntry {
     const cacheKey = writeKey || WORKSHOP_ONLY_KEY;
     const existing = clientByKey.get(cacheKey);
     if (existing) return existing;
 
-    // SDK accepts undefined writeKey for Workshop-only / local-debugger mode.
-    // It auto-detects the daemon on localhost:5899 when NODE_ENV=development.
-    const client = createRaindropClaudeAgentSDK(writeKey ? { writeKey } : {});
+    const opts: { writeKey?: string; localWorkshopUrl?: string } = {};
+    if (writeKey) opts.writeKey = writeKey;
+    if (workshopEnabled) opts.localWorkshopUrl = WORKSHOP_DAEMON_URL;
+
+    const client = createRaindropClaudeAgentSDK(opts);
     const entry: ClientEntry = { client, identifiedWorkspaces: new Set() };
     clientByKey.set(cacheKey, entry);
     logger.info(
         writeKey
-            ? "Raindrop client initialised (cloud mode)"
-            : "Raindrop client initialised (Workshop / local-debugger mode)",
+            ? `Raindrop client initialised (cloud mode${workshopEnabled ? " + Workshop mirror" : ""})`
+            : `Raindrop client initialised (Workshop only @ ${WORKSHOP_DAEMON_URL})`,
     );
     return entry;
 }
@@ -68,7 +75,7 @@ export async function getRaindropQuery<P, R>(
         };
     }
 
-    const { client, identifiedWorkspaces } = getOrCreateClient(writeKey);
+    const { client, identifiedWorkspaces } = getOrCreateClient(writeKey, workshopEnabled);
 
     const workspace = await globalConfig.getActiveWorkspace();
     if (workspace && !identifiedWorkspaces.has(workspace.id)) {

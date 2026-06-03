@@ -23,7 +23,9 @@
       "Read(//Users/honza/Library/Mobile Documents/iCloud~md~obsidian/Documents/TheVault/agents/**)",
       "Bash(awk -F'\"' '{print $2}')",
       "WebFetch(domain:www.raindrop.ai)",
-      "WebFetch(domain:raindrop.ai)"
+      "WebFetch(domain:raindrop.ai)",
+      "Bash(grep -n 'name: \"monthly\"\\\\|^  },$' /Users/honza/Code/nomendex/bun-sidecar/src/services/default-skills.ts)",
+      "Bash(awk -F: '/monthly/{seen=1; print \"start:\"$1; next} seen{print \"next_close:\"$1; exit}')"
     ]
   }
 }

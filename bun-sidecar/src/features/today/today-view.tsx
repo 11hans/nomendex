@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import ChatView from "@/features/chat/chat-view";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,20 +19,22 @@ type SessionLookupState =
     | { status: "ready"; sessionId: string | undefined };
 
 export default function TodayView({ tabId, date }: TodayViewProps) {
-    const { openTab } = useWorkspaceContext();
-    const tabDate = date ?? getTodayLocalDateString();
+    const { openTab, activeTab } = useWorkspaceContext();
+    // A date prop from the past (e.g. a workspace.json entry saved before the
+    // live-tab migration) is treated as unpinned so the tab heals to today.
+    const isPinned = date !== undefined && date >= getTodayLocalDateString();
 
+    const [tabDate, setTabDate] = useState(() => isPinned ? date : getTodayLocalDateString());
     const [lookup, setLookup] = useState<SessionLookupState>({ status: "loading" });
     const [skipOnboarding, setSkipOnboarding] = useState(false);
-    const [isStale, setIsStale] = useState(() => tabDate < getTodayLocalDateString());
-    const didLookupRef = useRef(false);
+    const isStale = isPinned && tabDate < getTodayLocalDateString();
 
     // Resolve sessionId for this tab's date (if any) and goal count for onboarding.
+    // Re-runs whenever tabDate changes (e.g. live tab crossing midnight).
     useEffect(() => {
-        if (didLookupRef.current) return;
-        didLookupRef.current = true;
-
         let cancelled = false;
+        setLookup({ status: "loading" });
+        console.log("[Today] Lookup start", { tabDate, dateProp: date, isPinned });
         (async () => {
             try {
                 const [sessionRes, goals] = await Promise.all([
@@ -46,6 +48,7 @@ export default function TodayView({ tabId, date }: TodayViewProps) {
                 if (cancelled) return;
 
                 const existing = sessionRes?.session?.id as string | undefined;
+                console.log("[Today] Lookup result", { tabDate, existing, session: sessionRes?.session });
                 if (existing) {
                     setLookup({ status: "ready", sessionId: existing });
                 } else if (goals.length === 0) {
@@ -62,23 +65,49 @@ export default function TodayView({ tabId, date }: TodayViewProps) {
         return () => {
             cancelled = true;
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tabDate]);
 
-    // Single-shot timer to detect day rollover. Fires at next local midnight; once
-    // stale, we don't auto-close — the user gets a banner to open today's tab.
+    // Day rollover. Live tabs (no explicit date prop) auto-advance tabDate at
+    // local midnight so the chat session, banner, and title all refresh in place.
+    // Pinned tabs (explicit date) just become stale and show the banner.
     useEffect(() => {
-        if (isStale) return;
+        if (isPinned) return;
+        const tick = () => {
+            const today = getTodayLocalDateString();
+            if (today !== tabDate) setTabDate(today);
+        };
         const ms = getMsUntilNextLocalMidnight();
-        const timer = setTimeout(() => setIsStale(true), ms);
+        const timer = setTimeout(tick, ms);
         return () => clearTimeout(timer);
-    }, [isStale, tabDate]);
+    }, [isPinned, tabDate]);
+
+    // Backup the midnight timer: re-check the current date whenever the tab
+    // becomes visible again (Mac wakes from sleep across midnight, window
+    // refocus, or this tab being re-activated inside the workspace). Without
+    // this, a missed setTimeout leaves the tab pinned to yesterday until the
+    // app is restarted.
+    useEffect(() => {
+        if (isPinned) return;
+        const refresh = () => {
+            const today = getTodayLocalDateString();
+            setTabDate((prev) => (prev !== today ? today : prev));
+        };
+        const onVisibility = () => { if (!document.hidden) refresh(); };
+        document.addEventListener("visibilitychange", onVisibility);
+        window.addEventListener("focus", refresh);
+        if (activeTab?.id === tabId) refresh();
+        return () => {
+            document.removeEventListener("visibilitychange", onVisibility);
+            window.removeEventListener("focus", refresh);
+        };
+    }, [isPinned, activeTab?.id, tabId]);
 
     const handleOpenToday = () => {
-        const newDate = getTodayLocalDateString();
         openTab({
             pluginMeta: todayPluginSerial,
             view: "default",
-            props: { date: newDate },
+            props: {},
         });
     };
 
@@ -142,6 +171,7 @@ export default function TodayView({ tabId, date }: TodayViewProps) {
             )}
             <div className="flex-1 min-h-0">
                 <ChatView
+                    key={tabDate}
                     sessionId={sessionId}
                     tabId={tabId}
                     initialPrompt={sessionId ? undefined : "/daily"}

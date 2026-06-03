@@ -1132,11 +1132,11 @@
   .max-w-\[140px\] {
     max-width: 140px;
   }
-  .max-w-\[160px\] {
-    max-width: 160px;
-  }
   .max-w-\[220px\] {
     max-width: 220px;
+  }
+  .max-w-\[280px\] {
+    max-width: 280px;
   }
   .max-w-\[340px\] {
     max-width: 340px;
@@ -1269,6 +1269,9 @@
   }
   .flex-1 {
     flex: 1;
+  }
+  .flex-none {
+    flex: none;
   }
   .flex-shrink-0 {
     flex-shrink: 0;

@@ -64,10 +64,13 @@ export async function buildDailyContextBlock(
         day: "numeric",
         weekday: "long",
     });
+    const hour = now.getHours();
+    const timeOfDay = hour < 12 ? "morning" : hour < 16 ? "midday" : "evening";
 
     if (files.length === 0) {
         return `<daily-context>
 today: ${iso} (${czDate})
+time_of_day: ${timeOfDay}
 daily_notes_dir: ${dailyDir}
 filename_pattern: unknown (no existing notes)
 today_note: { exists: false }
@@ -96,6 +99,7 @@ today_note: { exists: false }
 
     return `<daily-context>
 today: ${iso} (${czDate})
+time_of_day: ${timeOfDay}
 daily_notes_dir: ${dailyDir}
 filename_pattern: ${pattern}
 today_note: { filename: "${todayFile}", path: "${todayPath}", exists: ${todayExists} }

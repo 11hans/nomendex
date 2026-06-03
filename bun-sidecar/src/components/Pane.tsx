@@ -234,7 +234,7 @@ export function Pane({
                                     )}
                                     <TabsTrigger
                                         value={tab.id}
-                                        className={`rounded-none h-9 px-3 gap-1.5 flex items-center transition-all duration-300 min-w-0 max-w-[160px] cursor-grab text-xs border-r ${isDraggingFromThisPane && draggedTabIndex === index ? "opacity-50" : ""} ${isTabExpiring(tab) ? "opacity-40" : ""}`}
+                                        className={`rounded-none h-9 px-3 gap-1.5 flex flex-none items-center transition-all duration-300 min-w-0 max-w-[280px] cursor-grab text-xs border-r ${isDraggingFromThisPane && draggedTabIndex === index ? "opacity-50" : ""} ${isTabExpiring(tab) ? "opacity-40" : ""}`}
                                         style={{
                                             backgroundColor: activeTab?.id === tab.id ? currentTheme.styles.surfacePrimary : currentTheme.styles.surfaceSecondary,
                                             color: activeTab?.id === tab.id ? currentTheme.styles.contentPrimary : currentTheme.styles.contentSecondary,

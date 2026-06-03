@@ -2851,419 +2851,46 @@ This is opt-in only. Modern timeblock creation uses the per-request flow above.
       "SKILL.md": `---
 name: weekly
 description: Facilitate weekly review process with reflection, goal alignment, planning, and timeblocking handoff. Create review notes, analyze past week, plan next week. Use on Sundays or whenever doing weekly planning.
-version: 11
+version: 12
 source: nomendex
 ---
 
 # Weekly Review Skill
 
-Facilitates your weekly review process by creating a review note and guiding reflection on the past week while planning the next.
+**Delegate this work to the \`weekly-reviewer\` subagent.** Do not run the review inline — it consumes ~1M tokens in the main session and contaminates cache for follow-up turns. The subagent owns the full recipe (Collect → Reflect → Plan, goal-graph fetch, task-first scheduling, output format).
 
-## Usage
+## How to invoke
 
-Invoke with \`/weekly\` or ask BPagent to help with your weekly review.
+1. **Recall first** (subagents don't see your memory). Call \`memory_search\` with the user's intent keywords + "weekly". Summarize relevant hits — durable preferences, prior review style, active project focus — into one short paragraph.
 
-\`\`\`
-/weekly
-\`\`\`
+2. **Resolve current week range.** Default to ISO week containing today (Mon–Sun). If the user named a different week, use that.
 
-## What This Skill Does
+3. **Call the Task tool** with subagent type \`weekly-reviewer\` and a prompt containing:
+   - User's original request (verbatim).
+   - Current week range (\`YYYY-MM-DD\` to \`YYYY-MM-DD\`).
+   - Memory recap from step 1 (or "no relevant prior context" if empty).
+   - Any specific focus the user mentioned (project, goal, theme) — do not invent one.
 
-1. **Creates Weekly Review Note**
-   - Uses weekly review template
-   - Names it with current week's date
-   - Places in Goals folder
+4. **Hand back the subagent's output.** Do not re-summarize or re-format. The subagent writes the review note itself; surface the file path and a 1-line TL;DR.
 
-2. **Guides Review Process**
-   - Reviews last week's accomplishments
-   - Analyzes todos completion and patterns via \`/todos\` skill
-   - Identifies incomplete tasks
-   - Plans upcoming week
-   - Aligns with typed goals (monthly/quarterly/yearly) via Goals API
+## When NOT to delegate
 
-3. **Adds Task-First Scheduling**
-   - Handles scheduling directly in planning (no separate wizard phase)
-   - Shows preview as todo update diff before any mutation
-   - Treats conflicts as blockers; warnings are advisory
+Stay inline only for these narrow cases — they aren't a "weekly review":
 
-4. **Automates Housekeeping**
-   - Archives old daily notes
-   - Updates project statuses
-   - Cleans up completed and stale todos
+- User asks a single targeted question about last week ("what did I finish on Wednesday?") → answer directly.
+- User wants to edit / amend an existing weekly review note → edit it directly.
+- User wants a quick rollup without a written note → produce the rollup inline.
 
-## Todo Safety Rules
-- **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
-- **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
-- **Timeblock semantics**: Generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) are calendar blocks, not actionable tasks. Keep them out of carry-forward, completion-rate math, weekly completion tables, and batch reschedule.
-- **Timeblock completion**: Never mark a generated timeblock event as \`done\`. If the user explicitly wants to convert it into an actionable task, first remove timeblock semantics and then confirm any status change.
-- **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
-- **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
+Anything that walks the Collect → Reflect → Plan arc goes to the subagent.
 
-## Review Process Steps
+## Subagent contract (for reference)
 
-### Step 1: Reflection (10 minutes)
-- Review daily notes from past week
-- Fetch all todos via \`/todos\` skill (project, status, \`scheduledStart\`/\`scheduledEnd\`, dueDate, priority)
-- Calculate todo completion rate by project while keeping \`Multi-day Context\` and generated timeblock events out of day-level completion math
-- **Backfill timeblock retrospective links**: list the past week's timeblocks (\`POST /api/todos/list\` with \`kinds: ["event"]\` and \`scheduledOverlap\` covering the week, filter to \`source === "timeblock-generator"\` or legacy tag \`timeblock\`). For any timeblock whose \`description\` does NOT contain \`<!-- timeblock-worked-todos -->\`, run the infer → confirm → persist procedure (see \`/timeblocking\` → "Timeblock Retrospective Linking"). Skip already-linked timeblocks.
-- Use the persisted \`<!-- timeblock-worked-todos -->\` data from each linked timeblock to build a Focus Time table (which projects actually received reserved time, and what concrete todos were worked on inside each block)
-- Identify wins and challenges
-- Capture lessons learned
-- Copy any explicit streak wording from the latest relevant daily note verbatim
-
-### Step 2: Goal Alignment + Project Rollup (10 minutes)
-- Fetch goal progress from \`/api/goals/list\` with \`{ "status": "active" }\` and \`/api/goals/graph\` for each
-- Display progress per progressMode (rollup %, metric current/target, manual %, milestone count)
-- Map project progress via \`goalRef\` (from \`/api/projects/get\`) to their linked goals
-- Identify overdue and blocked todos
-- Adjust weekly priorities based on goal progress gaps
-- When creating todos for next week, set \`goalRefs\` if the todo serves a goal not covered by the project's \`goalRef\`
-- Compile project progress table with goalRef link for the review note
-
-### Step 3: Planning (10 minutes)
-- Set ONE big thing for the week
-- Review and triage uncompleted single-day todos (archive/delete/carry over) while showing multi-day scheduled todos as context only
-- Explicitly exclude generated timeblock events from carry-forward and completion summaries
-- Plan todo distribution for next week by day
-- Include project next-actions when planning week
-- Schedule important tasks using task-first planner:
-  - ask whether user wants \`day_only\` or \`exact_time\`
-  - preview update diff for existing actionable todos
-  - apply only after confirmation
-
-\`\`\`markdown
-## Timeblocking Preview
-
-### Aktualizovat
-- [[todo:abc-123|Manuál frekvenční měnič]]
-  - from: 2026-04-07
-  - to: 2026-04-07T09:00 → 2026-04-07T11:30
-
-- [[todo:def-456|Procházka]]
-  - from: (none)
-  - to: 2026-04-07T13:00 → 2026-04-07T14:00
-\`\`\`
-
-Rules:
-- Show exactly which existing todos are updated
-- Conflicts block apply
-- Apply only after explicit confirmation
-- Do not create generic filler blocks (Morning/Evening review, movement, deep-work, etc.) unless explicitly requested by user
-
-## Interactive Prompts
-
-The skill guides you through:
-
-1. **"What were your top 3 wins this week?"**
-   - Celebrates progress
-   - Builds momentum
-   - Documents achievements
-
-2. **"What were your main challenges?"**
-   - Identifies obstacles
-   - Plans solutions
-   - Learns from difficulties
-
-3. **"What's your ONE big thing next week?"**
-   - Forces prioritization
-   - Creates focus
-   - Drives meaningful progress
-
-## Weekly Review Checklist
-
-- Review all daily notes
-- Fetch and analyze todos via \`/todos\` skill
-- Calculate todo completion rates by project
-- Identify overdue and blocked todos
-- Keep multi-day scheduled todos in a separate context section, not carry-forward or daily-rate math
-- Keep generated timeblock events out of carry-forward, completion tables, and weekly completion math
-- Backfill \`<!-- timeblock-worked-todos -->\` on past-week timeblocks that are missing it
-- Process inbox items
-- Update project statuses
-- Check upcoming scheduled todos via \`scheduledStart\`/\`scheduledEnd\` (and external calendar only if explicitly available)
-- Review monthly goals from API (plus weekly-note narrative context)
-- Copy streak values from the latest relevant daily note verbatim; do not derive them from todo text or checkbox arithmetic
-- Plan next week's priorities
-- Propose new todos and todo distribution for next week (batch confirm with user, then create/update via API)
-- Offer task-first scheduling choices (day-only vs exact-time) directly inside planning and show update diff before apply
-- Clean digital workspace
-- Archive completed todos via API (batch confirm with user)
-- Commit changes to Git
-
-## Weekly Review Note Format
-
-All todo references use \`[[todo:id|Title]]\` wiki-links. Never write \`[ ]\`/\`[x]\` checkboxes — todo state is managed exclusively through the API.
-
-\`\`\`markdown
-# Weekly Review: YYYY-MM-DD
-
-## Last Week's Wins
-1.
-2.
-3.
-
-## Challenges & Lessons
-- Challenge:
-- Lesson:
-
-## Todo Analysis
-### Completion by Project
-| Project | Completed | Total | Rate |
-|---------|-----------|-------|------|
-| [[ProjectA]] | 12 | 20 | 60% |
-| [[ProjectB]] | 0 | 5 | 0% |
-
-### Overdue Todos
-- [[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-10 → 2026-03-10 · [ProjectA] · high
-- [[todo:def-456|Pohotovost]] · id: def-456 · 2026-03-12 → 2026-03-12 · [ProjectB] · medium
-
-### Blocked Todos
-- [[todo:ghi-789|Deploy to prod]] · [ProjectA] · blocked by: payment gateway
-
-### Multi-day Context
-- [[todo:mno-345|Morava]] · id: mno-345 · 2026-03-11 → 2026-03-14 · [ProjectB] · context only
-
-### Timeblocks & Events (this week)
-- Excluded from completion math and carry-forward
-- **Focus Time Summary** (from persisted \`<!-- timeblock-worked-todos -->\` blocks on this week's timeblocks):
-
-| Day | Block | Project | Worked on |
-|-----|-------|---------|-----------|
-| Mon | Nomendex — práce (09:00–12:00) | Nomendex | [[todo:abc-123\\|Fix tag UI]], [[todo:def-456\\|Refactor chat routes]] |
-| Tue | Deep Work (19:30–21:30) | — | [[todo:ghi-789\\|API spec draft]] |
-
-- Backfill any timeblock in the week without a persisted link block (Step 1 of Reflection)
-- External events this week are listed separately below for context only
-
-### Today Column Patterns
-- Average "Today" todos: 8/day
-- Completion rate: 5/8 (62.5%)
-- **Insight:** Overcommitting by ~3 todos/day
-
-## Goal Progress (from \`/api/goals/graph\`)
-### Yearly Goals
-| Area | Goal | Progress | Mode |
-|------|------|----------|------|
-| Career & Professional | Nomendex v produkci | ████▢▢▢▢▢▢ 20% | rollup |
-| Health & Wellness | Pohybový návyk | 12/72 tréninků (17%) | metric |
-| Personal Growth | Denní review streak | DEN 1 (from latest daily note) | manual |
-
-### This Week's Goal Contribution (from frozen \`goalRefs\` on completed todos)
-- Career & Professional: 5 todos completed → +3% progress
-- Health & Wellness: 2 todos completed → 14/72 metric
-
-## Project Progress
-| Project | Phase | Progress | Next Action |
-|---------|-------|----------|-------------|
-| [[ProjectA]] | Active | 60% | goalRef: goal-xyz | [Next step] |
-| [[ProjectB]] | Planning | 10% | goalRef: — | [Next step] |
-
-## Next Week Planning
-
-### ONE Big Thing
->
-
-### Key Tasks
-Proposed new todos for next week (agent creates via API after user confirms batch):
-1. "Task title" · project: X · priority: high · scheduledStart: Monday
-2. "Task title" · project: Y · priority: medium · scheduledStart: Tuesday
-3. "Task title" · project: X · priority: low · scheduledStart: Wednesday
-
-### Todo Plan
-Distribution of existing + new todos across the week (agent sets \`scheduledStart\` via API after confirmation):
-
-**Monday:**
-- [[todo:abc-123|Start audit]] · [ProjectA] · high
-- [[todo:def-456|Morning routine]] · [ProjectB] · low
-
-**Tuesday:**
-- [[todo:ghi-789|Review UI bugs]] · [ProjectA] · medium
-- [[todo:jkl-012|30min run]] · [ProjectB] · low
-
-**Wednesday:**
-- [[todo:mno-345|Deploy feature]] · [ProjectA] · high
-- [[todo:pqr-678|Meal prep]] · [ProjectB] · low
-
-(Continue for rest of week...)
-
-### Project Next-Actions
-- [[todo:id|Specific next step]] · [ProjectA]
-- [[todo:id|Specific next step]] · [ProjectB]
-
-### Time Blocks
-- Use weekly timeblocking preview diff before applying any replace
-- Keep deleted vs created blocks explicit
-
-### Todo Housekeeping
-Actions executed via API after user confirms batch:
-
-**Archive:** (agent calls archive endpoint)
-- [[todo:abc-123|Old completed todo]] · done 3/10
-- [[todo:def-456|Another old todo]] · done 3/8
-
-**Delete:** (agent calls delete endpoint)
-- [[todo:ghi-789|Stale todo]] · created 2/15, no activity
-
-**Re-prioritize:** (agent calls update endpoint)
-- [[todo:jkl-012|Move X to high priority]] · current: low → proposed: high
-
-## Notes
-\`\`\`
-
-## Automation Features
-
-### Todo Analysis via \`/todos\` Skill
-Fetch and analyze todos from Nomendex API:
-- **Completion metrics**: Calculate completion rate by project
-- **Overdue detection**: Identify todos past their due date
-- **Blocker identification**: Surface todos marked as blocked
-- **Pattern analysis**: Track "Today" column usage and completion while keeping multi-day context and generated timeblock events out of day-level completion-rate math
-- **Goal mapping**: Connect completed todos to typed goals via the frozen \`goalRefs\` on closed todos (or, for open todos, via explicit \`goalRefs\` falling back to inherited \`project.goalRef\`)
-- **Disambiguation**: When titles repeat, show visible plain-text ID + \`scheduledStart\`-\`scheduledEnd\`
-
-Example usage in weekly review:
-\`\`\`
-Use /todos skill to:
-1. Fetch all todos from past week
-2. Group by project and status
-3. Calculate completion rates (exclude multi-day context and generated timeblock events from daily-rate math)
-4. Identify overdue items
-5. Analyze daily "Today" column patterns
-6. Render duplicate titles with visible IDs and scheduled ranges
-\`\`\`
-
-### Auto-Archive
-Suggest moving daily notes older than 30 days to Archives.
-
-### Project Status Update
-For each active project:
-- Update completion percentage
-- Note blockers
-- Set next actions
-
-### Habit Tracking
-Calculate habit success rates from daily notes:
-- Count habit checkboxes
-- Show completion percentage
-- Identify patterns
-- For streak-style habits, copy the explicit label from the latest relevant daily note verbatim; do not derive streak arithmetic
-
-## Best Practices
-
-### Consistent Timing
-- Same day each week (Sunday recommended)
-- Same time if possible
-- Block calendar time
-- Treat as non-negotiable
-
-### Preparation
-- Clean inbox before review
-- Have calendar ready
-- Gather project updates
-- Review any feedback
-
-### Follow-through
-- Share highlights with team/family
-- Update external systems
-- Communicate changes
-- Celebrate wins
-
-## Task-Based Progress Tracking
-
-The weekly skill uses session tasks to show progress through the 3-phase review.
-
-### Phase Tasks
-
-Create tasks at skill start:
-
-\`\`\`
-TaskCreate:
-  subject: "Phase 1: Collect"
-  description: "Gather daily notes from past week, fetch todos data, extract wins and challenges"
-  activeForm: "Collecting daily notes, todos, and extracting highlights..."
-
-TaskCreate:
-  subject: "Phase 2: Reflect"
-  description: "Calculate goal progress, analyze todo completion patterns, identify alignment gaps"
-  activeForm: "Calculating goal progress and analyzing todo patterns..."
-
-TaskCreate:
-  subject: "Phase 3: Plan"
-  description: "Identify ONE Big Thing, triage todos, plan daily focus areas for next week"
-  activeForm: "Planning next week's focus and todo distribution..."
-
-\`\`\`
-
-### Dependencies
-
-Phases must run in order:
-\`\`\`
-TaskUpdate: "Phase 2: Reflect", addBlockedBy: [phase-1-collect-id]
-TaskUpdate: "Phase 3: Plan", addBlockedBy: [phase-2-reflect-id]
-\`\`\`
-
-Reflect is blocked until Collect completes. Plan is blocked until Reflect completes. This provides visibility into the weekly review process.
-
-Mark each task \`in_progress\` when starting, \`completed\` when done using TaskUpdate.
-
-Task tools are session-scoped and don't persist between BPagent sessions—your actual work items are managed through the Nomendex todos API, and the weekly review note serves as a read-only snapshot.
-
-## Agent Team Workflow (Optional)
-
-For a faster, more thorough weekly review, use agent teams to parallelize the collection phase:
-
-\`\`\`
-Team Lead (coordinator)
-├── collector agent — Read all daily notes, extract wins/challenges/tasks
-├── goal-analyzer agent — Fetch goal progress via /api/goals/graph/forest, find alignment gaps
-├── project-scanner agent — Fetch projects via /api/projects/list, read project notes for narrative context
-└── todo-collector agent — Fetch todos via /todos skill, analyze completion, identify patterns
-\`\`\`
-
-### How to Use
-When invoking \`/weekly\`, you can request the team-based approach:
-\`\`\`
-/weekly
-"Use the team approach for a thorough review"
-\`\`\`
-
-The team lead:
-1. Spawns four agents to work in parallel
-2. Collector reads daily notes and extracts highlights
-3. Goal-analyzer fetches goal forest via \`POST /api/goals/graph/forest {}\` and analyzes computed progress per goal
-4. Project-scanner fetches project list via \`POST /api/projects/list {}\`, reads project notes for narrative context only
-5. Todo-collector fetches todos via \`/todos\` skill and analyzes:
-   - Completion rates by project
-   - Overdue and blocked todos
-   - "Today" column patterns
-   - Mapping of completed todos to typed goals (via the frozen \`goalRefs\` snapshot)
-6. Team lead synthesizes findings into the weekly review note
-
-This makes the review faster (parallel collection) and more thorough (dedicated analysis per area).
-
-### Vault Health Check (Ad-hoc)
-
-The weekly review can optionally include a vault health check using multiple agents:
-- **note-organizer**: Scan for broken links, orphan notes
-- **goal-aligner**: Check daily-to-goal alignment
-- **inbox-processor**: Check for unprocessed items
-
-Request with: "Include a vault health check in my weekly review"
-
-## Integration
-
-Works with:
-- \`/daily\` - Reviews daily notes from the week
-- \`/todos\` - Fetches todos data for completion analysis and planning
-- \`/monthly\` - Weekly reviews feed monthly rollup
-- \`/project\` - Project status in review
-- \`/push\` - Commit after completing review
-- \`/onboard\` - Load context for informed review
-- Goal tracking skill - Progress calculations
+The \`weekly-reviewer\` subagent has access to: \`Read\`, \`Write\`, \`Edit\`, \`Glob\`, \`Grep\`, \`Bash\`, \`TaskCreate\`, \`TaskUpdate\`, \`TaskList\`. It cannot ask the user clarifying questions mid-run, so the Task prompt must include everything it needs to make decisions (week range, focus, any constraints). If the user typically expects interactive prompts during weekly review, gather those answers in the main session *before* delegating.
 `,
     },
   }
 ];
+
 
 /**
  * In-memory storage for pending updates.

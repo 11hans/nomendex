@@ -11,12 +11,16 @@ export function getMsUntilNextLocalMidnight(now: Date = new Date()): number {
     return Math.max(1000, next.getTime() - now.getTime());
 }
 
-// Compact day/month label for tab titles, locale-aware (browser default).
-// "2026-05-07" → "7. 5." in cs-CZ, "5/7" in en-US.
+// Compact day + short-month label for tab titles, locale-aware.
+// "2026-06-03" → "3. čvn" in cs-CZ, "Jun 3" in en-US.
+// Short month avoids the ambiguous "3. 6." double-dot rendering of the
+// fully numeric format; weekday is dropped because tabs are width-constrained
+// and the day-of-week was getting truncated to "W…".
 export function formatTabDateLabel(isoDate: string): string {
     const [y, m, d] = isoDate.split("-").map(Number);
     if (!y || !m || !d) return isoDate;
-    return new Intl.DateTimeFormat(undefined, { month: "numeric", day: "numeric" }).format(
-        new Date(y, m - 1, d)
-    );
+    return new Intl.DateTimeFormat(undefined, {
+        day: "numeric",
+        month: "short",
+    }).format(new Date(y, m - 1, d));
 }
