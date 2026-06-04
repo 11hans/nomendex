@@ -71,7 +71,8 @@ export const WorkspaceStateSchema = z.object({
         provider: z.enum(["disabled", "openrouter", "claude"]).default("disabled"),
         openRouterModel: z.string().default("xiaomi/mimo-v2-flash:free"),
         consolidationModel: z.string().default("anthropic/claude-sonnet-4-6"),
-    }).default({ provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free", consolidationModel: "anthropic/claude-sonnet-4-6" }),
+        adversaryEnabled: z.boolean().default(false),
+    }).default({ provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free", consolidationModel: "anthropic/claude-sonnet-4-6", adversaryEnabled: false }),
     embeddings: z.object({
         provider: z.enum(["disabled", "voyage"]).default("disabled"),
     }).default({ provider: "disabled" }),

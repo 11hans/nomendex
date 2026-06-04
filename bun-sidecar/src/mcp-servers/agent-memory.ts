@@ -7,6 +7,53 @@ import {
     deleteAgentMemory,
 } from "@/features/agent-memory/fx";
 import { MemoryScopeSchema, MemoryKindSchema } from "@/features/agent-memory/index";
+import type { AgentMemoryRecord } from "@/features/agent-memory/index";
+
+/**
+ * Format memory records as compact, token-efficient lines for tool output.
+ * One record per line:
+ *   • [scope/kind imp=0.85] mem_abc12: <title> — <text> [corrects: ...]
+ */
+function formatMemoryLines(records: AgentMemoryRecord[]): string {
+    if (records.length === 0) return "(no matching memories)";
+
+    const sanitize = (s: string): string => s.trim().replace(/[\r\n]+/g, " ");
+    const truncate = (s: string, limit: number): string =>
+        s.length <= limit ? s : s.slice(0, limit - 1) + "…";
+
+    const lines: string[] = [];
+    for (const r of records) {
+        const impToken = typeof r.importance === "number"
+            ? ` imp=${r.importance.toFixed(2)}`
+            : "";
+        const header = `[${r.scope}/${r.kind}${impToken}]`;
+        const title = sanitize(r.title ?? "");
+        const text = truncate(sanitize(r.text ?? ""), 240);
+
+        // Support metadata.corrects (string or array) when present.
+        const metaCorrects = (r as unknown as { metadata?: { corrects?: unknown } })
+            ?.metadata?.corrects;
+        // Also support the top-level `corrects` string field already on the record.
+        const topCorrects = (r as { corrects?: unknown }).corrects;
+
+        let correctsToken = "";
+        const rawCorrects = metaCorrects ?? topCorrects;
+        if (typeof rawCorrects === "string" && rawCorrects.trim().length > 0) {
+            correctsToken = ` [corrects: ${truncate(sanitize(rawCorrects), 200)}]`;
+        } else if (Array.isArray(rawCorrects) && rawCorrects.length > 0) {
+            const joined = rawCorrects
+                .filter((c): c is string => typeof c === "string")
+                .map((c) => sanitize(c))
+                .join(", ");
+            if (joined.length > 0) {
+                correctsToken = ` [corrects: ${truncate(joined, 200)}]`;
+            }
+        }
+
+        lines.push(`• ${header} ${r.id}: ${title} — ${text}${correctsToken}`);
+    }
+    return lines.join("\n");
+}
 
 /**
  * Build an inline MCP server that exposes agent memory tools.
@@ -24,9 +71,9 @@ export function buildAgentMemoryMcpServer(ctx: { agentId: string; sessionId?: st
         tools: [
             tool(
                 "memory_search",
-                `Search your long-term memory for relevant information from previous sessions. Use this to recall context, decisions, goals, preferences, or any knowledge you've saved before. Returns the most relevant memories ranked by relevance to your query.`,
+                `REQUIRED FIRST STEP for any user-specific question (identity, preferences, ongoing goals/projects, prior decisions, relationships). Searches the user's persistent memory across past sessions. Returns compact lines in the form \`• [scope/kind imp=X] id: title — text\` — NOT JSON. Call this BEFORE asking the user a question whose answer might already be stored, and BEFORE suggesting defaults based on your priors. Use short lexical queries (3–8 keywords) drawn from the user's message; if the first query returns 0 hits, do not reword and retry — just proceed.`,
                 {
-                    query: z.string().describe("Search query - describe what you're looking for"),
+                    query: z.string().describe("Search query - 3-8 short keywords from the user's message"),
                     limit: z.number().optional().describe("Max results to return (default: 10)"),
                     scope: MemoryScopeSchema.optional().describe("Filter by scope: 'agent' (private) or 'workspace' (shared)"),
                 },
@@ -41,7 +88,7 @@ export function buildAgentMemoryMcpServer(ctx: { agentId: string; sessionId?: st
                     return {
                         content: [{
                             type: "text" as const,
-                            text: JSON.stringify(results, null, 2),
+                            text: formatMemoryLines(results),
                         }],
                     };
                 }
@@ -49,27 +96,30 @@ export function buildAgentMemoryMcpServer(ctx: { agentId: string; sessionId?: st
 
             ...(readOnly ? [] : [tool(
                 "memory_save",
-                `Save information to your long-term memory so you can recall it in future sessions. Use this to remember:
-- User preferences and working style
-- Goals and objectives
-- Project context and decisions
-- Important references and links
-- Contextual information about the workspace
-
-Duplicate detection is automatic - saving the same fact again will merge rather than create duplicates.`,
+                `Save a durable fact the user revealed in conversation. ONLY save when: (a) the user explicitly told you to remember it, OR (b) the fact will be useful in a future session AND is unlikely to be re-derivable from project state, files, or the live API. DO NOT save transient task state, code patterns, file paths, lookup answers, or anything the file system / API already knows. The \`correction\` kind is RESERVED for the consolidation pipeline — to record a corrected fact, save it under its natural kind (identity / preference / decision / etc.) and the maintenance loop will link it to the outdated record automatically. Dedup by fingerprint is automatic.`,
                 {
-                    kind: MemoryKindSchema.describe("Type of memory: preference, goal, project, decision, context, or reference"),
+                    kind: MemoryKindSchema.describe("Type of memory: identity, preference, goal, project, decision, relationship, knowledge, context, or reference. NOTE: 'correction' is reserved for the consolidation pipeline and will be refused here."),
                     title: z.string().describe("Short title summarizing the memory"),
                     text: z.string().describe("Detailed content of the memory"),
                     scope: MemoryScopeSchema.optional().describe("'agent' (private, default) or 'workspace' (shared with subagents)"),
                     tags: z.array(z.string()).optional().describe("Tags for categorization"),
-                    importance: z.number().min(0).max(1).optional().describe("Importance score 0-1 (default: 0.5)"),
+                    importance: z.number().min(0).max(1).optional().describe("Importance score 0-1 (default: 0.5). Use >=0.7 only for permanent identity/preferences/durable goals."),
                     confidence: z.number().min(0).max(1).optional().describe("Confidence score 0-1 (default: 0.8)"),
                     ttlDays: z.number().optional().describe("Days until expiry (default depends on kind)"),
                     sourceRef: z.string().optional().describe("Reference to source (note path, todo id, etc.)"),
                     supersedes: z.array(z.string()).optional().describe("IDs of older memories this one replaces. Listed memories will be archived (hidden but recoverable). Use when correcting an outdated or wrong memory."),
                 },
                 async (args) => {
+                    if (args.kind === "correction") {
+                        return {
+                            content: [{
+                                type: "text" as const,
+                                text: "Refused: kind 'correction' is reserved for the consolidation pipeline. Save the new corrected fact normally (kind: preference/identity/etc.) and the maintenance loop will link it to the outdated record automatically.",
+                            }],
+                            isError: true,
+                        };
+                    }
+
                     const result = await saveAgentMemory({
                         agentId,
                         scope: args.scope || "agent",
@@ -102,7 +152,7 @@ Duplicate detection is automatic - saving the same fact again will merge rather 
 
             tool(
                 "memory_list_recent",
-                `List your most recently updated memories. Useful for reviewing what you know or checking recent context.`,
+                `Lists the most recently updated memories in the requested scope. Use for orientation at the start of a session, NOT as a substitute for memory_search — keyword search is far more accurate when you have a specific question. Returns compact lines in the same format as memory_search.`,
                 {
                     limit: z.number().optional().describe("Max results (default: 20)"),
                     scope: MemoryScopeSchema.optional().describe("Filter by scope"),
@@ -117,7 +167,7 @@ Duplicate detection is automatic - saving the same fact again will merge rather 
                     return {
                         content: [{
                             type: "text" as const,
-                            text: JSON.stringify(results, null, 2),
+                            text: formatMemoryLines(results),
                         }],
                     };
                 }
@@ -125,7 +175,7 @@ Duplicate detection is automatic - saving the same fact again will merge rather 
 
             ...(readOnly ? [] : [tool(
                 "memory_delete",
-                `Delete a specific memory by its ID. Use when information is outdated or incorrect.`,
+                `Permanently removes a memory record. PREFER letting the daily consolidation pipeline retire outdated facts (it preserves them via \`supersedes\`, so they remain recoverable). Only delete if the record is clearly invalid (corrupt, test data) or the user explicitly asks you to forget it.`,
                 {
                     memoryId: z.string().describe("The ID of the memory to delete"),
                 },

@@ -45,6 +45,11 @@ export interface ConsolidationReport {
     merged: number;
     failed: number;
     reason?: string;
+    adversary?: {
+        ran: boolean;
+        approved: boolean;
+        rejectedReasons?: string[];
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -149,18 +154,64 @@ Conservative rules:
 - Different kinds (preference vs decision vs project) are almost never duplicates.
 - "correction" kind records must NEVER be pruned, superseded, or merged away.
 - Records with importance >= 0.7 should rarely be pruned.
+- Records may carry a \`[corrects: <id-or-title>]\` tag — this means the record was previously created to overwrite the listed record. When proposing merges/archives, never break a correction chain: prefer to archive the corrected (older) record, not the correction itself.
 - If unsure, propose nothing.
 
 Output strict JSON only, no prose:
 { "proposals": [ { "type": "prune", "id": "..." }, { "type": "supersede", "winnerId": "...", "loserIds": ["..."] } ] }`;
 
+/**
+ * Read `corrects` linkage off a record. The typed schema currently stores it as
+ * an optional string on the record itself, but a future evolution may move it
+ * under `metadata` and/or accept an array of ids. Accept both shapes defensively.
+ */
+function readCorrectsLinkage(record: AgentMemoryRecord): string | string[] | undefined {
+    const direct = (record as { corrects?: unknown }).corrects;
+    if (typeof direct === "string" && direct.trim().length > 0) return direct;
+    if (Array.isArray(direct)) {
+        const ids = direct.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+        if (ids.length > 0) return ids;
+    }
+    const metadata = (record as { metadata?: { corrects?: unknown } }).metadata;
+    const fromMeta = metadata?.corrects;
+    if (typeof fromMeta === "string" && fromMeta.trim().length > 0) return fromMeta;
+    if (Array.isArray(fromMeta)) {
+        const ids = fromMeta.filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+        if (ids.length > 0) return ids;
+    }
+    return undefined;
+}
+
+function formatCorrectsTag(corrects: string | string[]): string {
+    let label: string;
+    if (Array.isArray(corrects)) {
+        const first = corrects.slice(0, 3).join(", ");
+        label = corrects.length > 3 ? `${first}+${corrects.length - 3} more` : first;
+    } else {
+        label = corrects;
+    }
+    // Replace newlines and stray brackets so the tag cannot break the [corrects: ...] syntax.
+    label = label.replace(/[\r\n\]]/g, " ").replace(/\s+/g, " ").trim();
+    const full = ` [corrects: ${label}]`;
+    if (full.length <= 200) return full;
+    // Truncate to 200 chars total with an ellipsis, keeping the trailing bracket.
+    const head = full.slice(0, 199 - 1); // leave room for the closing ']' and ellipsis
+    return `${head.slice(0, 196)}…]`;
+}
+
 function buildConsolidationUserContent(records: AgentMemoryRecord[]): string {
-    const lines: string[] = ["Memories:"];
+    const lines: string[] = [
+        // Inline reminder for the LLM in case it misses the system bullet.
+        "Note: a `[corrects: <id-or-title>]` suffix on a record means that record overwrites the listed older record. Never archive a correction in favor of the record it corrects.",
+        "Memories:",
+    ];
     for (const r of records) {
         const title = r.title.replace(/\s+/g, " ").slice(0, 120);
         const text = r.text.replace(/\s+/g, " ").slice(0, 240);
+        const corrects = readCorrectsLinkage(r);
+        const correctsTag = corrects ? formatCorrectsTag(corrects) : "";
         lines.push(
-            `[${r.id}] (kind=${r.kind}, scope=${r.scope}, imp=${r.importance.toFixed(2)}) ${title} — ${text}`,
+            `[${r.id}] (kind=${r.kind}, scope=${r.scope}, imp=${r.importance.toFixed(2)}) ${title} — ${text}${correctsTag}`,
         );
     }
     return lines.join("\n");
@@ -215,6 +266,7 @@ interface ExtractionWorkspaceConfig {
     provider: "disabled" | "openrouter" | "claude";
     openRouterModel: string;
     consolidationModel: string;
+    adversaryEnabled: boolean;
 }
 
 async function loadExtractionWorkspaceConfig(): Promise<ExtractionWorkspaceConfig | null> {
@@ -228,6 +280,7 @@ async function loadExtractionWorkspaceConfig(): Promise<ExtractionWorkspaceConfi
             provider: state.memoryExtraction.provider,
             openRouterModel: state.memoryExtraction.openRouterModel,
             consolidationModel: state.memoryExtraction.consolidationModel,
+            adversaryEnabled: state.memoryExtraction.adversaryEnabled,
         };
     } catch (err) {
         logger.warn("Failed to read extraction config for consolidation", {
@@ -275,6 +328,122 @@ async function callOpenRouterForProposals(params: {
     };
     const content = json.choices?.[0]?.message?.content ?? "";
     return parseConsolidationProposals(content);
+}
+
+// ---------------------------------------------------------------------------
+// Adversary pass (optional)
+// ---------------------------------------------------------------------------
+
+const ADVERSARY_SYSTEM_PROMPT = `You are the Adversary in a memory consolidation pipeline. A Proposer agent has suggested merges, archives, updates, and new correction records for a long-term memory store about a single user.
+
+Your job is to find problems with the proposal. Be specific and skeptical. Reject any proposal that:
+
+- Archives a record that is still factually accurate.
+- Merges two records whose subjects are similar in topic but distinct in meaning.
+- Breaks a correction chain by archiving the correction instead of the outdated record.
+- Invents new content not supported by the candidate records shown.
+- Removes nuance ("I prefer X for Y context" → "I prefer X").
+
+If the proposal is sound, respond with \`{"approved": true}\` and nothing else.
+
+If the proposal has fixable problems, respond with \`{"approved": false, "revisedProposal": <fixed proposal in the same shape>, "rejectedReasons": ["..."]}\`.
+
+If the proposal is fundamentally wrong, respond with \`{"approved": false, "rejectedReasons": ["..."]}\` and omit \`revisedProposal\`.
+
+Return ONLY valid JSON. No prose outside the JSON.`;
+
+interface AdversaryVerdict {
+    approved: boolean;
+    revisedProposal?: ConsolidationProposal[];
+    rejectedReasons?: string[];
+}
+
+function parseAdversaryResponse(raw: string): AdversaryVerdict | null {
+    const trimmed = raw.trim();
+    const jsonStart = trimmed.indexOf("{");
+    const jsonEnd = trimmed.lastIndexOf("}");
+    if (jsonStart < 0 || jsonEnd <= jsonStart) return null;
+
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(trimmed.slice(jsonStart, jsonEnd + 1));
+    } catch {
+        return null;
+    }
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const obj = parsed as Record<string, unknown>;
+    if (typeof obj.approved !== "boolean") return null;
+
+    const verdict: AdversaryVerdict = { approved: obj.approved };
+
+    if (Array.isArray(obj.rejectedReasons)) {
+        const reasons = obj.rejectedReasons.filter((x): x is string => typeof x === "string");
+        if (reasons.length > 0) verdict.rejectedReasons = reasons;
+    }
+
+    if (obj.revisedProposal !== undefined) {
+        // `revisedProposal` may arrive as a bare array of proposal objects or as an
+        // object with a `proposals` array — accept both, then reuse the existing parser.
+        const revisedJson = JSON.stringify(
+            Array.isArray(obj.revisedProposal)
+                ? { proposals: obj.revisedProposal }
+                : obj.revisedProposal,
+        );
+        const revised = parseConsolidationProposals(revisedJson);
+        if (revised.length > 0) verdict.revisedProposal = revised;
+    }
+
+    return verdict;
+}
+
+async function callOpenRouterForAdversary(params: {
+    apiKey: string;
+    model: string;
+    records: AgentMemoryRecord[];
+    proposal: ConsolidationProposal[];
+}): Promise<AdversaryVerdict | null> {
+    const { apiKey, model, records, proposal } = params;
+    const userContent = [
+        "=== Candidate Records ===",
+        buildConsolidationUserContent(records),
+        "",
+        "=== Proposer's Proposal ===",
+        JSON.stringify({ proposals: proposal }, null, 2),
+    ].join("\n");
+
+    const body = {
+        model,
+        messages: [
+            { role: "system", content: ADVERSARY_SYSTEM_PROMPT },
+            { role: "user", content: userContent },
+        ],
+        temperature: 0.1,
+        max_tokens: 2000,
+    };
+
+    const response = await fetch(OPENROUTER_API_URL, {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://nomendex.app",
+            "X-Title": "Nomendex Memory Consolidation Adversary",
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(OPENROUTER_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+        const errText = await response.text().catch(() => "(unreadable)");
+        throw new Error(`OpenRouter API error ${response.status}: ${errText.slice(0, 200)}`);
+    }
+
+    const json = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = json.choices?.[0]?.message?.content ?? "";
+    return parseAdversaryResponse(content);
 }
 
 /**
@@ -442,13 +611,62 @@ export async function runAIConsolidation(): Promise<ConsolidationReport> {
         };
     }
 
+    // ---- Adversary pass (optional) ----------------------------------------
+    let proposalsToApply: ConsolidationProposal[] = proposals;
+    let adversaryInfo: ConsolidationReport["adversary"] | undefined;
+
+    if (config.adversaryEnabled && proposals.length > 0) {
+        try {
+            const verdict = await callOpenRouterForAdversary({
+                apiKey,
+                model: config.consolidationModel,
+                records: candidates,
+                proposal: proposals,
+            });
+
+            if (!verdict) {
+                logger.warn("Adversary returned unparseable response; applying original proposal");
+                adversaryInfo = {
+                    ran: true,
+                    approved: true,
+                    rejectedReasons: ["Adversary call failed: unparseable response"],
+                };
+            } else if (verdict.approved) {
+                adversaryInfo = { ran: true, approved: true };
+            } else if (verdict.revisedProposal && verdict.revisedProposal.length > 0) {
+                proposalsToApply = verdict.revisedProposal;
+                adversaryInfo = {
+                    ran: true,
+                    approved: false,
+                    rejectedReasons: verdict.rejectedReasons,
+                };
+            } else {
+                // Rejected with no revision — skip application.
+                proposalsToApply = [];
+                adversaryInfo = {
+                    ran: true,
+                    approved: false,
+                    rejectedReasons: verdict.rejectedReasons,
+                };
+            }
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.warn("Adversary call failed; applying original proposal", { error: message });
+            adversaryInfo = {
+                ran: true,
+                approved: true,
+                rejectedReasons: [`Adversary call failed: ${message}`],
+            };
+        }
+    }
+
     const byId = new Map(all.map((r) => [r.id, r]));
     let pruned = 0;
     let superseded = 0;
     let merged = 0;
     let failed = 0;
 
-    for (const proposal of proposals) {
+    for (const proposal of proposalsToApply) {
         const result = await applyProposal(proposal, byId);
         if (!result.ok) {
             failed++;
@@ -459,14 +677,16 @@ export async function runAIConsolidation(): Promise<ConsolidationReport> {
         else if (result.kind === "merge") merged++;
     }
 
-    return {
+    const report: ConsolidationReport = {
         provider: config.provider,
-        proposals: proposals.length,
+        proposals: proposalsToApply.length,
         pruned,
         superseded,
         merged,
         failed,
     };
+    if (adversaryInfo) report.adversary = adversaryInfo;
+    return report;
 }
 
 // ---------------------------------------------------------------------------

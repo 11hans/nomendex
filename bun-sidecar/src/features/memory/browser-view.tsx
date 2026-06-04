@@ -32,12 +32,15 @@ import type { AgentMemoryRecord, MemoryKind } from "@/features/agent-memory";
 import type { ConsolidationReport } from "@/features/agent-memory/maintenance";
 import { notesPluginSerial } from "@/features/notes";
 
-const ALL_KINDS: MemoryKind[] = ["preference", "goal", "project", "decision", "context", "reference", "correction"];
+const ALL_KINDS: MemoryKind[] = ["identity", "preference", "goal", "project", "decision", "relationship", "knowledge", "context", "reference", "correction"];
 const KIND_LABELS: Record<MemoryKind, string> = {
+    identity: "Identity",
     preference: "Preference",
     goal: "Goal",
     project: "Project",
     decision: "Decision",
+    relationship: "Relationship",
+    knowledge: "Knowledge",
     context: "Context",
     reference: "Reference",
     correction: "Correction",
@@ -57,6 +60,12 @@ function getKindTone(kind: MemoryKind, styles: Theme["styles"]): string {
             return styles.contentTertiary;
         case "correction":
             return styles.semanticDestructive;
+        case "identity":
+            return styles.semanticPrimary;
+        case "relationship":
+            return styles.contentAccent;
+        case "knowledge":
+            return styles.contentPrimary;
         case "context":
         default:
             return styles.contentSecondary;

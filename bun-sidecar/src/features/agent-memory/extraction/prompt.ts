@@ -61,10 +61,13 @@ Do not reason about database state.
 
 Use exactly one of these kinds:
 
+- \`identity\`: Stable facts about who the user is — name, role, location, languages, work setup, hardware. Update only when the user explicitly corrects them.
 - \`preference\`: An ongoing habitual way of working that was never different — how the user writes, names things, structures notes or todos, communicates, or uses the agent
 - \`goal\`: An active or durable objective the user is pursuing (e.g. "wants to migrate all notes to a flat structure by end of month")
 - \`project\`: A durable fact about a workspace entity such as a project, folder, codebase, or system
 - \`decision\`: A one-time committed choice that replaced a previous state (e.g. "switched from flat to folder-based notes", "chose GTD over ad-hoc task management")
+- \`relationship\`: People in the user's orbit (colleagues, family, collaborators) and how they relate. Save when a person becomes recurring context.
+- \`knowledge\`: Durable factual knowledge the user has shared — domain expertise, recurring vocabulary, technical conventions they follow. Not the same as \`preference\` (preferences are about taste or process).
 - \`context\`: A recurring focus area or ongoing concern that spans multiple sessions; not a single-session task or in-progress item
 - \`reference\`: A durable reference worth remembering, such as an important path, workspace location, project name, or recurring resource
 - \`correction\`: The user explicitly took back something they said earlier. Use this only when the user clearly negates or replaces a previous statement (e.g. "Actually I prefer React, not Vue", "I no longer use folder X", "scratch that — the deadline is Friday, not Thursday"). Correction memories almost always win against earlier facts on the same topic.
@@ -245,7 +248,7 @@ Use this stable key order in every memory object:
 {
   "memories": [
     {
-      "kind": "preference | goal | project | decision | context | reference | correction",
+      "kind": "identity | preference | goal | project | decision | relationship | knowledge | context | reference | correction",
       "scope": "agent | workspace",
       "title": "string, max 80 chars",
       "text": "string, max 200 chars",
@@ -309,6 +312,18 @@ Input:
 Output:
 
 <memories>{"memories":[{"kind":"correction","scope":"workspace","title":"Names daily notes as YYYY/MM/DD-title","text":"CORRECTION: Daily notes are named YYYY/MM/DD-title. Previously: daily notes were named YYYY-MM-DD.","tags":["notes","naming","workflow"],"importance":0.82,"confidence":0.95,"corrects":"daily notes named YYYY-MM-DD"}]}</memories>
+
+### Example 5 — Identity, relationship, and knowledge
+
+Input:
+
+[User]: Quick context for you: I'm Honza, based in Prague, working as a staff engineer at Acme. My teammate Petra owns the billing service we keep touching. By the way, in our codebase \`tenant\` always means the paying organization, never a single user.
+[Assistant]: Understood — you're Honza in Prague at Acme, Petra owns billing, and \`tenant\` means a paying org.
+[User]: Right.
+
+Output:
+
+<memories>{"memories":[{"kind":"identity","scope":"agent","title":"Staff engineer at Acme, based in Prague, goes by Honza","text":"Works as a staff engineer at Acme and is based in Prague. Uses the name Honza.","tags":["agent","workflow"],"importance":0.88,"confidence":0.97},{"kind":"knowledge","scope":"workspace","title":"In this codebase \`tenant\` means a paying organization","text":"The term tenant refers to the paying organization, never an individual user.","tags":["coding","workspace","vocabulary"],"importance":0.8,"confidence":0.95},{"kind":"relationship","scope":"workspace","title":"Petra owns the billing service","text":"Teammate Petra is the owner of the billing service the user keeps touching.","tags":["projects","workspace"],"importance":0.72,"confidence":0.94}]}</memories>
 
 ## Final check before answering
 
