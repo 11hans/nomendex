@@ -11,6 +11,7 @@ import { notesAPI } from "@/hooks/useNotesAPI";
 import { notesPluginSerial } from "@/features/notes";
 import { KeyboardIndicator } from "@/components/KeyboardIndicator";
 import { parseDateFromInput } from "./date-utils";
+import { formatFullDate } from "@/utils/date-format";
 
 interface DailyNoteDatePickerDialogProps {
     onSuccess?: (fileName: string) => void;
@@ -21,7 +22,7 @@ export function DailyNoteDatePickerDialog({ onSuccess }: DailyNoteDatePickerDial
     const [dateInput, setDateInput] = React.useState("");
     const [isOpening, setIsOpening] = React.useState(false);
     const { closeDialog } = useCommandDialog();
-    const { addNewTab, setActiveTabId } = useWorkspaceContext();
+    const { addNewTab, setActiveTabId, dateFormat } = useWorkspaceContext();
     const { navigate, currentPath } = useRouting();
 
     const handleDateInputChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,13 +98,8 @@ export function DailyNoteDatePickerDialog({ onSuccess }: DailyNoteDatePickerDial
     }, [handleSubmit]);
 
     const formattedDate = React.useMemo(() => {
-        return selectedDate.toLocaleDateString("en-US", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-        });
-    }, [selectedDate]);
+        return formatFullDate(selectedDate, dateFormat);
+    }, [selectedDate, dateFormat]);
 
     // Check if selected date is today
     const isToday = React.useMemo(() => {

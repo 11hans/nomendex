@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef, useCallback, type CSSProperties } from "react";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
+import { formatMediumDate, formatDateWithWeekday, formatFullDate } from "@/utils/date-format";
+import type { DateFormat } from "@/types/Workspace";
 import { useTheme, type Theme } from "@/hooks/useTheme";
 import { useAgentMemoryAPI } from "@/hooks/useAgentMemoryAPI";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
@@ -72,12 +74,8 @@ function getKindTone(kind: MemoryKind, styles: Theme["styles"]): string {
     }
 }
 
-function formatListDate(iso: string): string {
-    return new Date(iso).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-    });
+function formatListDate(iso: string, dateFormat: DateFormat = "us"): string {
+    return formatMediumDate(new Date(iso), dateFormat);
 }
 
 function snippet(text: string, maxLength = 120): string {
@@ -124,7 +122,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
     const { currentTheme } = useTheme();
     const styles = currentTheme.styles;
     const api = useAgentMemoryAPI();
-    const { activeTab } = useWorkspaceContext();
+    const { activeTab, dateFormat } = useWorkspaceContext();
 
     const [memories, setMemories] = useState<AgentMemoryRecord[]>([]);
     const [total, setTotal] = useState(0);
@@ -584,7 +582,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
                                                 {snippet(mem.text)}
                                             </p>
                                             <div className="mt-1.5 flex items-center gap-1.5 text-micro" style={{ color: styles.contentTertiary }}>
-                                                <span>updated {formatListDate(mem.updatedAt)}</span>
+                                                <span>updated {formatListDate(mem.updatedAt, dateFormat)}</span>
                                                 {mem.tags.length > 0 ? (
                                                     <span className="truncate">{mem.tags.slice(0, 3).map((t) => `#${t}`).join(" ")}</span>
                                                 ) : (
@@ -950,7 +948,7 @@ function JournalTab({ tabId: _tabId }: { tabId: string }) {
     const { currentTheme } = useTheme();
     const styles = currentTheme.styles;
     const notesAPI = useNotesAPI();
-    const { openTab } = useWorkspaceContext();
+    const { openTab, dateFormat } = useWorkspaceContext();
 
     const [entries, setEntries] = useState<DailyEntry[]>([]);
     const [loading, setLoading] = useState(true);
@@ -1043,11 +1041,7 @@ function JournalTab({ tabId: _tabId }: { tabId: string }) {
                         >
                             {entries.map((entry, index) => {
                                 const d = new Date(entry.date + "T00:00:00");
-                                const dayLabel = d.toLocaleDateString("en-US", {
-                                    weekday: "short",
-                                    month: "short",
-                                    day: "numeric",
-                                });
+                                const dayLabel = formatDateWithWeekday(d, dateFormat);
                                 return (
                                     <button
                                         key={entry.date}
@@ -1082,12 +1076,7 @@ function JournalTab({ tabId: _tabId }: { tabId: string }) {
                                 style={{ borderColor: styles.borderDefault }}
                             >
                                 <span className="text-xs font-medium" style={{ color: styles.contentPrimary }}>
-                                    {new Date(selectedEntry.date + "T00:00:00").toLocaleDateString("en-US", {
-                                        weekday: "long",
-                                        year: "numeric",
-                                        month: "long",
-                                        day: "numeric",
-                                    })}
+                                    {formatFullDate(new Date(selectedEntry.date + "T00:00:00"), dateFormat)}
                                 </span>
                                 <div className="ml-auto">
                                     <Button

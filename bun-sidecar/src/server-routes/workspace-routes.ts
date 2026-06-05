@@ -188,6 +188,7 @@ export const workspaceRoutes = {
                         embeddings: { provider: "disabled" },
                         appleCalendarSync: true,
                         tabAutoCloseTimeout: 900,
+                        dateFormat: "us",
                     };
                     await Bun.write(`${getNomendexPath()}/workspace.json`, JSON.stringify(defaultWorkspace, null, 2));
 

@@ -7,6 +7,9 @@ import { parseLocalDateString } from "@/features/notes/date-utils";
 import { ScheduledDateTimePicker } from "./pickers";
 import { useTheme } from "@/hooks/useTheme";
 import { isEventTodo } from "./todo-kind-utils";
+import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
+import { formatShortDate } from "@/utils/date-format";
+import type { DateFormat } from "@/types/Workspace";
 
 function parseChecklistLines(description: string) {
     return description.split('\n')
@@ -33,11 +36,11 @@ function hasChecklistItems(description?: string): boolean {
     return !!description && /^-\s*\[[ xX]\]/m.test(description);
 }
 
-function formatScheduleDisplay(start?: string, end?: string): string | null {
+function formatScheduleDisplay(start?: string, end?: string, dateFormat: DateFormat = "us"): string | null {
     if (!start && !end) return null;
 
     const formatDay = (value: string) =>
-        parseLocalDateString(value.split("T")[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        formatShortDate(parseLocalDateString(value.split("T")[0]), dateFormat);
     const formatTime = (value: string) => (value.includes("T") ? value.split("T")[1] : null);
 
     if (start && end) {
@@ -108,6 +111,7 @@ export function TodoCard({
     children?: React.ReactNode;
 }) {
     const { currentTheme } = useTheme();
+    const { dateFormat } = useWorkspaceContext();
     const isEvent = isEventTodo(todo);
 
     const now = new Date();
@@ -118,7 +122,7 @@ export function TodoCard({
         && !Number.isNaN(new Date(todo.dueDate).getTime())
         && new Date(todo.dueDate).getTime() < startOfToday
     );
-    const scheduleLabel = formatScheduleDisplay(todo.scheduledStart, todo.scheduledEnd);
+    const scheduleLabel = formatScheduleDisplay(todo.scheduledStart, todo.scheduledEnd, dateFormat);
     const priorityColor = todo.priority ? PRIORITY_CONFIG.find((item) => item.value === todo.priority)?.color : undefined;
 
     return (

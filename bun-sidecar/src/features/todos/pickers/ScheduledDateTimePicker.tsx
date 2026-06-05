@@ -8,6 +8,8 @@ import { CalendarClock, Clock, X } from "lucide-react";
 import { toLocalDateString, parseLocalDateString } from "@/features/notes/date-utils";
 import type { DateRange } from "react-day-picker";
 import { parseTimeInput, RangeDayButton } from "./picker-utils";
+import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
+import { formatShortDate, formatDateWithWeekday } from "@/utils/date-format";
 
 interface ScheduledDateTimePickerProps {
     scheduledEnd: string | undefined;
@@ -26,6 +28,7 @@ export function ScheduledDateTimePicker({ scheduledEnd, scheduledStart, onChange
     const timeInputRef = useRef<HTMLInputElement>(null);
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
+    const { dateFormat } = useWorkspaceContext();
 
     const initLocalState = () => {
         if (scheduledStart) {
@@ -159,7 +162,7 @@ export function ScheduledDateTimePicker({ scheduledEnd, scheduledStart, onChange
         if (scheduledStart && !scheduledEnd) {
             return (
                 <span className="whitespace-nowrap">
-                    {parseLocalDateString(scheduledStart.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                    {formatShortDate(parseLocalDateString(scheduledStart.split('T')[0]), dateFormat)}
                     {scheduledStart.includes('T') && ` ${scheduledStart.split('T')[1]}`}
                 </span>
             );
@@ -168,8 +171,8 @@ export function ScheduledDateTimePicker({ scheduledEnd, scheduledStart, onChange
         if (scheduledStart && scheduledEnd) {
             const startDay = scheduledStart.split('T')[0];
             const dueDay = scheduledEnd.split('T')[0];
-            const startFormatted = parseLocalDateString(startDay).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-            const dueFormatted = parseLocalDateString(dueDay).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+            const startFormatted = formatShortDate(parseLocalDateString(startDay), dateFormat);
+            const dueFormatted = formatShortDate(parseLocalDateString(dueDay), dateFormat);
             const startTime = scheduledStart.includes('T') ? scheduledStart.split('T')[1] : null;
             const dueTime = scheduledEnd.includes('T') ? scheduledEnd.split('T')[1] : null;
 
@@ -199,7 +202,7 @@ export function ScheduledDateTimePicker({ scheduledEnd, scheduledStart, onChange
 
         return (
             <span className="whitespace-nowrap">
-                {parseLocalDateString(scheduledEnd.split('T')[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                {formatShortDate(parseLocalDateString(scheduledEnd.split('T')[0]), dateFormat)}
                 {scheduledEnd.includes('T') && ` ${scheduledEnd.split('T')[1]}`}
             </span>
         );
@@ -262,8 +265,8 @@ export function ScheduledDateTimePicker({ scheduledEnd, scheduledStart, onChange
                             {!localFrom
                                 ? "Select a date"
                                 : isSingleDay
-                                    ? localFrom.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
-                                    : `${localFrom.toLocaleDateString("en-US", { month: "short", day: "numeric" })} → ${localTo!.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                                    ? formatDateWithWeekday(localFrom, dateFormat)
+                                    : `${formatShortDate(localFrom, dateFormat)} → ${formatShortDate(localTo!, dateFormat)}`
                             }
                         </div>
 

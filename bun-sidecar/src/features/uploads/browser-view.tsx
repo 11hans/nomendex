@@ -1,4 +1,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
+import { formatShortDate } from "@/utils/date-format";
+import type { DateFormat } from "@/types/Workspace";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -32,7 +35,7 @@ function formatFileSize(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatDate(dateString: string): string {
+function formatDate(dateString: string, dateFormat: DateFormat = "us"): string {
     const date = new Date(dateString);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -47,7 +50,7 @@ function formatDate(dateString: string): string {
     if (diffDays < 7) {
         return date.toLocaleDateString([], { weekday: "short" });
     }
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+    return formatShortDate(date, dateFormat);
 }
 
 function fuzzySearch(query: string, text: string): boolean {
@@ -71,6 +74,7 @@ function fuzzySearch(query: string, text: string): boolean {
 
 export default function UploadsBrowserView() {
     const { currentTheme } = useTheme();
+    const { dateFormat } = useWorkspaceContext();
     const [uploads, setUploads] = useState<Attachment[]>([]);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
@@ -442,7 +446,7 @@ export default function UploadsBrowserView() {
                                                     {upload.originalName || upload.filename}
                                                 </p>
                                                 <p className="text-caption" style={{ color: currentTheme.styles.contentTertiary }}>
-                                                    {formatFileSize(upload.size)} · {formatDate(upload.createdAt)} · {upload.mimeType}
+                                                    {formatFileSize(upload.size)} · {formatDate(upload.createdAt, dateFormat)} · {upload.mimeType}
                                                 </p>
                                             </div>
                                             <div className="flex items-center gap-1 shrink-0">

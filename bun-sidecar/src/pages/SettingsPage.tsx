@@ -15,7 +15,7 @@ import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
-import type { NotesLocation } from "@/types/Workspace";
+import type { NotesLocation, DateFormat } from "@/types/Workspace";
 
 type SecretInfo = {
     key: string;
@@ -615,7 +615,7 @@ function SettingsContent() {
     const [recordingKeys, setRecordingKeys] = useState<string[]>([]);
     const { setTheme, themes, currentTheme } = useTheme();
     const { shortcuts, updateShortcut, resetShortcut, resetAllShortcuts } = useKeyboardShortcuts();
-    const { chatInputEnterToSend, setChatInputEnterToSend, workspace, appleCalendarSync, setAppleCalendarSync, updateWorkspace } = useWorkspaceContext();
+    const { chatInputEnterToSend, setChatInputEnterToSend, workspace, appleCalendarSync, setAppleCalendarSync, updateWorkspace, dateFormat, setDateFormat } = useWorkspaceContext();
 
     // Local state for pending preference change
     const [pendingEnterToSend, setPendingEnterToSend] = useState<boolean | null>(null);
@@ -1109,6 +1109,31 @@ function SettingsContent() {
                                         onCheckedChange={setAppleCalendarSync}
                                     />
                                 </div>
+                            </CardContent>
+                        </Card>
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <CalendarDays className="h-4 w-4" />
+                                    Date Format
+                                </CardTitle>
+                                <CardDescription>Choose how dates are displayed throughout the app</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <RadioGroup
+                                    value={dateFormat}
+                                    onValueChange={(v) => setDateFormat(v as DateFormat)}
+                                    className="space-y-2"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <RadioGroupItem value="us" id="date-us" />
+                                        <Label htmlFor="date-us" className="text-caption cursor-pointer">US format — Jun 5, 2026</Label>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <RadioGroupItem value="eu" id="date-eu" />
+                                        <Label htmlFor="date-eu" className="text-caption cursor-pointer">EU format — 5. 6. 2026</Label>
+                                    </div>
+                                </RadioGroup>
                             </CardContent>
                         </Card>
                         <Card>

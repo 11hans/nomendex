@@ -20,6 +20,9 @@ export const ProjectPreferencesSchema = z.object({
     sortByDate: z.boolean().default(false),
 });
 
+export const DateFormatSchema = z.enum(["us", "eu"]);
+export type DateFormat = z.infer<typeof DateFormatSchema>;
+
 export const GitAuthModeSchema = z.enum(["pat", "local"]);
 export type GitAuthMode = z.infer<typeof GitAuthModeSchema>;
 
@@ -78,6 +81,7 @@ export const WorkspaceStateSchema = z.object({
     }).default({ provider: "disabled" }),
     appleCalendarSync: z.boolean().default(true),
     tabAutoCloseTimeout: z.number().min(0).default(900),
+    dateFormat: DateFormatSchema.default("us"),
 });
 
 export type WorkspaceTab = z.infer<typeof WorkspaceTabSchema>;

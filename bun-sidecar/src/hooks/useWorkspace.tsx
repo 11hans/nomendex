@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { PluginInstance, PluginBase, SerializablePlugin } from "@/types/Plugin";
-import { WorkspaceState, WorkspaceTab, WorkspaceStateSchema, ProjectPreferences, GitAuthMode, NotesLocation, AutoSyncConfig, Pane, LayoutMode } from "@/types/Workspace";
+import { WorkspaceState, WorkspaceTab, WorkspaceStateSchema, ProjectPreferences, GitAuthMode, NotesLocation, AutoSyncConfig, Pane, LayoutMode, DateFormat } from "@/types/Workspace";
 import type { TodoFilterState, TodoViewPreferences } from "@/features/todos/todo-filter-types";
 import { createDefaultFilterState } from "@/features/todos/todo-filter-types";
 import { type RouteParams } from "./useRouting";
@@ -66,6 +66,7 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         embeddings: { provider: "disabled" },
         appleCalendarSync: true,
         tabAutoCloseTimeout: 900,
+        dateFormat: "us",
     });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -916,6 +917,14 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         [updateWorkspace]
     );
 
+    // Date format (US vs EU)
+    const setDateFormat = useCallback(
+        (format: DateFormat) => {
+            updateWorkspace((prev) => ({ ...prev, dateFormat: format }));
+        },
+        [updateWorkspace]
+    );
+
 
 
     // === Pane Operations ===
@@ -1354,6 +1363,10 @@ export function useWorkspace(_initialRoute?: RouteParams) {
         // Apple Calendar sync
         appleCalendarSync: workspace.appleCalendarSync,
         setAppleCalendarSync,
+
+        // Date format
+        dateFormat: workspace.dateFormat,
+        setDateFormat,
 
         // Tab pinning
         toggleTabPinned,

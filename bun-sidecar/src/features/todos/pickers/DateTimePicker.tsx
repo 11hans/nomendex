@@ -7,6 +7,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { CalendarCheck, Clock, X } from "lucide-react";
 import { toLocalDateString, parseLocalDateString } from "@/features/notes/date-utils";
 import { parseTimeInput, SingleDayButton } from "./picker-utils";
+import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
+import { formatShortDate, formatDateWithWeekday } from "@/utils/date-format";
 
 interface DateTimePickerProps {
     dueDate: string | undefined;
@@ -23,6 +25,7 @@ export function DateTimePicker({ dueDate, onChange, compact }: DateTimePickerPro
     const timeInputRef = useRef<HTMLInputElement>(null);
     const { currentTheme } = useTheme();
     const { styles } = currentTheme;
+    const { dateFormat } = useWorkspaceContext();
 
     const initLocalState = () => {
         if (dueDate) {
@@ -110,7 +113,7 @@ export function DateTimePicker({ dueDate, onChange, compact }: DateTimePickerPro
 
         return (
             <span className="whitespace-nowrap">
-                {parseLocalDateString(dueDate.split("T")[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                {formatShortDate(parseLocalDateString(dueDate.split("T")[0]), dateFormat)}
                 {dueDate.includes("T") && ` ${dueDate.split("T")[1]}`}
             </span>
         );
@@ -166,7 +169,7 @@ export function DateTimePicker({ dueDate, onChange, compact }: DateTimePickerPro
                         <div className="text-xs text-center py-1" style={{ color: styles.contentSecondary }}>
                             {!localDate
                                 ? "Select a deadline"
-                                : `Due ${localDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`}
+                                : `Due ${formatDateWithWeekday(localDate, dateFormat)}`}
                         </div>
 
                         <div className="pt-2 border-t" style={{ borderColor: styles.surfaceTertiary }}>

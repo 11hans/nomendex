@@ -19,7 +19,7 @@ type SessionLookupState =
     | { status: "ready"; sessionId: string | undefined };
 
 export default function TodayView({ tabId, date }: TodayViewProps) {
-    const { openTab, activeTab } = useWorkspaceContext();
+    const { openTab, activeTab, dateFormat } = useWorkspaceContext();
     // A date prop from the past (e.g. a workspace.json entry saved before the
     // live-tab migration) is treated as unpinned so the tab heals to today.
     const isPinned = date !== undefined && date >= getTodayLocalDateString();
@@ -34,7 +34,6 @@ export default function TodayView({ tabId, date }: TodayViewProps) {
     useEffect(() => {
         let cancelled = false;
         setLookup({ status: "loading" });
-        console.log("[Today] Lookup start", { tabDate, dateProp: date, isPinned });
         (async () => {
             try {
                 const [sessionRes, goals] = await Promise.all([
@@ -48,7 +47,6 @@ export default function TodayView({ tabId, date }: TodayViewProps) {
                 if (cancelled) return;
 
                 const existing = sessionRes?.session?.id as string | undefined;
-                console.log("[Today] Lookup result", { tabDate, existing, session: sessionRes?.session });
                 if (existing) {
                     setLookup({ status: "ready", sessionId: existing });
                 } else if (goals.length === 0) {
@@ -65,7 +63,6 @@ export default function TodayView({ tabId, date }: TodayViewProps) {
         return () => {
             cancelled = true;
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [tabDate]);
 
     // Day rollover. Live tabs (no explicit date prop) auto-advance tabDate at
@@ -178,7 +175,7 @@ export default function TodayView({ tabId, date }: TodayViewProps) {
                     autoSend={!sessionId}
                     forcedAgentId="bpagent"
                     dailyDate={tabDate}
-                    tabNameOverride={isStale ? formatTabDateLabel(tabDate) : `Today · ${formatTabDateLabel(tabDate)}`}
+                    tabNameOverride={isStale ? formatTabDateLabel(tabDate, dateFormat) : `Today · ${formatTabDateLabel(tabDate, dateFormat)}`}
                 />
             </div>
         </div>

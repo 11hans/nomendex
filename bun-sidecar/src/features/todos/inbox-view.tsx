@@ -33,6 +33,8 @@ import {
     ListTodo,
 } from "lucide-react";
 import { isEventTodo, isTaskTodo } from "./todo-kind-utils";
+import { formatShortDate } from "@/utils/date-format";
+import type { DateFormat } from "@/types/Workspace";
 
 const INBOX_PROJECT = "Inbox";
 const ALL_TASKS = "__all__";
@@ -143,7 +145,7 @@ function getGroupName(todo: Todo): string {
     return normalizeProjectName(todo.project);
 }
 
-function formatRelativeDateLabel(dateString?: string): string {
+function formatRelativeDateLabel(dateString?: string, dateFormat: DateFormat = "us"): string {
     if (!dateString) return "";
 
     const date = new Date(dateString);
@@ -157,7 +159,7 @@ function formatRelativeDateLabel(dateString?: string): string {
     if (daysDiff === 0) return "today";
     if (daysDiff === 1) return "yesterday";
 
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return formatShortDate(date, dateFormat);
 }
 
 function DroppableProjectItem({
@@ -291,9 +293,10 @@ function DraggableTodoRow({
         id: todo.id,
         disabled: todo.archived,
     });
+    const { dateFormat } = useWorkspaceContext();
 
     const statusType = getStatusBucketForTodo(todo);
-    const dateLabel = formatRelativeDateLabel(todo.updatedAt);
+    const dateLabel = formatRelativeDateLabel(todo.updatedAt, dateFormat);
     const leadTag = todo.tags?.[0];
     const isEvent = isEventTodo(todo);
 
