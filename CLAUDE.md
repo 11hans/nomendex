@@ -36,6 +36,7 @@ All features live under `bun-sidecar/src/features/[feature]/`. Each has a dedica
 - **Apple Calendar** — Two-way EventKit sync on macOS for todos with `scheduledStart`/`scheduledEnd`. See `apple-calendar-integration.md`.
 - **Multi-Workspace** — Multiple isolated workspaces, switch triggers full reload. See `multi-workspace.md`.
 - **Inbox** — Master-detail task triage (built on todos, not a separate entity). See `inbox.md`.
+- **Timeblocking** — Template-driven weekly schedule generator: day-type templates expand into `event` todos with coverage rules + conflict detection (preview/apply). Surfaced via the "Plan Week (Timeblocking)" command. See `timeblocking.md`.
 
 ### Core Technologies
 - **Runtime**: Bun (not Node.js) — use `bun` for all commands
@@ -262,7 +263,7 @@ Effective prompt sources (shown in Agents UI):
 Model catalog: `/api/agents/models` merges Anthropic `/v1/models` (if `ANTHROPIC_API_KEY` present) with a local fallback list.
 
 ### BPagent
-Specialized planning agent with skills (`/daily`, `/weekly`, `/monthly`, `/goal-tracking`, `/project`, `/review`, `/adopt`), subagents (`weekly-reviewer`, `goal-aligner`, `inbox-processor`, `note-organizer`), and typed goal integration. Expects Obsidian-compatible vault structure. Details: `docs/features/bpagent.md`.
+Specialized planning agent with skills (`/daily`, `/weekly`, `/monthly`, `/goal-tracking`, `/project`, `/review`, `/adopt`), subagents (`weekly-reviewer`, `monthly-reviewer`, `goal-aligner`, `inbox-processor`, `note-organizer`), and typed goal integration. Expects Obsidian-compatible vault structure. Details: `docs/features/bpagent.md`.
 
 ### MCP Servers
 - User-defined in `{workspace}/.nomendex/mcp-servers.json`.

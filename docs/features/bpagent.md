@@ -94,10 +94,13 @@ Průběh je viditelný jako progress indikátory v chatu.
 
 ### `/monthly` – Měsíční review
 
-30minutový process na konci měsíce:
-- Shrnutí týdenních výher a výzev
-- Kontrola kvartálních milníků
-- Plánování zaměření na příští měsíc
+Strukturovaný proces na konci (nebo začátku) měsíce. Agent předá práci subagentovi `monthly-reviewer`, který provede tři fáze:
+
+1. **Sběr (10 min)** – Sjednotí týdenní review za poslední měsíc, projde denní záznamy za 30 dní, načte měsíční cíle a stav projektů
+2. **Reflexe (10 min)** – Zkontroluje kvartální a roční milníky přes goal forest, porovná plán vs. realitu
+3. **Plánování (10 min)** – Stanoví hlavní zaměření a 3úrovňové priority (must / should / nice) na příští měsíc, založí/aktualizuje měsíční cíle přes API
+
+Průběh je viditelný jako progress indikátory v chatu. Jednorázové dotazy ("kolik todos jsem dodělal minulý měsíc?") agent zodpoví přímo, bez delegace.
 
 ### `/project` – Správa projektů
 
@@ -190,6 +193,10 @@ Spouští se přes `/weekly`. Prochází denní záznamy za posledních 7 dní, 
 ### Příští týden
 **Jedna hlavní věc:** [priorita]
 ```
+
+### `monthly-reviewer` – Měsíční reviewer
+
+Spouští se přes `/monthly`. Stejně jako `weekly-reviewer` běží ve třech fázích (Sběr → Reflexe → Plánování) s progress indikátory. Sjednocuje týdenní review za poslední měsíc, kontroluje kvartální a roční milníky přes typed goal graph (`computedProgress`, ne počítání checkboxů) a generuje strukturovaný měsíční report — výhry, výzvy, vzorce, todo metriky podle projektů, pokrok cílů, kvartální milníky a plán na příští měsíc. Nové měsíční cíle zakládá přes API a poté regeneruje dashboardy.
 
 ### `goal-aligner` – Kontrola souladu cílů
 
