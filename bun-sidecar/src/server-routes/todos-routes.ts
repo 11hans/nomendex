@@ -24,6 +24,7 @@ import {
 } from "@/features/todos/fx";
 import { DayTypeSchema } from "@/features/timeblocking/types";
 import { applyTimeblockingPlan, previewTimeblockingPlan } from "@/features/timeblocking/service";
+import { ensureTimeblockingConfig } from "@/features/timeblocking/config";
 import { applyTaskPlannerPlan, previewTaskPlannerPlan } from "@/features/timeblocking/task-planner";
 import { addTodoSSEClient, broadcastTodoEvent, type TodoEvent } from "@/services/todo-events";
 import { TodoKindSchema, TodoSourceSchema, TodoStatusSchema, RecurrenceSchema } from "@/features/todos/todo-types";
@@ -471,6 +472,16 @@ export const todosRoutes = {
                 if (msg.includes("not found")) status = 404;
                 else if (msg.includes("no recurrence")) status = 400;
                 return Response.json({ error: msg }, { status });
+            }
+        },
+    },
+    "/api/todos/timeblocking/config": {
+        async POST() {
+            try {
+                return Response.json(await ensureTimeblockingConfig());
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                return Response.json({ error: message }, { status: 400 });
             }
         },
     },

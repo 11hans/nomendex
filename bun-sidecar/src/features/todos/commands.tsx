@@ -1,6 +1,7 @@
 import React from "react";
 import { Command } from "@/types/Commands";
 import { CreateTodoCommandDialog } from "./CreateTodoCommandDialog";
+import { TimeblockingDialog } from "@/features/timeblocking/TimeblockingDialog";
 import { todosPluginSerial } from "./index";
 import { WorkspaceTab } from "@/types/Workspace";
 import { SerializablePlugin } from "@/types/Plugin";
@@ -104,6 +105,20 @@ export async function getTodosCommands(context: CommandContext): Promise<Command
                     content: <CreateTodoCommandDialog />,
                     width: '700px',
                     maxHeight: '90vh',
+                });
+            },
+        },
+        {
+            id: "todos.timeblocking",
+            name: "Plan Week (Timeblocking)",
+            description: "Generate this week's timeblock events from your day templates",
+            icon: "Calendar",
+            callback: () => {
+                context.closeCommandMenu();
+                context.openDialog({
+                    content: <TimeblockingDialog />,
+                    width: '640px',
+                    maxHeight: '85vh',
                 });
             },
         },

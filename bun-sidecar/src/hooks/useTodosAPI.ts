@@ -2,7 +2,7 @@ import { Todo, type TodoKind, type TodoSource, type Recurrence } from "@/feature
 import type { Attachment } from "@/types/attachments";
 import type { BoardConfig, ProjectConfig } from "@/features/projects/project-types";
 import type { GetTodosInput } from "@/features/todos";
-import type { DayConfig } from "@/features/timeblocking/types";
+import type { DayConfig, TimeblockingConfig } from "@/features/timeblocking/types";
 import type { TimeblockingApplyResult, TimeblockingPreviewResult } from "@/features/timeblocking/service";
 import type { TaskPlannerApplyResult, TaskPlannerPlanInput, TaskPlannerPreviewResult } from "@/features/timeblocking/task-planner";
 import {
@@ -136,6 +136,7 @@ export const todosAPI = {
         sanitizeTodoListForClient(await fetchAPI<Todo[]>("archived", args)),
     getTags: () => fetchAPI<string[]>("tags"),
     deleteTag: (args: { tagName: string }) => fetchAPI<{ deletedFromCount: number }>("tags/delete", args),
+    getTimeblockingConfig: () => fetchAPI<TimeblockingConfig>("timeblocking/config"),
     previewTimeblocking: (args: { weekStart: string; days: DayConfig[] }) =>
         fetchAPI<TimeblockingPreviewResult>("timeblocking/preview", args),
     applyTimeblocking: (args: { weekStart: string; days: DayConfig[] }) =>
