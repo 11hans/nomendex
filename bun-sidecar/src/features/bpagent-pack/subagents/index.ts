@@ -2,6 +2,7 @@ import type { AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 import path from "node:path";
 import type { VaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
 import { buildWeeklyReviewer } from "./weekly-reviewer";
+import { buildMonthlyReviewer } from "./monthly-reviewer";
 import { buildGoalAligner } from "./goal-aligner";
 import { buildInboxProcessor } from "./inbox-processor";
 import { buildNoteOrganizer } from "./note-organizer";
@@ -34,6 +35,7 @@ export function buildBpagentSubagents(input?: {
 
     return {
         "weekly-reviewer": buildWeeklyReviewer({ port, dailyNotesDir, goalsDir }),
+        "monthly-reviewer": buildMonthlyReviewer({ port, dailyNotesDir, goalsDir, projectsDir }),
         "goal-aligner": buildGoalAligner({ port, dailyNotesDir, goalsDir, projectsDir }),
         "inbox-processor": buildInboxProcessor({ port, notesPath, inboxDir, projectsDir }),
         "note-organizer": buildNoteOrganizer({ projectsDir }),

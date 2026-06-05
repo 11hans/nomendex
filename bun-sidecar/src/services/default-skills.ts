@@ -1811,252 +1811,41 @@ Use \`/api/goals/graph\` to get computed progress — never calculate manually f
       "SKILL.md": `---
 name: monthly
 description: Monthly review and planning. Roll up weekly reviews, check quarterly milestones, set next month's focus. Use at end of month or start of new month.
-version: 5
+version: 6
 source: nomendex
 ---
 
 # Monthly Review Skill
 
-Facilitates monthly review and planning by rolling up weekly reviews, checking quarterly milestones, and setting next month's focus.
+**Delegate this work to the \`monthly-reviewer\` subagent.** Do not run the review inline — it consumes a large token budget in the main session and contaminates cache for follow-up turns. The subagent owns the full recipe (Collect → Reflect → Plan, weekly rollup, quarterly milestone check, goal-graph fetch, next-month planning, output format).
 
-## Usage
+## How to invoke
 
-\`\`\`
-/monthly              # Run monthly review for current month
-\`\`\`
+1. **Recall first** (subagents don't see your memory). Call \`memory_search\` with the user's intent keywords + "monthly". Summarize relevant hits — durable preferences, prior review style, active goal/project focus — into one short paragraph.
 
-Or ask:
-- "Help me with my monthly review"
-- "Plan next month"
-- "How did this month go?"
+2. **Resolve current month range.** Default to the calendar month containing today (first day → last day). If the user named a different month, use that.
 
-## What This Skill Does
+3. **Call the Task tool** with subagent type \`monthly-reviewer\` and a prompt containing:
+   - User's original request (verbatim).
+   - Current month range (\`YYYY-MM-DD\` to \`YYYY-MM-DD\`).
+   - Memory recap from step 1 (or "no relevant prior context" if empty).
+   - Any specific focus the user mentioned (goal, project, theme) — do not invent one.
 
-1. **Fetches monthly goal data** via \`/api/goals/list\` and \`/api/goals/graph/forest\`
-2. **Rolls up weekly reviews** from the past month
-3. **Checks quarterly milestones** via typed goal hierarchy
-4. **Plans next month's** focus areas and priorities
+4. **Hand back the subagent's output.** Do not re-summarize or re-format. The subagent writes the review note itself and manages monthly goals via the API; surface the file path and a 1-line TL;DR.
 
-## Data Sources
+## When NOT to delegate
 
-### Primary: Typed API (source of truth)
-- Monthly goals: \`POST /api/goals/list { "horizon": "monthly", "status": "active" }\`
-- Full goal forest with progress: \`POST /api/goals/graph/forest {}\`
-- Quarterly goals: \`POST /api/goals/list { "horizon": "quarterly", "status": "active" }\`
-- Yearly goals: \`POST /api/goals/list { "horizon": "yearly", "status": "active" }\`
-- Projects: \`POST /api/projects/list {}\`
+Stay inline only for these narrow cases — they aren't a "monthly review":
 
-### Secondary: Markdown narrative
-- Weekly reviews (\`Goals/3. Weekly Review.md\` or weekly review notes)
-- Daily notes from past 30 days
+- User asks a single targeted question about last month ("how many todos did I finish in May?") → answer directly.
+- User wants to edit / amend an existing monthly review note → edit it directly.
+- User wants a quick rollup without a written note → produce the rollup inline.
 
-**Important:** \`Goals/2. Monthly Goals.md\` is a generated-only dashboard — never read it as an editable source and never write to it directly. Use the API to manage goals, then call \`POST /api/goals/sync/dashboards {}\` to regenerate dashboards.
+Anything that walks the Collect → Reflect → Plan arc goes to the subagent.
 
-## Todo Safety Rules
-- **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
-- **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
-- **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
-- **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
+## Subagent contract (for reference)
 
-## Review Process
-
-### Phase 1: Collect Monthly Data (10 minutes)
-
-1. Read all weekly reviews from the past month (\`Goals/3. Weekly Review.md\` or weekly review notes)
-2. Read daily notes from past 30 days (scan for patterns)
-3. Fetch todos data for past month via \`/todos\` skill
-4. Fetch current monthly goals via \`POST /api/goals/list { "horizon": "monthly", "status": "active" }\`
-5. Fetch project status via \`POST /api/projects/list {}\`
-
-**Extract:**
-- Wins from each week
-- Challenges and recurring blockers
-- Todo completion rates by project
-- Monthly todo patterns (total completed, overdue, blocked)
-- Goal progress from API (\`computedProgress\` per goal)
-- Project milestones completed
-- Habits tracked (completion rates)
-- Explicit streak labels from the latest relevant daily note, copied verbatim
-
-### Phase 2: Reflect on Month (10 minutes)
-
-1. Fetch quarterly milestones via \`POST /api/goals/list { "horizon": "quarterly", "status": "active" }\`
-2. Fetch yearly goals via \`POST /api/goals/list { "horizon": "yearly", "status": "active" }\`
-3. Use \`POST /api/goals/graph/forest {}\` for full progress overview
-4. Calculate which quarter we're in and check milestone progress
-5. Identify patterns across weeks (energy, productivity, focus areas)
-6. Compare planned vs actual outcomes
-
-**Generate:**
-- Monthly accomplishment summary
-- Quarterly milestone progress check (from API data)
-- Pattern analysis (what worked, what didn't)
-- Goal alignment assessment
-
-### Phase 3: Plan Next Month (10 minutes)
-
-1. Identify next month's quarterly milestones from goal forest
-2. Surface projects that need attention (via \`/api/projects/list\`)
-3. Set next month's primary focus (ONE thing)
-4. Define 3-tier priorities (must/should/nice-to-have)
-5. Plan habits to build or maintain
-
-**Write:**
-- Create new monthly goals via \`POST /api/goals/create { horizon: "monthly", ... }\` or update existing via \`POST /api/goals/update\`
-- Set specific weekly milestones for the month ahead
-- Call \`POST /api/goals/sync/dashboards {}\` to regenerate \`Goals/2. Monthly Goals.md\` and other dashboards
-
-## Output Format
-
-\`\`\`markdown
-## Monthly Review: [Month Year]
-
-### Month Summary
-- Weeks reviewed: 4
-- Daily notes analyzed: [N]
-- Projects active: [N]
-
-### Wins
-1. [Major accomplishment]
-2. [Progress milestone]
-3. [Habit success]
-
-### Challenges
-1. [Recurring blocker]
-2. [Missed target]
-
-### Patterns
-- **Energy:** [When were you most productive?]
-- **Focus:** [What got the most attention?]
-- **Gaps:** [What was consistently avoided?]
-
-### Todo Metrics
-| Project | Completed | Total | Rate | Trend |
-|---------|-----------|-------|------|-------|
-| Nomendex | 45 | 60 | 75% | ↗️ +10% |
-| Health | 8 | 24 | 33% | ↘️ -5% |
-| Work | 30 | 40 | 75% | → stable |
-
-**Insights:**
-- Total todos completed: 83
-- Average completion rate: 61%
-- Best performing: Nomendex (improving scoping)
-- Needs attention: Health (overcommitting, break into smaller todos)
-
-### Goal Progress (from \`/api/goals/graph\`)
-| Goal | Progress | Mode | Delta |
-|------|----------|------|-------|
-| Nomendex v produkci | 20% | rollup | +5% |
-| Pohybový návyk | 12/72 | metric | +8 |
-| Denní review streak | DEN 1 | manual | from latest daily note |
-
-### Quarterly Milestone Check (from \`/api/goals/list { "horizon": "quarterly" }\`)
-| Milestone | Goal ID | Status | Progress |
-|-----------|---------|--------|----------|
-| Q2 Launch | goal-xxx | active | 0/4 milestone |
-| Q1 Audit | goal-yyy | active | 2/3 milestone |
-
-### Project Status
-| Project | Progress | Status | Next Month Focus |
-|---------|----------|--------|-----------------|
-| [Project 1] | 60% | Active | [Key deliverable] |
-
-### Next Month Plan
-
-**ONE Focus:** [Primary objective]
-
-**Must Complete:**
-1. [Non-negotiable deliverable]
-2. [Critical milestone]
-3. [Key commitment]
-
-**Should Complete:**
-1. [Important but flexible]
-2. [Supporting goal]
-
-**Nice to Have:**
-1. [Stretch goal]
-
-**Weekly Milestones:**
-- Week 1: [Focus]
-- Week 2: [Focus]
-- Week 3: [Focus]
-- Week 4: [Focus + monthly review]
-
-### Wellbeing Check
-- Physical Health: /10
-- Mental Health: /10
-- Relationships: /10
-- Work Satisfaction: /10
-- Overall: /10
-
-### Questions to Consider
-- "What would make next month feel truly successful?"
-- "What commitment should you drop or delegate?"
-- "Which goal needs a different approach?"
-\`\`\`
-
-## Data Sources
-
-**Primary (typed store via API):**
-- \`/api/goals/list\` — all goals by horizon, status, area
-- \`/api/goals/graph\` — per-goal progress with children, projects, todos
-- \`/api/projects/list\` — projects with goalRef
-- \`/api/todos/list\` — todos with goalRefs (resolve via project.goalRef when goalRefs is undefined)
-
-**Secondary (markdown for narrative context):**
-- Weekly Review notes — for qualitative reflection rollup
-- Daily notes — for pattern analysis
-- Mirror notes are synced views, not primary data
-
-## Task-Based Progress Tracking
-
-### Monthly Review Tasks
-\`\`\`
-TaskCreate:
-  subject: "Phase 1: Collect monthly data"
-  description: "Read weekly reviews, daily notes, todos data, and project files from past month"
-  activeForm: "Collecting monthly data..."
-
-TaskCreate:
-  subject: "Fetch monthly todos"
-  description: "Load all todos from past month via /todos skill for completion analysis"
-  activeForm: "Fetching monthly todo metrics..."
-
-TaskCreate:
-  subject: "Phase 2: Reflect on month"
-  description: "Analyze patterns, check quarterly milestones, assess goal alignment, review todo trends"
-  activeForm: "Reflecting on monthly patterns..."
-
-TaskCreate:
-  subject: "Phase 3: Plan next month"
-  description: "Set focus, define priorities, establish weekly milestones, plan todo capacity"
-  activeForm: "Planning next month..."
-
-TaskCreate:
-  subject: "Write monthly review note"
-  description: "Generate and save the monthly review document"
-  activeForm: "Writing monthly review..."
-\`\`\`
-
-### Dependencies
-\`\`\`
-TaskUpdate: "Phase 2: Reflect", addBlockedBy: [phase-1-id]
-TaskUpdate: "Phase 3: Plan", addBlockedBy: [phase-2-id]
-TaskUpdate: "Write monthly review", addBlockedBy: [phase-3-id]
-\`\`\`
-
-Mark each task \`in_progress\` when starting, \`completed\` when done.
-
-## Integration
-
-Works with:
-- \`/todos\` - Fetch monthly todo metrics for trend analysis
-- \`/weekly\` - Monthly review rolls up weekly reviews
-- \`/goal-tracking\` - Quarterly milestone progress
-- \`/project status\` - Project progress feeds monthly assessment
-- \`/daily\` - Next month's plan informs daily priorities
-- \`/push\` - Commit after completing review
+The \`monthly-reviewer\` subagent has access to: \`Read\`, \`Write\`, \`Edit\`, \`Glob\`, \`Grep\`, \`Bash\`, \`TaskCreate\`, \`TaskUpdate\`, \`TaskList\`. It cannot ask the user clarifying questions mid-run, so the Task prompt must include everything it needs to make decisions (month range, focus, any constraints). If the user typically expects interactive prompts during monthly review, gather those answers in the main session *before* delegating.
 `,
     },
   },
