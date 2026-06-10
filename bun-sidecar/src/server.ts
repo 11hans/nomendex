@@ -3,7 +3,7 @@ import index from "./index.html";
 import { createServiceLogger, getLogFile, startupLog, markStartupComplete, isInStartupMode } from "./lib/logger";
 import { initializeWorkspaceServices } from "./services/workspace-init";
 import { appendFile } from "node:fs/promises";
-import { isAllowedRequestHost, isAllowedWebSocketOrigin, resolveServerHostname } from "@/lib/request-security";
+import { isAllowedRequestHost, isAllowedWebSocketOrigin, isLoopbackHost, resolveServerHostname } from "@/lib/request-security";
 import { baseDirRoute } from "./server-routes/base-dir";
 import { workspaceRoutes } from "./server-routes/workspace-routes";
 import { gitInstalledRoute, gitInitRoute, gitStatusRoute, gitSetupRemoteRoute, gitPullRoute, gitPushRoute, gitCommitRoute, gitFetchStatusRoute, gitFileDiffRoute, gitConflictsRoute, gitResolveConflictRoute, gitAbortMergeRoute, gitContinueMergeRoute, gitConflictContentRoute, gitStageRoute, gitUnstageRoute, gitStageAllRoute, gitUnstageAllRoute, gitStatusDetailedRoute, gitDiscardRoute } from "./server-routes/git-sync";
@@ -66,6 +66,15 @@ const wsToSessionMap = new Map<ServerWebSocket<TerminalWSData>, string>();
 // Realtime websocket clients for channel events
 const realtimeClients = new Set<ServerWebSocket<RealtimeWSData>>();
 const serverHostname = resolveServerHostname();
+
+if (!isLoopbackHost(serverHostname)) {
+    serverLogger.warn(
+        "SECURITY: server is binding to a non-loopback address — the full API, including terminal "
+        + "WebSockets that spawn shells, will be reachable from the network without authentication. "
+        + "Unset SERVER_HOST/HOST or set it to 127.0.0.1 unless this is intentional.",
+        { hostname: serverHostname },
+    );
+}
 
 gatewayService.subscribe((event) => {
     const payload = JSON.stringify({
