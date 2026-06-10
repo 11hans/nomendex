@@ -15,7 +15,7 @@ import {
 } from "./storage";
 import { ChannelManager } from "./channel-manager";
 import { GatewayHttpError } from "./errors";
-import { evaluateTelegramSendPolicy, redactGatewayEvent } from "./security";
+import { evaluateTelegramSendPolicy, isAllowlisted, redactGatewayEvent } from "./security";
 import { generateTelegramReply } from "./ai";
 import { listAppThreadMessages, listAppThreads } from "./app-sessions";
 import type {
@@ -31,6 +31,11 @@ import type {
 } from "./types";
 
 const gatewayLogger = createServiceLogger("GATEWAY");
+
+// Auto-replies are rate limited per chat so a message flood cannot trigger an
+// agent query (and an outbound Telegram send) for every inbound message.
+// Manual sends and explicit AI replies from the UI are not limited.
+const AUTO_REPLY_MIN_INTERVAL_MS = 30_000;
 
 type ThreadFilter = {
   channel?: "all" | "app" | "telegram";
@@ -59,6 +64,7 @@ class GatewayService {
   private initialized = false;
   private readonly subscribers = new Set<(event: GatewayEvent) => void>();
   private pendingBacklogCount = 0;
+  private readonly lastAutoReplyAtByChat = new Map<string, number>();
 
   private readonly channelManager = new ChannelManager({
     getSettings: async () => loadChannelsSettings(),
@@ -343,6 +349,16 @@ class GatewayService {
   private async handleTelegramInbound(message: TelegramInboundMessage): Promise<void> {
     const settings = await loadChannelsSettings();
 
+    // Drop non-allowlisted senders at ingestion: nothing is persisted or
+    // emitted for them, so strangers cannot fill storage or surface in the UI.
+    if (!isAllowlisted(message.chatId, message.username, settings.telegram.allowlist)) {
+      gatewayLogger.warn("Dropped Telegram message from non-allowlisted sender", {
+        chatId: message.chatId,
+        hasUsername: !!message.username,
+      });
+      return;
+    }
+
     const registry = new SessionRegistry(settings.telegram.timeZone);
     const threadId = registry.telegramDmKey(message.chatId, new Date(message.timestampMs));
 
@@ -399,6 +415,18 @@ class GatewayService {
       }).allowed;
 
     if (shouldAutoReply) {
+      const lastReplyAt = this.lastAutoReplyAtByChat.get(message.chatId) || 0;
+      const elapsedMs = Date.now() - lastReplyAt;
+      if (elapsedMs < AUTO_REPLY_MIN_INTERVAL_MS) {
+        gatewayLogger.warn("Skipping Telegram auto-reply (rate limited)", {
+          chatId: message.chatId,
+          elapsedMs,
+          minIntervalMs: AUTO_REPLY_MIN_INTERVAL_MS,
+        });
+        return;
+      }
+
+      this.lastAutoReplyAtByChat.set(message.chatId, Date.now());
       await this.aiReplyTelegram({ threadId, prompt: message.text });
     }
   }
