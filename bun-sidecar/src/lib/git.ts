@@ -1071,6 +1071,13 @@ export function createGitClient(config: GitClientConfig) {
         async resolveConflict(filepath: string, resolution: "ours" | "theirs" | "mark-resolved"): Promise<void> {
             logger.info("Resolving conflict", { filepath, resolution });
 
+            // Conflict resolution stages the file at the end, so the staging
+            // guard applies here too — otherwise /api/git/resolve-conflict
+            // (mark-resolved needs no actual conflict) bypasses it.
+            if (isProtectedFromStaging(filepath)) {
+                throw new Error(`Refusing to stage protected file: ${filepath}`);
+            }
+
             if (resolution === "mark-resolved") {
                 // Just stage the file as-is (user has manually resolved)
                 await git.add({ fs, dir, filepath });
