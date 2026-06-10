@@ -15,7 +15,7 @@ import {
 } from "./storage";
 import { ChannelManager } from "./channel-manager";
 import { GatewayHttpError } from "./errors";
-import { evaluateTelegramSendPolicy, isAllowlisted, redactGatewayEvent } from "./security";
+import { allowlistMatchType, evaluateTelegramSendPolicy, redactGatewayEvent } from "./security";
 import { generateTelegramReply } from "./ai";
 import { listAppThreadMessages, listAppThreads } from "./app-sessions";
 import type {
@@ -365,12 +365,30 @@ class GatewayService {
 
     // Drop non-allowlisted senders at ingestion: nothing is persisted or
     // emitted for them, so strangers cannot fill storage or surface in the UI.
-    if (!isAllowlisted(message.chatId, message.username, settings.telegram.allowlist)) {
+    const allowlistMatch = allowlistMatchType(message.chatId, message.username, settings.telegram.allowlist);
+    if (!allowlistMatch) {
       gatewayLogger.warn("Dropped Telegram message from non-allowlisted sender", {
         chatId: message.chatId,
         hasUsername: !!message.username,
       });
       return;
+    }
+
+    // Username-only matches are weaker: Telegram usernames can be released and
+    // re-registered by someone else. If this username was previously seen with
+    // a different chatId, treat the sender as an impostor and drop the message.
+    if (allowlistMatch === "username" && message.username) {
+      const knownThreads = await loadTelegramThreads();
+      const needle = message.username.toLowerCase();
+      const bound = knownThreads.find(
+        (t) => t.externalChatId && t.externalUsername?.toLowerCase() === needle,
+      );
+      if (bound && bound.externalChatId !== message.chatId) {
+        gatewayLogger.warn("Dropped Telegram message: allowlisted username arrived from a different chatId (possible username takeover)", {
+          chatId: message.chatId,
+        });
+        return;
+      }
     }
 
     const registry = new SessionRegistry(settings.telegram.timeZone);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { evaluateTelegramSendPolicy, isAllowlisted, redactGatewayEvent } from "./security";
+import { allowlistMatchType, evaluateTelegramSendPolicy, isAllowlisted, redactGatewayEvent } from "./security";
 import type { GatewayEvent } from "./types";
 
 describe("gateway security", () => {
@@ -7,6 +7,13 @@ describe("gateway security", () => {
     expect(isAllowlisted("123", undefined, ["123"])).toBe(true);
     expect(isAllowlisted("123", "Alice", ["@alice"])).toBe(true);
     expect(isAllowlisted("123", "Bob", ["@alice", "456"])).toBe(false);
+  });
+
+  it("reports whether the allowlist matched by chatId or username", () => {
+    expect(allowlistMatchType("123", "alice", ["123", "@alice"])).toBe("chatId");
+    expect(allowlistMatchType("123", "Alice", ["@alice"])).toBe("username");
+    expect(allowlistMatchType("123", "bob", ["@alice"])).toBe(null);
+    expect(allowlistMatchType("123", undefined, [])).toBe(null);
   });
 
   it("enforces telegram send policy", () => {

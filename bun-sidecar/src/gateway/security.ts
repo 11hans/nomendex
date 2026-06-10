@@ -1,7 +1,12 @@
 import type { GatewayEvent } from "./types";
 
-export function isAllowlisted(chatId: string, username: string | undefined, allowlist: string[]): boolean {
-  if (allowlist.length === 0) return false;
+export type AllowlistMatch = "chatId" | "username" | null;
+
+// chatId is the primary identity: Telegram usernames are mutable and can be
+// re-registered by a different account, so a username-only match is weaker
+// and callers should verify it against a previously seen chatId binding.
+export function allowlistMatchType(chatId: string, username: string | undefined, allowlist: string[]): AllowlistMatch {
+  if (allowlist.length === 0) return null;
   const normalized = new Set(
     allowlist
       .map((item) => item.trim().toLowerCase())
@@ -9,8 +14,14 @@ export function isAllowlisted(chatId: string, username: string | undefined, allo
       .map((item) => (item.startsWith("@") ? item.slice(1) : item)),
   );
 
+  if (normalized.has(chatId.toLowerCase())) return "chatId";
   const user = username?.toLowerCase();
-  return normalized.has(chatId.toLowerCase()) || (!!user && normalized.has(user));
+  if (user && normalized.has(user)) return "username";
+  return null;
+}
+
+export function isAllowlisted(chatId: string, username: string | undefined, allowlist: string[]): boolean {
+  return allowlistMatchType(chatId, username, allowlist) !== null;
 }
 
 export function evaluateTelegramSendPolicy(input: {
