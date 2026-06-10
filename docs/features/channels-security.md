@@ -15,6 +15,22 @@ All WebSocket upgrade requests (`/ws` and `/terminal/:id`) are checked via `isAl
 - Loopback server + loopback origin → allowed (local dev, different ports)
 - Everything else → rejected with `403 Forbidden`
 
+## Inbound ingestion allowlist
+
+Inbound Telegram messages from senders not on the allowlist are dropped at ingestion in `GatewayService.handleTelegramInbound` — nothing is persisted to `channels-messages.jsonl`, no thread is created, and no realtime event is emitted. With an empty allowlist all inbound messages are dropped (deny by default).
+
+## Polling retry policy
+
+`TelegramMonitor.runLoop` retries failed `getUpdates` polls with exponential backoff (1s base, doubling, 60s cap; reset on success). HTTP 4xx responses other than 429 (bad token, competing `getUpdates` consumer) are non-retryable: the monitor logs an error, reports it via `onError`, and stops instead of hammering the API.
+
+## Auto-reply rate limit
+
+AI auto-replies are limited to one per chat per 30 seconds (`AUTO_REPLY_MIN_INTERVAL_MS` in `src/gateway/service.ts`). Rate-limited inbound messages are still persisted and emitted; only the agent query + outbound send is skipped. Manual sends and explicit AI replies from the UI are not limited.
+
+## Git staging guard
+
+`src/lib/git.ts` refuses to stage `.nomendex/secrets.json` regardless of `.gitignore` state: `addAll()` silently skips it and `stageFile()` throws. This protects API keys even if the file was tracked before the ignore rules were written.
+
 ## Telegram send policy
 
 All outbound Telegram messages (manual and AI auto-reply) go through `evaluateTelegramSendPolicy()` in `src/gateway/security.ts`:
