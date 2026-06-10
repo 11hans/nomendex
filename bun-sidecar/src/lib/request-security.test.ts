@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   evaluateMutatingRequestPolicy,
+  isAllowedRequestHost,
   isAllowedWebSocketOrigin,
   isLoopbackHost,
   resolveServerHostname,
@@ -42,21 +43,29 @@ describe("request security", () => {
 
     const sameOriginJson = new Request(url, {
       method: "POST",
-      headers: { origin: "http://127.0.0.1:1234", "content-type": "application/json" },
+      headers: {
+        host: "127.0.0.1:1234",
+        origin: "http://127.0.0.1:1234",
+        "content-type": "application/json",
+      },
       body: "{}",
     });
     expect(evaluateMutatingRequestPolicy(sameOriginJson, "127.0.0.1")).toEqual({ allowed: true });
 
     const noOriginJson = new Request(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { host: "localhost:1234", "content-type": "application/json" },
       body: "{}",
     });
     expect(evaluateMutatingRequestPolicy(noOriginJson, "127.0.0.1")).toEqual({ allowed: true });
 
     const foreignOrigin = new Request(url, {
       method: "POST",
-      headers: { origin: "http://evil.example.com", "content-type": "application/json" },
+      headers: {
+        host: "127.0.0.1:1234",
+        origin: "http://evil.example.com",
+        "content-type": "application/json",
+      },
       body: "{}",
     });
     expect(evaluateMutatingRequestPolicy(foreignOrigin, "127.0.0.1")).toEqual({
@@ -66,13 +75,33 @@ describe("request security", () => {
 
     const simpleRequest = new Request(url, {
       method: "POST",
-      headers: { "content-type": "text/plain" },
+      headers: { host: "127.0.0.1:1234", "content-type": "text/plain" },
       body: "{}",
     });
     expect(evaluateMutatingRequestPolicy(simpleRequest, "127.0.0.1")).toEqual({
       allowed: false,
       reason: "content-type",
     });
+
+    const rebindHost = new Request(url, {
+      method: "POST",
+      headers: { host: "rebind.attacker.example:1234", "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(evaluateMutatingRequestPolicy(rebindHost, "127.0.0.1")).toEqual({
+      allowed: false,
+      reason: "host",
+    });
+  });
+
+  it("validates Host header against loopback when bound to loopback", () => {
+    expect(isAllowedRequestHost("127.0.0.1:1234", "127.0.0.1")).toBe(true);
+    expect(isAllowedRequestHost("localhost:1234", "127.0.0.1")).toBe(true);
+    expect(isAllowedRequestHost("[::1]:1234", "127.0.0.1")).toBe(true);
+    expect(isAllowedRequestHost("rebind.attacker.example:1234", "127.0.0.1")).toBe(false);
+    expect(isAllowedRequestHost(null, "127.0.0.1")).toBe(false);
+    // Explicit non-loopback bind opts out of the check
+    expect(isAllowedRequestHost("nas.local:1234", "0.0.0.0")).toBe(true);
   });
 });
 

@@ -3,7 +3,7 @@ import index from "./index.html";
 import { createServiceLogger, getLogFile, startupLog, markStartupComplete, isInStartupMode } from "./lib/logger";
 import { initializeWorkspaceServices } from "./services/workspace-init";
 import { appendFile } from "node:fs/promises";
-import { isAllowedWebSocketOrigin, resolveServerHostname } from "@/lib/request-security";
+import { isAllowedRequestHost, isAllowedWebSocketOrigin, resolveServerHostname } from "@/lib/request-security";
 import { baseDirRoute } from "./server-routes/base-dir";
 import { workspaceRoutes } from "./server-routes/workspace-routes";
 import { gitInstalledRoute, gitInitRoute, gitStatusRoute, gitSetupRemoteRoute, gitPullRoute, gitPushRoute, gitCommitRoute, gitFetchStatusRoute, gitFileDiffRoute, gitConflictsRoute, gitResolveConflictRoute, gitAbortMergeRoute, gitContinueMergeRoute, gitConflictContentRoute, gitStageRoute, gitUnstageRoute, gitStageAllRoute, gitUnstageAllRoute, gitStatusDetailedRoute, gitDiscardRoute } from "./server-routes/git-sync";
@@ -209,6 +209,13 @@ const server = serve<WSData>({
             GET: (req, server) => {
                 serverLogger.info("WebSocket upgrade request received at /ws", { url: req.url });
 
+                if (!isAllowedRequestHost(req.headers.get("host"), serverHostname)) {
+                    serverLogger.warn("Rejected WebSocket upgrade due to host policy", {
+                        host: req.headers.get("host"),
+                    });
+                    return new Response("Forbidden", { status: 403 });
+                }
+
                 if (!isAllowedWebSocketOrigin(req.url, req.headers.get("origin"), serverHostname)) {
                     serverLogger.warn("Rejected WebSocket upgrade due to origin policy", {
                         url: req.url,
@@ -239,6 +246,13 @@ const server = serve<WSData>({
                     url: req.url,
                     sessionId,
                 });
+
+                if (!isAllowedRequestHost(req.headers.get("host"), serverHostname)) {
+                    serverLogger.warn("Rejected terminal WebSocket upgrade due to host policy", {
+                        host: req.headers.get("host"),
+                    });
+                    return new Response("Forbidden", { status: 403 });
+                }
 
                 if (!isAllowedWebSocketOrigin(req.url, req.headers.get("origin"), serverHostname)) {
                     serverLogger.warn("Rejected terminal WebSocket upgrade due to origin policy", {

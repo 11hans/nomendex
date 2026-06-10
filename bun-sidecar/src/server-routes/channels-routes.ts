@@ -24,6 +24,12 @@ function rejectUntrustedMutation(req: Request): Response | null {
       { status: 415 },
     );
   }
+  if (policy.reason === "host") {
+    return Response.json(
+      { error: "Request host rejected", code: "FORBIDDEN_HOST" },
+      { status: 403 },
+    );
+  }
   return Response.json(
     { error: "Cross-origin request rejected", code: "FORBIDDEN_ORIGIN" },
     { status: 403 },
