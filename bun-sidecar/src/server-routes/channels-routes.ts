@@ -2,8 +2,33 @@ import { gatewayService } from "@/gateway/service";
 import { GatewayHttpError } from "@/gateway/errors";
 import { ChannelsSettingsPatchSchema, TelegramAiReplySchema, TelegramSendSchema } from "@/gateway/types";
 import { createServiceLogger } from "@/lib/logger";
+import { evaluateMutatingRequestPolicy } from "@/lib/request-security";
 
 const logger = createServiceLogger("CHANNELS-ROUTES");
+
+// CSRF guard: these routes send Telegram messages and trigger agent runs, so
+// browser requests from foreign origins (or without a JSON content type) are
+// rejected before the body is parsed.
+function rejectUntrustedMutation(req: Request): Response | null {
+  const policy = evaluateMutatingRequestPolicy(req);
+  if (policy.allowed) return null;
+
+  logger.warn("Rejected channels mutation request", {
+    path: new URL(req.url).pathname,
+    reason: policy.reason,
+  });
+
+  if (policy.reason === "content-type") {
+    return Response.json(
+      { error: "Content-Type must be application/json", code: "UNSUPPORTED_CONTENT_TYPE" },
+      { status: 415 },
+    );
+  }
+  return Response.json(
+    { error: "Cross-origin request rejected", code: "FORBIDDEN_ORIGIN" },
+    { status: 403 },
+  );
+}
 
 export const channelsRoutes = {
   "/api/channels/threads": {
@@ -48,6 +73,8 @@ export const channelsRoutes = {
 
   "/api/channels/telegram/send": {
     async POST(req: Request) {
+      const rejected = rejectUntrustedMutation(req);
+      if (rejected) return rejected;
       try {
         const body = await req.json();
         const parsed = TelegramSendSchema.parse(body);
@@ -75,6 +102,8 @@ export const channelsRoutes = {
 
   "/api/channels/telegram/ai-reply": {
     async POST(req: Request) {
+      const rejected = rejectUntrustedMutation(req);
+      if (rejected) return rejected;
       try {
         const body = await req.json();
         const parsed = TelegramAiReplySchema.parse(body);
@@ -110,6 +139,8 @@ export const channelsRoutes = {
     },
 
     async PUT(req: Request) {
+      const rejected = rejectUntrustedMutation(req);
+      if (rejected) return rejected;
       try {
         const body = await req.json();
         const parsed = ChannelsSettingsPatchSchema.parse(body);
