@@ -25,7 +25,10 @@
       "WebFetch(domain:www.raindrop.ai)",
       "WebFetch(domain:raindrop.ai)",
       "Bash(grep -n 'name: \"monthly\"\\\\|^  },$' /Users/honza/Code/nomendex/bun-sidecar/src/services/default-skills.ts)",
-      "Bash(awk -F: '/monthly/{seen=1; print \"start:\"$1; next} seen{print \"next_close:\"$1; exit}')"
+      "Bash(awk -F: '/monthly/{seen=1; print \"start:\"$1; next} seen{print \"next_close:\"$1; exit}')",
+      "Bash(cat)",
+      "Bash(git commit *)",
+      "mcp__raindrop__query_traces"
     ]
   }
 }
