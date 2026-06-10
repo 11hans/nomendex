@@ -178,7 +178,9 @@ export async function buildMcpServersFromConfig(mcpServerIds: string[]): Promise
         }
     }
 
-    runtimeLogger.info("Final MCP servers config", { mcpServers });
+    // Log only server IDs — the full config contains Authorization headers
+    // and expanded secret env values that must not land in plaintext logs.
+    runtimeLogger.info("Final MCP servers config", { serverIds: Object.keys(mcpServers) });
     return mcpServers;
 }
 
