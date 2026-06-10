@@ -312,6 +312,20 @@ class GatewayService {
       throw new GatewayHttpError(404, "TELEGRAM_THREAD_NOT_FOUND", "Telegram thread not found");
     }
 
+    // The send policy must be evaluated before the agent runs, not only inside
+    // sendTelegramMessage — a disabled channel or de-allowlisted sender must
+    // not be able to trigger an agent query (tokens + tool execution).
+    const policy = evaluateTelegramSendPolicy({
+      enabled: settings.telegram.enabled,
+      autoReplyEnabled: settings.telegram.autoReplyEnabled,
+      allowlist: settings.telegram.allowlist,
+      chatId: thread.externalChatId,
+      username: thread.externalUsername,
+    });
+    if (!policy.allowed) {
+      throw new GatewayHttpError(policy.status, policy.code, policy.message);
+    }
+
     const prompt = input.prompt?.trim() || await getLatestTelegramInboundText(input.threadId);
     if (!prompt) {
       throw new GatewayHttpError(400, "TELEGRAM_PROMPT_REQUIRED", "No prompt available for AI reply");
