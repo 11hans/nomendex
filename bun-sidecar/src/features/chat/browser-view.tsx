@@ -8,12 +8,8 @@ import { Search, MessageCircle, Plus, Trash2, Maximize2, Bot, UserRound, Chevron
 import { useCommandDialog } from "@/components/CommandDialogProvider";
 import { useTheme } from "@/hooks/useTheme";
 import { DeleteChatSessionDialog } from "./delete-chat-session-dialog";
-import { reconstructMessages, type SessionMetadata, type ChatMessage } from "./sessionUtils";
-
-type SessionWithSnippet = SessionMetadata & {
-    matchSnippet?: { before: string; match: string; after: string };
-    titleMatch?: boolean;
-};
+import { useChannelEvents } from "@/features/channels/useChannelEvents";
+import type { UnifiedMessage, UnifiedThread } from "@/features/channels/types";
 import { chatPluginSerial } from "./index";
 import {
     Message,
@@ -69,147 +65,171 @@ function highlightMatches(
     });
 }
 
-export default function ChatBrowserView({ tabId }: { tabId: string }) {
+function channelBadgeLabel(channel: UnifiedThread["channel"]): string {
+    return channel === "telegram" ? "Telegram" : "App";
+}
+
+function messageMetaLabel(message: UnifiedMessage, thread: UnifiedThread | null): string {
+    if (!thread || thread.channel === "app") {
+        return message.role === "user" ? "You" : "Agent";
+    }
+
+    return message.role === "user" ? (thread.externalUsername ? `@${thread.externalUsername}` : "Contact") : "You";
+}
+
+export default function ChatBrowserView({ tabId, initialChannel = "all" }: { tabId: string; initialChannel?: "all" | "app" | "telegram" }) {
     const { setTabName, addNewTab, setActiveTabId, getViewSelfPlacement, setSidebarTabId, activeTab } = useWorkspaceContext();
     const { currentTheme } = useTheme();
     const { openDialog } = useCommandDialog();
 
-    const [sessions, setSessions] = useState<SessionMetadata[]>([]);
-    const [filteredSessions, setFilteredSessions] = useState<SessionWithSnippet[]>([]);
-    const [isLoadingSessions, setIsLoadingSessions] = useState(true);
-    const [isSearching, setIsSearching] = useState(false);
+    const [channelFilter, setChannelFilter] = useState<"all" | "app" | "telegram">(initialChannel);
+    const [threads, setThreads] = useState<UnifiedThread[]>([]);
+    const [isLoadingThreads, setIsLoadingThreads] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedIndex, setSelectedIndex] = useState(0);
-    const [selectedSession, setSelectedSession] = useState<SessionWithSnippet | null>(null);
-    const [selectedMessages, setSelectedMessages] = useState<ChatMessage[]>([]);
+    const [selectedThread, setSelectedThread] = useState<UnifiedThread | null>(null);
+    const [selectedMessages, setSelectedMessages] = useState<UnifiedMessage[]>([]);
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
     const searchInputRef = useRef<HTMLInputElement>(null);
     const selectedRowRef = useRef<HTMLDivElement | null>(null);
+    const selectedThreadRef = useRef<UnifiedThread | null>(null);
     const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const placement = getViewSelfPlacement(tabId);
+
+    useEffect(() => {
+        selectedThreadRef.current = selectedThread;
+    }, [selectedThread]);
 
     // Set tab name
     useEffect(() => {
         setTabName(tabId, "Chat History");
     }, [tabId, setTabName]);
 
-    // Auto-focus search input when tab becomes active
-    // Refetch sessions and focus search when tab becomes active
+    const loadThreads = useCallback(async () => {
+        try {
+            setIsLoadingThreads(true);
+            const url = new URL("/api/channels/threads", window.location.origin);
+            url.searchParams.set("channel", channelFilter);
+            if (searchQuery.trim()) {
+                url.searchParams.set("query", searchQuery.trim());
+            }
+
+            const response = await fetch(`${url.pathname}${url.search}`);
+            const data = await response.json();
+            const loadedThreads: UnifiedThread[] = data.threads || [];
+
+            setThreads(loadedThreads);
+
+            if (loadedThreads.length === 0) {
+                setSelectedIndex(0);
+                setSelectedThread(null);
+                setSelectedMessages([]);
+                return;
+            }
+
+            const nextSelection = selectedThreadRef.current
+                ? loadedThreads.find((thread) => thread.id === selectedThreadRef.current?.id) || loadedThreads[0]
+                : loadedThreads[0];
+
+            setSelectedThread(nextSelection);
+            const nextIndex = loadedThreads.findIndex((thread) => thread.id === nextSelection.id);
+            setSelectedIndex(Math.max(nextIndex, 0));
+        } catch (error) {
+            console.error("[ChatBrowser] Failed to load threads:", error);
+            setThreads([]);
+            setSelectedThread(null);
+            setSelectedMessages([]);
+        } finally {
+            setIsLoadingThreads(false);
+        }
+    }, [channelFilter, searchQuery]);
+
+    // Refetch threads and focus search when tab becomes active
     useEffect(() => {
         if (activeTab?.id === tabId) {
-            loadSessions();
+            void loadThreads();
             requestAnimationFrame(() => {
                 searchInputRef.current?.focus();
             });
         }
-    }, [activeTab?.id, tabId]);
+    }, [activeTab?.id, tabId, loadThreads]);
 
-    // Load messages when session is selected
-    useEffect(() => {
-        if (selectedSession) {
-            loadSessionMessages(selectedSession.id);
-        } else {
-            setSelectedMessages([]);
-        }
-    }, [selectedSession]);
-
-    // Ensure selected item is visible
-    useEffect(() => {
-        selectedRowRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }, [selectedIndex]);
-
-    async function loadSessions() {
-        try {
-            setIsLoadingSessions(true);
-            const response = await fetch("/api/chat/sessions/list");
-            const data = await response.json();
-            const sessionList = data.sessions || [];
-            setSessions(sessionList);
-
-            // Select first session if available
-            if (sessionList.length > 0) {
-                setSelectedIndex(0);
-                setSelectedSession(sessionList[0]);
-            }
-        } catch (error) {
-            console.error("[ChatBrowser] Failed to load sessions:", error);
-        } finally {
-            setIsLoadingSessions(false);
-        }
-    }
-
-    async function loadSessionMessages(sessionId: string) {
-        try {
-            setIsLoadingMessages(true);
-            const response = await fetch(`/api/chat/sessions/history/${sessionId}`);
-            if (!response.ok) throw new Error("Failed to load messages");
-
-            const data = await response.json();
-            const sdkMessages = data.messages || [];
-            const uiMessages = reconstructMessages(sdkMessages);
-            setSelectedMessages(uiMessages);
-        } catch (error) {
-            console.error("[ChatBrowser] Failed to load messages:", error);
-            setSelectedMessages([]);
-        } finally {
-            setIsLoadingMessages(false);
-        }
-    }
-
-    // Search sessions with debouncing
+    // Debounce search / channel filter changes
     useEffect(() => {
         if (searchTimeoutRef.current) {
             clearTimeout(searchTimeoutRef.current);
         }
 
-        if (!searchQuery.trim()) {
-            // No search query - show all sessions
-            setFilteredSessions(sessions);
-            if (sessions.length > 0) {
-                setSelectedIndex(0);
-                setSelectedSession(sessions[0]);
-            }
-            return;
-        }
-
-        setIsSearching(true);
-        searchTimeoutRef.current = setTimeout(async () => {
-            try {
-                const response = await fetch("/api/chat/sessions/search", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ query: searchQuery }),
-                });
-                const data = await response.json();
-                const results = data.sessions || [];
-                setFilteredSessions(results);
-                if (results.length > 0) {
-                    setSelectedIndex(0);
-                    setSelectedSession(results[0]);
-                } else {
-                    setSelectedSession(null);
-                }
-            } catch (error) {
-                console.error("[ChatBrowser] Search failed:", error);
-            } finally {
-                setIsSearching(false);
-            }
-        }, 300);
+        searchTimeoutRef.current = setTimeout(() => {
+            void loadThreads();
+        }, 250);
 
         return () => {
             if (searchTimeoutRef.current) {
                 clearTimeout(searchTimeoutRef.current);
             }
         };
-    }, [searchQuery, sessions]);
+    }, [searchQuery, channelFilter, loadThreads]);
+
+    // Load messages for selected thread
+    useEffect(() => {
+        async function loadMessages() {
+            if (!selectedThread) {
+                setSelectedMessages([]);
+                return;
+            }
+
+            try {
+                setIsLoadingMessages(true);
+                const response = await fetch(`/api/channels/threads/${encodeURIComponent(selectedThread.id)}`);
+                if (!response.ok) throw new Error("Failed to load messages");
+                const data = await response.json();
+                setSelectedMessages(data.messages || []);
+            } catch (error) {
+                console.error("[ChatBrowser] Failed to load thread messages:", error);
+                setSelectedMessages([]);
+            } finally {
+                setIsLoadingMessages(false);
+            }
+        }
+
+        void loadMessages();
+    }, [selectedThread]);
+
+    // Refresh on realtime channel events
+    useChannelEvents((event) => {
+        if (
+            event.id === "channel.message.received"
+            || event.id === "channel.message.sent"
+            || event.id === "channel.thread.updated"
+            || event.id === "channel.backlog.drained"
+        ) {
+            void loadThreads();
+            if (selectedThread) {
+                void fetch(`/api/channels/threads/${encodeURIComponent(selectedThread.id)}`)
+                    .then((res) => res.json())
+                    .then((data) => setSelectedMessages(data.messages || []))
+                    .catch(() => undefined);
+            }
+        }
+    });
+
+    // Ensure selected item is visible
+    useEffect(() => {
+        selectedRowRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, [selectedIndex]);
 
     const handleOpenChat = useCallback(
-        async (sessionId: string) => {
+        async (thread: UnifiedThread) => {
+            const props = thread.channel === "app"
+                ? { sessionId: thread.sessionId, channel: "app" as const }
+                : { threadId: thread.id, channel: "telegram" as const };
+
             const newTab = await addNewTab({
                 pluginMeta: chatPluginSerial,
                 view: "chat",
-                props: { sessionId },
+                props,
                 preferExisting: true,
             });
             if (newTab) {
@@ -227,7 +247,7 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
         const newTab = await addNewTab({
             pluginMeta: chatPluginSerial,
             view: "chat",
-            props: {},
+            props: { channel: "app" },
         });
         if (newTab) {
             if (placement === "sidebar") {
@@ -238,31 +258,27 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
         }
     }, [addNewTab, setActiveTabId, placement, setSidebarTabId]);
 
-    const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+    const handleDeleteThread = (thread: UnifiedThread, e: React.MouseEvent) => {
         e.stopPropagation();
         e.preventDefault();
 
-        const handleSuccess = () => {
-            // Remove from local state
-            setSessions(prev => prev.filter(s => s.id !== sessionId));
-            setFilteredSessions(prev => prev.filter(s => s.id !== sessionId));
+        if (thread.channel !== "app" || !thread.sessionId) {
+            return;
+        }
 
-            // Update selection if needed
-            if (selectedSession?.id === sessionId) {
-                const remaining = filteredSessions.filter(s => s.id !== sessionId);
-                if (remaining.length > 0) {
-                    setSelectedIndex(0);
-                    setSelectedSession(remaining[0]);
-                } else {
-                    setSelectedSession(null);
-                }
+        const handleSuccess = () => {
+            const remaining = threads.filter((item) => item.id !== thread.id);
+            setThreads(remaining);
+            if (selectedThread?.id === thread.id) {
+                setSelectedThread(remaining[0] || null);
+                setSelectedIndex(0);
             }
         };
 
         openDialog({
             content: (
                 <DeleteChatSessionDialog
-                    sessionId={sessionId}
+                    sessionId={thread.sessionId}
                     onSuccess={handleSuccess}
                 />
             ),
@@ -271,21 +287,21 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
 
     // Keyboard navigation
     const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (filteredSessions.length === 0) return;
+        if (threads.length === 0) return;
 
         if (e.key === "ArrowDown") {
             e.preventDefault();
-            const newIndex = (selectedIndex + 1) % filteredSessions.length;
+            const newIndex = (selectedIndex + 1) % threads.length;
             setSelectedIndex(newIndex);
-            setSelectedSession(filteredSessions[newIndex] || null);
+            setSelectedThread(threads[newIndex] || null);
         } else if (e.key === "ArrowUp") {
             e.preventDefault();
-            const newIndex = (selectedIndex - 1 + filteredSessions.length) % filteredSessions.length;
+            const newIndex = (selectedIndex - 1 + threads.length) % threads.length;
             setSelectedIndex(newIndex);
-            setSelectedSession(filteredSessions[newIndex] || null);
-        } else if (e.key === "Enter" && selectedSession) {
+            setSelectedThread(threads[newIndex] || null);
+        } else if (e.key === "Enter" && selectedThread) {
             e.preventDefault();
-            handleOpenChat(selectedSession.id);
+            void handleOpenChat(selectedThread);
         } else if (e.key === "Escape") {
             if (searchQuery) {
                 setSearchQuery("");
@@ -296,7 +312,6 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
     };
 
     const styles = currentTheme.styles;
-    const visibleSessions = searchQuery.trim() ? filteredSessions.length : sessions.length;
 
     return (
         <div
@@ -304,7 +319,7 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
             style={{ backgroundColor: styles.surfacePrimary }}
         >
             <div className="flex-1 flex overflow-hidden min-h-0">
-                {/* Left Panel - Session List */}
+                {/* Left Panel - Thread List */}
                 <div
                     className="w-72 shrink-0 overflow-hidden border-r flex flex-col h-full min-h-0"
                     style={{
@@ -332,7 +347,7 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                     className="text-caption shrink-0"
                                     style={{ color: styles.contentTertiary }}
                                 >
-                                    ({visibleSessions})
+                                    ({threads.length})
                                 </span>
                             </div>
                             <div className="flex items-center gap-0.5 shrink-0">
@@ -346,6 +361,22 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                     <Plus className="h-4 w-4" />
                                 </Button>
                             </div>
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                            {(["all", "app", "telegram"] as const).map((channel) => (
+                                <button
+                                    key={channel}
+                                    onClick={() => setChannelFilter(channel)}
+                                    className="px-2.5 py-1 rounded text-xs transition-colors"
+                                    style={{
+                                        backgroundColor: channelFilter === channel ? styles.surfaceAccent : "transparent",
+                                        color: channelFilter === channel ? styles.contentPrimary : styles.contentSecondary,
+                                    }}
+                                >
+                                    {channel === "all" ? "All" : channel === "app" ? "App" : "Telegram"}
+                                </button>
+                            ))}
                         </div>
 
                         <div className="relative">
@@ -377,15 +408,11 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                     >
                         <div className="h-full overflow-y-auto overflow-x-hidden">
                             <div className="px-2 py-2 space-y-1.5">
-                                {isLoadingSessions ? (
+                                {isLoadingThreads ? (
                                     <div className="p-6 text-center" style={{ color: styles.contentSecondary }}>
                                         <p className="text-xs">Loading...</p>
                                     </div>
-                                ) : isSearching ? (
-                                    <div className="p-6 text-center" style={{ color: styles.contentSecondary }}>
-                                        <p className="text-xs">Searching...</p>
-                                    </div>
-                                ) : filteredSessions.length === 0 ? (
+                                ) : threads.length === 0 ? (
                                     <div className="p-6 text-center" style={{ color: styles.contentSecondary }}>
                                         {searchQuery ? (
                                             <p className="text-xs">No chats match "{searchQuery}"</p>
@@ -393,18 +420,20 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                             <div className="space-y-2">
                                                 <MessageCircle className="h-12 w-12 mx-auto" style={{ color: styles.contentTertiary }} />
                                                 <p className="text-xs">No chats yet</p>
-                                                <Button size="sm" className="h-7 px-2 text-xs" onClick={handleNewChat}>
-                                                    <Plus className="h-4 w-4 mr-1" /> Start a chat
-                                                </Button>
+                                                {channelFilter !== "telegram" && (
+                                                    <Button size="sm" className="h-7 px-2 text-xs" onClick={handleNewChat}>
+                                                        <Plus className="h-4 w-4 mr-1" /> Start a chat
+                                                    </Button>
+                                                )}
                                             </div>
                                         )}
                                     </div>
                                 ) : (
-                                    filteredSessions.map((session, index) => {
+                                    threads.map((thread, index) => {
                                         const isSelected = index === selectedIndex;
                                         return (
                                             <div
-                                                key={session.id}
+                                                key={thread.id}
                                                 ref={isSelected ? selectedRowRef : undefined}
                                                 className="group relative min-w-0 overflow-hidden rounded-lg border transition-colors"
                                                 style={{
@@ -413,12 +442,12 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                                 }}
                                                 onMouseEnter={() => {
                                                     setSelectedIndex(index);
-                                                    setSelectedSession(session);
+                                                    setSelectedThread(thread);
                                                 }}
                                             >
                                                 <button
                                                     className="w-full px-2.5 py-2 text-left"
-                                                    onClick={() => handleOpenChat(session.id)}
+                                                    onClick={() => void handleOpenChat(thread)}
                                                     style={{
                                                         backgroundColor: isSelected ? styles.surfaceAccent : "transparent",
                                                     }}
@@ -428,43 +457,44 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                                             className="truncate text-xs font-medium"
                                                             style={{ color: styles.contentPrimary }}
                                                         >
-                                                            {session.title}
+                                                            {thread.title}
                                                         </span>
-                                                        <span
-                                                            className="ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:text-red-500"
+                                                        {channelFilter === "all" && (
+                                                            <span className="text-[9px] uppercase shrink-0" style={{ color: styles.contentTertiary }}>
+                                                                {channelBadgeLabel(thread.channel)}
+                                                            </span>
+                                                        )}
+                                                        {thread.channel === "app" && thread.sessionId && (
+                                                            <span
+                                                                className="ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:text-red-500"
+                                                                style={{ color: styles.contentTertiary }}
+                                                                onClick={(e) => {
+                                                                    handleDeleteThread(thread, e);
+                                                                }}
+                                                            >
+                                                                <Trash2 className="h-3 w-3" />
+                                                            </span>
+                                                        )}
+                                                        <ChevronRight
+                                                            className={thread.channel === "app" && thread.sessionId
+                                                                ? "size-3 opacity-60 shrink-0"
+                                                                : "ml-auto size-3 opacity-60 shrink-0"
+                                                            }
                                                             style={{ color: styles.contentTertiary }}
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                e.preventDefault();
-                                                                handleDeleteSession(session.id, e);
-                                                            }}
-                                                        >
-                                                            <Trash2 className="h-3 w-3" />
-                                                        </span>
-                                                        <ChevronRight className="size-3 opacity-60 shrink-0" style={{ color: styles.contentTertiary }} />
+                                                        />
                                                     </div>
                                                     <div
                                                         className="mt-0.5 text-caption truncate"
                                                         style={{ color: styles.contentTertiary }}
                                                     >
-                                                        {formatRelativeTime(session.updatedAt)} • {session.messageCount} messages
+                                                        {formatRelativeTime(thread.updatedAt)} • {thread.messageCount} messages
                                                     </div>
-                                                    {session.matchSnippet && (
+                                                    {!!thread.preview && (
                                                         <div
                                                             className="mt-1 text-caption line-clamp-1"
                                                             style={{ color: styles.contentSecondary }}
                                                         >
-                                                            {session.matchSnippet.before}
-                                                            <span
-                                                                className="font-semibold rounded px-0.5"
-                                                                style={{
-                                                                    backgroundColor: styles.contentAccent + "30",
-                                                                    color: styles.contentPrimary,
-                                                                }}
-                                                            >
-                                                                {session.matchSnippet.match}
-                                                            </span>
-                                                            {session.matchSnippet.after}
+                                                            {highlightMatches(thread.preview, searchQuery, styles.contentAccent)}
                                                         </div>
                                                     )}
                                                 </button>
@@ -482,7 +512,7 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                     className="flex-1 flex flex-col overflow-hidden relative min-w-0"
                     style={{ backgroundColor: styles.surfacePrimary }}
                 >
-                    {selectedSession ? (
+                    {selectedThread ? (
                         <>
                             <div
                                 className="shrink-0 px-4 py-2.5 border-b"
@@ -504,14 +534,14 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                             className="text-caption shrink-0"
                                             style={{ color: styles.contentTertiary }}
                                         >
-                                            ({selectedSession.messageCount})
+                                            ({selectedThread.messageCount})
                                         </span>
                                     </div>
                                     <Button
                                         variant="ghost"
                                         size="icon"
                                         className="h-7 w-7"
-                                        onClick={() => handleOpenChat(selectedSession.id)}
+                                        onClick={() => void handleOpenChat(selectedThread)}
                                         title="Open chat in new tab"
                                     >
                                         <Maximize2 className="h-4 w-4" />
@@ -549,55 +579,25 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                                     >
                                                         {message.role === "user" ? (
                                                             <>
-                                                                <span>You</span>
+                                                                <span>{messageMetaLabel(message, selectedThread)}</span>
                                                                 <UserRound className="h-3.5 w-3.5" />
                                                             </>
                                                         ) : (
                                                             <>
                                                                 <Bot className="h-3.5 w-3.5" />
-                                                                <span>Agent</span>
+                                                                <span>{messageMetaLabel(message, selectedThread)}</span>
                                                             </>
                                                         )}
                                                     </div>
 
                                                     <MessageContent>
-                                                        {message.blocks.map((block) => {
-                                                            if (block.type === "text") {
-                                                                if (searchQuery.trim()) {
-                                                                    return (
-                                                                        <div key={block.id} className="whitespace-pre-wrap break-words overflow-hidden">
-                                                                            {highlightMatches(
-                                                                                block.content,
-                                                                                searchQuery,
-                                                                                styles.contentAccent
-                                                                            )}
-                                                                        </div>
-                                                                    );
-                                                                }
-                                                                return (
-                                                                    <MessageResponse key={block.id}>
-                                                                        {block.content}
-                                                                    </MessageResponse>
-                                                                );
-                                                            }
-
-                                                            if (block.type === "tool") {
-                                                                return (
-                                                                    <div
-                                                                        key={block.id}
-                                                                        className="rounded px-2 py-1 text-xs"
-                                                                        style={{
-                                                                            backgroundColor: styles.surfacePrimary,
-                                                                            color: styles.contentSecondary,
-                                                                        }}
-                                                                    >
-                                                                        Tool: {block.toolCall.name}
-                                                                    </div>
-                                                                );
-                                                            }
-
-                                                            return null;
-                                                        })}
+                                                        {searchQuery.trim() ? (
+                                                            <div className="whitespace-pre-wrap break-words overflow-hidden">
+                                                                {highlightMatches(message.text, searchQuery, styles.contentAccent)}
+                                                            </div>
+                                                        ) : (
+                                                            <MessageResponse>{message.text}</MessageResponse>
+                                                        )}
                                                     </MessageContent>
                                                 </div>
                                             </Message>
@@ -606,7 +606,7 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                 </ScrollArea>
                             )}
                         </>
-                    ) : !isLoadingSessions && sessions.length > 0 ? (
+                    ) : !isLoadingThreads && threads.length > 0 ? (
                         <div className="flex-1 flex items-center justify-center p-6">
                             <div className="text-center space-y-2">
                                 <MessageCircle
@@ -618,16 +618,18 @@ export default function ChatBrowserView({ tabId }: { tabId: string }) {
                                 </p>
                             </div>
                         </div>
-                    ) : !isLoadingSessions ? (
+                    ) : !isLoadingThreads ? (
                         <div className="flex-1 flex items-center justify-center p-6">
                             <div className="text-center space-y-3">
                                 <MessageCircle className="h-12 w-12 mx-auto" style={{ color: styles.contentTertiary }} />
                                 <p className="text-xs" style={{ color: styles.contentSecondary }}>
                                     No chats yet
                                 </p>
-                                <Button className="h-7 px-2 text-xs" onClick={handleNewChat}>
-                                    <Plus className="h-4 w-4 mr-1" /> Start a chat
-                                </Button>
+                                {channelFilter !== "telegram" && (
+                                    <Button className="h-7 px-2 text-xs" onClick={handleNewChat}>
+                                        <Plus className="h-4 w-4 mr-1" /> Start a chat
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     ) : null}

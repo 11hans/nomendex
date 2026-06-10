@@ -1,6 +1,7 @@
 import { globalConfig, type GlobalConfig, type WorkspaceInfo } from "@/storage/global-config";
 import { Result, ErrorCodes } from "../types/Result";
 import { initializeWorkspaceServices } from "@/services/workspace-init";
+import { gatewayService } from "@/gateway/service";
 import { getRootPath, hasActiveWorkspace } from "@/storage/root-path";
 
 export const workspacesRoutes = {
@@ -69,6 +70,7 @@ export const workspacesRoutes = {
 
                 // Reinitialize all workspace-dependent services
                 await initializeWorkspaceServices();
+                await gatewayService.reinitialize();
 
                 const response: Result<{ requiresReload: boolean }> = {
                     success: true,
@@ -107,6 +109,7 @@ export const workspacesRoutes = {
 
                 // Reinitialize all workspace-dependent services for the new workspace
                 await initializeWorkspaceServices();
+                await gatewayService.reinitialize();
 
                 const response: Result<WorkspaceInfo> = {
                     success: true,

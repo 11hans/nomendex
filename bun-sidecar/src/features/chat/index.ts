@@ -91,6 +91,9 @@ const views = {
         id: "browser",
         name: "Chat Browser",
         component: ChatBrowserView,
+        propsSchema: z.object({
+            initialChannel: z.enum(["all", "app", "telegram"]).optional(),
+        }),
     },
     chat: {
         id: "chat",
@@ -99,6 +102,8 @@ const views = {
         propsSchema: z.object({
             sessionId: z.string().optional(),
             initialPrompt: z.string().optional(),
+            threadId: z.string().optional(),
+            channel: z.enum(["app", "telegram"]).optional(),
         }),
     },
 } as const;

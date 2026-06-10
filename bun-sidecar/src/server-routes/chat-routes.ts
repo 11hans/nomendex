@@ -3,11 +3,10 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { getRootPath, getNomendexPath, getUploadsPath, getNotesPath } from "@/storage/root-path";
 import { getAgent, getPreferences, savePreferences, addAllowedTool, getAgentAllowedTools } from "@/features/agents/fx";
-import { DEFAULT_AGENT, MCP_REGISTRY, getAgentEffectivePromptSource } from "@/features/agents/index";
-import { listUserMcpServers, expandEnvVars } from "@/features/mcp-servers/fx";
+import { DEFAULT_AGENT, getAgentEffectivePromptSource } from "@/features/agents/index";
 import type { AgentConfig } from "@/features/agents/index";
 import { createServiceLogger } from "@/lib/logger";
-import { secrets } from "@/lib/secrets";
+import { buildAgentContext, buildMcpServersFromConfig } from "@/lib/agent-runtime";
 import { getRaindropQuery, getRaindropUserId, eventMetadata } from "@/lib/raindrop-client";
 import { uiRendererServer } from "@/mcp-servers/ui-renderer";
 import { acquireFileLock, getActiveNoteFileNameForPath, releaseFileLockForToolUse } from "@/services/file-locks";
@@ -57,46 +56,6 @@ async function readImageAsBase64(imageUrl: string): Promise<{ data: string; medi
     }
 }
 
-// Build context information for the agent's system prompt
-function buildAgentContext(workspaceFolder: string): string {
-    const now = new Date();
-    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    const dayOfWeek = dayNames[now.getDay()];
-    const dateStr = now.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-    });
-    const serverPort = parseInt(process.env.PORT || "1234", 10);
-    const apiBaseUrl = `http://localhost:${serverPort}`;
-
-    return `<agent-context>
-Today is ${dayOfWeek}, ${dateStr}.
-You are working in the folder: ${workspaceFolder}
-The Nomendex API server is running at: ${apiBaseUrl} (use this base URL for all /api/* calls — do not assume a default port).
-
-## AskUserQuestion tool
-You have access to the AskUserQuestion tool which presents the user with multiple-choice questions in a clickable UI. Use it instead of plain-text questions whenever the user needs to choose between 2-4 concrete options. This is much faster for the user than typing an answer.
-
-When to use:
-- Clarifying ambiguous instructions (e.g. "which approach?", "which file?")
-- Gathering preferences or configuration choices
-- Offering implementation alternatives before starting work
-- Any decision point where you can enumerate the reasonable options
-
-When NOT to use:
-- Questions that require a free-form, detailed answer
-- Simple yes/no confirmations (just ask in text)
-- When there is only one reasonable path forward
-
-Tips:
-- Put the recommended option first and append "(Recommended)" to its label
-- Use multiSelect: true only when choices are genuinely non-exclusive
-- Keep option labels short (1-5 words); put detail in the description field
-- The user always has an "Other" option to type a custom answer
-</agent-context>`;
-}
-
 // Session management types
 type SessionMetadata = {
     id: string;
@@ -107,139 +66,6 @@ type SessionMetadata = {
     agentId?: string; // Which agent config was used for this session
     dailyDate?: string; // YYYY-MM-DD when session is bound to a Today tab
 };
-
-// Map of MCP server IDs to their secret key names
-const MCP_SERVER_SECRETS: Record<string, string> = {
-    "linear": "LINEAR_OAUTH_TOKEN",
-};
-
-// Build MCP servers from agent config - supports stdio, sse, and http transports
-// Checks user-defined servers first, then falls back to built-in registry
-async function buildMcpServersFromConfig(mcpServerIds: string[]): Promise<Record<string, McpServerConfig>> {
-    chatLogger.info("Building MCP servers", { serverIds: mcpServerIds });
-    const mcpServers: Record<string, McpServerConfig> = {};
-
-    // Load user-defined servers
-    const userServers = await listUserMcpServers();
-    chatLogger.info("User-defined MCP servers loaded", { count: userServers.length });
-
-    for (const serverId of mcpServerIds) {
-        // First, check user-defined servers
-        const userServer = userServers.find((s) => s.id === serverId);
-
-        if (userServer) {
-            // Build config from user-defined server with environment variable expansion
-            const transport = userServer.transport;
-
-            if ("type" in transport && transport.type === "sse") {
-                const config: McpServerConfig = {
-                    type: "sse",
-                    url: await expandEnvVars(transport.url),
-                };
-                if (transport.headers) {
-                    config.headers = {};
-                    for (const [key, value] of Object.entries(transport.headers)) {
-                        config.headers[key] = await expandEnvVars(value);
-                    }
-                }
-                mcpServers[serverId] = config;
-                chatLogger.info(`MCP server added (user-defined SSE): ${serverId}`, { url: config.url });
-            } else if ("type" in transport && transport.type === "http") {
-                const config: McpServerConfig = {
-                    type: "http",
-                    url: await expandEnvVars(transport.url),
-                };
-                if (transport.headers) {
-                    config.headers = {};
-                    for (const [key, value] of Object.entries(transport.headers)) {
-                        config.headers[key] = await expandEnvVars(value);
-                    }
-                }
-                mcpServers[serverId] = config;
-                chatLogger.info(`MCP server added (user-defined HTTP): ${serverId}`, { url: config.url });
-            } else if ("command" in transport) {
-                // stdio transport
-                const config: McpServerConfig = {
-                    command: await expandEnvVars(transport.command),
-                    args: await Promise.all(transport.args.map((arg) => expandEnvVars(arg))),
-                };
-                if (transport.env) {
-                    config.env = {};
-                    for (const [key, value] of Object.entries(transport.env)) {
-                        config.env[key] = await expandEnvVars(value);
-                    }
-                }
-                mcpServers[serverId] = config;
-                chatLogger.info(`MCP server added (user-defined stdio): ${serverId}`, { command: config.command });
-            }
-            continue;
-        }
-
-        // Fall back to built-in registry
-        const serverDef = MCP_REGISTRY.find((s) => s.id === serverId);
-        chatLogger.info(`MCP server lookup in registry: ${serverId}`, { found: !!serverDef });
-
-        if (serverDef) {
-            const sourceConfig = serverDef.config;
-
-            // Check if this server needs an OAuth token from secrets
-            const secretKey = MCP_SERVER_SECRETS[serverId];
-            let authToken: string | undefined;
-            if (secretKey) {
-                authToken = await secrets.get(secretKey);
-                chatLogger.info(`MCP server auth: ${serverId}`, { hasToken: !!authToken });
-            }
-
-            // Handle different transport types
-            if ("type" in sourceConfig && sourceConfig.type === "sse") {
-                // SSE transport - no subprocess needed
-                const config: McpServerConfig = {
-                    type: "sse",
-                    url: sourceConfig.url,
-                };
-                // Merge headers from config and add auth token if available
-                const headers: Record<string, string> = { ...sourceConfig.headers };
-                if (authToken) {
-                    headers["Authorization"] = `Bearer ${authToken}`;
-                }
-                if (Object.keys(headers).length > 0) {
-                    config.headers = headers;
-                }
-                mcpServers[serverId] = config;
-                chatLogger.info(`MCP server added (registry SSE): ${serverId}`, { url: sourceConfig.url, hasAuth: !!authToken });
-            } else if ("type" in sourceConfig && sourceConfig.type === "http") {
-                // HTTP transport
-                const config: McpServerConfig = {
-                    type: "http",
-                    url: sourceConfig.url,
-                };
-                const headers: Record<string, string> = { ...sourceConfig.headers };
-                if (authToken) {
-                    headers["Authorization"] = `Bearer ${authToken}`;
-                }
-                if (Object.keys(headers).length > 0) {
-                    config.headers = headers;
-                }
-                mcpServers[serverId] = config;
-                chatLogger.info(`MCP server added (registry HTTP): ${serverId}`, { url: sourceConfig.url, hasAuth: !!authToken });
-            } else if ("command" in sourceConfig) {
-                // stdio transport (default)
-                const config: McpServerConfig = {
-                    command: sourceConfig.command,
-                    args: sourceConfig.args,
-                };
-                if (sourceConfig.env) {
-                    config.env = sourceConfig.env;
-                }
-                mcpServers[serverId] = config;
-                chatLogger.info(`MCP server added (registry stdio): ${serverId}`, { command: sourceConfig.command });
-            }
-        }
-    }
-
-    chatLogger.info("Final MCP servers config", { mcpServers });
-    return mcpServers;
-}
 
 // Permission handling types
 type PermissionDecision = "allow" | "deny";

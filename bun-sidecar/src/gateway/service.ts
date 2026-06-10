@@ -1,0 +1,420 @@
+import { createServiceLogger } from "@/lib/logger";
+import { secrets } from "@/lib/secrets";
+import { SessionRegistry } from "./session-registry";
+import {
+  appendTelegramMessage,
+  findTelegramThread,
+  getLatestTelegramInboundText,
+  listTelegramMessages,
+  loadChannelsSettings,
+  loadTelegramState,
+  loadTelegramThreads,
+  saveChannelsSettings,
+  saveTelegramState,
+  upsertTelegramThread,
+} from "./storage";
+import { ChannelManager } from "./channel-manager";
+import { GatewayHttpError } from "./errors";
+import { evaluateTelegramSendPolicy, redactGatewayEvent } from "./security";
+import { generateTelegramReply } from "./ai";
+import { listAppThreadMessages, listAppThreads } from "./app-sessions";
+import type {
+  ChannelStatus,
+  ChannelsDebugStatus,
+  ChannelsSettings,
+  ChannelsSettingsPatch,
+  GatewayEvent,
+  PublicChannelsSettings,
+  TelegramInboundMessage,
+  UnifiedMessage,
+  UnifiedThread,
+} from "./types";
+
+const gatewayLogger = createServiceLogger("GATEWAY");
+
+type ThreadFilter = {
+  channel?: "all" | "app" | "telegram";
+  query?: string;
+};
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function randomId(prefix: string): string {
+  return `${prefix}-${crypto.randomUUID()}`;
+}
+
+function threadMatchesQuery(thread: UnifiedThread, query: string): boolean {
+  const needle = query.toLowerCase();
+  return (
+    thread.title.toLowerCase().includes(needle)
+    || (thread.preview || "").toLowerCase().includes(needle)
+    || (thread.externalChatId || "").toLowerCase().includes(needle)
+    || (thread.externalUsername || "").toLowerCase().includes(needle)
+  );
+}
+
+class GatewayService {
+  private initialized = false;
+  private readonly subscribers = new Set<(event: GatewayEvent) => void>();
+  private pendingBacklogCount = 0;
+
+  private readonly channelManager = new ChannelManager({
+    getSettings: async () => loadChannelsSettings(),
+    getLastUpdateId: async () => (await loadTelegramState()).lastUpdateId,
+    setLastUpdateId: async (updateId) => saveTelegramState({ lastUpdateId: updateId }),
+    onTelegramMessage: async (message) => this.handleTelegramInbound(message),
+    onStatusChange: (status) => {
+      this.emit({
+        id: "channel.status.changed",
+        payload: { status },
+      });
+    },
+  });
+
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+    await this.channelManager.start();
+    this.initialized = true;
+  }
+
+  async reinitialize(): Promise<void> {
+    await this.channelManager.reload();
+    this.initialized = true;
+  }
+
+  subscribe(handler: (event: GatewayEvent) => void): () => void {
+    this.subscribers.add(handler);
+
+    if (this.pendingBacklogCount > 0) {
+      handler({
+        id: "channel.backlog.drained",
+        payload: { count: this.pendingBacklogCount },
+      });
+      this.pendingBacklogCount = 0;
+    }
+
+    return () => {
+      this.subscribers.delete(handler);
+    };
+  }
+
+  getStatus(): ChannelStatus {
+    return this.channelManager.getStatus();
+  }
+
+  async getDebugStatus(): Promise<ChannelsDebugStatus> {
+    const settings = await loadChannelsSettings();
+    const telegramState = await loadTelegramState();
+    const token = await secrets.get(settings.telegram.tokenSecretKey);
+    const claudeRaw = await secrets.get("CLAUDE_CODE_OAUTH_TOKEN");
+    const claudeTrimmed = claudeRaw?.trim() || "";
+    const threads = await loadTelegramThreads();
+    return {
+      status: this.getStatus(),
+      telegram: {
+        enabled: settings.telegram.enabled,
+        hasToken: !!token,
+        autoReplyEnabled: settings.telegram.autoReplyEnabled,
+        allowlistSize: settings.telegram.allowlist.length,
+        timeZone: settings.telegram.timeZone,
+        pollingTimeoutSec: settings.telegram.pollingTimeoutSec,
+        lastUpdateId: telegramState.lastUpdateId,
+        telegramThreadCount: threads.length,
+      },
+      ai: {
+        hasClaudeOauthToken: !!claudeTrimmed,
+      },
+    };
+  }
+
+  async getSettings(): Promise<PublicChannelsSettings> {
+    const settings = await loadChannelsSettings();
+    const token = await secrets.get(settings.telegram.tokenSecretKey);
+    const { tokenSecretKey: _tokenKey, ...publicTelegram } = settings.telegram;
+    return {
+      telegram: {
+        ...publicTelegram,
+        hasToken: !!token,
+      },
+    };
+  }
+
+  async updateSettings(patch: ChannelsSettingsPatch): Promise<PublicChannelsSettings> {
+    const current = await loadChannelsSettings();
+    const next: ChannelsSettings = {
+      telegram: {
+        ...current.telegram,
+        ...(patch.telegram || {}),
+        allowlist: Array.isArray(patch.telegram?.allowlist)
+          ? patch.telegram.allowlist
+          : current.telegram.allowlist,
+      },
+    };
+
+    await saveChannelsSettings(next);
+    await this.channelManager.reload();
+    return this.getSettings();
+  }
+
+  async listThreads(filter: ThreadFilter = {}): Promise<UnifiedThread[]> {
+    const channel = filter.channel || "all";
+    const query = filter.query?.trim();
+
+    const threads: UnifiedThread[] = [];
+
+    if (channel === "all" || channel === "app") {
+      const appThreads = await listAppThreads(query);
+      threads.push(...appThreads);
+    }
+
+    if (channel === "all" || channel === "telegram") {
+      const telegramThreads = await loadTelegramThreads();
+      if (!query) {
+        threads.push(...telegramThreads);
+      } else {
+        const matched: UnifiedThread[] = [];
+        for (const thread of telegramThreads) {
+          if (threadMatchesQuery(thread, query)) {
+            matched.push(thread);
+            continue;
+          }
+
+          const messages = await listTelegramMessages(thread.id);
+          const hasTextMatch = messages.some((message) => message.text.toLowerCase().includes(query.toLowerCase()));
+          if (hasTextMatch) matched.push(thread);
+        }
+        threads.push(...matched);
+      }
+    }
+
+    return threads.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  }
+
+  async getThreadMessages(threadId: string): Promise<UnifiedMessage[]> {
+    if (threadId.startsWith("app:")) {
+      return listAppThreadMessages(threadId);
+    }
+
+    return listTelegramMessages(threadId);
+  }
+
+  async sendTelegramMessage(input: {
+    threadId?: string;
+    chatId?: string;
+    text: string;
+    source: "manual" | "ai";
+  }): Promise<UnifiedMessage> {
+    const text = input.text.trim();
+    if (!text) {
+      throw new GatewayHttpError(400, "TELEGRAM_TEXT_REQUIRED", "Message text is required");
+    }
+
+    let thread: UnifiedThread | null = null;
+    if (input.threadId) {
+      thread = await findTelegramThread(input.threadId);
+      if (!thread) {
+        throw new GatewayHttpError(404, "TELEGRAM_THREAD_NOT_FOUND", "Telegram thread not found");
+      }
+    }
+
+    const inputChatId = input.chatId?.trim();
+    if (thread?.externalChatId && inputChatId && thread.externalChatId !== inputChatId) {
+      throw new GatewayHttpError(
+        409,
+        "TELEGRAM_THREAD_CHAT_MISMATCH",
+        "Provided chatId does not match the selected Telegram thread",
+      );
+    }
+
+    const chatId = inputChatId || thread?.externalChatId;
+
+    if (!chatId) {
+      throw new GatewayHttpError(400, "TELEGRAM_CHAT_REQUIRED", "chatId is required");
+    }
+
+    const settings = await loadChannelsSettings();
+    const policy = evaluateTelegramSendPolicy({
+      enabled: settings.telegram.enabled,
+      autoReplyEnabled: settings.telegram.autoReplyEnabled,
+      allowlist: settings.telegram.allowlist,
+      chatId,
+      username: thread?.externalUsername,
+    });
+    if (!policy.allowed) {
+      throw new GatewayHttpError(policy.status, policy.code, policy.message);
+    }
+
+    const sendResult = await this.channelManager.sendTelegram(chatId, text);
+
+    if (!thread) {
+      const registry = new SessionRegistry(settings.telegram.timeZone);
+      const threadId = registry.telegramDmKey(chatId);
+      thread = {
+        id: threadId,
+        channel: "telegram",
+        title: `DM ${chatId}`,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        messageCount: 0,
+        externalChatId: chatId,
+      };
+    }
+
+    const message: UnifiedMessage = {
+      id: randomId("telegram-out"),
+      threadId: thread.id,
+      channel: "telegram",
+      role: "assistant",
+      text,
+      createdAt: nowIso(),
+      source: "telegram",
+      direction: "outbound",
+      externalMessageId: sendResult.messageId,
+      externalChatId: chatId,
+    };
+
+    await appendTelegramMessage(message);
+
+    const updatedThread: UnifiedThread = {
+      ...thread,
+      updatedAt: message.createdAt,
+      messageCount: thread.messageCount + 1,
+      preview: text.slice(0, 200),
+      externalChatId: chatId,
+    };
+
+    await upsertTelegramThread(updatedThread);
+
+    this.emit({
+      id: "channel.message.sent",
+      payload: { threadId: updatedThread.id, message },
+    });
+    this.emit({
+      id: "channel.thread.updated",
+      payload: { thread: updatedThread },
+    });
+
+    return message;
+  }
+
+  async aiReplyTelegram(input: { threadId: string; prompt?: string }): Promise<{ text: string; fallbackUsed: boolean }> {
+    const settings = await loadChannelsSettings();
+    const thread = await findTelegramThread(input.threadId);
+    if (!thread || !thread.externalChatId) {
+      throw new GatewayHttpError(404, "TELEGRAM_THREAD_NOT_FOUND", "Telegram thread not found");
+    }
+
+    const prompt = input.prompt?.trim() || await getLatestTelegramInboundText(input.threadId);
+    if (!prompt) {
+      throw new GatewayHttpError(400, "TELEGRAM_PROMPT_REQUIRED", "No prompt available for AI reply");
+    }
+
+    let replyText = "";
+    let fallbackUsed = false;
+
+    try {
+      replyText = await generateTelegramReply(prompt, settings.telegram.telegramAgentId);
+      if (!replyText.trim()) {
+        fallbackUsed = true;
+        replyText = settings.telegram.fallbackText;
+      }
+    } catch (error) {
+      gatewayLogger.error("Telegram AI reply failed", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      fallbackUsed = true;
+      replyText = settings.telegram.fallbackText;
+    }
+
+    await this.sendTelegramMessage({
+      threadId: input.threadId,
+      text: replyText,
+      source: "ai",
+    });
+
+    return {
+      text: replyText,
+      fallbackUsed,
+    };
+  }
+
+  private async handleTelegramInbound(message: TelegramInboundMessage): Promise<void> {
+    const settings = await loadChannelsSettings();
+
+    const registry = new SessionRegistry(settings.telegram.timeZone);
+    const threadId = registry.telegramDmKey(message.chatId, new Date(message.timestampMs));
+
+    const existing = await findTelegramThread(threadId);
+    const thread: UnifiedThread = {
+      id: threadId,
+      channel: "telegram",
+      title: message.username ? `@${message.username}` : `DM ${message.chatId}`,
+      createdAt: existing?.createdAt || nowIso(),
+      updatedAt: new Date(message.timestampMs).toISOString(),
+      messageCount: (existing?.messageCount || 0) + 1,
+      preview: message.text.slice(0, 200),
+      externalChatId: message.chatId,
+      externalUsername: message.username,
+    };
+
+    const unifiedMessage: UnifiedMessage = {
+      id: randomId("telegram-in"),
+      threadId,
+      channel: "telegram",
+      role: "user",
+      text: message.text,
+      createdAt: new Date(message.timestampMs).toISOString(),
+      source: "telegram",
+      direction: "inbound",
+      externalMessageId: message.messageId,
+      externalChatId: message.chatId,
+    };
+
+    await appendTelegramMessage(unifiedMessage);
+    await upsertTelegramThread(thread);
+
+    this.emit({
+      id: "channel.message.received",
+      payload: {
+        threadId,
+        message: unifiedMessage,
+      },
+    });
+    this.emit({
+      id: "channel.thread.updated",
+      payload: {
+        thread,
+      },
+    });
+
+    const shouldAutoReply = settings.telegram.autoReplyEnabled
+      && evaluateTelegramSendPolicy({
+        enabled: settings.telegram.enabled,
+        autoReplyEnabled: settings.telegram.autoReplyEnabled,
+        allowlist: settings.telegram.allowlist,
+        chatId: message.chatId,
+        username: message.username,
+      }).allowed;
+
+    if (shouldAutoReply) {
+      await this.aiReplyTelegram({ threadId, prompt: message.text });
+    }
+  }
+
+  private emit(event: GatewayEvent): void {
+    const redactedEvent = redactGatewayEvent(event);
+
+    if (this.subscribers.size === 0 && redactedEvent.id === "channel.message.received") {
+      this.pendingBacklogCount += 1;
+      return;
+    }
+
+    for (const subscriber of this.subscribers) {
+      subscriber(redactedEvent);
+    }
+  }
+}
+
+export const gatewayService = new GatewayService();

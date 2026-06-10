@@ -3,7 +3,7 @@ import {
     Conversation,
     ConversationContent,
 } from "@/components/ai-elements/conversation";
-import { MessageResponse } from "@/components/ai-elements/message";
+import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import {
     ProseMirrorPromptInput,
     ProseMirrorPromptTextarea,
@@ -37,6 +37,7 @@ import {
     MessageCircle,
     ListChecks,
     FileCode,
+    UserRound,
     Camera,
     Monitor,
     Clock,
@@ -68,6 +69,9 @@ import { removeFileLock, upsertFileLock } from "@/hooks/useFileLocks";
 import { ChatPlanWidget, type PlanItem } from "./ChatPlanWidget";
 import { detectBashApiCalls } from "./bash-curl-detector";
 import { BashApiSummary } from "./BashApiSummary";
+import type { UnifiedMessage } from "@/features/channels/types";
+import { useChannelEvents } from "@/features/channels/useChannelEvents";
+import { useAutoStickToBottom } from "@/hooks/useAutoStickToBottom";
 
 type ToolCallState =
     | "input-streaming"
@@ -87,6 +91,8 @@ type PendingPermission = {
 
 export type ChatViewProps = {
     sessionId?: string;
+    threadId?: string;
+    channel?: "app" | "telegram";
     tabId: string;
     initialPrompt?: string;
     autoSend?: boolean;
@@ -502,7 +508,7 @@ function extractPlanTodos(content: string): PlanItem[] | null {
     return extractNumberedListPlan(content) ?? extractTablePlan(content);
 }
 
-export default function ChatView({ sessionId: initialSessionId, tabId, initialPrompt, autoSend, forcedAgentId, dailyDate, tabNameOverride }: ChatViewProps) {
+function AppChatView({ sessionId: initialSessionId, tabId, initialPrompt, autoSend, forcedAgentId, dailyDate, tabNameOverride }: ChatViewProps) {
     const { setTabName, updateTabProps, activeTab, setActiveTabId, chatInputEnterToSend } = useWorkspaceContext();
 
     // Capture the initial sessionId at mount time - don't react to prop changes
@@ -1700,4 +1706,237 @@ export default function ChatView({ sessionId: initialSessionId, tabId, initialPr
             </div>
         </div>
     );
+}
+
+function TelegramChatView({ threadId, tabId }: ChatViewProps) {
+    const { setTabName, chatInputEnterToSend } = useWorkspaceContext();
+
+    const [thread, setThread] = useState<{ id: string; title: string; externalUsername?: string } | null>(null);
+    const [messages, setMessages] = useState<UnifiedMessage[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isSending, setIsSending] = useState(false);
+    const inputRef = useRef<ProseMirrorPromptTextareaHandle>(null);
+    const scrollRef = useTabScrollPersistence(tabId);
+    const { scrollToBottomIfNeeded } = useAutoStickToBottom(scrollRef);
+
+    const refreshThread = useCallback(async () => {
+        if (!threadId) {
+            setThread(null);
+            setMessages([]);
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            const [threadsResponse, messagesResponse] = await Promise.all([
+                fetch("/api/channels/threads?channel=telegram"),
+                fetch(`/api/channels/threads/${encodeURIComponent(threadId)}`),
+            ]);
+
+            if (threadsResponse.ok) {
+                const threadsData = await threadsResponse.json();
+                const found = (threadsData.threads || []).find((item: { id: string }) => item.id === threadId) || null;
+                setThread(found);
+            }
+
+            if (messagesResponse.ok) {
+                const messagesData = await messagesResponse.json();
+                setMessages(messagesData.messages || []);
+            } else {
+                setMessages([]);
+            }
+        } catch (error) {
+            console.error("[TelegramChat] Failed to load thread:", error);
+            setMessages([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [threadId]);
+
+    useEffect(() => {
+        setTabName(tabId, thread?.title || "Telegram Chat");
+    }, [thread, tabId, setTabName]);
+
+    useEffect(() => {
+        void refreshThread();
+    }, [refreshThread]);
+
+    // Keep Telegram view pinned to bottom while user is near bottom.
+    useEffect(() => {
+        if (isLoading) return;
+        scrollToBottomIfNeeded();
+    }, [messages, isLoading, scrollToBottomIfNeeded]);
+
+    useChannelEvents((event) => {
+        if (!threadId) return;
+        if (
+            event.id === "channel.message.received"
+            || event.id === "channel.message.sent"
+            || event.id === "channel.thread.updated"
+            || event.id === "channel.backlog.drained"
+        ) {
+            const payloadThreadId = typeof event.payload?.threadId === "string"
+                ? (event.payload.threadId as string)
+                : undefined;
+            if (!payloadThreadId || payloadThreadId === threadId) {
+                void refreshThread();
+            }
+        }
+    });
+
+    const sendManualMessage = useCallback(async ({ text }: { text: string; attachments: Attachment[] }) => {
+        if (!threadId || !text.trim()) return;
+
+        try {
+            setIsSending(true);
+            const response = await fetch("/api/channels/telegram/send", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ threadId, text }),
+            });
+            if (!response.ok) {
+                const body = await response.json().catch(() => null) as { error?: string } | null;
+                throw new Error(body?.error || "Send failed");
+            }
+            await refreshThread();
+        } catch (error) {
+            console.error("[TelegramChat] Failed to send message:", error);
+            toast.error(error instanceof Error ? error.message : "Failed to send Telegram message");
+        } finally {
+            setIsSending(false);
+        }
+    }, [threadId, refreshThread]);
+
+    const sendAiReply = useCallback(async () => {
+        if (!threadId) return;
+
+        const prompt = (inputRef.current?.getContent() || "").trim();
+        if (prompt) {
+            inputRef.current?.clear();
+        }
+
+        try {
+            setIsSending(true);
+            const response = await fetch("/api/channels/telegram/ai-reply", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    threadId,
+                    ...(prompt ? { prompt } : {}),
+                }),
+            });
+
+            if (!response.ok) {
+                const body = await response.json().catch(() => null) as { error?: string } | null;
+                throw new Error(body?.error || "AI reply failed");
+            }
+
+            await refreshThread();
+        } catch (error) {
+            console.error("[TelegramChat] Failed to generate AI reply:", error);
+            toast.error(error instanceof Error ? error.message : "Failed to generate AI reply");
+        } finally {
+            setIsSending(false);
+        }
+    }, [threadId, refreshThread]);
+
+    return (
+        <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
+            <div className="shrink-0 border-b border-border px-4 py-2.5">
+                <div className="mx-auto flex w-full max-w-3xl min-w-0 items-center gap-2">
+                    <MessageSquare className="size-3.5 text-primary" />
+                    <span className="truncate text-xs font-medium uppercase tracking-[0.14em]">
+                        {thread?.title || "Telegram"}
+                    </span>
+                    <span className="shrink-0 text-caption text-muted-foreground">
+                        Telegram • {isSending ? "sending" : "ready"}
+                    </span>
+                </div>
+            </div>
+
+            <OverlayScrollbar scrollRef={scrollRef} className="min-h-0 flex-1">
+                {isLoading && messages.length === 0 ? (
+                    <div className="flex h-full min-h-0 flex-col items-center justify-center">
+                        <Loader />
+                    </div>
+                ) : (
+                    <Conversation className="min-h-0">
+                        <ConversationContent className="max-w-3xl gap-3 px-4 pb-6 pt-3">
+                            {messages.map((message) => (
+                                <Message key={message.id} from={message.role}>
+                                    <div
+                                        className={message.role === "user"
+                                            ? "ml-auto w-fit max-w-[90%] rounded-lg border border-border bg-secondary/40 px-2.5 py-2"
+                                            : "w-full rounded-lg border border-border bg-card px-2.5 py-2"
+                                        }
+                                    >
+                                        <div
+                                            className={message.role === "user"
+                                                ? "mb-1 flex items-center justify-end gap-1.5 text-caption uppercase tracking-[0.08em] text-muted-foreground"
+                                                : "mb-1 flex items-center gap-1.5 text-caption uppercase tracking-[0.08em] text-muted-foreground"
+                                            }
+                                        >
+                                            {message.role === "user" ? (
+                                                <>
+                                                    <span>{thread?.externalUsername ? `@${thread.externalUsername}` : "Contact"}</span>
+                                                    <UserRound className="h-3.5 w-3.5" />
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Bot className="h-3.5 w-3.5" />
+                                                    <span>You</span>
+                                                </>
+                                            )}
+                                        </div>
+                                        <MessageContent>
+                                            <MessageResponse>{message.text}</MessageResponse>
+                                        </MessageContent>
+                                    </div>
+                                </Message>
+                            ))}
+                        </ConversationContent>
+                    </Conversation>
+                )}
+            </OverlayScrollbar>
+
+            <div className="mx-auto w-full max-w-3xl px-4 pb-4">
+                <div className="rounded-2xl border border-border bg-card p-2 chat-input-area">
+                    <ProseMirrorPromptInput onSubmit={sendManualMessage} isLoading={isSending} className="border-0 bg-transparent shadow-none">
+                        <ProseMirrorPromptTextarea
+                            ref={inputRef}
+                            placeholder={isSending ? "Sending..." : "Message to Telegram..."}
+                            enterToSend={chatInputEnterToSend}
+                            className="min-h-[64px] [&_.pm-chat-input]:text-xs [&>div.absolute]:text-xs"
+                        />
+                        <ProseMirrorPromptFooter className="justify-end">
+                            <div className="flex items-center gap-1">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 px-2 text-xs"
+                                    onClick={() => void sendAiReply()}
+                                    disabled={isSending || !threadId}
+                                >
+                                    AI Reply
+                                </Button>
+                                <ProseMirrorPromptSubmit className="rounded-lg" disabled={isSending || !threadId} />
+                            </div>
+                        </ProseMirrorPromptFooter>
+                    </ProseMirrorPromptInput>
+                    <p className="px-2 pb-1 text-xs text-muted-foreground">
+                        Send delivers a manual Telegram message. AI Reply asks the agent to respond.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export default function ChatView(props: ChatViewProps) {
+    const inferredChannel = props.channel || (props.threadId?.startsWith("telegram:") ? "telegram" : "app");
+    if (inferredChannel === "telegram") {
+        return <TelegramChatView {...props} />;
+    }
+    return <AppChatView {...props} />;
 }

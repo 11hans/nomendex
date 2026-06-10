@@ -3,6 +3,7 @@ import index from "./index.html";
 import { createServiceLogger, getLogFile, startupLog, markStartupComplete, isInStartupMode } from "./lib/logger";
 import { initializeWorkspaceServices } from "./services/workspace-init";
 import { appendFile } from "node:fs/promises";
+import { isAllowedWebSocketOrigin, resolveServerHostname } from "@/lib/request-security";
 import { baseDirRoute } from "./server-routes/base-dir";
 import { workspaceRoutes } from "./server-routes/workspace-routes";
 import { gitInstalledRoute, gitInitRoute, gitStatusRoute, gitSetupRemoteRoute, gitPullRoute, gitPushRoute, gitCommitRoute, gitFetchStatusRoute, gitFileDiffRoute, gitConflictsRoute, gitResolveConflictRoute, gitAbortMergeRoute, gitContinueMergeRoute, gitConflictContentRoute, gitStageRoute, gitUnstageRoute, gitStageAllRoute, gitUnstageAllRoute, gitStatusDetailedRoute, gitDiscardRoute } from "./server-routes/git-sync";
@@ -26,6 +27,8 @@ import { agentMemoryRoutes } from "./server-routes/agent-memory-routes";
 import { memoryExtractionRoutes } from "./server-routes/memory-extraction-routes";
 import { memoryEmbeddingsRoutes } from "./server-routes/memory-embeddings-routes";
 import { insightsRoutes } from "./server-routes/insights-routes";
+import { channelsRoutes } from "./server-routes/channels-routes";
+import { gatewayService } from "@/gateway/service";
 
 
 // Terminal WebSocket data type
@@ -34,8 +37,13 @@ interface TerminalWSData {
     sessionId: string;
 }
 
+interface RealtimeWSData {
+    isRealtime: true;
+    subscribedTopics: Set<"channels">;
+}
+
 // Union type for all WebSocket data types
-type WSData = TerminalWSData | Record<string, never>;
+type WSData = TerminalWSData | RealtimeWSData;
 
 interface TerminalSession {
     proc: Subprocess;
@@ -55,6 +63,31 @@ const apiLogger = createServiceLogger("API");
 const terminalSessions = new Map<string, TerminalSession>();
 // Map to track WebSocket to session ID
 const wsToSessionMap = new Map<ServerWebSocket<TerminalWSData>, string>();
+// Realtime websocket clients for channel events
+const realtimeClients = new Set<ServerWebSocket<RealtimeWSData>>();
+const serverHostname = resolveServerHostname();
+
+gatewayService.subscribe((event) => {
+    const payload = JSON.stringify({
+        type: "event",
+        id: event.id,
+        payload: event.payload,
+        timestamp: Date.now(),
+    });
+
+    for (const client of realtimeClients) {
+        if (!client.data.subscribedTopics.has("channels")) {
+            continue;
+        }
+        try {
+            client.send(payload);
+        } catch (error) {
+            serverLogger.warn("Failed to send gateway event to WebSocket client", {
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+});
 
 // Initialize workspace paths, secrets, and feature services.
 // Run in background so the HTTP server can start immediately — the macOS host
@@ -72,6 +105,7 @@ async function runInitialization() {
         startupError = null;
         startupState = "ready";
         startupLog.info('Workspace services initialized successfully');
+        await initializeGateway();
     } catch (error) {
         startupError = error instanceof Error ? error.message : String(error);
         startupState = "failed";
@@ -80,10 +114,24 @@ async function runInitialization() {
     }
 }
 
+// Initialize channels gateway (safe to fail without crashing the app).
+// Must run after workspace services so storage paths resolve against the active workspace.
+async function initializeGateway() {
+    try {
+        await gatewayService.initialize();
+        startupLog.info("Channels gateway initialized");
+    } catch (error) {
+        startupLog.warn("Channels gateway failed to initialize", {
+            error: error instanceof Error ? error.message : String(error),
+        });
+    }
+}
+
 // Kick off init in background; do not await.
 runInitialization();
 
 const server = serve<WSData>({
+    hostname: serverHostname,
     port: process.env.PORT ? parseInt(process.env.PORT) : 1234,
     idleTimeout: 255, // Maximum timeout in seconds (prevents "request timed out after 10 seconds" errors)
 
@@ -124,6 +172,7 @@ const server = serve<WSData>({
                     startupError = null;
                     startupState = "ready";
                     startupLog.info('Startup retry succeeded');
+                    await initializeGateway();
                     return Response.json({ ok: true, state: "ready" });
                 } catch (error) {
                     startupError = error instanceof Error ? error.message : String(error);
@@ -154,13 +203,22 @@ const server = serve<WSData>({
         ...memoryExtractionRoutes,
         ...memoryEmbeddingsRoutes,
         ...insightsRoutes,
+        ...channelsRoutes,
         // WebSocket route handler
         "/ws": {
             GET: (req, server) => {
                 serverLogger.info("WebSocket upgrade request received at /ws", { url: req.url });
 
+                if (!isAllowedWebSocketOrigin(req.url, req.headers.get("origin"), serverHostname)) {
+                    serverLogger.warn("Rejected WebSocket upgrade due to origin policy", {
+                        url: req.url,
+                        origin: req.headers.get("origin"),
+                    });
+                    return new Response("Forbidden", { status: 403 });
+                }
+
                 // Upgrade the request to a WebSocket
-                if (server.upgrade(req, { data: {} })) {
+                if (server.upgrade(req, { data: { isRealtime: true, subscribedTopics: new Set<"channels">() } })) {
                     serverLogger.info("WebSocket upgrade successful");
                     return; // do not return a Response
                 }
@@ -181,6 +239,14 @@ const server = serve<WSData>({
                     url: req.url,
                     sessionId,
                 });
+
+                if (!isAllowedWebSocketOrigin(req.url, req.headers.get("origin"), serverHostname)) {
+                    serverLogger.warn("Rejected terminal WebSocket upgrade due to origin policy", {
+                        url: req.url,
+                        origin: req.headers.get("origin"),
+                    });
+                    return new Response("Forbidden", { status: 403 });
+                }
 
                 // Upgrade the request to a WebSocket with terminal flag and session ID
                 if (server.upgrade(req, { data: { isTerminal: true, sessionId } })) {
@@ -358,13 +424,26 @@ const server = serve<WSData>({
             } else {
                 const msgLen = typeof _message === "string" ? _message.length : (_message as ArrayBuffer).byteLength;
                 serverLogger.info("WebSocket message received", { messageType: typeof _message, messageLength: msgLen });
-                // Echo the message back to the client for non-terminal connections
                 if (typeof _message === "string") {
-                    _ws.send(_message);
-                } else {
-                    _ws.send(_message as ArrayBuffer);
+                    try {
+                        const parsed = JSON.parse(_message) as { type?: string; topic?: string };
+                        if (parsed.type === "ping") {
+                            _ws.send(JSON.stringify({ type: "pong", timestamp: Date.now() }));
+                        } else if (parsed.type === "subscribe" && parsed.topic === "channels") {
+                            if (_ws.data && "isRealtime" in _ws.data && _ws.data.isRealtime) {
+                                _ws.data.subscribedTopics.add("channels");
+                                _ws.send(JSON.stringify({ type: "subscribed", topic: "channels" }));
+                            }
+                        } else if (parsed.type === "unsubscribe" && parsed.topic === "channels") {
+                            if (_ws.data && "isRealtime" in _ws.data && _ws.data.isRealtime) {
+                                _ws.data.subscribedTopics.delete("channels");
+                                _ws.send(JSON.stringify({ type: "unsubscribed", topic: "channels" }));
+                            }
+                        }
+                    } catch {
+                        // Ignore non-JSON messages for realtime socket
+                    }
                 }
-                serverLogger.info("WebSocket message echoed back to client");
             }
         },
         open(_ws: ServerWebSocket<WSData>) {
@@ -520,6 +599,9 @@ const server = serve<WSData>({
                 }
             } else {
                 serverLogger.info("WebSocket client connected");
+                if (_ws.data && "isRealtime" in _ws.data && _ws.data.isRealtime) {
+                    realtimeClients.add(_ws as ServerWebSocket<RealtimeWSData>);
+                }
             }
         },
         close(_ws: ServerWebSocket<WSData>, _code: number, _message: string) {
@@ -545,6 +627,7 @@ const server = serve<WSData>({
                 // PTY will only be killed when it exits naturally or on server shutdown
             } else {
                 serverLogger.info("WebSocket client disconnected", { code: _code, message: _message });
+                realtimeClients.delete(_ws as ServerWebSocket<RealtimeWSData>);
             }
         },
         drain(_ws) {
@@ -554,7 +637,7 @@ const server = serve<WSData>({
 });
 
 // Log server startup (to file during startup)
-startupLog.info(`Server listening on port ${server.port}`, { port: server.port });
+startupLog.info(`Server listening on ${serverHostname}:${server.port}`, { host: serverHostname, port: server.port });
 startupLog.info('Waiting for health check from native app...');
 
 // Write server port to discoverable location for external tools (e.g., Claude skills)

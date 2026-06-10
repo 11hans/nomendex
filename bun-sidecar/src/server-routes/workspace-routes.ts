@@ -3,6 +3,7 @@ import { Result, ErrorCodes } from "../types/Result";
 import { WorkspaceState, WorkspaceStateSchema, WorkspaceTab } from "../types/Workspace";
 import { getNomendexPath, getRootPath, getNotesPath, getTodosPath, getUploadsPath, getSkillsPath, hasActiveWorkspace, initializePaths } from "../storage/root-path";
 import { initializeNotesService } from "@/features/notes/fx";
+import { gatewayService } from "@/gateway/service";
 import { invalidateEmbeddingsConfig } from "@/features/agent-memory/embeddings";
 import path from "path";
 import { copyFile, mkdir } from "node:fs/promises";
@@ -349,6 +350,7 @@ export const workspaceRoutes = {
             try {
                 await initializePaths();
                 await initializeNotesService();
+                await gatewayService.reinitialize();
                 const response: Result<{ success: boolean }> = {
                     success: true,
                     data: { success: true },

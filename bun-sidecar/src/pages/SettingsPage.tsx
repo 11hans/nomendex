@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
@@ -11,6 +11,7 @@ import { Badge } from "../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { RotateCcw, Eye, EyeOff, Check, X, Key, RefreshCw, Info, Plus, Trash2, FolderOpen, Brain, Loader2, ExternalLink, CalendarDays, LayoutGrid } from "lucide-react";
 import { Input } from "../components/ui/input";
+import { Textarea } from "../components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group";
 import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
@@ -610,6 +611,265 @@ function StorageSettings() {
     );
 }
 
+type ChannelsSettingsResponse = {
+    telegram: {
+        enabled: boolean;
+        allowlist: string[];
+        autoReplyEnabled: boolean;
+        telegramAgentId: string;
+        fallbackText: string;
+        timeZone: string;
+        pollingTimeoutSec: number;
+        hasToken: boolean;
+    };
+};
+
+type ChannelsStatusResponse = {
+    status: { running: boolean; connected: boolean; lastError: string | null };
+    telegram: {
+        enabled: boolean;
+        hasToken: boolean;
+        autoReplyEnabled: boolean;
+        allowlistSize: number;
+        timeZone: string;
+        pollingTimeoutSec: number;
+        lastUpdateId: number;
+        telegramThreadCount: number;
+    };
+    ai: {
+        hasClaudeOauthToken: boolean;
+    };
+};
+
+function ChannelsSettings() {
+    const [settings, setSettings] = useState<ChannelsSettingsResponse | null>(null);
+    const [status, setStatus] = useState<ChannelsStatusResponse | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [refreshingStatus, setRefreshingStatus] = useState(false);
+    const [allowlistText, setAllowlistText] = useState("");
+
+    const loadStatus = useCallback(async () => {
+        try {
+            setRefreshingStatus(true);
+            const response = await fetch("/api/channels/status");
+            if (!response.ok) throw new Error("Failed to load channels status");
+            const data = await response.json();
+            setStatus(data);
+        } catch (error) {
+            console.error("Failed to load channel status:", error);
+        } finally {
+            setRefreshingStatus(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        async function loadChannels() {
+            try {
+                setLoading(true);
+                const response = await fetch("/api/channels/settings");
+                if (!response.ok) throw new Error("Failed to load channels settings");
+                const data = await response.json();
+                setSettings(data.settings);
+                setAllowlistText((data.settings?.telegram?.allowlist || []).join("\n"));
+                await loadStatus();
+            } catch (error) {
+                console.error("Failed to load channel settings:", error);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        void loadChannels();
+    }, [loadStatus]);
+
+    const save = async () => {
+        if (!settings) return;
+        try {
+            setSaving(true);
+            // Only patchable keys — ChannelsSettingsPatchSchema is strict
+            const payload = {
+                telegram: {
+                    enabled: settings.telegram.enabled,
+                    autoReplyEnabled: settings.telegram.autoReplyEnabled,
+                    allowlist: allowlistText
+                        .split("\n")
+                        .map((line) => line.trim())
+                        .filter(Boolean),
+                    telegramAgentId: settings.telegram.telegramAgentId,
+                    fallbackText: settings.telegram.fallbackText,
+                    timeZone: settings.telegram.timeZone,
+                },
+            };
+
+            const response = await fetch("/api/channels/settings", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            if (!response.ok) throw new Error("Failed to save channel settings");
+            const data = await response.json();
+            setSettings(data.settings);
+            setAllowlistText((data.settings?.telegram?.allowlist || []).join("\n"));
+            await loadStatus();
+        } catch (error) {
+            console.error("Failed to save channel settings:", error);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading || !settings) {
+        return (
+            <Card>
+                <CardHeader>
+                    <CardTitle>Channels</CardTitle>
+                    <CardDescription>Loading channel settings...</CardDescription>
+                </CardHeader>
+            </Card>
+        );
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Channels</CardTitle>
+                <CardDescription>Configure Telegram integration and auto-reply policy</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                {status && (
+                    <div className="rounded border border-border p-3 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                            <div className="font-medium">Runtime status</div>
+                            <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={() => void loadStatus()}>
+                                {refreshingStatus ? "Refreshing..." : "Refresh status"}
+                            </Button>
+                        </div>
+                        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-1.5 text-[11px]">
+                            <div>running: <strong>{String(status.status.running)}</strong></div>
+                            <div>connected: <strong>{String(status.status.connected)}</strong></div>
+                            <div>hasToken: <strong>{String(status.telegram.hasToken)}</strong></div>
+                            <div>lastUpdateId: <strong>{status.telegram.lastUpdateId}</strong></div>
+                            <div>threads: <strong>{status.telegram.telegramThreadCount}</strong></div>
+                            <div>allowlist size: <strong>{status.telegram.allowlistSize}</strong></div>
+                            <div>Claude token present: <strong>{String(status.ai.hasClaudeOauthToken)}</strong></div>
+                            <div>timezone: <strong>{status.telegram.timeZone}</strong></div>
+                            <div>poll timeout: <strong>{status.telegram.pollingTimeoutSec}s</strong></div>
+                        </div>
+                        {status.status.lastError && (
+                            <div className="mt-2 text-destructive">
+                                lastError: {status.status.lastError}
+                            </div>
+                        )}
+                        <div className="mt-1 text-muted-foreground">
+                            V1 supports only Telegram DM text messages.
+                        </div>
+                    </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="telegram-enabled">Telegram Enabled</Label>
+                        <Switch
+                            id="telegram-enabled"
+                            checked={settings.telegram.enabled}
+                            onCheckedChange={(checked) =>
+                                setSettings((prev) =>
+                                    prev
+                                        ? { ...prev, telegram: { ...prev.telegram, enabled: checked } }
+                                        : prev
+                                )
+                            }
+                        />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="telegram-auto-reply">Telegram Auto-Reply</Label>
+                        <Switch
+                            id="telegram-auto-reply"
+                            checked={settings.telegram.autoReplyEnabled}
+                            onCheckedChange={(checked) =>
+                                setSettings((prev) =>
+                                    prev
+                                        ? { ...prev, telegram: { ...prev.telegram, autoReplyEnabled: checked } }
+                                        : prev
+                                )
+                            }
+                        />
+                    </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                    Bot token status: <strong>{settings.telegram.hasToken ? "configured" : "missing"}</strong>.
+                    Add it in the <strong>API Keys</strong> tab under <code>TELEGRAM_BOT_TOKEN</code>.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                        <Label htmlFor="telegram-agent-id">Telegram Agent ID</Label>
+                        <Input
+                            id="telegram-agent-id"
+                            value={settings.telegram.telegramAgentId}
+                            onChange={(e) =>
+                                setSettings((prev) =>
+                                    prev
+                                        ? { ...prev, telegram: { ...prev.telegram, telegramAgentId: e.target.value } }
+                                        : prev
+                                )
+                            }
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="telegram-timezone">Time Zone</Label>
+                        <Input
+                            id="telegram-timezone"
+                            value={settings.telegram.timeZone}
+                            onChange={(e) =>
+                                setSettings((prev) =>
+                                    prev
+                                        ? { ...prev, telegram: { ...prev.telegram, timeZone: e.target.value } }
+                                        : prev
+                                )
+                            }
+                        />
+                    </div>
+                </div>
+
+                <div className="space-y-1.5">
+                    <Label htmlFor="telegram-allowlist">Allowlist (one chat ID or username per line)</Label>
+                    <Textarea
+                        id="telegram-allowlist"
+                        value={allowlistText}
+                        onChange={(e) => setAllowlistText(e.target.value)}
+                        rows={5}
+                    />
+                </div>
+
+                <div className="space-y-1.5">
+                    <Label htmlFor="telegram-fallback">Fallback Reply Text</Label>
+                    <Textarea
+                        id="telegram-fallback"
+                        value={settings.telegram.fallbackText}
+                        onChange={(e) =>
+                            setSettings((prev) =>
+                                prev
+                                    ? { ...prev, telegram: { ...prev.telegram, fallbackText: e.target.value } }
+                                    : prev
+                            )
+                        }
+                        rows={3}
+                    />
+                </div>
+
+                <div className="flex items-center gap-2">
+                    <Button onClick={save} disabled={saving}>
+                        {saving ? "Saving..." : "Save Channels Settings"}
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
 function SettingsContent() {
     const [editingShortcut, setEditingShortcut] = useState<string | null>(null);
     const [recordingKeys, setRecordingKeys] = useState<string[]>([]);
@@ -950,6 +1210,7 @@ function SettingsContent() {
                         <TabsTrigger value="preferences">Preferences</TabsTrigger>
                         <TabsTrigger value="theme">Theme</TabsTrigger>
                         <TabsTrigger value="secrets">API Keys</TabsTrigger>
+                        <TabsTrigger value="channels">Channels</TabsTrigger>
                         <TabsTrigger value="memory">Memory</TabsTrigger>
                         <TabsTrigger value="storage">Storage</TabsTrigger>
                         <TabsTrigger value="about">About</TabsTrigger>
@@ -1741,6 +2002,10 @@ function SettingsContent() {
                                 </CardContent>
                             </Card>
                         </div>
+                    </TabsContent>
+
+                    <TabsContent value="channels" className="mt-0">
+                        <ChannelsSettings />
                     </TabsContent>
 
                     <TabsContent value="memory" className="mt-0">
