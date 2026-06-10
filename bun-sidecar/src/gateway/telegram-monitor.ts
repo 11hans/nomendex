@@ -21,6 +21,29 @@ type TelegramUpdate = {
   };
 };
 
+export class TelegramHttpError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "TelegramHttpError";
+  }
+}
+
+const BACKOFF_BASE_MS = 1000;
+const BACKOFF_MAX_MS = 60_000;
+
+export function nextBackoffMs(currentMs: number): number {
+  return Math.min(Math.max(currentMs, BACKOFF_BASE_MS) * 2, BACKOFF_MAX_MS);
+}
+
+// 4xx (except 429) means bad token/config or a competing getUpdates consumer —
+// retrying cannot help, so the loop stops and surfaces the error instead.
+export function isFatalTelegramPollingError(error: unknown): boolean {
+  return error instanceof TelegramHttpError
+    && error.status >= 400
+    && error.status < 500
+    && error.status !== 429;
+}
+
 type StartOptions = {
   token: string;
   pollingTimeoutSec: number;
@@ -55,11 +78,13 @@ export class TelegramMonitor {
 
   private async runLoop(opts: StartOptions, signal: AbortSignal): Promise<void> {
     let connected = false;
+    let backoffMs = BACKOFF_BASE_MS;
     let offset = await opts.getLastUpdateId();
 
     while (this.running && !signal.aborted) {
       try {
         const result = await fetchTelegramUpdates(opts.token, offset + 1, opts.pollingTimeoutSec, signal);
+        backoffMs = BACKOFF_BASE_MS;
         if (!connected) {
           connected = true;
           opts.onConnectionChange?.(true);
@@ -96,11 +121,23 @@ export class TelegramMonitor {
           opts.onConnectionChange?.(false);
         }
         const normalized = error instanceof Error ? error : new Error(String(error));
-        telegramLogger.warn("Telegram polling failed", {
-          error: normalized.message,
-        });
         opts.onError?.(normalized);
-        await sleep(2000);
+
+        if (isFatalTelegramPollingError(error)) {
+          telegramLogger.error("Telegram polling failed with non-retryable error, stopping monitor", {
+            status: (error as TelegramHttpError).status,
+            error: normalized.message,
+          });
+          this.running = false;
+          break;
+        }
+
+        telegramLogger.warn("Telegram polling failed, retrying with backoff", {
+          error: normalized.message,
+          backoffMs,
+        });
+        await sleep(backoffMs);
+        backoffMs = nextBackoffMs(backoffMs);
       }
     }
 
@@ -162,7 +199,7 @@ async function fetchTelegramUpdates(
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`Telegram polling HTTP ${response.status}: ${body}`);
+    throw new TelegramHttpError(response.status, `Telegram polling HTTP ${response.status}: ${body}`);
   }
 
   const data = await response.json() as {
