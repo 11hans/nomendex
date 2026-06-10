@@ -193,6 +193,13 @@ export type RunAgentTextQueryInput = {
     onStderr?: (data: string) => void;
     cwd?: string;
     systemPromptOverride?: string;
+    /**
+     * When set, replaces the agent's persisted allowedTools entirely. Headless
+     * callers exposed to untrusted input (e.g. Telegram auto-reply) must pass
+     * a restrictive list here so interactive "Always Allow" grants from
+     * _preferences.json (Bash, Write, ...) do not leak into unattended runs.
+     */
+    allowedToolsOverride?: string[];
 };
 
 function collectAssistantText(msg: unknown): string {
@@ -217,7 +224,9 @@ function collectAssistantText(msg: unknown): string {
 export async function runAgentTextQuery(input: RunAgentTextQueryInput): Promise<{ text: string; agentConfig: AgentConfig }> {
     const agentConfig = (await getAgent({ agentId: input.agentId })) || DEFAULT_AGENT;
 
-    const allowedTools = new Set(await getAgentAllowedTools({ agentId: agentConfig.id }));
+    const allowedTools = new Set(
+        input.allowedToolsOverride ?? await getAgentAllowedTools({ agentId: agentConfig.id }),
+    );
     const mcpServers = await buildMcpServersFromConfig(agentConfig.mcpServers);
     const cwd = input.cwd || getRootPath();
     const claudeCliPath = process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;

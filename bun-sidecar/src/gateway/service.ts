@@ -326,7 +326,11 @@ class GatewayService {
       throw new GatewayHttpError(policy.status, policy.code, policy.message);
     }
 
-    const prompt = input.prompt?.trim() || await getLatestTelegramInboundText(input.threadId);
+    // input.prompt is operator input from the app UI and is trusted; without
+    // it the prompt falls back to the latest inbound Telegram text, which is
+    // untrusted and gets framed as data before reaching the agent.
+    const operatorPrompt = input.prompt?.trim();
+    const prompt = operatorPrompt || await getLatestTelegramInboundText(input.threadId);
     if (!prompt) {
       throw new GatewayHttpError(400, "TELEGRAM_PROMPT_REQUIRED", "No prompt available for AI reply");
     }
@@ -335,7 +339,9 @@ class GatewayService {
     let fallbackUsed = false;
 
     try {
-      replyText = await generateTelegramReply(prompt, settings.telegram.telegramAgentId);
+      replyText = await generateTelegramReply(prompt, settings.telegram.telegramAgentId, {
+        untrusted: !operatorPrompt,
+      });
       if (!replyText.trim()) {
         fallbackUsed = true;
         replyText = settings.telegram.fallbackText;
@@ -459,7 +465,10 @@ class GatewayService {
       }
 
       this.lastAutoReplyAtByChat.set(message.chatId, Date.now());
-      await this.aiReplyTelegram({ threadId, prompt: message.text });
+      // No prompt: aiReplyTelegram falls back to the just-persisted inbound
+      // text and treats it as untrusted. Passing message.text here would make
+      // it look like trusted operator input.
+      await this.aiReplyTelegram({ threadId });
     }
   }
 
