@@ -191,6 +191,16 @@ async function rejectSystemCredentials(url: string, auth: { username: string; pa
 }
 
 /**
+ * Paths that must never be staged, even if a stale .gitignore (or an already
+ * tracked copy) would otherwise let them through. Guards API keys and tokens
+ * in workspace secrets from ever reaching a remote.
+ */
+export function isProtectedFromStaging(filepath: string): boolean {
+    const normalized = filepath.replace(/\\/g, "/").replace(/^\.\//, "");
+    return normalized === ".nomendex/secrets.json";
+}
+
+/**
  * Create a git client for a specific directory
  */
 export function createGitClient(config: GitClientConfig) {
@@ -443,6 +453,7 @@ export function createGitClient(config: GitClientConfig) {
             const matrix = await git.statusMatrix({ fs, dir });
 
             for (const [filepath, head, workdir] of matrix) {
+                if (isProtectedFromStaging(filepath)) continue;
                 if (workdir === 0 && head === 1) {
                     // File was deleted
                     await git.remove({ fs, dir, filepath });
@@ -509,6 +520,9 @@ export function createGitClient(config: GitClientConfig) {
          * Stage a single file
          */
         async stageFile(filepath: string): Promise<void> {
+            if (isProtectedFromStaging(filepath)) {
+                throw new Error(`Refusing to stage protected file: ${filepath}`);
+            }
             const fullPath = `${dir}/${filepath}`;
             const file = Bun.file(fullPath);
             if (await file.exists()) {
