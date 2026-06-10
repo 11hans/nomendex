@@ -19,6 +19,28 @@ All WebSocket upgrade requests (`/ws` and `/terminal/:id`) are checked via `isAl
 
 Inbound Telegram messages from senders not on the allowlist are dropped at ingestion in `GatewayService.handleTelegramInbound` — nothing is persisted to `channels-messages.jsonl`, no thread is created, and no realtime event is emitted. With an empty allowlist all inbound messages are dropped (deny by default).
 
+chatId is the primary identity. Telegram usernames are mutable and can be re-registered by a different account, so a username-only allowlist match (`allowlistMatchType() === "username"`) is additionally verified against existing threads: if the username was previously seen with a different chatId, the message is dropped as a possible username takeover.
+
+## Host header validation (DNS rebinding)
+
+When the server is bound to loopback, the `Host` header must resolve to a loopback name (`isAllowedRequestHost()` in `src/lib/request-security.ts`). This defeats DNS rebinding, where both the request URL and the `Origin` header carry an attacker hostname that points at `127.0.0.1` and would pass the same-origin check. Enforced on WebSocket upgrades and mutating channel routes. Explicit non-loopback binds (`SERVER_HOST`) opt out — and are logged with a prominent security warning at startup.
+
+## CSRF guard on mutating channel routes
+
+`POST /api/channels/telegram/send`, `POST /api/channels/telegram/ai-reply`, and `PUT /api/channels/settings` are guarded by `evaluateMutatingRequestPolicy()`:
+
+1. **Host not loopback** (loopback-bound server) → `403 FORBIDDEN_HOST`
+2. **Foreign `Origin` header** → `403 FORBIDDEN_ORIGIN`
+3. **Content-Type is not `application/json`** → `415 UNSUPPORTED_CONTENT_TYPE`
+
+This closes off cross-site "simple requests" (`text/plain` POSTs need no CORS preflight) while keeping non-browser clients without an `Origin` header working.
+
+## Headless agent confinement
+
+Telegram AI replies run unattended via `runAgentTextQuery()` with `allowedToolsOverride` set to a fixed read-only list (`Read`, `Grep`, `Glob`) — interactive "Always Allow" grants from agent preferences never apply to headless runs. The policy check in `aiReplyTelegram` runs **before** the agent query, so a disabled channel or de-allowlisted sender cannot trigger an agent run at all.
+
+Inbound Telegram text is untrusted input: it is wrapped in `<untrusted-telegram-message>` framing with instructions not to follow embedded commands. Only operator prompts typed in the app UI bypass the framing.
+
 ## Polling retry policy
 
 `TelegramMonitor.runLoop` retries failed `getUpdates` polls with exponential backoff (1s base, doubling, 60s cap; reset on success). HTTP 4xx responses other than 429 (bad token, competing `getUpdates` consumer) are non-retryable: the monitor logs an error, reports it via `onError`, and stops instead of hammering the API.
@@ -29,7 +51,7 @@ AI auto-replies are limited to one per chat per 30 seconds (`AUTO_REPLY_MIN_INTE
 
 ## Git staging guard
 
-`src/lib/git.ts` refuses to stage `.nomendex/secrets.json` regardless of `.gitignore` state: `addAll()` silently skips it and `stageFile()` throws. This protects API keys even if the file was tracked before the ignore rules were written.
+`src/lib/git.ts` refuses to stage `.nomendex/secrets.json` regardless of `.gitignore` state: `addAll()` silently skips it, and `stageFile()` and `resolveConflict()` throw (conflict resolution stages the file at the end, and the `mark-resolved` variant needs no actual conflict, so the guard applies there too). This protects API keys even if the file was tracked before the ignore rules were written.
 
 ## Telegram send policy
 
