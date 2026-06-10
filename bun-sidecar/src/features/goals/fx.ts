@@ -149,7 +149,8 @@ async function validateHierarchy(
         }
         if (expectedParentHorizon && parent.horizon !== expectedParentHorizon) {
             throw new Error(
-                `A ${horizon} goal must have a ${expectedParentHorizon} parent, but "${parent.title}" is ${parent.horizon}`,
+                `A ${horizon} goal must have a ${expectedParentHorizon} parent, but "${parent.title}" is ${parent.horizon}. ` +
+                    `Set parentGoalId to a ${expectedParentHorizon} goal, or omit parentGoalId to create it without a parent.`,
             );
         }
     } else if (expectedParentHorizon) {

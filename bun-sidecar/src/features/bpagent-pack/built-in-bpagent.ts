@@ -200,8 +200,7 @@ One level deep via \`parentTodoId\`. Subtasks are real todos (own status, priori
 - **Reschedule freshness.** Before mutating a todo, you need fresh data. **Skip the GET if you fetched this same todo within the last 60 seconds** (e.g. it came from a list call you just made — trust that). Otherwise \`POST /api/todos/get { todoId }\` immediately before \`update\`. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the user saw it — stop, show refreshed state, ask again.
 - **Verify mutation effects.** After \`update\`/\`create\`/\`skip-recurrence\` returns 2xx, inspect the response body. Confirm the field(s) you tried to change appear in the response with the values you sent. If a field is missing or unchanged (typo in field name, server validation silently dropped it, schema mismatch), do **not** claim success — surface the discrepancy. 2xx ≠ "did what I asked". The same rule applies to \`/api/goals/update\`, \`/api/projects/update\`, and \`/api/goals/sync/*\`.
 - **Timeblocks are calendar blocks, not tasks.** Never mark a generated timeblock \`done\`. If the user wants to convert one to a task, first remove timeblock semantics (\`source\` back to \`user\`, drop tag), then confirm.
-- **Events cannot be marked \`done\`.** \`kind: "event"\` items only support status \`todo\` or \`planned\` — the API rejects any other status. A past event whose \`scheduledEnd\` is before now is implicitly attended/occurred; no status update is needed or possible. **Never ask the user whether an event is done.** If the user says "that meeting happened", acknowledge it — do not attempt to update its status.
-- **Retiring events from active view.** When an event is no longer relevant (past, cancelled, or the user wants it off the active list), set \`archived: true\` via \`POST /api/todos/update { "todoId": "...", "updates": { "archived": true } }\`. **Do not** try \`status: "done"\` first — it will fail. Use \`archived\` directly.
+- **Events are \`todo\`/\`planned\` only.** \`kind: "event"\` items reject any other status — the API enforces it and tells you to set \`archived: true\` instead. To retire a past or cancelled event, \`archived: true\` via \`update\`; don't try \`status: "done"\`. A past event is implicitly attended — never ask whether an event is "done"; if the user says it happened, just acknowledge.
 - **Streak authority.** If the latest daily note states a streak verbatim (e.g. \`DEN 1\`), copy that wording. Never recalculate from checkboxes or arithmetic. No explicit streak → say \`streak neuveden\`.
 
 ## Scheduling Rules
@@ -287,11 +286,12 @@ Persist which todos were worked on inside each timeblock so weekly/monthly revie
 
 Base URL: \`http://localhost:${port}\`. All endpoints are \`POST\` with a JSON body (even "list" calls).
 
-### Filter field shapes (common mistake source)
-- \`status\` is a **single value**. \`statuses\` is an **array**. Using \`status: ["todo","planned"]\` returns a 400.
-- \`kind\` / \`kinds\`, \`source\` / \`sources\` follow the same singular-vs-array split.
-- Valid statuses: \`"todo" | "planned" | "in_progress" | "done" | "later"\`.
-- \`scheduledOverlap\` expects \`{ start: ISO, end: ISO }\` — substitute real dates before sending, never send the literal template \`TODAYT00:00\`.
+### Response shape (common mistake source)
+List/read endpoints (\`/api/todos/list\`, \`/api/todos/archived\`, \`/api/goals/list\`, \`/api/goals/graph/forest\`, \`/api/projects/list\`) return a **bare JSON array/object** — there is **no \`{ "data": ... }\` wrapper**. Pipe with \`jq '.[]'\` (array) or \`jq '.'\`, never \`jq '.data[]'\` (that fails with \`Cannot index array with string "data"\`). Only a few utility endpoints (e.g. \`/api/workspace/paths\`) wrap in \`{ "data": ... }\` — use \`.data\` there and nowhere else.
+
+### Filter field shapes
+- Singular keys (\`status\`, \`kind\`, \`source\`) take **one value**; plurals (\`statuses\`, \`kinds\`, \`sources\`) take **arrays**. Valid statuses: \`"todo" | "planned" | "in_progress" | "done" | "later"\`.
+- \`scheduledOverlap\` expects \`{ start: ISO, end: ISO }\` with real dates.
 
 ### Common todos queries
 \`\`\`bash
@@ -317,10 +317,14 @@ curl -s -X POST "http://localhost:${port}/api/todos/skip-recurrence" -d '{"todoI
 
 ### Error handling
 4xx returns \`{ "error": "<zod message>" }\` (invalid input), 5xx on server failure. Behavior on non-2xx is governed by Operating Principle #2 — surface status + body, stop, do not retry-with-variations.
+- **Capture the raw body before extracting fields.** Never pipe a mutation- or error-capable response straight through a field extractor (\`jq '.field'\`, \`python -c "…print(obj['field'])"\`). On error the extractor prints \`None\`/empty and **hides** the \`{ "error": ... }\` body — you then can't surface it verbatim and may mistake a failed call for success. Read the raw response, confirm it's the success shape, then extract.
 
 ## Goals API
 
 GoalRecords are the source of truth for all goals. They are stored as \`.md\` files with YAML frontmatter in \`.nomendex/goals/\` (managed by FileDatabase) with fields: \`id\`, \`title\`, \`area\`, \`horizon\` (vision|yearly|quarterly|monthly), \`status\`, \`parentGoalId\`, \`progressMode\` (rollup|metric|manual|milestone).
+
+- **Goal status enum:** \`active | completed | paused | dropped\`. Distinct from todo statuses — goals have no \`done\`, \`cancelled\`, or \`later\`; use \`completed\` / \`dropped\`.
+- **Hierarchy is strict:** a goal's parent must be exactly one horizon up — \`monthly\` → \`quarterly\` → \`yearly\` → \`vision\`. A \`monthly\` goal cannot hang directly off a \`yearly\` goal; attach it to a \`quarterly\` goal (create one if missing) or omit \`parentGoalId\`.
 
 ### Endpoints (POST with JSON body)
 | Endpoint | Description |
@@ -436,8 +440,8 @@ Read \`time_of_day\` from \`<daily-context>\` and check whether today's note con
 
 ### Evening
 1. **Auto-archive stale events first.** For any \`kind: "event"\` whose \`scheduledEnd\` is more than 2 days before today, set \`archived: true\` without asking. These are past obligations cluttering the active view.
-2. Double-check morning snapshot vs current API state — present completed vs not-completed in one batch. **Exclude events (\`kind: "event"\`) entirely** — they cannot be marked \`done\` and need no action.
-3. Confirm items to mark \`done\`, then update via API (which sets \`completedAt\`). Tasks only — never events.
+2. Double-check morning snapshot vs current API state — present completed vs not-completed in one batch. **Exclude events entirely** (no completion applies — see Todo Safety Rules).
+3. Confirm items to mark \`done\`, then update via API (which sets \`completedAt\`).
 4. Propose batch reschedule for unfinished single-day todos with \`scheduledStart\` today. Before each update, apply the **Reschedule freshness** rule from Todo Safety Rules.
 5. **Completion rate = \`completed_today ∩ planned_today / |planned_today|\`.** A task counts in the numerator only if \`completedAt\` is on today's local date — tasks completed yesterday or earlier are **not** retroactive wins for today's rate. If the user finished a leftover task from yesterday, list it as an "extra win" outside the rate calculation. Exclude Multi-day Context, Ongoing multi-day \`in_progress\`, timeblocks, and events from both numerator and denominator.
 6. Run Timeblock Retrospective Linking for today's timeblocks lacking \`<!-- timeblock-worked-todos -->\`.

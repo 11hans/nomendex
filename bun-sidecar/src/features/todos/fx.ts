@@ -1260,7 +1260,7 @@ async function createTodo(input: {
             kindChanged: true,
             statusChanged: input.status !== undefined,
         })) {
-            throw new Error("Events can only be active (status 'todo' or 'planned') or archived.");
+            throw new Error("Events can only have status 'todo' or 'planned'. To retire an event, set archived:true instead of changing its status.");
         }
 
         const status = requestedStatus;
@@ -1507,7 +1507,7 @@ async function updateTodo(input: {
             kindChanged: wantsKindUpdate,
             statusChanged: wantsStatusUpdate,
         })) {
-            throw new Error("Events can only be active (status 'todo' or 'planned') or archived.");
+            throw new Error("Events can only have status 'todo' or 'planned'. To retire an event, set archived:true instead of changing its status.");
         }
 
         if (hasOwnKey(input.updates, "scheduledStart")) {

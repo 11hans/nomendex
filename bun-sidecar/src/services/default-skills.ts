@@ -1458,7 +1458,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 17
+version: 19
 source: nomendex
 ---
 
@@ -1510,7 +1510,16 @@ Read-only by default. Propose first; mutate only after explicit confirmation.
      -d '{"project":"<name>","statuses":["todo","planned","in_progress"]}'
    \`\`\`
 6. **Surface goal progress**: \`POST /api/goals/list { "status": "active" }\`, then \`POST /api/goals/graph { goalId }\` for each. Use weekly/monthly notes only as narrative context, and say so if they are template stubs.
-7. **Ask focus questions** ("What's your ONE thing? What might get in the way?") before editing anything.
+7. **Reality check + focus questions** (read-only; before editing anything):
+   a. Run a behavioral scan: \`curl -s -X POST "http://localhost:<port>/api/insights/scan" -d '{}'\`. It returns deterministic \`signals\` (each is a FACT with numbers — never an accusation).
+   b. Surface **at most ONE** signal in the morning — the top \`warning\`, else the top \`notice\`. If \`signals\` is empty (or only \`info\`), stay quiet; do not manufacture a problem.
+   c. Frame it as **fact → open question**, never a verdict. State the signal's \`detail\` verbatim-ish, then ask a question that invites the user to decide:
+      - \`low_throughput\` → "Jen X done za týden. Co tě nejvíc brzdí — kapacita, nejasné priority, nebo vyhýbání?"
+      - \`goal_overload\` → "N aktivních cílů, focus 0. Vybereme 3 na tento týden a zbytek na pauzu?"
+      - \`neglected_area\` → "Oblast „X" týden na nule. Patří dnes do plánu, nebo ji vědomě odkládáš?"
+      - \`stale_todo\` → "X úkolů leží Y dní bez pohybu. Projdeme je — naplánovat, nebo smazat?"
+      - \`overdue_high_priority\` → "N high-priority po termínu. Co s nimi dnes?"
+   d. Let the answer inform the ONE thing. Then ask the focus questions ("What's your ONE thing? What might get in the way?").
 8. **Save workset snapshot** to the daily note under \`## Today's Workset\`: the \`[[todo:id|Title]]\` list PLUS \`<!-- workset: id1, id2, ... -->\` HTML comment listing only the IDs. Actionable single-day todos only — no events, no timeblocks, no Multi-day Context. This snapshot is the evening baseline.
 9. **Propose new todos** via API if planning reveals a need — never write new \`[ ]\` checkboxes in the note.
 10. **Sunday/review-day nudge**: if today is the user's \`reviewDay\` (from \`vault-config.json\`, default Sunday), offer \`/weekly\` at the end of the morning.
@@ -1543,6 +1552,7 @@ Read-only by default. Propose first; mutate only after explicit confirmation.
 - Workset in bucket order, Multi-day Context separate
 - Snapshot (\`<!-- workset: ... -->\` + \`[[todo:id]]\` list) saved in note
 - Yesterday's incomplete tasks reviewed
+- One behavioral signal surfaced as fact + question (or silence if scan is clean)
 - ONE priority asked
 - Timeblock/event intents routed through \`/timeblocking\`
 - \`/weekly\` offered if today is review day
@@ -1621,7 +1631,7 @@ For each of today's timeblocks (\`source === "timeblock-generator"\` or legacy t
 ### Capture
 1. Fill \`## Pracovní zápisek\` — co se řešilo, co se naučilo, otevřené otázky/blockers.
 2. Fill \`## Evening Reflection 🌙\` — What went well, What could be better, Tomorrow's focus, Gratitude.
-3. Update the **Energy / Mood / Sleep** line at the bottom of the note.
+3. Update the **Energy / Mood** line at the bottom of the note. Do not track, fill in, or ask about sleep — leave any legacy sleep field blank.
 
 ### Today's Cascade Impact
 \`\`\`markdown
@@ -1658,7 +1668,7 @@ The physical template lives in the vault's \`Templates/\` folder (detected via \
 | \`## Notes & Captures\` (Decisions, Ideas, Learned) | Morning / ad-hoc |
 | \`## Pracovní zápisek\` | Evening shutdown |
 | \`## Evening Reflection 🌙\` (What went well, Better, Tomorrow, Gratitude) | Evening shutdown |
-| \`**Energy / Mood / Sleep**\` line | Evening shutdown |
+| \`**Energy / Mood**\` line | Evening shutdown |
 | \`## Links\` (← yesterday \| tomorrow →) | Written by template on creation |
 
 When morning was skipped, leave \`## Morning Setup ☀️\` and \`## Today's Focus\` as empty template stubs.

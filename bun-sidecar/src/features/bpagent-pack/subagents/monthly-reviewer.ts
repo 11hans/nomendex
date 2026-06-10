@@ -30,12 +30,13 @@ You facilitate the monthly review process for a personal knowledge management sy
 5. Extract wins, challenges, todo completion rates by project, and any explicit streak labels (copied verbatim from the latest relevant daily note)
 
 ### Phase 2: Reflect on Month (10 minutes)
-1. Fetch quarterly milestones via \`curl -s http://localhost:${port}/api/goals/list -X POST -H 'Content-Type: application/json' -d '{"horizon":"quarterly","status":"active"}'\`
-2. Fetch yearly goals via \`curl -s http://localhost:${port}/api/goals/list -X POST -H 'Content-Type: application/json' -d '{"horizon":"yearly","status":"active"}'\`
-3. Fetch the full goal forest with progress: \`curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'\`
-4. Review computed progress per goal (use \`computedProgress\` from the response, never count checkboxes)
-5. Calculate which quarter we're in and check milestone progress
-6. Identify patterns across weeks (energy, productivity, focus areas) and compare planned vs actual outcomes
+1. **Behavioral scan** (deterministic backbone, 30-day window): \`curl -s http://localhost:${port}/api/insights/scan -X POST -H 'Content-Type: application/json' -d '{"windowDays":30}'\`. Returns \`signals\` — facts with numbers (\`low_throughput\`, \`goal_overload\`, \`neglected_area\`, \`stale_todo\`, \`overdue_high_priority\`, \`effort_distribution\`). Each is a FACT, never an accusation. Use them to ground the reflection, the **Gaps** pattern line, and the probing questions.
+2. Fetch quarterly milestones via \`curl -s http://localhost:${port}/api/goals/list -X POST -H 'Content-Type: application/json' -d '{"horizon":"quarterly","status":"active"}'\`
+3. Fetch yearly goals via \`curl -s http://localhost:${port}/api/goals/list -X POST -H 'Content-Type: application/json' -d '{"horizon":"yearly","status":"active"}'\`
+4. Fetch the full goal forest with progress: \`curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'\`
+5. Review computed progress per goal (use \`computedProgress\` from the response, never count checkboxes)
+6. Calculate which quarter we're in and check milestone progress
+7. Identify patterns across weeks (energy, productivity, focus areas) and compare planned vs actual outcomes; cross-reference \`neglected_area\` / \`goal_overload\` for the Gaps line
 
 ### Phase 3: Plan Next Month (10 minutes)
 1. Identify next month's quarterly milestones from the goal forest
@@ -50,6 +51,7 @@ ${apiBaseUrlBlock(port)}
 ## Data Sources
 
 ### Primary: Typed API (source of truth for goals & progress)
+- Behavioral signals (30-day): \`curl -s http://localhost:${port}/api/insights/scan -X POST -H 'Content-Type: application/json' -d '{"windowDays":30}'\`
 - Goal forest: \`curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'\`
 - Monthly goals: \`curl -s http://localhost:${port}/api/goals/list -X POST -H 'Content-Type: application/json' -d '{"horizon":"monthly","status":"active"}'\`
 - Quarterly goals: \`curl -s http://localhost:${port}/api/goals/list -X POST -H 'Content-Type: application/json' -d '{"horizon":"quarterly","status":"active"}'\`
@@ -154,10 +156,11 @@ Generate a structured monthly review:
 
 ## Coaching Integration
 
-When Productivity Coach output style is active, include probing questions:
-- "What would make next month feel truly successful?"
-- "What commitment should you drop or delegate?"
-- "Which goal needs a different approach?"
+Ground probing questions in the Phase-2 \`signals\` (state the fact, then ask — never accuse):
+- If \`goal_overload\`: "N aktivních cílů, focus 0 — co tento měsíc vědomě odložíš nebo deleguješ?"
+- If \`neglected_area\` (30 dní): "Oblast „X" měsíc bez pohybu — pořád to je cíl, nebo je čas ho pozastavit?"
+- If \`low_throughput\`: "Dokončené za měsíc kleslo na X. Který cíl potřebuje jiný přístup?"
+- Always: "Co by příští měsíc udělalo opravdu úspěšným?"
 
 ## Progress Tracking
 

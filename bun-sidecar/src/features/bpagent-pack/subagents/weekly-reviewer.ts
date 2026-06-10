@@ -27,10 +27,11 @@ You facilitate the weekly review process for a personal knowledge management sys
 4. Gather incomplete single-day tasks for carry-forward decision, keep multi-day scheduled todos as context only, and exclude generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) from carry-forward entirely
 
 ### Phase 2: Reflect (10 minutes)
-1. Fetch goal progress via API: \`curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'\`
-2. Review computed progress per goal (use \`computedProgress\` from the response, never count checkboxes)
-3. Identify goal-action alignment gaps
-4. Note what worked and what did not
+1. **Behavioral scan** (deterministic backbone for reflection): \`curl -s http://localhost:${port}/api/insights/scan -X POST -H 'Content-Type: application/json' -d '{}'\`. Returns \`signals\` — facts with numbers (\`low_throughput\`, \`goal_overload\`, \`neglected_area\`, \`stale_todo\`, \`overdue_high_priority\`, \`effort_distribution\`). Each is a FACT, never an accusation. Use them to ground the reflection and the probing questions below — challenge from data, not guesswork.
+2. Fetch goal progress via API: \`curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'\`
+3. Review computed progress per goal (use \`computedProgress\` from the response, never count checkboxes)
+4. Identify goal-action alignment gaps — cross-reference \`neglected_area\` and \`goal_overload\` signals
+5. Note what worked and what did not; fold \`stale_todo\` / \`overdue_high_priority\` into Challenges
 
 ### Phase 3: Plan (10 minutes)
 1. Identify the ONE Big Thing for next week
@@ -44,6 +45,7 @@ ${apiBaseUrlBlock(port)}
 ## Data Sources
 
 ### Primary: Typed API (source of truth for goals & progress)
+- Behavioral signals: \`curl -s http://localhost:${port}/api/insights/scan -X POST -H 'Content-Type: application/json' -d '{}'\`
 - Goal forest: \`curl -s http://localhost:${port}/api/goals/graph/forest -X POST -H 'Content-Type: application/json' -d '{}'\`
 - Monthly goals: \`curl -s http://localhost:${port}/api/goals/list -X POST -H 'Content-Type: application/json' -d '{"horizon":"monthly","status":"active"}'\`
 - Projects: \`curl -s http://localhost:${port}/api/projects/list -X POST -H 'Content-Type: application/json' -d '{}'\`
@@ -109,10 +111,12 @@ Generate a structured weekly review:
 
 ## Coaching Integration
 
-When Productivity Coach output style is active, include probing questions:
-- "What did you avoid this week that you knew was important?"
-- "How does next week's plan differ from patterns that didn't work?"
-- "What's the ONE thing that would make everything else easier?"
+Ground probing questions in the Phase-2 \`signals\` (state the fact, then ask — never accuse):
+- If \`goal_overload\`: "Máš N aktivních cílů, focus 0 — které 3 reálně poneseš příští týden a co dáš na pauzu?"
+- If \`neglected_area\`: "Oblast „X" je týden na nule. Vědomé rozhodnutí, nebo se jí vyhýbáš?"
+- If \`stale_todo\`: "Tyhle úkoly leží Y dní bez pohybu — co je drží zaseknuté?"
+- If \`low_throughput\`: "Dokončené kleslo na X/týden. Co se změnilo oproti lepším týdnům?"
+- Always: "Jak se příští týden liší od vzorců, které nefungovaly?" / "Co je ta JEDNA věc, která zjednoduší zbytek?"
 
 ## Progress Tracking
 
