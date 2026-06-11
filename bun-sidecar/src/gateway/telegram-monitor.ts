@@ -4,7 +4,7 @@ import type { TelegramInboundMessage } from "./types";
 
 const telegramLogger = createServiceLogger("TELEGRAM-MONITOR");
 
-type TelegramUpdate = {
+export type TelegramUpdate = {
   update_id: number;
   message?: {
     message_id: number;
@@ -44,6 +44,31 @@ export function isFatalTelegramPollingError(error: unknown): boolean {
     && error.status !== 429;
 }
 
+// Map a raw getUpdates entry to an inbound message. Returns null for updates
+// that should be skipped: non-private chats, missing text, or malformed
+// payloads — the Telegram response is only type-asserted, so field types are
+// verified here before anything downstream builds Dates from them.
+export function toTelegramInboundMessage(update: TelegramUpdate): TelegramInboundMessage | null {
+  if (typeof update.update_id !== "number") return null;
+  const msg = update.message;
+  if (!msg || !msg.chat || msg.chat.type !== "private") return null;
+  if (typeof msg.chat.id !== "number" || typeof msg.message_id !== "number") return null;
+  if (typeof msg.date !== "number" || !Number.isFinite(msg.date)) return null;
+  if (typeof msg.text !== "string") return null;
+
+  const text = normalizeTelegramInboundText(msg.text);
+  if (!text) return null;
+
+  return {
+    updateId: update.update_id,
+    chatId: String(msg.chat.id),
+    username: normalizeTelegramUsername(msg.from?.username || msg.chat.username),
+    text,
+    messageId: String(msg.message_id),
+    timestampMs: msg.date * 1000,
+  };
+}
+
 type StartOptions = {
   token: string;
   pollingTimeoutSec: number;
@@ -52,6 +77,8 @@ type StartOptions = {
   onMessage: (message: TelegramInboundMessage) => Promise<void>;
   onConnectionChange?: (connected: boolean) => void;
   onError?: (error: Error) => void;
+  /** Called when the loop stops on its own (fatal polling error), not via stop(). */
+  onStop?: () => void;
 };
 
 export class TelegramMonitor {
@@ -91,28 +118,27 @@ export class TelegramMonitor {
         }
 
         for (const update of result) {
-          if (update.update_id <= offset) continue;
+          if (typeof update.update_id !== "number" || update.update_id <= offset) continue;
           offset = update.update_id;
+
+          const inbound = toTelegramInboundMessage(update);
+          if (inbound) {
+            // Handler failures are not connection failures: they must not
+            // trigger backoff or a fatal stop, and must not block later
+            // updates in the same batch.
+            try {
+              await opts.onMessage(inbound);
+            } catch (error) {
+              telegramLogger.error("Telegram inbound handler failed", {
+                updateId: update.update_id,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          }
+
+          // Persist the offset only after the handler ran, so a crash mid-
+          // handling redelivers the update on restart instead of dropping it.
           await opts.setLastUpdateId(offset);
-
-          const msg = update.message;
-          if (!msg || !msg.chat || msg.chat.type !== "private") continue;
-          if (!msg.text) continue;
-
-          const normalizedText = normalizeTelegramInboundText(msg.text);
-          if (!normalizedText) continue;
-
-          const username = normalizeTelegramUsername(msg.from?.username || msg.chat.username);
-
-          const inbound: TelegramInboundMessage = {
-            updateId: update.update_id,
-            chatId: String(msg.chat.id),
-            username,
-            text: normalizedText,
-            messageId: String(msg.message_id),
-            timestampMs: msg.date * 1000,
-          };
-          await opts.onMessage(inbound);
         }
       } catch (error) {
         if (signal.aborted) break;
@@ -142,6 +168,11 @@ export class TelegramMonitor {
     }
 
     opts.onConnectionChange?.(false);
+    // An aborted signal means stop()/reload() initiated the shutdown and the
+    // caller already knows; anything else is the loop dying on its own.
+    if (!signal.aborted) {
+      opts.onStop?.();
+    }
   }
 }
 
