@@ -2,7 +2,6 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import type { ReactNode } from "react";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Search, MessageCircle, Plus, Trash2, Maximize2, Bot, UserRound, ChevronRight } from "lucide-react";
 import { useCommandDialog } from "@/components/CommandDialogProvider";
@@ -454,34 +453,33 @@ export default function ChatBrowserView({ tabId, initialChannel = "all" }: { tab
                                                 >
                                                     <div className="flex items-center gap-1.5">
                                                         <span
-                                                            className="truncate text-xs font-medium"
+                                                            className="min-w-0 flex-1 truncate text-xs font-medium"
                                                             style={{ color: styles.contentPrimary }}
                                                         >
                                                             {thread.title}
                                                         </span>
-                                                        {channelFilter === "all" && (
-                                                            <span className="text-[9px] uppercase shrink-0" style={{ color: styles.contentTertiary }}>
-                                                                {channelBadgeLabel(thread.channel)}
-                                                            </span>
-                                                        )}
-                                                        {thread.channel === "app" && thread.sessionId && (
-                                                            <span
-                                                                className="ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:text-red-500"
+                                                        <div className="flex shrink-0 items-center gap-1.5">
+                                                            {channelFilter === "all" && (
+                                                                <span className="text-[9px] uppercase" style={{ color: styles.contentTertiary }}>
+                                                                    {channelBadgeLabel(thread.channel)}
+                                                                </span>
+                                                            )}
+                                                            {thread.channel === "app" && thread.sessionId && (
+                                                                <span
+                                                                    className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:text-red-500"
+                                                                    style={{ color: styles.contentTertiary }}
+                                                                    onClick={(e) => {
+                                                                        handleDeleteThread(thread, e);
+                                                                    }}
+                                                                >
+                                                                    <Trash2 className="h-3 w-3" />
+                                                                </span>
+                                                            )}
+                                                            <ChevronRight
+                                                                className="size-3 opacity-60"
                                                                 style={{ color: styles.contentTertiary }}
-                                                                onClick={(e) => {
-                                                                    handleDeleteThread(thread, e);
-                                                                }}
-                                                            >
-                                                                <Trash2 className="h-3 w-3" />
-                                                            </span>
-                                                        )}
-                                                        <ChevronRight
-                                                            className={thread.channel === "app" && thread.sessionId
-                                                                ? "size-3 opacity-60 shrink-0"
-                                                                : "ml-auto size-3 opacity-60 shrink-0"
-                                                            }
-                                                            style={{ color: styles.contentTertiary }}
-                                                        />
+                                                            />
+                                                        </div>
                                                     </div>
                                                     <div
                                                         className="mt-0.5 text-caption truncate"
@@ -489,7 +487,7 @@ export default function ChatBrowserView({ tabId, initialChannel = "all" }: { tab
                                                     >
                                                         {formatRelativeTime(thread.updatedAt)} • {thread.messageCount} messages
                                                     </div>
-                                                    {!!thread.preview && (
+                                                    {!!searchQuery.trim() && !!thread.preview && (
                                                         <div
                                                             className="mt-1 text-caption line-clamp-1"
                                                             style={{ color: styles.contentSecondary }}
@@ -556,8 +554,9 @@ export default function ChatBrowserView({ tabId, initialChannel = "all" }: { tab
                                     </p>
                                 </div>
                             ) : (
-                                <ScrollArea className="flex-1">
-                                    <div className="mx-auto max-w-3xl min-w-0 space-y-3 p-4">
+                                <div className="flex-1 overflow-hidden min-h-0">
+                                    <div className="h-full overflow-y-auto overflow-x-hidden">
+                                        <div className="mx-auto max-w-3xl min-w-0 space-y-3 p-4">
                                         {selectedMessages.map((message) => (
                                             <Message key={message.id} from={message.role}>
                                                 <div
@@ -602,8 +601,9 @@ export default function ChatBrowserView({ tabId, initialChannel = "all" }: { tab
                                                 </div>
                                             </Message>
                                         ))}
+                                        </div>
                                     </div>
-                                </ScrollArea>
+                                </div>
                             )}
                         </>
                     ) : !isLoadingThreads && threads.length > 0 ? (
