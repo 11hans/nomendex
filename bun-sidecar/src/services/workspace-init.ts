@@ -8,6 +8,7 @@ import { initializeAgentMemoryService, disposeAgentMemoryService } from "@/featu
 import { secrets } from "@/lib/secrets";
 import { onStartup, scheduleInboxAutoArchive } from "@/onStartup";
 import { startNotesWatcher } from "@/services/notes-watcher";
+import { startGitChangeWatcher, stopGitChangeWatcher } from "@/services/git-change-watcher";
 import { enableAgentEditing } from "@/services/agent-editing";
 
 /**
@@ -78,6 +79,7 @@ export async function initializeWorkspaceServices(): Promise<void> {
         await initService("goals", initializeGoalsService);
         await initService("agent-memory", initializeAgentMemoryService);
         await initService("notes-watcher", () => startNotesWatcher());
+        await initService("git-change-watcher", () => startGitChangeWatcher());
         await initService("agent-editing", enableAgentEditing);
 
         scheduleInboxAutoArchive();
@@ -87,5 +89,6 @@ export async function initializeWorkspaceServices(): Promise<void> {
         startupLog.info("Skipping feature services (no active workspace)");
         // Tear down services that may have been running for a previous workspace
         await disposeAgentMemoryService();
+        stopGitChangeWatcher();
     }
 }

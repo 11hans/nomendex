@@ -6,7 +6,7 @@ import { appendFile } from "node:fs/promises";
 import { isAllowedRequestHost, isAllowedWebSocketOrigin, isLoopbackHost, resolveServerHostname } from "@/lib/request-security";
 import { baseDirRoute } from "./server-routes/base-dir";
 import { workspaceRoutes } from "./server-routes/workspace-routes";
-import { gitInstalledRoute, gitInitRoute, gitStatusRoute, gitSetupRemoteRoute, gitPullRoute, gitPushRoute, gitCommitRoute, gitFetchStatusRoute, gitFileDiffRoute, gitConflictsRoute, gitResolveConflictRoute, gitAbortMergeRoute, gitContinueMergeRoute, gitConflictContentRoute, gitStageRoute, gitUnstageRoute, gitStageAllRoute, gitUnstageAllRoute, gitStatusDetailedRoute, gitDiscardRoute } from "./server-routes/git-sync";
+import { gitInstalledRoute, gitInitRoute, gitStatusRoute, gitLocalChangesRoute, gitSetupRemoteRoute, gitPullRoute, gitPushRoute, gitCommitRoute, gitFetchStatusRoute, gitFileDiffRoute, gitConflictsRoute, gitResolveConflictRoute, gitAbortMergeRoute, gitContinueMergeRoute, gitConflictContentRoute, gitStageRoute, gitUnstageRoute, gitStageAllRoute, gitUnstageAllRoute, gitStatusDetailedRoute, gitDiscardRoute } from "./server-routes/git-sync";
 // Feature-specific routes (replacing plugin registry)
 import { todosRoutes } from "./server-routes/todos-routes";
 import { notesRoutes } from "./server-routes/notes-routes";
@@ -379,6 +379,7 @@ const server = serve<WSData>({
         "/api/git/installed": gitInstalledRoute,
         "/api/git/init": gitInitRoute,
         "/api/git/status": gitStatusRoute,
+        "/api/git/local-changes": gitLocalChangesRoute,
         "/api/git/setup-remote": gitSetupRemoteRoute,
         "/api/git/pull": gitPullRoute,
         "/api/git/push": gitPushRoute,

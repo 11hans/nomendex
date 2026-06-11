@@ -54,9 +54,12 @@ Derived flags:
 
 Configured from workspace settings and applied in `GHSyncContext`:
 - scheduled polling: interval-based fetch/sync checks
-- sync-on-change: file-change polling with debounce
+- sync-on-change: server-side fs.watch change detection with debounce
 
 Key behavior:
+- Change detection is server-side: `git-change-watcher.ts` (fs.watch on workspace root, ignoring `.git/`) records a last-change timestamp; the frontend polls the cheap `/api/git/local-changes` endpoint (no git status walk) every 3s
+- Before syncing, one full `/api/git/status` confirms there really are uncommitted changes (fs events also fire for ignored files and for pull checkouts, so this prevents sync loops)
+- If the server watcher isn't running, the frontend falls back to polling full `/api/git/status`
 - On-change sync uses debounce (5s)
 - Sync pauses automatically when merge conflict is active
 - Auto-sync can be globally paused/resumed

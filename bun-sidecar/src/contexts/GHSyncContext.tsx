@@ -293,8 +293,12 @@ export function GHSyncProvider(props: { children: React.ReactNode }) {
         };
     }, [isReady, autoSync.enabled, autoSync.paused, autoSync.intervalSeconds, status.hasMergeConflict, checkForChanges]);
 
-    // File watching with debounce (polls git status every 3 seconds, debounces sync by 5 seconds)
-    // Also pauses when there's an active merge conflict
+    // File watching with debounce: polls the cheap fs.watch-backed
+    // /api/git/local-changes every 3 seconds (no git status walk) and runs one
+    // full git status as confirmation before syncing — fs events also fire for
+    // ignored files and for git's own checkouts during pull, so this avoids
+    // sync loops. Falls back to full status polling if the server watcher
+    // isn't running. Also pauses when there's an active merge conflict.
     useEffect(() => {
         if (!isReady || !autoSync.enabled || !autoSync.syncOnChanges || autoSync.paused || status.hasMergeConflict) {
             if (changeDebounceRef.current) {
@@ -308,37 +312,68 @@ export function GHSyncProvider(props: { children: React.ReactNode }) {
             return;
         }
 
-        let lastChangeDetected: number | null = null;
+        let lastHandledChangeAt = 0;
         let isWatching = true;
+
+        // Sync after 5 seconds of no new changes, confirming first that there
+        // really is something to commit.
+        const scheduleConfirmedSync = (options?: { skipConfirmation?: boolean }) => {
+            if (changeDebounceRef.current) {
+                clearTimeout(changeDebounceRef.current);
+            }
+            changeDebounceRef.current = setTimeout(async () => {
+                changeDebounceRef.current = null;
+                if (!isWatching) return;
+                if (options?.skipConfirmation) {
+                    syncRef.current?.();
+                    return;
+                }
+                try {
+                    const response = await fetch("/api/git/status");
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.hasUncommittedChanges) {
+                            syncRef.current?.();
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error confirming changes before sync:", error);
+                }
+            }, CHANGE_DEBOUNCE_MS);
+        };
 
         const watchForChanges = async () => {
             if (!isWatching) return;
 
             try {
-                const response = await fetch("/api/git/status");
+                const response = await fetch("/api/git/local-changes");
                 if (response.ok) {
                     const data = await response.json();
 
-                    if (data.hasUncommittedChanges) {
-                        const now = Date.now();
-                        // Only reset timer if it's a new change window
-                        if (lastChangeDetected === null || now - lastChangeDetected > CHANGE_DEBOUNCE_MS) {
-                            lastChangeDetected = now;
-
-                            // Clear any existing debounce
-                            if (changeDebounceRef.current) {
-                                clearTimeout(changeDebounceRef.current);
+                    if (data.watcherActive) {
+                        if (typeof data.lastChangeAt === "number" && data.lastChangeAt > lastHandledChangeAt) {
+                            lastHandledChangeAt = data.lastChangeAt;
+                            scheduleConfirmedSync();
+                        }
+                    } else {
+                        // Server-side watcher unavailable — fall back to the
+                        // full status poll (already confirmed, sync directly).
+                        // Don't reset a pending debounce: the workspace stays
+                        // dirty until the sync runs, so re-scheduling on every
+                        // poll would postpone the sync forever.
+                        if (!changeDebounceRef.current) {
+                            const statusResponse = await fetch("/api/git/status");
+                            if (statusResponse.ok) {
+                                const statusData = await statusResponse.json();
+                                if (statusData.hasUncommittedChanges) {
+                                    scheduleConfirmedSync({ skipConfirmation: true });
+                                }
                             }
-
-                            // Sync after 5 seconds of no new changes
-                            changeDebounceRef.current = setTimeout(() => {
-                                syncRef.current?.();
-                            }, CHANGE_DEBOUNCE_MS);
                         }
                     }
                 }
             } catch (error) {
-                // Ignore errors during status polling
+                // Ignore errors during change polling
                 console.error("Error watching for changes:", error);
             }
 

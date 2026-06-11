@@ -3,6 +3,7 @@ import { getRootPath, getNomendexPath } from "../storage/root-path";
 import { createServiceLogger } from "../lib/logger";
 import { createGitClient, CommitInfo, ConflictFile, AuthConfig, FileChange } from "../lib/git";
 import { GitAuthModeSchema } from "../types/Workspace";
+import { getGitChangeState } from "../services/git-change-watcher";
 
 const logger = createServiceLogger("GIT-SYNC");
 
@@ -143,6 +144,16 @@ export const gitInitRoute: RouteHandler<GitSyncResponse> = {
                 { status: 500 }
             );
         }
+    },
+};
+
+// Cheap local-change probe backed by the fs.watch git change watcher.
+// Lets the frontend detect "something changed in the workspace" without
+// running a full worktree status walk on every poll.
+export const gitLocalChangesRoute: RouteHandler<{ success: boolean; lastChangeAt: number | null; watcherActive: boolean }> = {
+    GET: async (_req) => {
+        const state = getGitChangeState();
+        return Response.json({ success: true, ...state });
     },
 };
 

@@ -201,10 +201,33 @@ export function isProtectedFromStaging(filepath: string): boolean {
 }
 
 /**
+ * Shared isomorphic-git object cache, keyed by repo dir. Reusing one cache
+ * object across commands avoids re-reading and re-indexing packfiles on every
+ * call — the status endpoint is polled by auto-sync, so this is a hot path.
+ * Safe across fetch/merge (they only add objects); must be cleared if
+ * packfiles are deleted externally (e.g. `git gc` via the system CLI).
+ */
+const gitCaches = new Map<string, object>();
+
+export function clearGitCache(dir?: string): void {
+    if (dir) {
+        gitCaches.delete(dir);
+    } else {
+        gitCaches.clear();
+    }
+}
+
+/**
  * Create a git client for a specific directory
  */
 export function createGitClient(config: GitClientConfig) {
     const { dir, author = DEFAULT_AUTHOR } = config;
+
+    let cache = gitCaches.get(dir);
+    if (!cache) {
+        cache = {};
+        gitCaches.set(dir, cache);
+    }
 
     // Ensure pack files are writable so isomorphic-git can operate on repos
     // created by the system git CLI (which makes pack files read-only)
@@ -319,14 +342,14 @@ export function createGitClient(config: GitClientConfig) {
          * Checkout a branch
          */
         async checkout(ref: string): Promise<void> {
-            await git.checkout({ fs, dir, ref });
+            await git.checkout({ fs, dir, cache, ref });
         },
 
         /**
          * Get repository status
          */
         async status(): Promise<StatusResult> {
-            const matrix = await git.statusMatrix({ fs, dir });
+            const matrix = await git.statusMatrix({ fs, dir, cache });
             const changedFiles: FileChange[] = [];
 
             for (const [filepath, head, workdir, stage] of matrix) {
@@ -364,9 +387,22 @@ export function createGitClient(config: GitClientConfig) {
          * Used for inline diff previews in the Sync UI.
          */
         async getChangedFileContent(filepath: string): Promise<ChangedFileContentResult> {
-            const statusResult = await this.status();
-            const fileChange = statusResult.changedFiles.find((f) => f.path === filepath);
-            const status = fileChange?.status ?? "unchanged";
+            // Scope the status check to the single file — a full statusMatrix
+            // walk of the worktree is wasteful when previewing one diff.
+            const matrix = await git.statusMatrix({ fs, dir, cache, filepaths: [filepath] });
+            let status: FileChange["status"] | "unchanged" = "unchanged";
+            if (matrix.length > 0) {
+                const [, head, workdir, stage] = matrix[0]!;
+                if (head === 0 && workdir === 2 && stage === 0) {
+                    status = "untracked";
+                } else if (head === 0 && stage !== 0) {
+                    status = "added";
+                } else if (head === 1 && workdir === 0) {
+                    status = "deleted";
+                } else if (head === 1 && (workdir === 2 || stage === 2 || stage === 3)) {
+                    status = "modified";
+                }
+            }
 
             const toPreviewText = (bytes: Uint8Array): { text: string; binary: boolean; truncated: boolean } => {
                 const binary = bytes.includes(0);
@@ -397,7 +433,7 @@ export function createGitClient(config: GitClientConfig) {
 
             if (headOid) {
                 try {
-                    const blob = await git.readBlob({ fs, dir, oid: headOid, filepath });
+                    const blob = await git.readBlob({ fs, dir, cache, oid: headOid, filepath });
                     baseBytes = blob.blob;
                 } catch {
                     baseBytes = null;
@@ -434,7 +470,7 @@ export function createGitClient(config: GitClientConfig) {
          */
         async log(opts: { depth?: number } = {}): Promise<CommitInfo[]> {
             try {
-                const commits = await git.log({ fs, dir, depth: opts.depth ?? 5 });
+                const commits = await git.log({ fs, dir, cache, depth: opts.depth ?? 5 });
                 return commits.map((c: ReadCommitResult) => ({
                     hash: c.oid.slice(0, 7),
                     message: c.commit.message.split("\n")[0] ?? "",
@@ -450,7 +486,7 @@ export function createGitClient(config: GitClientConfig) {
          * Stage all changes (add new/modified, remove deleted)
          */
         async addAll(): Promise<void> {
-            const matrix = await git.statusMatrix({ fs, dir });
+            const matrix = await git.statusMatrix({ fs, dir, cache });
 
             for (const [filepath, head, workdir] of matrix) {
                 if (isProtectedFromStaging(filepath)) continue;
@@ -468,7 +504,7 @@ export function createGitClient(config: GitClientConfig) {
          * Check if there are staged changes
          */
         async hasStagedChanges(): Promise<boolean> {
-            const matrix = await git.statusMatrix({ fs, dir });
+            const matrix = await git.statusMatrix({ fs, dir, cache });
             for (const [, head, , stage] of matrix) {
                 if (stage !== head && stage !== 0) {
                     return true;
@@ -482,7 +518,7 @@ export function createGitClient(config: GitClientConfig) {
          * For untracked files, deletes the file.
          */
         async discardFile(filepath: string): Promise<void> {
-            const matrix = await git.statusMatrix({ fs, dir, filepaths: [filepath] });
+            const matrix = await git.statusMatrix({ fs, dir, cache, filepaths: [filepath] });
             if (matrix.length === 0) return;
 
             const [, head, workdir] = matrix[0]!;
@@ -503,7 +539,7 @@ export function createGitClient(config: GitClientConfig) {
                 }
             } else {
                 // Tracked file — checkout from HEAD
-                await git.checkout({ fs, dir, ref: "HEAD", filepaths: [filepath], force: true });
+                await git.checkout({ fs, dir, cache, ref: "HEAD", filepaths: [filepath], force: true });
             }
         },
 
@@ -561,7 +597,7 @@ export function createGitClient(config: GitClientConfig) {
          * Get detailed status separating staged and unstaged changes
          */
         async statusDetailed(): Promise<DetailedStatusResult> {
-            const matrix = await git.statusMatrix({ fs, dir });
+            const matrix = await git.statusMatrix({ fs, dir, cache });
             const stagedFiles: FileChange[] = [];
             const unstagedFiles: FileChange[] = [];
 
@@ -747,6 +783,7 @@ export function createGitClient(config: GitClientConfig) {
                 await git.merge({
                     fs,
                     dir,
+                    cache,
                     ours: branch,
                     theirs: `${remote}/${branch}`,
                     abortOnConflict: false,
@@ -762,6 +799,7 @@ export function createGitClient(config: GitClientConfig) {
                 await git.checkout({
                     fs,
                     dir,
+                    cache,
                     ref: branch,
                     force: false,
                 });
@@ -790,7 +828,7 @@ export function createGitClient(config: GitClientConfig) {
                     // If no conflict files from error, scan the working directory for conflict markers
                     if (conflictFiles.length === 0) {
                         logger.info("No conflict files in error data, scanning for conflict markers");
-                        const index = await git.listFiles({ fs, dir });
+                        const index = await git.listFiles({ fs, dir, cache });
                         for (const filepath of index) {
                             if (await this.hasConflictMarkers(filepath)) {
                                 conflictFiles.push(filepath);
@@ -874,10 +912,10 @@ export function createGitClient(config: GitClientConfig) {
                 await this.fetch(auth, "origin", branch);
 
                 // Get local and remote commits
-                const localCommits = await git.log({ fs, dir, ref: branch });
+                const localCommits = await git.log({ fs, dir, cache, ref: branch });
                 let remoteCommits: ReadCommitResult[] = [];
                 try {
-                    remoteCommits = await git.log({ fs, dir, ref: `origin/${branch}` });
+                    remoteCommits = await git.log({ fs, dir, cache, ref: `origin/${branch}` });
                 } catch {
                     // Remote branch might not exist yet
                     return result;
@@ -908,6 +946,7 @@ export function createGitClient(config: GitClientConfig) {
                             const changes = await git.walk({
                                 fs,
                                 dir,
+                                cache,
                                 trees: [git.TREE({ ref: localTree }), git.TREE({ ref: remoteTree })],
                                 map: async function (filepath, [local, remote]) {
                                     if (filepath === ".") return undefined;
@@ -997,7 +1036,7 @@ export function createGitClient(config: GitClientConfig) {
 
                 // Also scan all tracked files for conflict markers
                 // This catches files that might have been missed or manually created
-                const index = await git.listFiles({ fs, dir });
+                const index = await git.listFiles({ fs, dir, cache });
                 logger.info("Scanning tracked files for markers", { fileCount: index.length });
                 let filesWithMarkers = 0;
                 for (const filepath of index) {
@@ -1018,7 +1057,7 @@ export function createGitClient(config: GitClientConfig) {
                 logger.info("Finished scanning for markers", { filesWithMarkers });
 
                 // Check status matrix for staged files (considered resolved)
-                const matrix = await git.statusMatrix({ fs, dir });
+                const matrix = await git.statusMatrix({ fs, dir, cache });
                 logger.info("Checking status matrix", { matrixSize: matrix.length });
                 for (const [filepath, head, workdir, stage] of matrix) {
                     if (seenPaths.has(filepath)) continue;
@@ -1115,6 +1154,7 @@ export function createGitClient(config: GitClientConfig) {
                 const blob = await git.readBlob({
                     fs,
                     dir,
+                    cache,
                     oid: refToUse,
                     filepath,
                 });
@@ -1159,7 +1199,7 @@ export function createGitClient(config: GitClientConfig) {
                 try {
                     const oursRef = mergeState?.oursOid ?? "HEAD";
                     logger.info("Reading ours blob", { oursRef: oursRef.slice(0, 7), filepath });
-                    const ours = await git.readBlob({ fs, dir, oid: oursRef, filepath });
+                    const ours = await git.readBlob({ fs, dir, cache, oid: oursRef, filepath });
                     oursContent = Buffer.from(ours.blob).toString("utf-8");
                     logger.info("Got ours content", { length: oursContent.length });
                 } catch (e) {
@@ -1185,7 +1225,7 @@ export function createGitClient(config: GitClientConfig) {
 
                     if (theirsRef) {
                         logger.info("Reading theirs blob", { theirsRef: theirsRef.slice(0, 7), filepath });
-                        const theirs = await git.readBlob({ fs, dir, oid: theirsRef, filepath });
+                        const theirs = await git.readBlob({ fs, dir, cache, oid: theirsRef, filepath });
                         theirsContent = Buffer.from(theirs.blob).toString("utf-8");
                         logger.info("Got theirs content", { length: theirsContent.length });
                     } else {
@@ -1293,7 +1333,7 @@ export function createGitClient(config: GitClientConfig) {
             await this.clearMergeState();
 
             // Reset to HEAD (or stored oursOid)
-            await git.checkout({ fs, dir, ref: resetRef, force: true });
+            await git.checkout({ fs, dir, cache, ref: resetRef, force: true });
             logger.info("Merge aborted", { resetRef });
         },
 
