@@ -93,25 +93,27 @@ export type TelegramInboundMessage = {
 
 // Zod schemas for API input validation
 
+// Telegram rejects messages over 4096 characters, and unbounded input would
+// flow into agent prompts and the append-only messages log.
 export const TelegramSendSchema = z.object({
-  threadId: z.string().optional(),
-  chatId: z.string().optional(),
-  text: z.string().min(1),
+  threadId: z.string().max(256).optional(),
+  chatId: z.string().max(64).optional(),
+  text: z.string().min(1).max(4096),
 });
 
 export const TelegramAiReplySchema = z.object({
-  threadId: z.string().min(1),
-  prompt: z.string().optional(),
+  threadId: z.string().min(1).max(256),
+  prompt: z.string().max(4096).optional(),
 });
 
 export const ChannelsSettingsPatchSchema = z.object({
   telegram: z.object({
     enabled: z.boolean().optional(),
     autoReplyEnabled: z.boolean().optional(),
-    allowlist: z.array(z.string()).optional(),
-    telegramAgentId: z.string().optional(),
-    timeZone: z.string().optional(),
-    fallbackText: z.string().optional(),
+    allowlist: z.array(z.string().min(1).max(64)).max(100).optional(),
+    telegramAgentId: z.string().max(128).optional(),
+    timeZone: z.string().max(64).optional(),
+    fallbackText: z.string().max(4096).optional(),
   }).strict().optional(),
 }).strict();
 
