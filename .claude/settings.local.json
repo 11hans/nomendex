@@ -28,7 +28,13 @@
       "Bash(awk -F: '/monthly/{seen=1; print \"start:\"$1; next} seen{print \"next_close:\"$1; exit}')",
       "Bash(cat)",
       "Bash(git commit *)",
-      "mcp__raindrop__query_traces"
+      "mcp__raindrop__query_traces",
+      "Bash(git -C /Users/honza/Code/nomendex diff --stat 3c7c5ad telegram -- bun-sidecar/src/onStartup.ts)",
+      "Bash(git -C /Users/honza/Code/nomendex show telegram:bun-sidecar/src/gateway/ai.ts)",
+      "Bash(git show *)",
+      "Bash(python3 -)",
+      "Bash(git -C /Users/honza/Code/nomendex stash list)",
+      "Bash(git -C /Users/honza/Code/nomendex status --short)"
     ]
   }
 }
