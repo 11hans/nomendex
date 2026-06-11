@@ -115,18 +115,27 @@ async function saveTelegramThreads(threads: UnifiedThread[]): Promise<void> {
   await Bun.write(getChannelThreadsPath(), JSON.stringify(threads, null, 2));
 }
 
-export async function upsertTelegramThread(thread: UnifiedThread): Promise<void> {
-  const threads = await loadTelegramThreads();
-  const index = threads.findIndex((item) => item.id === thread.id);
+// Serialize upserts: concurrent read-modify-write cycles on
+// channels-threads.json (inbound message + manual send at the same time)
+// could otherwise drop one of the updates.
+let threadWriteQueue: Promise<unknown> = Promise.resolve();
 
-  if (index >= 0) {
-    threads[index] = thread;
-  } else {
-    threads.push(thread);
-  }
+export function upsertTelegramThread(thread: UnifiedThread): Promise<void> {
+  const task = threadWriteQueue.then(async () => {
+    const threads = await loadTelegramThreads();
+    const index = threads.findIndex((item) => item.id === thread.id);
 
-  threads.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  await saveTelegramThreads(threads);
+    if (index >= 0) {
+      threads[index] = thread;
+    } else {
+      threads.push(thread);
+    }
+
+    threads.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    await saveTelegramThreads(threads);
+  });
+  threadWriteQueue = task.catch(() => undefined);
+  return task;
 }
 
 export async function findTelegramThread(threadId: string): Promise<UnifiedThread | null> {
@@ -139,6 +148,24 @@ export async function appendTelegramMessage(message: UnifiedMessage): Promise<vo
   const path = getChannelMessagesPath();
   const line = `${JSON.stringify(message)}\n`;
   await appendFile(path, line, "utf-8");
+}
+
+// channels-messages.jsonl is append-only and every thread read scans the
+// whole file, so it must not grow unbounded. Compacted on gateway init.
+const MESSAGES_COMPACT_THRESHOLD_BYTES = 5 * 1024 * 1024;
+const MESSAGES_COMPACT_KEEP_LINES = 5000;
+
+export async function compactTelegramMessagesFile(): Promise<void> {
+  if (!(await ensureWorkspaceDir())) return;
+  const path = getChannelMessagesPath();
+  const file = Bun.file(path);
+  if (!(await file.exists()) || file.size <= MESSAGES_COMPACT_THRESHOLD_BYTES) return;
+
+  const lines = (await file.text()).split("\n").filter(Boolean);
+  if (lines.length <= MESSAGES_COMPACT_KEEP_LINES) return;
+
+  const kept = lines.slice(-MESSAGES_COMPACT_KEEP_LINES);
+  await Bun.write(path, `${kept.join("\n")}\n`);
 }
 
 

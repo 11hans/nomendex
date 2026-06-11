@@ -3,6 +3,7 @@ import { secrets } from "@/lib/secrets";
 import { SessionRegistry } from "./session-registry";
 import {
   appendTelegramMessage,
+  compactTelegramMessagesFile,
   findTelegramThread,
   getLatestTelegramInboundText,
   listTelegramMessages,
@@ -81,11 +82,13 @@ class GatewayService {
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
+    await compactTelegramMessagesFile();
     await this.channelManager.start();
     this.initialized = true;
   }
 
   async reinitialize(): Promise<void> {
+    await compactTelegramMessagesFile();
     await this.channelManager.reload();
     this.initialized = true;
   }
