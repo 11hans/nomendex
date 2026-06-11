@@ -6,6 +6,13 @@ import type { ChannelStatus, ChannelsSettings, TelegramInboundMessage } from "./
 
 const gatewayLogger = createServiceLogger("CHANNEL-MANAGER");
 
+// Insurance: error strings can embed the bot token (e.g. fetch errors that
+// include the request URL). lastError flows into status responses and
+// WebSocket events, so the token must never survive in it.
+function scrubToken(message: string, token: string): string {
+  return token ? message.split(token).join("[redacted]") : message;
+}
+
 type ChannelManagerOptions = {
   getSettings: () => Promise<ChannelsSettings>;
   getLastUpdateId: () => Promise<number>;
@@ -101,7 +108,12 @@ export class ChannelManager {
         this.setStatus({ connected, ...(connected ? { lastError: null } : {}) });
       },
       onError: (error) => {
-        this.setStatus({ connected: false, lastError: error.message });
+        this.setStatus({ connected: false, lastError: scrubToken(error.message, token) });
+      },
+      onStop: () => {
+        // The monitor stopped on its own (fatal polling error) — without
+        // this, status.running would keep claiming the channel is alive.
+        this.setStatus({ running: false, connected: false });
       },
     });
 
