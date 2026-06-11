@@ -55,7 +55,7 @@ export function FilePickerDialog({ open, onOpenChange, onSelect }: FilePickerDia
             setLoading(true);
             try {
                 const [notesData, todosData, projectsData] = await Promise.all([
-                    notesAPI.getNotes(),
+                    notesAPI.getNotesMetadata(),
                     todosAPI.getTodos(),
                     projectsAPI.listProjects(),
                 ]);

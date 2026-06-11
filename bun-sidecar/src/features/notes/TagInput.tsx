@@ -21,7 +21,7 @@ export function TagInput({ tags, onTagsChange, placeholder = "Type a tag..." }: 
     useEffect(() => {
         async function loadTags() {
             try {
-                const notes = await notesAPI.getNotes();
+                const notes = await notesAPI.getNotesMetadata();
                 const tagSet = new Set<string>();
                 notes.forEach((note) => {
                     const noteTags = note.frontMatter?.tags;

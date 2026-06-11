@@ -30,20 +30,8 @@ export interface ScanResult {
 }
 
 /**
- * Check if a file is online-only (cloud placeholder without local data).
- * Online-only files have size > 0 but blocks === 0.
- */
-async function isOnlineOnly(filePath: string): Promise<boolean> {
-    try {
-        const stats = await stat(filePath);
-        return stats.size > 0 && stats.blocks === 0;
-    } catch {
-        return false; // If we can't stat it, let the read fail later
-    }
-}
-
-/**
- * Scan a directory for markdown files, excluding online-only files.
+ * Scan a directory for markdown files, excluding online-only files
+ * (cloud placeholders with size > 0 but blocks === 0).
  */
 async function scanDirectory(params: {
     dirPath: string;
@@ -61,14 +49,14 @@ async function scanDirectory(params: {
             const fullPath = join(dirPath, relativePath);
 
             try {
-                // Check if file is online-only
-                if (await isOnlineOnly(fullPath)) {
+                // Single stat covers both the online-only check and mtime
+                const stats = await stat(fullPath);
+
+                // Online-only cloud placeholder: size > 0 but no local blocks
+                if (stats.size > 0 && stats.blocks === 0) {
                     skippedOnlineOnly++;
                     continue;
                 }
-
-                // Get mtime
-                const stats = await stat(fullPath);
 
                 files.push({
                     relativePath,
@@ -142,7 +130,7 @@ export async function scanNotesFiles(): Promise<ScanResult> {
  * Populates the `content` field on each file.
  */
 export async function readFileContents(files: ScannedFile[]): Promise<void> {
-    for (const file of files) {
+    await Promise.all(files.map(async (file) => {
         try {
             file.content = await Bun.file(file.fullPath).text();
         } catch (error) {
@@ -151,7 +139,7 @@ export async function readFileContents(files: ScannedFile[]): Promise<void> {
             });
             file.content = ""; // Empty content so extractors don't fail
         }
-    }
+    }));
 }
 
 /**

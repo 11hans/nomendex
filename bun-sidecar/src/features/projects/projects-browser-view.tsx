@@ -41,7 +41,7 @@ export function ProjectsBrowserView({ tabId }: { tabId: string }) {
         const [projectConfigs, allTodos, allNotes] = await Promise.all([
             projectsAPI.listProjects(),
             todosAPI.getTodos(),
-            notesAPI.getNotes(),
+            notesAPI.getNotesMetadata(),
         ]);
 
         const projectInfos = projectConfigs.map((config) => {

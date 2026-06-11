@@ -3,13 +3,13 @@ import { FileText } from "lucide-react";
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
-import { Note, notesPluginSerial } from "@/features/notes";
+import { NoteMetadata, notesPluginSerial } from "@/features/notes";
 
 export function NotesCommandMenu() {
     const [open, setOpen] = React.useState(false);
     const { openTab } = useWorkspaceContext();
     const inputRef = React.useRef<HTMLInputElement | null>(null);
-    const [notes, setNotes] = React.useState<Note[]>([]);
+    const [notes, setNotes] = React.useState<NoteMetadata[]>([]);
     const [loading, setLoading] = React.useState(false);
 
     // Create the API once
@@ -43,7 +43,7 @@ export function NotesCommandMenu() {
             if (open) {
                 console.log("[NotesCommandMenu] Dialog opened, fetching notes...");
                 setLoading(true);
-                const result = await call.getNotes();
+                const result = await call.getNotesMetadata();
                 setNotes(result);
                 setLoading(false);
             } else {

@@ -8,7 +8,7 @@ import {
     getWikiLinkPopupPosition,
 } from "./plugin";
 import { notesAPI } from "@/hooks/useNotesAPI";
-import { Note } from "@/features/notes";
+import { NoteMetadata } from "@/features/notes";
 import { useTheme } from "@/hooks/useTheme";
 
 interface WikiLinkPopupProps {
@@ -54,7 +54,7 @@ function fuzzyMatch(query: string, text: string): number {
 /**
  * Filter and sort notes by fuzzy match
  */
-function filterNotes(notes: Note[], query: string): Note[] {
+function filterNotes(notes: NoteMetadata[], query: string): NoteMetadata[] {
     if (!query) {
         // Return recent notes sorted by modified date
         return [...notes]
@@ -79,8 +79,8 @@ function filterNotes(notes: Note[], query: string): Note[] {
 
 export function WikiLinkPopup({ view, pluginState }: WikiLinkPopupProps) {
     const { currentTheme } = useTheme();
-    const [notes, setNotes] = useState<Note[]>([]);
-    const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
+    const [notes, setNotes] = useState<NoteMetadata[]>([]);
+    const [filteredNotes, setFilteredNotes] = useState<NoteMetadata[]>([]);
     const [loading, setLoading] = useState(true);
     const popupRef = useRef<HTMLDivElement>(null);
     const selectedRef = useRef<HTMLDivElement>(null);
@@ -91,7 +91,7 @@ export function WikiLinkPopup({ view, pluginState }: WikiLinkPopupProps) {
 
         async function loadNotes() {
             try {
-                const allNotes = await notesAPI.getNotes();
+                const allNotes = await notesAPI.getNotesMetadata();
                 if (mounted) {
                     setNotes(allNotes);
                     setLoading(false);
@@ -121,7 +121,7 @@ export function WikiLinkPopup({ view, pluginState }: WikiLinkPopupProps) {
 
     // Handle selection
     const handleSelect = useCallback(
-        (note: Note) => {
+        (note: NoteMetadata) => {
             const noteName = note.fileName.replace(/\.md$/, "");
             insertWikiLink(view, noteName);
         },

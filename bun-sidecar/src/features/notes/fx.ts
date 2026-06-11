@@ -11,6 +11,12 @@ import { mkdir } from "node:fs/promises";
 // Lazy-initialized storage for notes
 let storage: FeatureStorage | null = null;
 
+// Parsed-note cache keyed by relative file path, validated per call against the
+// file's mtime. Saves the read + YAML parse for unchanged files in getNotes /
+// getNotesMetadata / searchNotes (the search dialog scans the whole vault per
+// keystroke). Entries for deleted files are pruned at the end of getNotes.
+const noteCache = new Map<string, { mtimeMs: number; frontMatter?: Record<string, unknown>; content: string }>();
+
 /**
  * Initialize the notes service. Must be called after initializePaths().
  */
@@ -18,6 +24,7 @@ export async function initializeNotesService(): Promise<void> {
     if (!hasActiveWorkspace()) {
         return;
     }
+    noteCache.clear();
     storage = new FeatureStorage(getNotesPath());
     await getStorage().initialize();
 
@@ -86,44 +93,104 @@ function shouldSkipFolder(folderPath: string): boolean {
 async function getNotes(args?: { showHiddenFiles?: boolean }) {
     const showHiddenFiles = args?.showHiddenFiles ?? false;
     try {
-        const notes: { fileName: string; content: string; frontMatter?: Record<string, unknown>; folderPath?: string }[] = [];
+        const readNote = async (fileName: string, folderPath: string | undefined) => {
+            const mtimeMs = await getStorage().getFileMtime(fileName);
+            if (mtimeMs !== null) {
+                const cached = noteCache.get(fileName);
+                if (cached && cached.mtimeMs === mtimeMs) {
+                    // Clone frontMatter so callers mutating it can't poison the cache
+                    // (content is an immutable string, no clone needed).
+                    return {
+                        fileName,
+                        content: cached.content,
+                        frontMatter: cached.frontMatter ? structuredClone(cached.frontMatter) : undefined,
+                        folderPath,
+                    };
+                }
+            }
+            const rawContent = (await getStorage().readFile(fileName)) ?? "";
+            const { frontMatter, content } = parseFrontMatter(rawContent);
+            if (mtimeMs !== null) {
+                noteCache.set(fileName, {
+                    mtimeMs,
+                    frontMatter: frontMatter ? structuredClone(frontMatter) : undefined,
+                    content,
+                });
+            }
+            return { fileName, content, frontMatter, folderPath };
+        };
 
         // Get root-level files
         const rootFiles = await getStorage().listFiles(undefined, { includeHidden: showHiddenFiles });
-        for (const file of rootFiles) {
-            if (!file.endsWith(".md")) continue;
-            if (ALWAYS_HIDDEN_FILES.includes(file)) continue;
-            let rawContent = await getStorage().readFile(file);
-            if (!rawContent) rawContent = "";
-            const { frontMatter, content } = parseFrontMatter(rawContent);
-            notes.push({ fileName: file, content, frontMatter, folderPath: undefined });
-        }
+        const rootNotes = await Promise.all(
+            rootFiles
+                .filter((file) => file.endsWith(".md") && !ALWAYS_HIDDEN_FILES.includes(file))
+                .map((file) => readNote(file, undefined)),
+        );
 
-        // Get files from all folders recursively
+        // Get files from all folders recursively (skip system directories)
         const folders = await getStorage().listAllFoldersRecursive(undefined, { includeHidden: showHiddenFiles });
-        for (const folder of folders) {
-            // Always skip system directories
-            if (shouldSkipFolder(folder.path)) {
-                continue;
-            }
+        const folderNotes = await Promise.all(
+            folders
+                .filter((folder) => !shouldSkipFolder(folder.path))
+                .map(async (folder) => {
+                    const folderFiles = await getStorage().listFiles(folder.path, { includeHidden: showHiddenFiles });
+                    return Promise.all(
+                        folderFiles
+                            .filter((file) => file.endsWith(".md") && !ALWAYS_HIDDEN_FILES.includes(file))
+                            .map((file) => readNote(`${folder.path}/${file}`, folder.path)),
+                    );
+                }),
+        );
 
-            const folderFiles = await getStorage().listFiles(folder.path, { includeHidden: showHiddenFiles });
-            for (const file of folderFiles) {
-                if (!file.endsWith(".md")) continue;
-                if (ALWAYS_HIDDEN_FILES.includes(file)) continue;
-                const filePath = `${folder.path}/${file}`;
-                let rawContent = await getStorage().readFile(filePath);
-                if (!rawContent) rawContent = "";
-                const { frontMatter, content } = parseFrontMatter(rawContent);
-                notes.push({ fileName: filePath, content, frontMatter, folderPath: folder.path });
-            }
-        }
+        const notes = [...rootNotes, ...folderNotes.flat()];
+
+        // Drop cache entries for deleted files. A key missing from this listing
+        // may just be hidden (showHiddenFiles=false), so confirm with an
+        // existence check — the unlisted set is empty in steady state.
+        const seen = new Set(notes.map((note) => note.fileName));
+        await Promise.all(
+            Array.from(noteCache.keys())
+                .filter((key) => !seen.has(key))
+                .map(async (key) => {
+                    if (!(await getStorage().fileExists(key))) {
+                        noteCache.delete(key);
+                    }
+                }),
+        );
 
         return notes;
     } catch {
         // Return empty array if notes directory doesn't exist
         return [];
     }
+}
+
+function unescapeMarkdown(text: string): string {
+    return text.replace(/\\(.)/g, "$1");
+}
+
+// Extract a display title (first H1, falling back to H2) — mirrors what the
+// notes file tree used to compute client-side from full content.
+function extractNoteTitle(content: string): string | undefined {
+    const h1Match = content.match(/^#\s+(.+)$/m);
+    if (h1Match?.[1]) return unescapeMarkdown(h1Match[1].trim());
+    const h2Match = content.match(/^##\s+(.+)$/m);
+    if (h2Match?.[1]) return unescapeMarkdown(h2Match[1].trim());
+    return undefined;
+}
+
+// Listing variant that drops note content from the payload (title is extracted
+// server-side). Use this for browsers/pickers; full content stays behind
+// getNoteByFileName / getNotes.
+async function getNotesMetadata(args?: { showHiddenFiles?: boolean }) {
+    const notes = await getNotes(args);
+    return notes.map(({ fileName, frontMatter, folderPath, content }) => ({
+        fileName,
+        frontMatter,
+        folderPath,
+        title: extractNoteTitle(content),
+    }));
 }
 
 async function searchNotes(args: { query: string }) {
@@ -567,6 +634,7 @@ async function moveNoteToFolder(args: { fileName: string; targetFolder: string |
 
 export const functions: FunctionsFromStubs<typeof functionStubs> = {
     getNotes: { ...functionStubs.getNotes, fx: getNotes },
+    getNotesMetadata: { ...functionStubs.getNotesMetadata, fx: getNotesMetadata },
     searchNotes: { ...functionStubs.searchNotes, fx: searchNotes },
     getNoteByFileName: { ...functionStubs.getNoteByFileName, fx: getNoteByFileName },
     createNote: { ...functionStubs.createNote, fx: createNote },

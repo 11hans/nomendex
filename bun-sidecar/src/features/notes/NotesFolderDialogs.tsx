@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { ChevronRight, ChevronDown, Folder as FolderIcon, FolderOpen, FileText } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { useNativeSubmit } from "@/hooks/useNativeKeyboardBridge";
-import { NoteFolder, Note } from "./index";
+import { NoteFolder, NoteMetadata } from "./index";
 import { cn } from "@/lib/utils";
 
 // ============ Create Folder Dialog ============
@@ -346,7 +346,7 @@ function FolderSelectItem({
 interface MoveToFolderDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    note: Note | null;
+    note: NoteMetadata | null;
     folders: NoteFolder[];
     onMove: (fileName: string, targetFolder: string | null) => void;
 }

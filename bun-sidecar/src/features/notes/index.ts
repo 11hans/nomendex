@@ -16,6 +16,15 @@ export const NoteSchema = z.object({
 
 export type Note = z.infer<typeof NoteSchema>;
 
+// Lightweight listing shape — everything from Note except content, plus a
+// server-extracted display title (first H1/H2 heading). Keeps /api/notes/list-metadata
+// payloads small for large vaults.
+export const NoteMetadataSchema = NoteSchema.omit({ content: true }).extend({
+    title: z.string().optional(),
+});
+
+export type NoteMetadata = z.infer<typeof NoteMetadataSchema>;
+
 export const NoteFolderSchema = z.object({
     name: z.string(),
     path: z.string(), // Full relative path from notes root
@@ -44,6 +53,12 @@ export const functionStubs = {
             showHiddenFiles: z.boolean().optional(),
         }),
         output: z.array(NoteSchema),
+    },
+    getNotesMetadata: {
+        input: z.object({
+            showHiddenFiles: z.boolean().optional(),
+        }),
+        output: z.array(NoteMetadataSchema),
     },
     searchNotes: {
         input: z.object({ query: z.string() }),

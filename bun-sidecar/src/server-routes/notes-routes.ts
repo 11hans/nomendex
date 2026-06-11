@@ -44,6 +44,13 @@ export const notesRoutes = {
             return Response.json(result);
         },
     },
+    "/api/notes/list-metadata": {
+        async POST(req: Request) {
+            const args = await req.json();
+            const result = await functions.getNotesMetadata.fx(args);
+            return Response.json(result);
+        },
+    },
     "/api/notes/search": {
         async POST(req: Request) {
             const args = await req.json();

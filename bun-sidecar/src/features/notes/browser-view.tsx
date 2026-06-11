@@ -10,7 +10,7 @@ import { Search, FileText, FilePlus, FolderPlus } from "lucide-react";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useNotesAPI } from "@/hooks/useNotesAPI";
 import { subscribe } from "@/lib/events";
-import { Note, NoteFolder, notesPluginSerial } from "./index";
+import { NoteMetadata, NoteFolder, notesPluginSerial } from "./index";
 import { NotesView } from "./note-view";
 import { NotesFileTree } from "./NotesFileTree";
 import { CreateFolderDialog, RenameFolderDialog, MoveToFolderDialog } from "./NotesFolderDialogs";
@@ -28,10 +28,10 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     const { activeTab, setTabName, openTab, getViewSelfPlacement, setSidebarTabId, showHiddenFiles } = useWorkspaceContext();
     const { loading, error, setLoading, setError } = usePlugin();
     const { currentTheme } = useTheme();
-    const [notes, setNotes] = useState<Array<Note>>([]);
+    const [notes, setNotes] = useState<Array<NoteMetadata>>([]);
     const [folders, setFolders] = useState<NoteFolder[]>([]);
     const [searchQuery, setSearchQuery] = useState("");
-    const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+    const [selectedNote, setSelectedNote] = useState<NoteMetadata | null>(null);
     const [expandFolderRequest, setExpandFolderRequest] = useState<{ path: string; nonce: number } | null>(null);
     const placement = getViewSelfPlacement(tabId);
     const { openDialog } = useCommandDialog();
@@ -42,7 +42,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
     const [renameFolderDialogOpen, setRenameFolderDialogOpen] = useState(false);
     const [folderToRename, setFolderToRename] = useState<NoteFolder | null>(null);
     const [moveToFolderDialogOpen, setMoveToFolderDialogOpen] = useState(false);
-    const [noteToMove, setNoteToMove] = useState<Note | null>(null);
+    const [noteToMove, setNoteToMove] = useState<NoteMetadata | null>(null);
 
     const searchInputRef = useRef<HTMLInputElement>(null);
     const hasSetTabNameRef = useRef<boolean>(false);
@@ -101,7 +101,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                 setLoading(true);
                 setError(null);
                 const [notesResult] = await Promise.all([
-                    notesAPI.getNotes({ showHiddenFiles }),
+                    notesAPI.getNotesMetadata({ showHiddenFiles }),
                     loadFolders(),
                 ]);
                 setNotes(notesResult);
@@ -117,7 +117,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
 
     useEffect(() => {
         return subscribe("notes:fileChanged", () => {
-            notesAPI.getNotes({ showHiddenFiles }).then(result => {
+            notesAPI.getNotesMetadata({ showHiddenFiles }).then(result => {
                 setNotes(result);
             });
         });
@@ -146,7 +146,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                 const moved = await notesAPI.moveNoteToFolder({ fileName: baseName, targetFolder: folderPath });
                 finalName = moved.fileName;
             }
-            const result = await notesAPI.getNotes({ showHiddenFiles });
+            const result = await notesAPI.getNotesMetadata({ showHiddenFiles });
             setNotes(result);
             const newNote = result.find((n) => n.fileName === finalName) ?? null;
             if (newNote) setSelectedNote(newNote);
@@ -171,7 +171,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                     noteFileName={noteFileName}
                     onSuccess={() => {
                         // Refresh notes list after deletion
-                        notesAPI.getNotes({ showHiddenFiles }).then(result => {
+                        notesAPI.getNotesMetadata({ showHiddenFiles }).then(result => {
                             setNotes(result);
                             if (selectedNote?.fileName === noteFileName) {
                                 setSelectedNote(result[0] || null);
@@ -189,7 +189,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                 <RenameNoteDialog
                     noteFileName={noteFileName}
                     onSuccess={() => {
-                        notesAPI.getNotes({ showHiddenFiles }).then(result => {
+                        notesAPI.getNotesMetadata({ showHiddenFiles }).then(result => {
                             setNotes(result);
                         });
                     }}
@@ -198,7 +198,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
         });
     }, [openDialog, notesAPI, showHiddenFiles]);
 
-    const handleSelectNote = useCallback((note: Note) => {
+    const handleSelectNote = useCallback((note: NoteMetadata) => {
         setSelectedNote(note);
     }, []);
 
@@ -222,7 +222,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
                         await notesAPI.deleteFolder({ folderPath: folder.path });
                         toast.success(`Deleted folder "${folder.name}"`);
                         await loadFolders();
-                        const result = await notesAPI.getNotes({ showHiddenFiles });
+                        const result = await notesAPI.getNotesMetadata({ showHiddenFiles });
                         setNotes(result);
                     }}
                 />
@@ -246,7 +246,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
             await notesAPI.renameFolder({ oldPath, newName });
             toast.success(`Renamed folder to "${newName}"`);
             await loadFolders();
-            const notesResult = await notesAPI.getNotes({ showHiddenFiles });
+            const notesResult = await notesAPI.getNotesMetadata({ showHiddenFiles });
             setNotes(notesResult);
         } catch (err) {
             console.error("Failed to rename folder:", err);
@@ -254,7 +254,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
         }
     }, [notesAPI, loadFolders, showHiddenFiles]);
 
-    const handleMoveToFolder = useCallback((note: Note) => {
+    const handleMoveToFolder = useCallback((note: NoteMetadata) => {
         setNoteToMove(note);
         setMoveToFolderDialogOpen(true);
     }, []);
@@ -264,7 +264,7 @@ export function NotesBrowserView({ tabId }: { tabId: string }) {
             await notesAPI.moveNoteToFolder({ fileName, targetFolder });
             const folderName = targetFolder ? folders.find(f => f.path === targetFolder)?.name ?? "folder" : "root";
             toast.success(`Moved to ${folderName}`);
-            const result = await notesAPI.getNotes({ showHiddenFiles });
+            const result = await notesAPI.getNotesMetadata({ showHiddenFiles });
             setNotes(result);
         } catch (err) {
             console.error("Failed to move note:", err);

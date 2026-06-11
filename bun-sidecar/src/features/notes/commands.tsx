@@ -52,7 +52,7 @@ export function getNotesCommands(context: CommandContext): Command[] {
             callback: async () => {
                 context.closeCommandMenu();
                 try {
-                    const existing = await notesAPI.getNotes({});
+                    const existing = await notesAPI.getNotesMetadata({});
                     const rootNotes = existing.filter((n) => !n.fileName.includes("/"));
                     const fileName = generateUntitledNoteName(rootNotes.map((n) => n.fileName));
                     await notesAPI.saveNote({ fileName, content: "" });

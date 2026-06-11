@@ -108,7 +108,7 @@ function TagManagementDialog({
         async function loadTags() {
             try {
                 if (type === "note") {
-                    const notes = await notesAPI.getNotes();
+                    const notes = await notesAPI.getNotesMetadata();
                     const tagSet = new Set<string>();
                     notes.forEach((note) => {
                         const noteTags = note.frontMatter?.tags;

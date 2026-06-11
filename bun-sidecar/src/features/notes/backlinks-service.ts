@@ -81,7 +81,9 @@ async function saveIndexToDisk(indexToSave: BacklinksIndex): Promise<void> {
     const nomendexPath = getNomendexPath();
     await mkdir(nomendexPath, { recursive: true });
     const indexPath = getIndexPath();
-    await Bun.write(indexPath, JSON.stringify(indexToSave, null, 2));
+    // Compact JSON — the index is machine-managed and written on every note
+    // save, so pretty-printing only inflates the write.
+    await Bun.write(indexPath, JSON.stringify(indexToSave));
 }
 
 /**
@@ -124,9 +126,9 @@ function updateFileInIndex(params: {
     indexRef: BacklinksIndex;
     fileName: string;
     content: string;
-    existingFiles: StringSet;
+    existingFilesLower: Set<string>;
 }): void {
-    const { indexRef, fileName, content, existingFiles } = params;
+    const { indexRef, fileName, content, existingFilesLower } = params;
     const fileNameWithoutExt = fileName.replace(/\.md$/, "");
 
     // 1. Remove old outbound links for this file - O(L_old)
@@ -168,20 +170,8 @@ function updateFileInIndex(params: {
         }
         StringSet.add(indexRef.backlinks[target], fileName);
 
-        // Check if this is a phantom (target doesn't exist)
-        const targetFile = `${target}.md`;
-        const targetFileLower = targetFile.toLowerCase();
-
-        // Check case-insensitively
-        let targetExists = false;
-        for (const existing of Object.keys(existingFiles)) {
-            if (existing.toLowerCase() === targetFileLower) {
-                targetExists = true;
-                break;
-            }
-        }
-
-        if (!targetExists) {
+        // Check if this is a phantom (target doesn't exist) — case-insensitive
+        if (!existingFilesLower.has(`${target}.md`.toLowerCase())) {
             if (!indexRef.phantoms[target]) {
                 indexRef.phantoms[target] = StringSet.create();
             }
@@ -196,6 +186,14 @@ function updateFileInIndex(params: {
             delete indexRef.phantoms[phantomKey];
         }
     }
+}
+
+function toLowerCaseFileSet(files: Iterable<string>): Set<string> {
+    const set = new Set<string>();
+    for (const file of files) {
+        set.add(file.toLowerCase());
+    }
+    return set;
 }
 
 /**
@@ -236,17 +234,21 @@ function removeFileFromIndex(params: {
 async function buildFullIndex(): Promise<BacklinksIndex> {
     const newIndex = createEmptyIndex();
     const files = await getAllNoteFiles();
-    const existingFiles = StringSet.fromArray(files);
+    const existingFilesLower = toLowerCaseFileSet(files);
 
-    for (const file of files) {
-        const content = await readFileContent(file);
-        const mtime = await getFileMtime(file);
+    const loaded = await Promise.all(files.map(async (file) => ({
+        file,
+        content: await readFileContent(file),
+        mtime: await getFileMtime(file),
+    })));
+
+    for (const { file, content, mtime } of loaded) {
         newIndex.mtimes[file] = mtime;
         updateFileInIndex({
             indexRef: newIndex,
             fileName: file,
             content,
-            existingFiles,
+            existingFilesLower,
         });
     }
 
@@ -264,17 +266,15 @@ async function refreshIndex(currentIndex: BacklinksIndex): Promise<{
 }> {
     const files = await getAllNoteFiles();
     const existingFiles = StringSet.fromArray(files);
+    const existingFilesLower = toLowerCaseFileSet(files);
 
-    const needsUpdate: string[] = [];
     const toRemove: string[] = [];
 
     // Find new/modified files
-    for (const file of files) {
-        const mtime = await getFileMtime(file);
-        if (!currentIndex.mtimes[file] || currentIndex.mtimes[file] !== mtime) {
-            needsUpdate.push(file);
-            currentIndex.mtimes[file] = mtime;
-        }
+    const mtimes = await Promise.all(files.map(async (file) => ({ file, mtime: await getFileMtime(file) })));
+    const needsUpdate = mtimes.filter(({ file, mtime }) => !currentIndex.mtimes[file] || currentIndex.mtimes[file] !== mtime);
+    for (const { file, mtime } of needsUpdate) {
+        currentIndex.mtimes[file] = mtime;
     }
 
     // Find deleted files
@@ -290,13 +290,13 @@ async function refreshIndex(currentIndex: BacklinksIndex): Promise<{
     }
 
     // Apply updates
-    for (const file of needsUpdate) {
+    for (const { file } of needsUpdate) {
         const content = await readFileContent(file);
         updateFileInIndex({
             indexRef: currentIndex,
             fileName: file,
             content,
-            existingFiles,
+            existingFilesLower,
         });
     }
 
@@ -358,6 +358,7 @@ export async function initializeBacklinksWithData(params: {
     // Try to load existing index for incremental update
     const existingIndex = await loadIndexFromDisk();
     const existingFiles = StringSet.fromArray(notesFiles.map((f) => f.relativePath));
+    const existingFilesLower = toLowerCaseFileSet(notesFiles.map((f) => f.relativePath));
 
     if (existingIndex) {
         // Find what needs updating
@@ -389,7 +390,7 @@ export async function initializeBacklinksWithData(params: {
                 indexRef: existingIndex,
                 fileName: file.relativePath,
                 wikiLinks: file.wikiLinks,
-                existingFiles,
+                existingFilesLower,
             });
         }
 
@@ -411,7 +412,7 @@ export async function initializeBacklinksWithData(params: {
                 indexRef: newIndex,
                 fileName: file.relativePath,
                 wikiLinks: file.wikiLinks,
-                existingFiles,
+                existingFilesLower,
             });
         }
 
@@ -430,9 +431,9 @@ function updateFileInIndexWithLinks(params: {
     indexRef: BacklinksIndex;
     fileName: string;
     wikiLinks: string[];
-    existingFiles: StringSet;
+    existingFilesLower: Set<string>;
 }): void {
-    const { indexRef, fileName, wikiLinks, existingFiles } = params;
+    const { indexRef, fileName, wikiLinks, existingFilesLower } = params;
     const fileNameWithoutExt = fileName.replace(/\.md$/, "");
 
     // 1. Remove old outbound links for this file
@@ -468,19 +469,8 @@ function updateFileInIndexWithLinks(params: {
         }
         StringSet.add(indexRef.backlinks[target], fileName);
 
-        // Check if this is a phantom (target doesn't exist)
-        const targetFile = `${target}.md`;
-        const targetFileLower = targetFile.toLowerCase();
-
-        let targetExists = false;
-        for (const existing of Object.keys(existingFiles)) {
-            if (existing.toLowerCase() === targetFileLower) {
-                targetExists = true;
-                break;
-            }
-        }
-
-        if (!targetExists) {
+        // Check if this is a phantom (target doesn't exist) — case-insensitive
+        if (!existingFilesLower.has(`${target}.md`.toLowerCase())) {
             if (!indexRef.phantoms[target]) {
                 indexRef.phantoms[target] = StringSet.create();
             }
@@ -567,8 +557,6 @@ export async function onNoteSaved(params: {
     }
 
     const { fileName, content } = params;
-    const files = await getAllNoteFiles();
-    const existingFiles = StringSet.fromArray(files);
 
     // Update mtime
     try {
@@ -578,11 +566,16 @@ export async function onNoteSaved(params: {
         index.mtimes[fileName] = Date.now();
     }
 
+    // The index already tracks every note (mtimes is maintained by the
+    // save/delete/rename/create hooks), so a full glob scan per save is
+    // unnecessary — derive the existing-file set from the index itself.
+    const existingFilesLower = toLowerCaseFileSet(Object.keys(index.mtimes));
+
     updateFileInIndex({
         indexRef: index,
         fileName,
         content,
-        existingFiles,
+        existingFilesLower,
     });
 
     await saveIndexToDisk(index);
@@ -681,6 +674,14 @@ export async function onNoteCreated(params: { fileName: string }): Promise<void>
 
     const { fileName } = params;
     const nameWithoutExt = fileName.replace(/\.md$/, "");
+
+    // Register the new file in the index so phantom checks (which derive the
+    // existing-file set from index.mtimes) see it before its first save.
+    try {
+        index.mtimes[fileName] = await getFileMtime(fileName);
+    } catch {
+        index.mtimes[fileName] = Date.now();
+    }
 
     // If this was a phantom, it's now resolved
     // Check case-insensitively

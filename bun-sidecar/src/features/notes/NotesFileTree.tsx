@@ -21,21 +21,21 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { OverlayScrollbar } from "@/components/OverlayScrollbar";
 import { useTheme } from "@/hooks/useTheme";
-import { NoteFolder, Note } from "./index";
+import { NoteFolder, NoteMetadata } from "./index";
 
 
 interface NotesFileTreeProps {
     folders: NoteFolder[];
-    notes: Note[];
+    notes: NoteMetadata[];
     selectedNoteFileName: string | null;
-    onSelectNote: (note: Note) => void;
+    onSelectNote: (note: NoteMetadata) => void;
     onOpenNote: (noteFileName: string) => void;
     onDeleteNote: (noteFileName: string) => void;
     onCreateFolder: (parentPath: string | null) => void;
     onCreateNoteInFolder: (folderPath: string | null) => void;
     onRenameFolder: (folder: NoteFolder) => void;
     onDeleteFolder: (folder: NoteFolder) => void;
-    onMoveToFolder: (note: Note) => void;
+    onMoveToFolder: (note: NoteMetadata) => void;
     onRenameNote: (noteFileName: string) => void;
     onPreloadNote?: (noteFileName: string) => void;
     searchQuery?: string;
@@ -47,21 +47,8 @@ interface TreeNode {
     name: string;
     path: string;
     folder?: NoteFolder;
-    note?: Note;
+    note?: NoteMetadata;
     children: TreeNode[];
-}
-
-// Helper: Extract first H1 heading from content
-function unescapeMarkdown(text: string): string {
-    return text.replace(/\\(.)/g, "$1");
-}
-
-function extractTitle(content: string): string | null {
-    const h1Match = content.match(/^#\s+(.+)$/m);
-    if (h1Match) return unescapeMarkdown(h1Match[1].trim());
-    const h2Match = content.match(/^##\s+(.+)$/m);
-    if (h2Match) return unescapeMarkdown(h2Match[1].trim());
-    return null;
 }
 
 // Helper: Format filename to display name
@@ -70,7 +57,7 @@ function formatDisplayName(fileName: string): string {
     return baseName.replace(/\.md$/, "");
 }
 
-function buildFileTree(folders: NoteFolder[], notes: Note[]): TreeNode[] {
+function buildFileTree(folders: NoteFolder[], notes: NoteMetadata[]): TreeNode[] {
     // Create folder nodes map
     const folderMap = new Map<string, TreeNode>();
 
@@ -151,8 +138,8 @@ function buildFileTree(folders: NoteFolder[], notes: Note[]): TreeNode[] {
 function flattenVisibleNotes(
     nodes: TreeNode[],
     expandedFolders: Set<string>
-): Note[] {
-    const result: Note[] = [];
+): NoteMetadata[] {
+    const result: NoteMetadata[] = [];
 
     const traverse = (nodeList: TreeNode[]) => {
         for (const node of nodeList) {
@@ -194,14 +181,14 @@ function TreeItem({
     selectedNoteFileName: string | null;
     expandedFolders: Set<string>;
     onToggleExpand: (folderPath: string) => void;
-    onSelectNote: (note: Note) => void;
+    onSelectNote: (note: NoteMetadata) => void;
     onOpenNote: (noteFileName: string) => void;
     onDeleteNote: (noteFileName: string) => void;
     onCreateFolder: (parentPath: string | null) => void;
     onCreateNoteInFolder: (folderPath: string | null) => void;
     onRenameFolder: (folder: NoteFolder) => void;
     onDeleteFolder: (folder: NoteFolder) => void;
-    onMoveToFolder: (note: Note) => void;
+    onMoveToFolder: (note: NoteMetadata) => void;
     onRenameNote: (noteFileName: string) => void;
     rowRefs: React.MutableRefObject<Map<string, HTMLDivElement>>;
 }) {
@@ -344,7 +331,7 @@ function TreeItem({
     // Note item
     const note = node.note!;
     const isSelected = selectedNoteFileName === note.fileName;
-    const h1Title = extractTitle(note.content || "");
+    const h1Title = note.title ?? null;
     const displayName = formatDisplayName(note.fileName);
     const displayTitle = h1Title || displayName;
 
@@ -473,7 +460,7 @@ export function NotesFileTree({
     const repeatDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const repeatIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const heldKeysRef = useRef<Set<string>>(new Set());
-    const visibleNotesRef = useRef<Note[]>([]);
+    const visibleNotesRef = useRef<NoteMetadata[]>([]);
     const onOpenNoteRef = useRef(onOpenNote);
 
     // Filter notes by search query
@@ -481,7 +468,7 @@ export function NotesFileTree({
         if (!searchQuery?.trim()) return notes;
         const query = searchQuery.toLowerCase();
         return notes.filter((note) => {
-            const title = extractTitle(note.content || "") || note.fileName;
+            const title = note.title || note.fileName;
             return (
                 note.fileName.toLowerCase().includes(query) ||
                 title.toLowerCase().includes(query)

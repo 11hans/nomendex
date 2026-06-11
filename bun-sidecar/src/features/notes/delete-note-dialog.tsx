@@ -24,7 +24,6 @@ export function DeleteNoteDialog({ noteFileName, onSuccess }: DeleteNoteDialogPr
         try {
             await api.deleteNote({ fileName: noteFileName });
             closeTabsWithNote(noteFileName);
-            await api.getNotes();
             closeDialog();
             onSuccess?.();
         } catch (error) {
