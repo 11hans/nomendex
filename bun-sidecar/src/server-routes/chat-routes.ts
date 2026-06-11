@@ -7,6 +7,7 @@ import { DEFAULT_AGENT, getAgentEffectivePromptSource } from "@/features/agents/
 import type { AgentConfig } from "@/features/agents/index";
 import { createServiceLogger } from "@/lib/logger";
 import { buildAgentContext, buildMcpServersFromConfig } from "@/lib/agent-runtime";
+import { findSessionFilePath, getClaudeSessionsDir } from "@/lib/claude-session-files";
 import { getRaindropQuery, getRaindropUserId, eventMetadata } from "@/lib/raindrop-client";
 import { uiRendererServer } from "@/mcp-servers/ui-renderer";
 import { acquireFileLock, getActiveNoteFileNameForPath, releaseFileLockForToolUse } from "@/services/file-locks";
@@ -112,48 +113,8 @@ setInterval(() => {
 function getSessionsFile(): string {
     return join(getNomendexPath(), "chat-sessions.jsonl");
 }
-// Claude sessions directory - computed from workspace path
-function getClaudeSessionsDir(): string {
-    const workspacePath = getRootPath();
-    // Convert path to Claude-compatible format (replace / with -)
-    // Claude keeps the leading dash, e.g., /Users/foo -> -Users-foo
-    const pathPart = workspacePath.replace(/\//g, "-");
-    return `${process.env.HOME}/.claude/projects/${pathPart}`;
-}
-
-function getClaudeProjectsRoot(): string {
-    return `${process.env.HOME}/.claude/projects`;
-}
-
-async function findSessionFilePath(sessionId: string): Promise<string | null> {
-    // Preferred location for the active workspace
-    const preferred = join(getClaudeSessionsDir(), `${sessionId}.jsonl`);
-    if (existsSync(preferred)) return preferred;
-
-    // Fallback: search all project folders under ~/.claude/projects
-    const projectsRoot = getClaudeProjectsRoot();
-    if (!existsSync(projectsRoot)) return null;
-
-    const direct = join(projectsRoot, `${sessionId}.jsonl`);
-    if (existsSync(direct)) return direct;
-
-    try {
-        const { readdir } = await import("node:fs/promises");
-        const entries = await readdir(projectsRoot, { withFileTypes: true });
-        for (const entry of entries) {
-            if (!entry.isDirectory()) continue;
-            const candidate = join(projectsRoot, entry.name, `${sessionId}.jsonl`);
-            if (existsSync(candidate)) return candidate;
-        }
-    } catch (error) {
-        chatLogger.warn("Failed while searching for session history file", {
-            sessionId,
-            error: error instanceof Error ? error.message : String(error),
-        });
-    }
-
-    return null;
-}
+// Claude sessions directory + file lookup live in lib/claude-session-files
+// (shared with the channels gateway's app-thread adapter).
 
 async function readJSONL<T>(filePath: string): Promise<T[]> {
     if (!existsSync(filePath)) {

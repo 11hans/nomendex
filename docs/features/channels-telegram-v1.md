@@ -100,7 +100,7 @@ All channel state is stored in the active workspace's `.nomendex/` directory:
 | `channels-messages.jsonl` | Append-only log of `UnifiedMessage` records (both inbound and outbound). Compacted on gateway init: when the file exceeds 5 MB, only the last 5000 lines are kept. |
 | `channels-telegram-state.json` | `{ lastUpdateId: number }` — persisted after each processed update for at-least-once delivery. |
 
-App thread messages are NOT stored in `.nomendex/` — they are read directly from `~/.claude/projects/<workspace-path-dashed>/<sessionId>.jsonl` on demand.
+App thread messages are NOT stored in `.nomendex/` — they are read directly from `~/.claude/projects/<workspace-path-dashed>/<sessionId>.jsonl` on demand (lookup via `lib/claude-session-files.ts`: every non-alphanumeric path character becomes `-`, with a fallback search across all project directories).
 
 The bot token lives in `.nomendex/secrets.json` under `TELEGRAM_BOT_TOKEN` (or a custom key configured in settings). It never leaves the server process: the API exposes only `hasToken: boolean`.
 

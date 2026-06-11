@@ -1,6 +1,6 @@
-import { getNomendexPath, getRootPath, hasActiveWorkspace } from "@/storage/root-path";
-import { existsSync } from "node:fs";
+import { getNomendexPath, hasActiveWorkspace } from "@/storage/root-path";
 import { join } from "node:path";
+import { findSessionFilePath } from "@/lib/claude-session-files";
 import type { UnifiedMessage, UnifiedThread } from "./types";
 import { readJSONL } from "./utils";
 
@@ -29,13 +29,6 @@ type SdkMessage = {
 function getSessionsFilePath(): string {
   return join(getNomendexPath(), "chat-sessions.jsonl");
 }
-
-function getClaudeSessionsDir(): string {
-  const workspacePath = getRootPath();
-  const pathPart = workspacePath.replace(/\//g, "-");
-  return `${process.env.HOME}/.claude/projects/${pathPart}`;
-}
-
 
 function extractTextFromSdkMessage(msg: SdkMessage): string {
   if (typeof msg.message === "string") {
@@ -70,8 +63,8 @@ export async function listAppThreads(query?: string): Promise<UnifiedThread[]> {
   const threads: UnifiedThread[] = [];
   for (const session of dedup.values()) {
     if (!session.id || /[^a-zA-Z0-9_-]/.test(session.id)) continue;
-    const historyPath = join(getClaudeSessionsDir(), `${session.id}.jsonl`);
-    if (!existsSync(historyPath)) continue;
+    const historyPath = await findSessionFilePath(session.id);
+    if (!historyPath) continue;
 
     let preview = "";
     try {
@@ -117,8 +110,8 @@ export async function listAppThreadMessages(threadId: string): Promise<UnifiedMe
 
   const sessionId = threadId.slice(4);
   if (!sessionId || /[^a-zA-Z0-9_-]/.test(sessionId)) return [];
-  const historyPath = join(getClaudeSessionsDir(), `${sessionId}.jsonl`);
-  if (!existsSync(historyPath)) return [];
+  const historyPath = await findSessionFilePath(sessionId);
+  if (!historyPath) return [];
 
   const rows = await readJSONL<SdkMessage>(historyPath);
   const messages: UnifiedMessage[] = [];
