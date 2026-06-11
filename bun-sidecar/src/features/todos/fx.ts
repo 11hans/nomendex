@@ -81,10 +81,12 @@ export async function initializeTodosService(): Promise<void> {
         todosLogger.warn("No active workspace, skipping todos initialization");
         return;
     }
+    todosDb?.dispose();
     todosDb = new FileDatabase<Todo>(getTodosPath());
     await todosDb.initialize();
 
     // NEW: Initialize board config database
+    boardConfigDb?.dispose();
     boardConfigDb = new FileDatabase<BoardConfig>(getBoardConfigPath());
     await boardConfigDb.initialize();
 
@@ -1651,10 +1653,10 @@ async function deleteTodo(input: { todoId: string }) {
         // Cascade delete children (subtasks) first
         const allBeforeDelete = await getDb().findAll();
         const children = allBeforeDelete.filter((t) => t.parentTodoId === input.todoId);
-        for (const child of children) {
+        await Promise.all(children.map(async (child) => {
             await getDb().delete(child.id);
             todosLogger.info(`Cascade-deleted subtask: ${child.id}`);
-        }
+        }));
 
         const deleted = await getDb().delete(input.todoId);
 
@@ -1766,24 +1768,21 @@ async function reorderTodos(_input: {
 
 async function archiveTodo(input: { todoId: string }) {
     todosLogger.info(`Archiving todo: ${input.todoId}`);
-    // Cascade archive to children (subtasks) first
+    // Cascade archive to children (subtasks) first. Routed through updateTodo
+    // (goalRefs freeze on close) but in parallel — children are independent records.
     const allTodos = await getDb().findAll();
     const children = allTodos.filter((t) => t.parentTodoId === input.todoId && !t.archived);
-    for (const child of children) {
-        await updateTodo({ todoId: child.id, updates: { archived: true } });
-    }
+    await Promise.all(children.map((child) => updateTodo({ todoId: child.id, updates: { archived: true } })));
     // Route through updateTodo so the goalRefs freeze logic stays consistent on close.
     return updateTodo({ todoId: input.todoId, updates: { archived: true } });
 }
 
 async function unarchiveTodo(input: { todoId: string }) {
     todosLogger.info(`Unarchiving todo: ${input.todoId}`);
-    // Cascade unarchive to children (subtasks) as well
+    // Cascade unarchive to children (subtasks) as well — parallel, see archiveTodo
     const allTodos = await getDb().findAll();
     const children = allTodos.filter((t) => t.parentTodoId === input.todoId && t.archived);
-    for (const child of children) {
-        await updateTodo({ todoId: child.id, updates: { archived: false } });
-    }
+    await Promise.all(children.map((child) => updateTodo({ todoId: child.id, updates: { archived: false } })));
     // Route through updateTodo so the goalRefs freeze logic stays consistent on reopen.
     return updateTodo({ todoId: input.todoId, updates: { archived: false } });
 }
@@ -1947,10 +1946,23 @@ async function deleteTag({ tagName }: { tagName: string }): Promise<{ deletedFro
         const tagLower = tagName.toLowerCase();
         const affected = todos.filter(t => t.tags?.some(t2 => t2.toLowerCase() === tagLower));
 
-        for (const todo of affected) {
-            const newTags = (todo.tags ?? []).filter(t => t.toLowerCase() !== tagLower);
-            const updated = await updateTodo({ todoId: todo.id, updates: { tags: newTags } });
-            broadcastTodoEvent({ type: "upsert", todo: updated });
+        // Direct batch write — a tags-only change can't touch project, status,
+        // or goalRefs, so the full updateTodo pipeline (and its sequential
+        // per-record awaits) is unnecessary here.
+        const now = new Date().toISOString();
+        const updatedRecords = await getDb().updateMany(
+            affected.map((todo) => ({
+                id: todo.id,
+                updates: {
+                    tags: (todo.tags ?? []).filter(t => t.toLowerCase() !== tagLower),
+                    updatedAt: now,
+                } as Partial<Todo>,
+            })),
+        );
+        for (const updated of updatedRecords) {
+            if (updated) {
+                broadcastTodoEvent({ type: "upsert", todo: sanitizeTodoForClient(updated) });
+            }
         }
 
         todosLogger.info(`Deleted tag "${tagName}" from ${affected.length} todos`);

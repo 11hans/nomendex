@@ -425,12 +425,14 @@ export async function disposeAgentMemoryService(): Promise<void> {
     }
     await flushEmbeddings();
     disposeEmbeddings();
+    db?.dispose();
     db = null;
     logger.info("Agent memory service disposed");
 }
 
 export async function initializeAgentMemoryService(): Promise<void> {
     const basePath = getAgentMemoryPath();
+    db?.dispose();
     db = new FileDatabase<AgentMemoryRecord>(basePath);
     await db.initialize();
 

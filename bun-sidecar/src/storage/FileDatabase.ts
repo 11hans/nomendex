@@ -1,5 +1,6 @@
 import path from "path";
 import { mkdir, readdir, unlink } from "node:fs/promises";
+import { watch, type FSWatcher } from "node:fs";
 
 export interface DatabaseRecord {
     id: string;
@@ -18,6 +19,18 @@ export class FileDatabase<T extends DatabaseRecord> {
     private basePath: string;
     private fileExtension: string = ".md";
 
+    // Full-directory snapshot cache, populated lazily by find(). Own mutations
+    // invalidate it synchronously; the directory watcher invalidates it on
+    // external writes (git pull/checkout, agents editing files directly).
+    // Only active while the watcher runs — without it we could never see
+    // external changes, so we fall back to scanning on every find().
+    private cache: Map<string, T> | null = null;
+    // Bumped on every invalidation so a directory scan that raced with a
+    // write can't store its (possibly already stale) snapshot.
+    private cacheGeneration = 0;
+    private watcher: FSWatcher | null = null;
+    private cacheEnabled = false;
+
     constructor(basePath: string) {
         this.basePath = basePath;
     }
@@ -27,6 +40,46 @@ export class FileDatabase<T extends DatabaseRecord> {
      */
     async initialize(): Promise<void> {
         await mkdir(this.basePath, { recursive: true });
+        this.startWatcher();
+    }
+
+    private invalidateCache(): void {
+        this.cache = null;
+        this.cacheGeneration++;
+    }
+
+    private startWatcher(): void {
+        this.stopWatcher();
+        try {
+            this.watcher = watch(this.basePath, () => {
+                this.invalidateCache();
+            });
+            this.watcher.on("error", () => {
+                this.stopWatcher();
+            });
+            // Never keep the process alive just for the cache watcher
+            this.watcher.unref();
+            this.cacheEnabled = true;
+        } catch {
+            this.cacheEnabled = false;
+        }
+    }
+
+    private stopWatcher(): void {
+        if (this.watcher) {
+            this.watcher.close();
+            this.watcher = null;
+        }
+        this.cacheEnabled = false;
+        this.invalidateCache();
+    }
+
+    /**
+     * Stop the directory watcher and drop the cache. Call when replacing an
+     * instance (e.g. on workspace switch) to avoid leaking watchers.
+     */
+    dispose(): void {
+        this.stopWatcher();
     }
 
     /**
@@ -126,6 +179,10 @@ export class FileDatabase<T extends DatabaseRecord> {
         const content = this.recordToFile(sanitized as T);
 
         await Bun.write(filePath, content);
+        // Invalidate synchronously — the watcher event from our own write is
+        // async, so a find() racing right behind this write must not see a
+        // stale snapshot.
+        this.invalidateCache();
         return sanitized as T;
     }
 
@@ -133,6 +190,16 @@ export class FileDatabase<T extends DatabaseRecord> {
      * Read a record by ID
      */
     async findById(id: string): Promise<T | null> {
+        // Serve from the snapshot cache when warm; on a miss fall through to
+        // the single-file read (ids whose frontmatter differs from the
+        // sanitized filename aren't necessarily keyed in the cache).
+        if (this.cacheEnabled && this.cache) {
+            const cached = this.cache.get(id);
+            if (cached) {
+                return structuredClone(cached);
+            }
+        }
+
         const filePath = this.getFilePath(id);
 
         try {
@@ -169,6 +236,7 @@ export class FileDatabase<T extends DatabaseRecord> {
         const content = this.recordToFile(updated);
 
         await Bun.write(filePath, content);
+        this.invalidateCache();
         return updated;
     }
 
@@ -180,6 +248,7 @@ export class FileDatabase<T extends DatabaseRecord> {
 
         try {
             await unlink(filePath);
+            this.invalidateCache();
             return true;
         } catch (error) {
             if ((error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -192,35 +261,78 @@ export class FileDatabase<T extends DatabaseRecord> {
     /**
      * Find all records matching query options
      */
-    async find(options: QueryOptions<T> = {}): Promise<T[]> {
+    private async loadAllRecords(): Promise<T[]> {
         const files = await readdir(this.basePath);
-        const records: T[] = [];
 
-        // Read all markdown files
-        for (const fileName of files) {
-            if (!fileName.endsWith(this.fileExtension)) continue;
-
-            const filePath = path.join(this.basePath, fileName);
-            try {
-                const content = await Bun.file(filePath).text();
-                const record = this.fileToRecord(content);
-
-                // Apply where filters
-                if (options.where) {
-                    let matches = true;
-                    for (const [key, value] of Object.entries(options.where)) {
-                        if (record[key as keyof T] !== value) {
-                            matches = false;
-                            break;
-                        }
+        // Read all markdown files in parallel
+        const parsed = await Promise.all(
+            files
+                .filter((fileName) => fileName.endsWith(this.fileExtension))
+                .map(async (fileName): Promise<T | null> => {
+                    const filePath = path.join(this.basePath, fileName);
+                    try {
+                        const content = await Bun.file(filePath).text();
+                        return this.fileToRecord(content);
+                    } catch (error) {
+                        console.error(`Error reading file ${fileName}:`, error);
+                        return null;
                     }
-                    if (!matches) continue;
-                }
+                }),
+        );
 
+        const records: T[] = [];
+        for (const record of parsed) {
+            if (record) {
                 records.push(record);
-            } catch (error) {
-                console.error(`Error reading file ${fileName}:`, error);
             }
+        }
+        return records;
+    }
+
+    /**
+     * All records as fresh objects — from the snapshot cache when warm,
+     * otherwise from a directory scan (which warms the cache). Cloning keeps
+     * the historical contract that every call returns independent objects,
+     * so callers mutating results can't poison the cache.
+     */
+    private async getAllRecords(): Promise<T[]> {
+        if (this.cacheEnabled && this.cache) {
+            const records: T[] = [];
+            for (const record of this.cache.values()) {
+                records.push(structuredClone(record));
+            }
+            return records;
+        }
+
+        const generationAtScanStart = this.cacheGeneration;
+        const loaded = await this.loadAllRecords();
+        // Only cache if nothing was invalidated while we were scanning —
+        // otherwise the snapshot may already miss a concurrent write.
+        if (this.cacheEnabled && this.cacheGeneration === generationAtScanStart) {
+            this.cache = new Map(loaded.map((record) => [record.id, structuredClone(record)]));
+        }
+        return loaded;
+    }
+
+    async find(options: QueryOptions<T> = {}): Promise<T[]> {
+        const allRecords = await this.getAllRecords();
+
+        const records: T[] = [];
+        for (const record of allRecords) {
+
+            // Apply where filters
+            if (options.where) {
+                let matches = true;
+                for (const [key, value] of Object.entries(options.where)) {
+                    if (record[key as keyof T] !== value) {
+                        matches = false;
+                        break;
+                    }
+                }
+                if (!matches) continue;
+            }
+
+            records.push(record);
         }
 
         // Apply sorting
@@ -294,5 +406,6 @@ export class FileDatabase<T extends DatabaseRecord> {
         const files = await readdir(this.basePath);
 
         await Promise.all(files.filter((f) => f.endsWith(this.fileExtension)).map((f) => unlink(path.join(this.basePath, f))));
+        this.invalidateCache();
     }
 }

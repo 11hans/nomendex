@@ -22,6 +22,7 @@ export async function initializeGoalsService(): Promise<void> {
         goalsLogger.warn("No active workspace, skipping goals initialization");
         return;
     }
+    goalsDb?.dispose();
     goalsDb = new FileDatabase<GoalRecord>(getGoalsPath());
     await goalsDb.initialize();
 

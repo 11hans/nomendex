@@ -49,14 +49,12 @@ export class FeatureStorage {
         const filePath = directory ? path.join(this.basePath, directory) : this.basePath;
         const includeHidden = options?.includeHidden ?? false;
         try {
-            const output = await readdir(filePath);
+            const entries = await readdir(filePath, { withFileTypes: true });
             const files: string[] = [];
-            for (const item of output) {
-                if (!includeHidden && item.startsWith(".")) continue;
-                const itemPath = path.join(filePath, item);
-                const stats = await stat(itemPath);
-                if (stats.isFile()) {
-                    files.push(item);
+            for (const entry of entries) {
+                if (!includeHidden && entry.name.startsWith(".")) continue;
+                if (entry.isFile()) {
+                    files.push(entry.name);
                 }
             }
             return files;
@@ -105,15 +103,13 @@ export class FeatureStorage {
         const basePath = directory ? path.join(this.basePath, directory) : this.basePath;
         const includeHidden = options?.includeHidden ?? false;
         try {
-            const items = await readdir(basePath);
+            const entries = await readdir(basePath, { withFileTypes: true });
             const folders: FolderInfo[] = [];
-            for (const item of items) {
-                if (!includeHidden && item.startsWith(".")) continue;
-                const itemPath = path.join(basePath, item);
-                const stats = await stat(itemPath);
-                if (stats.isDirectory()) {
-                    const relativePath = directory ? path.join(directory, item) : item;
-                    folders.push({ name: item, path: relativePath });
+            for (const entry of entries) {
+                if (!includeHidden && entry.name.startsWith(".")) continue;
+                if (entry.isDirectory()) {
+                    const relativePath = directory ? path.join(directory, entry.name) : entry.name;
+                    folders.push({ name: entry.name, path: relativePath });
                 }
             }
             return folders;
@@ -123,13 +119,15 @@ export class FeatureStorage {
     }
 
     async listAllFoldersRecursive(directory?: string, options?: { includeHidden?: boolean }): Promise<FolderInfo[]> {
-        const folders: FolderInfo[] = [];
         const baseFolders = await this.listFolders(directory, options);
 
-        for (const folder of baseFolders) {
-            folders.push(folder);
-            const subFolders = await this.listAllFoldersRecursive(folder.path, options);
-            folders.push(...subFolders);
+        const subFolderLists = await Promise.all(
+            baseFolders.map((folder) => this.listAllFoldersRecursive(folder.path, options)),
+        );
+
+        const folders: FolderInfo[] = [];
+        for (let i = 0; i < baseFolders.length; i++) {
+            folders.push(baseFolders[i]!, ...subFolderLists[i]!);
         }
 
         return folders;
