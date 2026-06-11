@@ -30,7 +30,7 @@ App threads are read-only adapters over `~/.claude/projects/…` JSONL files; th
 | `app-sessions.ts` | Reads `chat-sessions.jsonl` and Claude SDK history files to expose app chat sessions as `UnifiedThread`/`UnifiedMessage` items. |
 | `storage.ts` | Four files in `.nomendex/` (see Storage section). Thread upserts serialized through a write queue. Messages log compacted on init (5 MB / 5000-line thresholds). |
 | `security.ts` | `allowlistMatchType`, `isAllowlisted`, `evaluateTelegramSendPolicy`, `redactGatewayEvent`. |
-| `ai.ts` | `generateTelegramReply` — calls `runAgentTextQuery` with `allowedToolsOverride: ["Read", "Grep", "Glob"]` and `toolPolicy: "deny-unapproved"`. Untrusted inbound text is wrapped in `<untrusted-telegram-message>` framing. |
+| `ai.ts` | `generateTelegramReply` — calls `runAgentTextQuery` with the agent's persisted tool grants (`toolPolicy: "deny-unapproved"`, no override). Inbound text is framed as an operator command in `<telegram-message>`; both framings pin the output contract (sent verbatim, no secrets). |
 | `errors.ts` | `GatewayHttpError` — carries `status`, `code`, `message`. |
 | `utils.ts` | `readJSONL<T>` — resilient JSONL reader; skips corrupted lines. |
 
@@ -114,15 +114,15 @@ The bot token lives in `.nomendex/secrets.json` under `TELEGRAM_BOT_TOKEN` (or a
 6. Thread ID is derived: `SessionRegistry.telegramDmKey(chatId, messageTimestamp)` → `telegram:dm:<chatId>:<YYYY-MM-DD>` in the configured timezone.
 7. `appendTelegramMessage` + `upsertTelegramThread` (serialized queue).
 8. `channel.message.received` and `channel.thread.updated` events are emitted (after redaction).
-9. If `autoReplyEnabled` and the send policy passes: rate-limit check (30s / chat). If not rate-limited, `aiReplyTelegram` is called with no operator prompt so inbound text is treated as untrusted.
+9. If `autoReplyEnabled` and the send policy passes: rate-limit check (5s / chat). If not rate-limited, `aiReplyTelegram` is called with no operator prompt so the inbound text gets the `telegram` source framing.
 
 ## AI reply flow
 
 `GatewayService.aiReplyTelegram` / `POST /api/channels/telegram/ai-reply`:
 
 1. Send policy is evaluated **before** the agent runs — a disabled channel or de-allowlisted sender cannot trigger an agent query.
-2. `prompt` from the request body is operator-trusted input. If absent, the latest inbound message text for the thread is fetched and treated as untrusted (wrapped in `<untrusted-telegram-message>` by `ai.ts:frameUntrustedPrompt`).
-3. `generateTelegramReply` calls `runAgentTextQuery` with `allowedToolsOverride: ["Read", "Grep", "Glob"]` and `maxTurns: 4`. Interactive "Always Allow" grants from agent `_preferences.json` are never applied to headless runs.
+2. `prompt` from the request body is an operator prompt from the app UI. If absent, the latest inbound message text for the thread is used. Both carry operator authority (the allowlist binds the channel to the operator's account); they differ only in framing — inbound text is wrapped in `<telegram-message>` by `ai.ts:frameInboundPrompt` and presented as an operator command.
+3. `generateTelegramReply` calls `runAgentTextQuery` with the agent's persisted tool grants (same "Always Allow" set as app chat; ungranted tools are denied, `AskUserQuestion` always denied) and `maxTurns: 16`.
 4. If the agent returns empty text or throws, `fallbackText` from settings is used (`fallbackUsed: true` in the response).
 5. The reply is sent via `sendTelegramMessage` (which runs the send policy again and records the outbound message + thread update).
 
@@ -144,12 +144,13 @@ Allowlist matching is case-insensitive; entries can be numeric chat IDs or `@use
 - **Deny by default**: an empty allowlist drops all inbound messages.
 - **Token confinement**: `TELEGRAM_BOT_TOKEN` stays in `secrets.json` and in process memory only. The API exposes `hasToken` boolean. `ChannelManager` scrubs the token string from error messages before they reach any response or WS event.
 - **Send policy runs before agent**: `aiReplyTelegram` evaluates the policy before calling `runAgentTextQuery`, so a de-configured channel cannot consume AI tokens.
-- **Auto-reply rate limit**: one AI auto-reply per chat per 30 seconds (`AUTO_REPLY_MIN_INTERVAL_MS`). Rate-limited messages are still persisted and emitted. Manual sends and explicit "AI Reply" actions from the UI are not limited.
+- **Operator trust model**: allowlisted senders act with operator authority and the agent's full tool grants — the allowlist must contain only accounts the operator controls. See `channels-security.md`.
+- **Auto-reply rate limit**: one AI auto-reply per chat per 5 seconds (`AUTO_REPLY_MIN_INTERVAL_MS`), a flood guard sized for chat-like use. Rate-limited messages are still persisted and emitted. Manual sends and explicit "AI Reply" actions from the UI are not limited.
 - **At-least-once delivery**: the polling offset is persisted after the handler runs. A crash mid-handling redelivers the update on restart.
 
 ## Security
 
-Security details (ingestion allowlist, send policy, CSRF / host validation, headless agent confinement, WS origin validation, input limits, token scrubbing, event redaction, git staging guard) are documented in `docs/features/channels-security.md`.
+Security details (ingestion allowlist, send policy, CSRF / host validation, operator trust model, WS origin validation, input limits, token scrubbing, event redaction, git staging guard) are documented in `docs/features/channels-security.md`.
 
 ## Setup
 

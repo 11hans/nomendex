@@ -35,8 +35,9 @@ const gatewayLogger = createServiceLogger("GATEWAY");
 
 // Auto-replies are rate limited per chat so a message flood cannot trigger an
 // agent query (and an outbound Telegram send) for every inbound message.
+// Kept short — the channel behaves like a chat — but nonzero as a flood guard.
 // Manual sends and explicit AI replies from the UI are not limited.
-const AUTO_REPLY_MIN_INTERVAL_MS = 30_000;
+const AUTO_REPLY_MIN_INTERVAL_MS = 5_000;
 
 type ThreadFilter = {
   channel?: "all" | "app" | "telegram";
@@ -329,9 +330,10 @@ class GatewayService {
       throw new GatewayHttpError(policy.status, policy.code, policy.message);
     }
 
-    // input.prompt is operator input from the app UI and is trusted; without
-    // it the prompt falls back to the latest inbound Telegram text, which is
-    // untrusted and gets framed as data before reaching the agent.
+    // input.prompt is operator input from the app UI; without it the prompt
+    // falls back to the latest inbound Telegram text. Both carry operator
+    // authority (the allowlist binds the channel to the operator's account),
+    // they just get source-specific framing.
     const operatorPrompt = input.prompt?.trim();
     const prompt = operatorPrompt || await getLatestTelegramInboundText(input.threadId);
     if (!prompt) {
@@ -343,7 +345,7 @@ class GatewayService {
 
     try {
       replyText = await generateTelegramReply(prompt, settings.telegram.telegramAgentId, {
-        untrusted: !operatorPrompt,
+        source: operatorPrompt ? "app" : "telegram",
       });
       if (!replyText.trim()) {
         fallbackUsed = true;
@@ -469,8 +471,8 @@ class GatewayService {
 
       this.lastAutoReplyAtByChat.set(message.chatId, Date.now());
       // No prompt: aiReplyTelegram falls back to the just-persisted inbound
-      // text and treats it as untrusted. Passing message.text here would make
-      // it look like trusted operator input.
+      // text and frames it as an inbound Telegram message (source: "telegram")
+      // rather than an app-UI prompt.
       await this.aiReplyTelegram({ threadId });
     }
   }

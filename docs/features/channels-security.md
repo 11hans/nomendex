@@ -35,11 +35,17 @@ When the server is bound to loopback, the `Host` header must resolve to a loopba
 
 This closes off cross-site "simple requests" (`text/plain` POSTs need no CORS preflight) while keeping non-browser clients without an `Origin` header working.
 
-## Headless agent confinement
+## Operator trust model (headless agent)
 
-Telegram AI replies run unattended via `runAgentTextQuery()` with `allowedToolsOverride` set to a fixed read-only list (`Read`, `Grep`, `Glob`) — interactive "Always Allow" grants from agent preferences never apply to headless runs. The policy check in `aiReplyTelegram` runs **before** the agent query, so a disabled channel or de-allowlisted sender cannot trigger an agent run at all.
+The Telegram channel is the **operator's personal remote chat**: the allowlist binds the bot to the operator's own account(s), and that binding *is* the trust boundary. Inbound messages from allowlisted senders carry operator authority — the agent acts on them like app-chat messages, with the agent's full persisted tool grants (the same "Always Allow" set it has in the app; tools outside that set are denied, since headless runs cannot prompt). `AskUserQuestion` is always denied.
 
-Inbound Telegram text is untrusted input: it is wrapped in `<untrusted-telegram-message>` framing with instructions not to follow embedded commands. Only operator prompts typed in the app UI bypass the framing.
+Consequences:
+
+- **Everyone on the allowlist has operator-level access** to the agent's granted tools (potentially `Bash`). Keep the allowlist to accounts you control.
+- A compromised or stolen Telegram account on the allowlist means agent access; the username→chatId binding (above) covers username re-registration, not account takeover.
+- Replies transit Telegram's servers — the reply framing instructs the agent never to include secrets (API keys, tokens, credentials) in a message.
+
+The policy check in `aiReplyTelegram` still runs **before** the agent query, so a disabled channel or de-allowlisted sender cannot trigger an agent run at all. Inbound text is wrapped in `<telegram-message>` framing that also pins the output contract (sent verbatim, no meta commentary).
 
 ## Polling retry policy
 
@@ -47,7 +53,7 @@ Inbound Telegram text is untrusted input: it is wrapped in `<untrusted-telegram-
 
 ## Auto-reply rate limit
 
-AI auto-replies are limited to one per chat per 30 seconds (`AUTO_REPLY_MIN_INTERVAL_MS` in `src/gateway/service.ts`). Rate-limited inbound messages are still persisted and emitted; only the agent query + outbound send is skipped. Manual sends and explicit AI replies from the UI are not limited.
+AI auto-replies are limited to one per chat per 5 seconds (`AUTO_REPLY_MIN_INTERVAL_MS` in `src/gateway/service.ts`) — short enough for chat-like use, nonzero as a flood guard. Rate-limited inbound messages are still persisted and emitted; only the agent query + outbound send is skipped. Manual sends and explicit AI replies from the UI are not limited.
 
 ## Git staging guard
 

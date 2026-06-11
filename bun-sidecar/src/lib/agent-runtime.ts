@@ -197,9 +197,11 @@ export type RunAgentTextQueryInput = {
     systemPromptOverride?: string;
     /**
      * When set, replaces the agent's persisted allowedTools entirely. Headless
-     * callers exposed to untrusted input (e.g. Telegram auto-reply) must pass
-     * a restrictive list here so interactive "Always Allow" grants from
-     * _preferences.json (Bash, Write, ...) do not leak into unattended runs.
+     * callers exposed to untrusted input should pass a restrictive list here
+     * so interactive "Always Allow" grants from _preferences.json (Bash,
+     * Write, ...) do not leak into unattended runs. Callers whose input
+     * carries operator authority (e.g. the operator-bound Telegram channel)
+     * omit it and inherit the agent's grants.
      */
     allowedToolsOverride?: string[];
 };
