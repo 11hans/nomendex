@@ -92,6 +92,18 @@ Realtime `/ws` requires explicit subscribe before event delivery:
 
 Unsubscribing is also supported. Clients that never subscribe receive no events.
 
+## Input limits
+
+API inputs are bounded by Zod schemas in `src/gateway/types.ts`: message text and AI-reply prompt at 4096 chars (Telegram's own message limit), allowlist at 100 entries of 64 chars, plus caps on the remaining settings strings.
+
+## Polling loop robustness
+
+`TelegramMonitor.runLoop` validates raw `getUpdates` payloads (`toTelegramInboundMessage`) before processing — malformed fields are skipped instead of crashing downstream. Handler exceptions are logged per-update and do not enter the connection-failure path (no backoff or fatal stop). The update offset is persisted *after* the handler runs, so a crash mid-handling redelivers the update on restart (at-least-once). When the loop stops on its own (fatal 4xx), the `onStop` callback flips `status.running` to `false`, and `lastError` strings are scrubbed of the bot token before reaching status responses or WS events.
+
+## Storage bounds
+
+Thread upserts (read-modify-write on `channels-threads.json`) are serialized through a write queue. `channels-messages.jsonl` is compacted on gateway init: above 5 MB only the last 5000 lines are kept.
+
 ## Input normalization
 
 Inbound Telegram messages are normalized in `src/gateway/telegram-normalization.ts`:
