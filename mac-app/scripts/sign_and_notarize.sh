@@ -125,6 +125,25 @@ else
   log "[release] Note: No sidecar lib directory at $SIDECAR_LIB_DIR"
 fi
 
+# Sign bundled bun runtime (bun needs the JIT entitlement, same as the sidecar)
+BUNDLED_BUN="$APP_PATH/Contents/Resources/bin/bun"
+if [[ -f "$BUNDLED_BUN" ]]; then
+  run codesign --force --timestamp --options runtime \
+    --entitlements "$ENTITLEMENTS" \
+    --sign "$CODESIGN_IDENTITY" \
+    "$BUNDLED_BUN"
+fi
+
+# Sign bundled Claude CLI vendor binaries (ripgrep)
+CLAUDE_CLI_DIR="$APP_PATH/Contents/Resources/claude-cli"
+if [[ -d "$CLAUDE_CLI_DIR" ]]; then
+  while IFS= read -r -d '' vendored_bin; do
+    run codesign --force --timestamp --options runtime \
+      --sign "$CODESIGN_IDENTITY" \
+      "$vendored_bin"
+  done < <(find "$CLAUDE_CLI_DIR" -type f \( -name "rg" -o -name "*.node" \) -print0)
+fi
+
 # Sign sidecar binary with entitlements
 if [[ -f "$SIDECAR_BIN" ]]; then
   run codesign --force --timestamp --options runtime \

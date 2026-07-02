@@ -7,6 +7,7 @@ import { DEFAULT_AGENT, getAgentEffectivePromptSource } from "@/features/agents/
 import type { AgentConfig } from "@/features/agents/index";
 import { createServiceLogger } from "@/lib/logger";
 import { buildAgentContext, buildMcpServersFromConfig } from "@/lib/agent-runtime";
+import { getClaudeCliPath } from "@/lib/claude-cli";
 import { findSessionFilePath, getClaudeSessionsDir } from "@/lib/claude-session-files";
 import { getRaindropQuery, getRaindropUserId, eventMetadata } from "@/lib/raindrop-client";
 import { uiRendererServer } from "@/mcp-servers/ui-renderer";
@@ -497,9 +498,9 @@ export const chatRoutes = {
                 // Add the UI renderer server for skills to render custom UI
                 mcpServers["noetect-ui"] = uiRendererServer;
 
-                // Find Claude CLI path - check common locations
-                const claudeCliPath = process.env.CLAUDE_CLI_PATH
-                    || `${process.env.HOME}/.local/bin/claude`;
+                // Resolve the Claude CLI the SDK drives — pinned to the bundled
+                // version so global-CLI auto-updates can't change subagent semantics.
+                const claudeCliPath = getClaudeCliPath();
 
                 const sdkOptions: {
                     model: string;

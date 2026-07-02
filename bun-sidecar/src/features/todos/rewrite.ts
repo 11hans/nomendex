@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createServiceLogger } from "@/lib/logger";
+import { getClaudeCliPath, buildClaudeCliSpawn } from "@/lib/claude-cli";
 import type { TodoKind } from "./todo-types";
 
 const logger = createServiceLogger("TODO_REWRITE");
@@ -39,10 +40,6 @@ export interface RewriteDraftInput {
 export interface RewriteDraftOutput {
     title: string;
     description: string;
-}
-
-function getClaudeCliPath(): string {
-    return process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
 }
 
 function buildSystemPromptSuffix(kind: TodoKind): string {
@@ -85,21 +82,19 @@ export async function rewriteTodoDraft(input: RewriteDraftInput): Promise<Rewrit
     const userPrompt = buildUserPrompt(trimmedTitle, trimmedDesc);
     const systemSuffix = buildSystemPromptSuffix(input.kind);
 
-    const proc = Bun.spawn(
-        [
-            claudePath,
-            "--print",
-            "--model", MODEL,
-            "--append-system-prompt", systemSuffix,
-            "--json-schema", JSON_SCHEMA,
-            "--output-format", "json",
-            userPrompt,
-        ],
-        {
-            stdout: "pipe",
-            stderr: "pipe",
-        },
-    );
+    const spawn = buildClaudeCliSpawn([
+        "--print",
+        "--model", MODEL,
+        "--append-system-prompt", systemSuffix,
+        "--json-schema", JSON_SCHEMA,
+        "--output-format", "json",
+        userPrompt,
+    ]);
+    const proc = Bun.spawn(spawn.cmd, {
+        stdout: "pipe",
+        stderr: "pipe",
+        env: spawn.env,
+    });
 
     if (input.signal) {
         input.signal.addEventListener("abort", () => proc.kill(), { once: true });

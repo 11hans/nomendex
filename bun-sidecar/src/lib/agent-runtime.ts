@@ -6,6 +6,7 @@ import type { AgentConfig } from "@/features/agents/index";
 import { listUserMcpServers, expandEnvVars } from "@/features/mcp-servers/fx";
 import { secrets } from "@/lib/secrets";
 import { createServiceLogger } from "@/lib/logger";
+import { getClaudeCliPath } from "@/lib/claude-cli";
 
 const runtimeLogger = createServiceLogger("AGENT-RUNTIME");
 
@@ -233,7 +234,7 @@ export async function runAgentTextQuery(input: RunAgentTextQueryInput): Promise<
     );
     const mcpServers = await buildMcpServersFromConfig(agentConfig.mcpServers);
     const cwd = input.cwd || getRootPath();
-    const claudeCliPath = process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
+    const claudeCliPath = getClaudeCliPath();
     const toolPolicy = input.toolPolicy || "deny-unapproved";
     const systemPrompt = input.systemPromptOverride || (
         agentConfig.systemPrompt

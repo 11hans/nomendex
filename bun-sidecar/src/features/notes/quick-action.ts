@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { createServiceLogger } from "@/lib/logger";
+import { getClaudeCliPath, buildClaudeCliSpawn } from "@/lib/claude-cli";
 import {
     QUICK_ACTIONS,
     CUSTOM_PROMPT_MODEL,
@@ -8,10 +9,6 @@ import {
 } from "./quick-action-types";
 
 const logger = createServiceLogger("QUICK_ACTION");
-
-function getClaudeCliPath(): string {
-    return process.env.CLAUDE_CLI_PATH || `${process.env.HOME}/.local/bin/claude`;
-}
 
 export class NoClaudeCliError extends Error {
     statusCode = 503;
@@ -66,18 +63,15 @@ export function streamQuickAction(params: {
         ? `<text>\n${selectionText}\n</text>`
         : "Generate the requested content.";
 
-    const proc = Bun.spawn(
-        [
-            claudePath,
-            "--print",
-            "--verbose",           // required for stream-json
-            "--model", model,
-            "--append-system-prompt", systemPrompt,
-            "--output-format", "stream-json",
-            userPrompt,
-        ],
-        { stdout: "pipe", stderr: "pipe" },
-    );
+    const spawn = buildClaudeCliSpawn([
+        "--print",
+        "--verbose",           // required for stream-json
+        "--model", model,
+        "--append-system-prompt", systemPrompt,
+        "--output-format", "stream-json",
+        userPrompt,
+    ]);
+    const proc = Bun.spawn(spawn.cmd, { stdout: "pipe", stderr: "pipe", env: spawn.env });
 
     if (signal) {
         signal.addEventListener("abort", () => proc.kill(), { once: true });

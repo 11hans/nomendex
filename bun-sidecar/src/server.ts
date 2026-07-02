@@ -29,6 +29,7 @@ import { memoryEmbeddingsRoutes } from "./server-routes/memory-embeddings-routes
 import { insightsRoutes } from "./server-routes/insights-routes";
 import { channelsRoutes } from "./server-routes/channels-routes";
 import { gatewayService } from "@/gateway/service";
+import { verifyClaudeCli, getCachedClaudeCliInfo } from "@/lib/claude-cli";
 
 
 // Terminal WebSocket data type
@@ -139,6 +140,11 @@ async function initializeGateway() {
 // Kick off init in background; do not await.
 runInitialization();
 
+// Log which Claude CLI this build drives and warn on version drift
+// (>= 2.1 backgrounds subagents and breaks /monthly & /weekly delegation).
+// Never rejects; result is cached for /health.
+void verifyClaudeCli();
+
 const server = serve<WSData>({
     hostname: serverHostname,
     port: process.env.PORT ? parseInt(process.env.PORT) : 1234,
@@ -146,11 +152,12 @@ const server = serve<WSData>({
 
     routes: {
         // Health check endpoint - called by native app to confirm server is ready
+        // (the native host only checks for HTTP 200; the JSON body is diagnostics)
         "/health": {
             GET() {
                 startupLog.info('Health check passed - server ready');
                 markStartupComplete();
-                return new Response("OK", { status: 200 });
+                return Response.json({ status: "ok", claudeCli: getCachedClaudeCliInfo() });
             },
         },
 
