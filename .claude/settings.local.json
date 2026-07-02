@@ -34,7 +34,10 @@
       "Bash(git show *)",
       "Bash(python3 -)",
       "Bash(git -C /Users/honza/Code/nomendex stash list)",
-      "Bash(git -C /Users/honza/Code/nomendex status --short)"
+      "Bash(git -C /Users/honza/Code/nomendex status --short)",
+      "Bash(python3 *)",
+      "Bash(bunx tsc *)",
+      "Bash(echo \"tsc exit: $?\")"
     ]
   }
 }
