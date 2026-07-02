@@ -602,17 +602,36 @@ class CalendarManager {
     }
 
     private func parseISO(_ string: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
+
         if string.contains("T") {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "yyyy-MM-dd'T'HH:mm"
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone.current
-            return formatter.date(from: string)
+            // The Nomendex UI writes "yyyy-MM-dd'T'HH:mm", but agent/imported todos
+            // may carry seconds (or fractional seconds). A strict single-format parse
+            // silently returned nil for those, dropping the event. Try the most
+            // specific format first, then fall back.
+            let timedFormats = [
+                "yyyy-MM-dd'T'HH:mm:ss.SSS",
+                "yyyy-MM-dd'T'HH:mm:ss",
+                "yyyy-MM-dd'T'HH:mm",
+            ]
+            for format in timedFormats {
+                formatter.dateFormat = format
+                if let date = formatter.date(from: string) {
+                    return date
+                }
+            }
+            // Last resort: strings carrying a timezone designator (trailing Z / offset).
+            let iso = ISO8601DateFormatter()
+            iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = iso.date(from: string) {
+                return date
+            }
+            iso.formatOptions = [.withInternetDateTime]
+            return iso.date(from: string)
         } else {
-            let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = TimeZone.current
             return formatter.date(from: string)
         }
     }
