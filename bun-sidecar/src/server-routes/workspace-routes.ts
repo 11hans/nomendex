@@ -185,7 +185,7 @@ export const workspaceRoutes = {
                         chatInputEnterToSend: true,
                         showHiddenFiles: false,
                         todoViewPreferences: {},
-                        memoryExtraction: { provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free", consolidationModel: "anthropic/claude-sonnet-4-6", adversaryEnabled: false },
+                        memoryExtraction: { provider: "disabled", openRouterModel: "xiaomi/mimo-v2-flash:free", consolidationModel: "anthropic/claude-sonnet-5", adversaryEnabled: false },
                         embeddings: { provider: "disabled" },
                         appleCalendarSync: true,
                         tabAutoCloseTimeout: 900,

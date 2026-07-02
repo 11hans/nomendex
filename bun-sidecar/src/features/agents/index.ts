@@ -7,7 +7,7 @@ export type AgentModel = z.infer<typeof ModelSchema>;
 
 // Curated fallback models (canonical IDs) used when dynamic model listing is unavailable.
 export const PREDEFINED_MODELS = [
-    "claude-sonnet-4-6",
+    "claude-sonnet-5",
     "claude-opus-4-7",
     "claude-opus-4-5",
     "claude-haiku-4-5",
@@ -25,6 +25,7 @@ const MODEL_CANONICAL_ID_MAP: Record<string, string> = {
 
 // Display names for known model IDs (canonical + legacy aliases).
 export const MODEL_DISPLAY_NAMES: Record<string, string> = {
+    "claude-sonnet-5": "Claude Sonnet 5",
     "claude-sonnet-4-6": "Claude Sonnet 4.6",
     "claude-sonnet-4-5": "Claude Sonnet 4.5",
     "claude-sonnet-4-5-20250929": "Claude Sonnet 4.5",
@@ -238,7 +239,7 @@ export const DEFAULT_AGENT: AgentConfig = {
     name: "General Assistant",
     description: "A general-purpose coding assistant",
     systemPrompt: "", // Empty = uses SDK's default Claude Code system prompt
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-5",
     mcpServers: [], // No MCP servers enabled by default
     allowedTools: [], // No tools pre-allowed
     isDefault: true,

@@ -37,7 +37,7 @@ function NewAgentContent() {
     const [formName, setFormName] = useState("");
     const [formDescription, setFormDescription] = useState("");
     const [formSystemPrompt, setFormSystemPrompt] = useState("");
-    const [formModel, setFormModel] = useState<string>("claude-sonnet-4-6");
+    const [formModel, setFormModel] = useState<string>("claude-sonnet-5");
     const [availableModels, setAvailableModels] = useState<string[]>(buildAgentModelCatalog([]));
     const [formMcpServers, setFormMcpServers] = useState<string[]>([]);
     const [useCustomModel, setUseCustomModel] = useState(false);

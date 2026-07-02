@@ -547,7 +547,7 @@ export async function runAIConsolidation(): Promise<ConsolidationReport> {
     }
 
     // Resolve model: both openrouter and claude providers use OpenRouter API.
-    // The "claude" provider simply pins the model to Claude Sonnet 4.6.
+    // The "claude" provider simply pins the model to Claude Sonnet 5.
     const apiKey = await secrets.get("OPENROUTER_API_KEY");
     if (!apiKey) {
         return {
