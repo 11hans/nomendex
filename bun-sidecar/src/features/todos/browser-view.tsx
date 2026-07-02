@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffect, memo, type ReactNode, type RefObject } from "react";
 import { usePlugin } from "@/hooks/usePlugin";
 import { useTodosAPI } from "@/hooks/useTodosAPI";
 import { useGoalsAPI } from "@/hooks/useGoalsAPI";
@@ -247,6 +247,289 @@ function DroppableProjectItem({
                 {count}
             </span>
         </button>
+    );
+}
+
+// Shared state/handlers the board cards need from TodosBrowserView. The card
+// components below MUST stay at module level: defining them inside the view
+// gives them a new component type on every parent re-render, which makes React
+// remount the columns and reset their scroll position.
+interface KanbanCardContext {
+    selectedTodoId: string | null;
+    hideProject: boolean;
+    inlineSubtaskParentId: string | null;
+    subtasksByParentId: Map<string, Todo[]>;
+    subtaskProgressMap: Map<string, { done: number; total: number }>;
+    selectedCardRef: RefObject<HTMLDivElement | null>;
+    onSelectTodo: (id: string) => void;
+    onOpenTodo: (id: string) => void;
+    onDeleteTodo: (todo: Todo) => Promise<void>;
+    onArchiveTodo: (todo: Todo) => Promise<void>;
+    onToggleDone: (todo: Todo) => Promise<void>;
+    onInlineDateChange: (todo: Todo, dates: { scheduledStart?: string; scheduledEnd?: string }) => Promise<void>;
+    onChecklistToggle: (todo: Todo, newDescription: string) => Promise<void>;
+    onSetInlineSubtaskParent: (id: string | null) => void;
+    onCreateInlineSubtask: (parentId: string, title: string) => Promise<void>;
+}
+
+// Inline subtask row rendered below a parent card
+function SubtaskRow({ subtask, ctx }: { subtask: Todo; ctx: KanbanCardContext }) {
+    const { currentTheme } = useTheme();
+    const isSubtaskDone = subtask.status === "done";
+    return (
+        <div
+            className="flex items-center gap-2 pl-4 pr-3 py-0.5 cursor-pointer group/subtask hover:bg-surface-elevated rounded-sm transition-colors"
+            onClick={(e) => { e.stopPropagation(); ctx.onOpenTodo(subtask.id); }}
+            title={subtask.title}
+        >
+            <Checkbox
+                checked={isSubtaskDone}
+                onCheckedChange={(checked) => {
+                    if (checked !== "indeterminate") ctx.onToggleDone(subtask);
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="size-3 shrink-0"
+            />
+            <span
+                className="text-xs truncate min-w-0 flex-1 py-1"
+                style={{
+                    color: isSubtaskDone ? currentTheme.styles.contentTertiary : currentTheme.styles.contentSecondary,
+                    textDecoration: isSubtaskDone ? "line-through" : "none",
+                }}
+            >
+                {subtask.title}
+            </span>
+        </div>
+    );
+}
+
+// Inline subtask input (TickTick/Todoist style)
+function InlineSubtaskInput({ parentId, onCreate, onClose }: { parentId: string; onCreate: (parentId: string, title: string) => Promise<void>; onClose: () => void }) {
+    const { currentTheme } = useTheme();
+    const [value, setValue] = useState("");
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        // Focus on mount
+        inputRef.current?.focus();
+    }, []);
+
+    const handleSubmit = async () => {
+        const trimmed = value.trim();
+        if (!trimmed) return;
+        setValue("");
+        await onCreate(parentId, trimmed);
+        // Keep input open for next subtask — re-focus after creation
+        inputRef.current?.focus();
+    };
+
+    return (
+        <div className="flex items-center gap-2 pl-4 pr-3 py-0.5">
+            <div className="size-3 shrink-0 rounded-sm border" style={{ borderColor: currentTheme.styles.borderDefault }} />
+            <input
+                ref={inputRef}
+                type="text"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleSubmit();
+                    } else if (e.key === "Escape") {
+                        onClose();
+                    }
+                }}
+                onBlur={() => {
+                    // Close if empty, otherwise submit then close
+                    if (value.trim()) {
+                        handleSubmit().then(onClose);
+                    } else {
+                        onClose();
+                    }
+                }}
+                placeholder="New subtask..."
+                className="flex-1 text-xs bg-transparent border-none outline-none placeholder:opacity-40 py-1"
+                style={{ color: currentTheme.styles.contentPrimary }}
+            />
+        </div>
+    );
+}
+
+// Sortable Todo Card component with drop indicator and selection.
+// Memoized so that an unrelated parent/column re-render (e.g. a sibling column's
+// header hover state toggling) does NOT re-render a card whose props are
+// unchanged. Critical for the inline date popover: re-rendering the card while
+// its calendar popover is open reconciles react-day-picker's grid, drops focus
+// out of the Radix content, and dismisses the popover mid-interaction.
+const SortableTodoCard = memo(function SortableTodoCard({ todo, isOverThis, isSelected, ctx }: { todo: Todo; isOverThis: boolean; isSelected: boolean; ctx: KanbanCardContext }) {
+    const { currentTheme } = useTheme();
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: todo.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.3 : 1,
+        zIndex: isDragging ? 1 : 0,
+    };
+
+    // Show drop indicator when hovering over this card (but not when dragging this card)
+    const showIndicator = isOverThis && !isDragging;
+    const todoSubtasks = ctx.subtasksByParentId.get(todo.id) ?? [];
+    const progress = ctx.subtaskProgressMap.get(todo.id);
+
+    return (
+        <div
+            className="relative group/card"
+            ref={isSelected ? ctx.selectedCardRef : undefined}
+        >
+            {/* Drop indicator line */}
+            {showIndicator && (
+                <div className="absolute -top-1.5 left-0 right-0 h-0.5 rounded-full z-10 bg-accent" />
+            )}
+            <div
+                ref={setNodeRef}
+                style={style}
+                {...attributes}
+                {...listeners}
+                onClick={() => {
+                    ctx.onSelectTodo(todo.id);
+                }}
+                onDoubleClick={() => ctx.onOpenTodo(todo.id)}
+                className={`cursor-move rounded-lg ${isSelected ? 'outline outline-2 outline-offset-1 outline-accent' : ''}`}
+            >
+                <TodoCard
+                    todo={todo}
+                    selected={isSelected}
+                    onEdit={(t) => ctx.onOpenTodo(t.id)}
+                    onDelete={ctx.onDeleteTodo}
+                    onArchive={ctx.onArchiveTodo}
+                    onToggleDone={ctx.onToggleDone}
+                    hideProject={ctx.hideProject}
+                    onDateChange={ctx.onInlineDateChange}
+                    onChecklistToggle={ctx.onChecklistToggle}
+                    subtaskProgress={progress}
+                    onAddSubtask={(t) => ctx.onSetInlineSubtaskParent(t.id)}
+                >
+                    {/* Subtask rows + inline input inside the card */}
+                    {(todoSubtasks.length > 0 || ctx.inlineSubtaskParentId === todo.id) && (
+                        <div
+                            className="mx-2 mb-1.5 pt-1 border-t"
+                            style={{ borderColor: currentTheme.styles.borderDefault }}
+                            onClick={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                        >
+                            {todoSubtasks.map((st) => (
+                                <SubtaskRow key={st.id} subtask={st} ctx={ctx} />
+                            ))}
+                            {ctx.inlineSubtaskParentId === todo.id && (
+                                <InlineSubtaskInput
+                                    parentId={todo.id}
+                                    onCreate={ctx.onCreateInlineSubtask}
+                                    onClose={() => ctx.onSetInlineSubtaskParent(null)}
+                                />
+                            )}
+                        </div>
+                    )}
+                </TodoCard>
+            </div>
+        </div>
+    );
+});
+
+function KanbanColumn({
+    title,
+    columnId,
+    todos: columnTodos,
+    icon,
+    onAddTodo,
+    ctx,
+}: {
+    title: string;
+    columnId: string;
+    todos: Todo[];
+    icon: ReactNode;
+    onAddTodo: () => void;
+    ctx: KanbanCardContext;
+}) {
+    const { currentTheme } = useTheme();
+    const { setNodeRef, isOver } = useDroppable({
+        id: `column-${columnId}`,
+    });
+    const [headerHovered, setHeaderHovered] = useState(false);
+
+    // Get the currently dragged and hovered item from DndContext
+    const { active, over } = useDndContext();
+    const overId = over?.id as string | undefined;
+    const activeId = active?.id as string | undefined;
+
+    // Ensure columnTodos is always an array
+    const safeColumnTodos = Array.isArray(columnTodos) ? columnTodos : [];
+
+    return (
+        <div
+            ref={setNodeRef}
+            className="flex-1 min-w-0 flex flex-col rounded-lg transition-colors border"
+            style={{
+                borderColor: isOver ? currentTheme.styles.surfaceAccent : currentTheme.styles.borderDefault,
+                backgroundColor: currentTheme.styles.surfaceSecondary,
+            }}
+        >
+            <div
+                className="sticky top-0 z-10 flex items-center gap-1.5 flex-shrink-0 group cursor-pointer rounded-t-lg px-1.5 py-1 transition-colors shadow-[0_2px_4px_-1px_rgba(0,0,0,0.15)]"
+                onMouseEnter={() => setHeaderHovered(true)}
+                onMouseLeave={() => setHeaderHovered(false)}
+                onClick={onAddTodo}
+                style={{
+                    color: currentTheme.styles.contentSecondary,
+                    backgroundColor: currentTheme.styles.surfaceSecondary,
+                }}
+            >
+                {icon}
+                <h3 className="text-xs font-medium uppercase tracking-[0.08em]">{title}</h3>
+                <Badge variant="secondary" className="text-xs">
+                    {safeColumnTodos.length}
+                </Badge>
+                <button
+                    type="button"
+                    className={`ml-auto p-1 rounded transition-opacity ${headerHovered ? 'opacity-100' : 'opacity-0'}`}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onAddTodo();
+                    }}
+                    style={{
+                        color: currentTheme.styles.contentSecondary,
+                        backgroundColor: headerHovered ? currentTheme.styles.surfaceAccent : "transparent",
+                    }}
+                >
+                    <Plus className="size-4" />
+                </button>
+            </div>
+            <SortableContext items={safeColumnTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-2 py-3 px-1.5 flex-1 min-h-0 overflow-y-auto">
+                    {safeColumnTodos.map((todo) => (
+                        <SortableTodoCard
+                            key={todo.id}
+                            todo={todo}
+                            isOverThis={overId === todo.id && activeId !== todo.id}
+                            isSelected={ctx.selectedTodoId === todo.id}
+                            ctx={ctx}
+                        />
+                    ))}
+                    {safeColumnTodos.length === 0 && (
+                        <div className="text-center text-xs py-8" style={{ color: currentTheme.styles.contentTertiary }}>
+                            Drop tasks here
+                        </div>
+                    )}
+                </div>
+            </SortableContext>
+        </div>
     );
 }
 
@@ -1757,11 +2040,16 @@ export function TodosBrowserView({
     }, [activeTab?.id, activeTab?.pluginInstance?.viewId]);
 
     // Scroll to selected item only if off-screen, scroll to top if first in column
-    // useLayoutEffect ensures scroll happens synchronously after DOM update
+    // useLayoutEffect ensures scroll happens synchronously after DOM update.
+    // Guarded by lastScrolledTodoIdRef so background reloads (which change
+    // flattenedTodos/todosByColumn identity) don't yank the scroll position.
+    const lastScrolledTodoIdRef = useRef<string | null>(null);
     useLayoutEffect(() => {
         const el = selectedCardRef.current;
         const container = scrollContainerRef.current;
         if (!el || !selectedTodoId || !container) return;
+        if (lastScrolledTodoIdRef.current === selectedTodoId) return;
+        lastScrolledTodoIdRef.current = selectedTodoId;
 
         // Check if selected todo is first in its column
         const selectedTodo = flattenedTodos.find(t => t.id === selectedTodoId);
@@ -1789,254 +2077,44 @@ export function TodosBrowserView({
         }
     }, [selectedTodoId, flattenedTodos, todosByColumn, getColumnForTodo]);
 
-    // Inline subtask row rendered below a parent card
-    function SubtaskRow({ subtask }: { subtask: Todo }) {
-        const isSubtaskDone = subtask.status === "done";
-        return (
-            <div
-                className="flex items-center gap-2 pl-4 pr-3 py-0.5 cursor-pointer group/subtask hover:bg-surface-elevated rounded-sm transition-colors"
-                onClick={(e) => { e.stopPropagation(); handleOpenTodo(subtask.id); }}
-                title={subtask.title}
-            >
-                <Checkbox
-                    checked={isSubtaskDone}
-                    onCheckedChange={(checked) => {
-                        if (checked !== "indeterminate") toggleDoneWithToast(subtask);
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="size-3 shrink-0"
-                />
-                <span
-                    className="text-xs truncate min-w-0 flex-1 py-1"
-                    style={{
-                        color: isSubtaskDone ? currentTheme.styles.contentTertiary : currentTheme.styles.contentSecondary,
-                        textDecoration: isSubtaskDone ? "line-through" : "none",
-                    }}
-                >
-                    {subtask.title}
-                </span>
-            </div>
-        );
-    }
-
-    // Inline subtask input (TickTick/Todoist style)
-    function InlineSubtaskInput({ parentId, onClose }: { parentId: string; onClose: () => void }) {
-        const [value, setValue] = useState("");
-        const inputRef = useRef<HTMLInputElement>(null);
-
-        useEffect(() => {
-            // Focus on mount
-            inputRef.current?.focus();
-        }, []);
-
-        const handleSubmit = async () => {
-            const trimmed = value.trim();
-            if (!trimmed) return;
-            setValue("");
-            await handleCreateInlineSubtask(parentId, trimmed);
-            // Keep input open for next subtask — re-focus after creation
-            inputRef.current?.focus();
-        };
-
-        return (
-            <div className="flex items-center gap-2 pl-4 pr-3 py-0.5">
-                <div className="size-3 shrink-0 rounded-sm border" style={{ borderColor: currentTheme.styles.borderDefault }} />
-                <input
-                    ref={inputRef}
-                    type="text"
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleSubmit();
-                        } else if (e.key === "Escape") {
-                            onClose();
-                        }
-                    }}
-                    onBlur={() => {
-                        // Close if empty, otherwise submit then close
-                        if (value.trim()) {
-                            handleSubmit().then(onClose);
-                        } else {
-                            onClose();
-                        }
-                    }}
-                    placeholder="New subtask..."
-                    className="flex-1 text-xs bg-transparent border-none outline-none placeholder:opacity-40 py-1"
-                    style={{ color: currentTheme.styles.contentPrimary }}
-                />
-            </div>
-        );
-    }
-
-    // Sortable Todo Card component with drop indicator and selection
-    function SortableTodoCard({ todo, isOverThis, isSelected, hideProject }: { todo: Todo; isOverThis: boolean; isSelected: boolean; hideProject?: boolean }) {
-        const {
-            attributes,
-            listeners,
-            setNodeRef,
-            transform,
-            transition,
-            isDragging,
-        } = useSortable({ id: todo.id });
-
-        const style = {
-            transform: CSS.Transform.toString(transform),
-            transition,
-            opacity: isDragging ? 0.3 : 1,
-            zIndex: isDragging ? 1 : 0,
-        };
-
-        // Show drop indicator when hovering over this card (but not when dragging this card)
-        const showIndicator = isOverThis && !isDragging;
-        const todoSubtasks = subtasksByParentId.get(todo.id) ?? [];
-        const progress = subtaskProgressMap.get(todo.id);
-
-        return (
-            <div
-                className="relative group/card"
-                ref={isSelected ? selectedCardRef : undefined}
-            >
-                {/* Drop indicator line */}
-                {showIndicator && (
-                    <div className="absolute -top-1.5 left-0 right-0 h-0.5 rounded-full z-10 bg-accent" />
-                )}
-                <div
-                    ref={setNodeRef}
-                    style={style}
-                    {...attributes}
-                    {...listeners}
-                    onClick={() => {
-                        setSelectedTodoId(todo.id);
-                    }}
-                    onDoubleClick={() => handleOpenTodo(todo.id)}
-                    className={`cursor-move rounded-lg ${isSelected ? 'outline outline-2 outline-offset-1 outline-accent' : ''}`}
-                >
-                    <TodoCard
-                        todo={todo}
-                        selected={isSelected}
-                        onEdit={(t) => handleOpenTodo(t.id)}
-                        onDelete={deleteTodoWithToast}
-                        onArchive={archiveTodoWithToast}
-                        onToggleDone={toggleDoneWithToast}
-                        hideProject={hideProject}
-                        onDateChange={handleInlineDateChange}
-                        onChecklistToggle={handleChecklistToggle}
-                        subtaskProgress={progress}
-                        onAddSubtask={(t) => setInlineSubtaskParentId(t.id)}
-                    >
-                        {/* Subtask rows + inline input inside the card */}
-                        {(todoSubtasks.length > 0 || inlineSubtaskParentId === todo.id) && (
-                            <div
-                                className="mx-2 mb-1.5 pt-1 border-t"
-                                style={{ borderColor: currentTheme.styles.borderDefault }}
-                                onClick={(e) => e.stopPropagation()}
-                                onPointerDown={(e) => e.stopPropagation()}
-                            >
-                                {todoSubtasks.map((st) => (
-                                    <SubtaskRow key={st.id} subtask={st} />
-                                ))}
-                                {inlineSubtaskParentId === todo.id && (
-                                    <InlineSubtaskInput
-                                        parentId={todo.id}
-                                        onClose={() => setInlineSubtaskParentId(null)}
-                                    />
-                                )}
-                            </div>
-                        )}
-                    </TodoCard>
-                </div>
-            </div>
-        );
-    }
-
-    function KanbanColumn({
-        title,
-        columnId,
-        todos: columnTodos,
-        icon,
-        onAddTodo,
-    }: {
-        title: string;
-        columnId: string;
-        todos: Todo[];
-        icon: React.ReactNode;
-        onAddTodo: () => void;
-    }) {
-        const { setNodeRef, isOver } = useDroppable({
-            id: `column-${columnId}`,
-        });
-        const [headerHovered, setHeaderHovered] = useState(false);
-
-        // Get the currently dragged and hovered item from DndContext
-        const { active, over } = useDndContext();
-        const overId = over?.id as string | undefined;
-        const activeId = active?.id as string | undefined;
-
-        // Ensure columnTodos is always an array
-        const safeColumnTodos = Array.isArray(columnTodos) ? columnTodos : [];
-
-        return (
-            <div
-                ref={setNodeRef}
-                className="flex-1 min-w-0 flex flex-col rounded-lg transition-colors border"
-                style={{
-                    borderColor: isOver ? currentTheme.styles.surfaceAccent : currentTheme.styles.borderDefault,
-                    backgroundColor: currentTheme.styles.surfaceSecondary,
-                }}
-            >
-                <div
-                    className="sticky top-0 z-10 flex items-center gap-1.5 flex-shrink-0 group cursor-pointer rounded-t-lg px-1.5 py-1 transition-colors shadow-[0_2px_4px_-1px_rgba(0,0,0,0.15)]"
-                    onMouseEnter={() => setHeaderHovered(true)}
-                    onMouseLeave={() => setHeaderHovered(false)}
-                    onClick={onAddTodo}
-                    style={{
-                        color: currentTheme.styles.contentSecondary,
-                        backgroundColor: currentTheme.styles.surfaceSecondary,
-                    }}
-                >
-                    {icon}
-                    <h3 className="text-xs font-medium uppercase tracking-[0.08em]">{title}</h3>
-                    <Badge variant="secondary" className="text-xs">
-                        {safeColumnTodos.length}
-                    </Badge>
-                    <button
-                        type="button"
-                        className={`ml-auto p-1 rounded transition-opacity ${headerHovered ? 'opacity-100' : 'opacity-0'}`}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onAddTodo();
-                        }}
-                        style={{
-                            color: currentTheme.styles.contentSecondary,
-                            backgroundColor: headerHovered ? currentTheme.styles.surfaceAccent : "transparent",
-                        }}
-                    >
-                        <Plus className="size-4" />
-                    </button>
-                </div>
-                <SortableContext items={safeColumnTodos.map(t => t.id)} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-2 py-3 px-1.5 flex-1 min-h-0 overflow-y-auto">
-                        {safeColumnTodos.map((todo) => (
-                            <SortableTodoCard
-                                key={todo.id}
-                                todo={todo}
-                                isOverThis={overId === todo.id && activeId !== todo.id}
-                                isSelected={selectedTodoId === todo.id}
-                                hideProject={isProjectScopedView}
-                            />
-                        ))}
-                        {safeColumnTodos.length === 0 && (
-                            <div className="text-center text-xs py-8" style={{ color: currentTheme.styles.contentTertiary }}>
-                                Drop tasks here
-                            </div>
-                        )}
-                    </div>
-                </SortableContext>
-            </div>
-        );
-    }
+    // Memoized so its identity is stable across unrelated re-renders. Combined
+    // with memo() on SortableTodoCard, this keeps a card with an open inline
+    // calendar from re-rendering (and dismissing its popover) when something
+    // elsewhere on the board changes. Only rebuilds when a value a card actually
+    // reads changes; all handlers below are useCallback/useRef-stable.
+    const kanbanCtx = useMemo<KanbanCardContext>(() => ({
+        selectedTodoId,
+        hideProject: isProjectScopedView,
+        inlineSubtaskParentId,
+        subtasksByParentId,
+        subtaskProgressMap,
+        selectedCardRef,
+        onSelectTodo: setSelectedTodoId,
+        onOpenTodo: handleOpenTodo,
+        onDeleteTodo: deleteTodoWithToast,
+        onArchiveTodo: archiveTodoWithToast,
+        onToggleDone: toggleDoneWithToast,
+        onInlineDateChange: handleInlineDateChange,
+        onChecklistToggle: handleChecklistToggle,
+        onSetInlineSubtaskParent: setInlineSubtaskParentId,
+        onCreateInlineSubtask: handleCreateInlineSubtask,
+    }), [
+        selectedTodoId,
+        isProjectScopedView,
+        inlineSubtaskParentId,
+        subtasksByParentId,
+        subtaskProgressMap,
+        selectedCardRef,
+        setSelectedTodoId,
+        handleOpenTodo,
+        deleteTodoWithToast,
+        archiveTodoWithToast,
+        toggleDoneWithToast,
+        handleInlineDateChange,
+        handleChecklistToggle,
+        setInlineSubtaskParentId,
+        handleCreateInlineSubtask,
+    ]);
 
     return (
         <div
@@ -2201,6 +2279,7 @@ export function TodosBrowserView({
                                                     openCreateDialogWithStatus(col.id as any);
                                                 }
                                             }}
+                                            ctx={kanbanCtx}
                                         />
                                     );
                                 })}
@@ -2460,6 +2539,7 @@ export function TodosBrowserView({
                                             openCreateDialogWithStatus(col.id as any);
                                         }
                                     }}
+                                    ctx={kanbanCtx}
                                 />
                             );
                         })}
