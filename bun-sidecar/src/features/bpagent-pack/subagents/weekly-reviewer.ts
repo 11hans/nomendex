@@ -57,7 +57,7 @@ ${apiBaseUrlBlock(port)}
 Do not read \`${goalsDir}/0-2.md\` dashboard files as data sources — they are generated summaries. Use the API instead.
 
 ## Daily-note Truth Rules
-- **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
+- **Reschedule freshness**: Before any reschedule or update of an existing todo, you need fresh data. Skip the GET if you fetched this same todo within the last 60 seconds (e.g. from a list call you just made — trust that). Otherwise call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
 - **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
 - **Timeblock semantics**: Generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) are schedule blocks, not actionable tasks. Exclude them from carry-forward, completion-rate math, and planned-task counts.
 - **Scheduling semantics**: Default to task-first scheduling. Update \`scheduledStart\`/\`scheduledEnd\` on actionable todos. Do not create container events unless explicitly requested.

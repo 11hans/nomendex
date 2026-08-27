@@ -21,8 +21,8 @@ const DEFAULT_SKILLS: DefaultSkill[] = [
     files: {
       "SKILL.md": `---
 name: todos
-description: "Manages project todos via REST API. BEFORE using this skill, you must THINK: 'Does the user mention a project? Does the user imply a specific column like Today?'. Use when the user asks to create, view, update, or delete todos."
-version: 15
+description: "Manages project todos via REST API. Use when the user asks to create, view, update, or delete todos."
+version: 16
 source: nomendex
 ---
 
@@ -67,7 +67,7 @@ Every project can have **custom Kanban columns** with user-defined names. You CA
 
 | Concept | Purpose | Values |
 |---------|---------|--------|
-| **status** | Lifecycle state (for filtering) | \`todo\`, \`in_progress\`, \`done\`, \`later\` |
+| **status** | Lifecycle state (for filtering) | \`todo\`, \`planned\`, \`in_progress\`, \`done\`, \`later\` |
 | **customColumnId** | Visual position on board | UUID like \`col-a1b2c3d4\` |
 
 ## Overview
@@ -83,6 +83,7 @@ Each todo has a status field that controls which kanban column it appears in. Th
 | Status | Description |
 |--------|-------------|
 | \`todo\` | Not started - the default status for new todos |
+| \`planned\` | Scoped and committed, not yet started (stronger than \`todo\`) |
 | \`in_progress\` | Currently being worked on |
 | \`done\` | Completed |
 | \`later\` | Deferred or backlogged for future consideration |
@@ -147,8 +148,9 @@ TODO=$(curl -s -X POST "http://localhost:$PORT/api/todos/create" \\
 TODO_ID=$(echo $TODO | jq -r '.id')
 
 # 3. Move to custom column (e.g. from step 1 found "col-8f9a" for "Today")
+# NOTE: double quotes so $TODO_ID expands — single quotes would send the literal string
 curl -s -X POST "http://localhost:$PORT/api/todos/update" \\
-  -d '{"todoId": "$TODO_ID", "updates": {"customColumnId": "col-8f9a"}}'
+  -d "{\\"todoId\\": \\"$TODO_ID\\", \\"updates\\": {\\"customColumnId\\": \\"col-8f9a\\"}}"
 \`\`\`
 
 ## List Todos
@@ -235,32 +237,12 @@ Use this workflow for read-only requests such as:
 ### Read-Only Rules
 - Treat these requests as **read-only** unless the user explicitly asks you to create, update, archive, or reorder a todo.
 - If the user is brainstorming, reviewing bugs, or planning work, do NOT silently create todos. Ask whether they want the items captured first.
-- Never read internal cache artifacts such as \`.claude/projects/.../tool-results\`. Use live API calls and workspace files only.
 
-### Todo Safety Rules
-- **Reschedule freshness**: Before any reschedule or update of an existing todo, call \`POST /api/todos/get\` with the todo ID immediately before \`update\`. Do not rely on stale \`/api/todos/list\` data. If \`status\`, \`scheduledStart\`, or \`scheduledEnd\` changed since the todo was shown to the user, stop, show the refreshed state, and ask again.
-- **Multi-day context**: If \`scheduledStart\` and \`scheduledEnd\` are more than 1 local calendar day apart, classify the todo as \`Multi-day context\`. Show it separately, do not include it in \`Today's Workset\`, \`<!-- workset: ... -->\`, completion-rate math, or batch reschedule.
-- **Timeblock semantics**: Generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) are calendar blocks, not actionable tasks. Show them as schedule context, never in normal workset buckets, completion-rate math, carry-forward, or batch reschedule.
-- **Timeblock completion**: Never mark a generated timeblock event as \`done\`. If the user explicitly wants to convert it into an actionable task, first remove timeblock semantics and then confirm any status change.
-- **Streak authority**: If the latest relevant daily note explicitly states a streak (for example \`DEN 1\`), copy that wording verbatim. Do not recalculate streaks from todo text, checkboxes, or your own arithmetic. If no explicit streak is written, say \`streak neuveden\`.
-- **Duplicate-title rendering**: If 2+ relevant todos share the same title, render each one with visible plain-text ID and scheduled range, for example \`[[todo:abc-123|Pohotovost]] · id: abc-123 · 2026-03-31 → 2026-03-31\`.
-
-### Today Workset Order
-When answering a "today" or "schedule" query without an explicit external calendar integration, build the workset in this order:
-
-1. **Overdue** - todos with \`dueDate\` before today (deadline bucket)
-2. **Due Today** - todos with \`dueDate\` today (deadline bucket)
-3. **Scheduled / Started** - single-day todos whose \`scheduledStart\` (and non-multi-day \`scheduledEnd\` ranges) cover today or earlier, plus non-multi-day \`in_progress\` items not already shown
-4. **Multi-day Context** - todos whose \`scheduledStart\`/\`scheduledEnd\` span more than 1 local calendar day; show separately as context only
-5. **Today / Now Columns** - open todos in real Today-style custom columns after loading the project board config
-6. **Focused Project** - if the user names a project, show that project's remaining open todos prominently
-7. **Other Candidates** - remaining open todos worth considering
-
-Present these as labeled buckets. Do NOT mix deadline buckets (\`dueDate\`) with schedule/today buckets (\`scheduledStart\`/\`scheduledEnd\`). \`Multi-day Context\` is informational and not part of the actionable daily workset.
-
-### Calendar / Schedule Interpretation
-- Treat "calendar" or "schedule" queries as looking for todos with \`scheduledStart\`/\`scheduledEnd\` (schedule/calendar context) while \`dueDate\` remains the deadline field used for overdue counts.
-- Only talk about an external calendar if the user explicitly points to one.
+### Safety & Workset Rules — single source: bpagent prompt
+The semantic rules live in the \`built-in-bpagent\` system prompt. Follow them from there; this skill does not restate them (restated copies drift):
+- **Todo Safety Rules** — reschedule freshness (incl. the 60-second skip-GET exemption), timeblock semantics, event status handling, streak authority, duplicate-title rendering.
+- **Today Workset Algorithm** — bucket order and presentation. Never mix deadline buckets (\`dueDate\`) with schedule buckets (\`scheduledStart\`/\`scheduledEnd\`); Multi-day Context is informational only.
+- \`dueDate\` = deadline field (overdue counts); \`scheduledStart\`/\`scheduledEnd\` = schedule/calendar fields. Only talk about an external calendar if the user explicitly points to one.
 
 ### Today Column Detection
 - Never guess a custom column ID like \`col-today\`.
@@ -294,14 +276,9 @@ Follow this checklist exactly for mutating requests:
 *   ❌ **DO NOT guess IDs**: Never use \`col-today\`. Look it up!
 *   ❌ **DO NOT create with customColumnId**: API ignores it. Create then Update.
 *   ❌ **DO NOT treat planning as capture**: If the user is only describing bugs, ideas, or options during planning, ask whether they want them saved as todos.
-*   ❌ **DO NOT use cached tool output**: Never inspect \`.claude/projects/.../tool-results\` instead of calling the live API.
-*   ❌ **DO NOT invent goal/project links**: In daily/evening context, NEVER say "This task probably relates to goal X" unless there is an explicit typed link (project.goalRef → goal ID, or the todo's effective goalRefs contain the goal ID — i.e. todo.goalRefs explicitly, or inherited from its project's goalRef). State only what is in the data.
-*   ❌ **DO NOT reschedule from stale list data**: Re-fetch the concrete todo via \`/api/todos/get\` immediately before any reschedule/update.
-*   ❌ **DO NOT batch-reschedule multi-day todos**: Show them as \`Multi-day context\` only.
-*   ❌ **DO NOT hide duplicate titles**: When titles repeat, show visible plain-text ID + \`scheduledStart\`-\`scheduledEnd\`.
-*   ❌ **DO NOT invent streak arithmetic**: Use the latest relevant daily note verbatim, or say \`streak neuveden\`.
-*   ❌ **DO NOT treat generated timeblock events as normal tasks**: Keep generated timeblock events (\`kind: "event"\`, \`source: "timeblock-generator"\`; legacy fallback: tag \`timeblock\`) out of workset math, carry-forward, and done/completion actions unless the user explicitly converts them first.
 *   ❌ **DO NOT create a todo from a timeblock phrase**: "Dopoledne pracuju na Nomendex" = create one timeblock (via \`/timeblocking\`), NOT a new todo. "14:00 schůzka s Petrem" = create one event, NOT a new todo. Recognize the phrase class before choosing this skill.
+
+Semantic anti-patterns (stale reschedules, multi-day batching, duplicate-title hiding, streak arithmetic, timeblock completion, goal-link inference, cached tool output) are governed by the bpagent prompt — Operating Principles + Todo Safety Rules. Do not re-derive them here.
 
 ## Golden Example (Few-Shot)
 
@@ -310,7 +287,7 @@ Follow this checklist exactly for mutating requests:
 **Agent Thought Process**:
 1.  *Analyze*:
     *   Project: "Nomedex dev" (needs verification)
-    *   Column: "Dneska" -> Today
+    *   Column: "Today" (needs real column ID from board config)
     *   **Clean Title**: "Fix a UI bug: tag deletion icon UI" (Removed project/time context)
 2.  *Verify*: Must check project list for "Nomedex dev".
 
@@ -330,9 +307,9 @@ TODO=$(curl -s -X POST "http://localhost:$PORT/api/todos/create" \\
   -d '{"title": "Fix a UI bug: tag deletion icon UI", "project": "Nomendex dev"}')
 ID=$(echo $TODO | jq -r '.id')
 
-# 4. Move to Target Column
+# 4. Move to Target Column (double quotes so $ID expands)
 curl -s -X POST "http://localhost:$PORT/api/todos/update" \\
-  -d '{"todoId": "$ID", "updates": {"customColumnId": "col-8f9a..."}}'
+  -d "{\\"todoId\\": \\"$ID\\", \\"updates\\": {\\"customColumnId\\": \\"col-8f9a...\\"}}"
 \`\`\`
 
 ## Important Constraints
@@ -356,11 +333,11 @@ Projects can have custom Kanban columns beyond the default statuses. To work wit
 
 > **IMPORTANT**: Column IDs are dynamic generated UUIDs. NEVER guess an ID like "col-today". ALWAYS map the user's requested column name to the actual ID found in the project configuration.
 
-Example: Moving a todo to a "Code Review" column:
+Example: Moving a todo to a "Code Review" column (column ID read from the board config, never guessed):
 \`\`\`bash
 curl -s -X POST "http://localhost:$PORT/api/todos/update" \\
   -H "Content-Type: application/json" \\
-  -d '{"todoId": "todo-123", "updates": {"customColumnId": "col-review"}}'
+  -d '{"todoId": "todo-123", "updates": {"customColumnId": "col-3b7e91d0"}}'
 \`\`\`
 
 See the **projects** skill for full documentation on loading board configurations and working with custom columns.
@@ -427,8 +404,8 @@ For rendering interactive HTML interfaces in chat, use the **create-interface** 
     files: {
       "SKILL.md": `---
 name: projects
-description: "Working with projects and custom Kanban boards. BEFORE using this skill, you must THINK: 'Does the user assume the project already exists? Am I creating a duplicate because of case sensitivity?'. Use when the user mentions a project name."
-version: 5
+description: "Working with projects and custom Kanban boards via REST API. Use when the user mentions a project name or asks about board columns."
+version: 6
 source: nomendex
 ---
 
@@ -453,7 +430,7 @@ Projects are stored in \`.nomendex/projects.json\` - the source of truth for all
 ## Port Discovery
 
 \`\`\`bash
-PORT=$(cat ~/Library/Application\\\\ Support/com.firstloop.nomendex/serverport.json | grep -o '"port":[0-9]*' | cut -d: -f2)
+PORT=$(cat ~/Library/Application\\ Support/com.firstloop.nomendex/serverport.json | grep -o '"port":[0-9]*' | cut -d: -f2)
 \`\`\`
 
 ## API Endpoints
@@ -472,13 +449,13 @@ PORT=$(cat ~/Library/Application\\\\ Support/com.firstloop.nomendex/serverport.j
 
 \`\`\`bash
 # By name (recommended)
-curl -s -X POST "http://localhost:$PORT/api/projects/get-by-name" \\\\
-  -H "Content-Type: application/json" \\\\
+curl -s -X POST "http://localhost:$PORT/api/projects/get-by-name" \\
+  -H "Content-Type: application/json" \\
   -d '{"name": "PROJECT_NAME"}'
 
 # By ID
-curl -s -X POST "http://localhost:$PORT/api/projects/get" \\\\
-  -H "Content-Type: application/json" \\\\
+curl -s -X POST "http://localhost:$PORT/api/projects/get" \\
+  -H "Content-Type: application/json" \\
   -d '{"projectId": "project-id"}'
 \`\`\`
 
@@ -487,8 +464,8 @@ curl -s -X POST "http://localhost:$PORT/api/projects/get" \\\\
 The board config contains custom columns with their IDs and status mappings:
 
 \`\`\`bash
-curl -s -X POST "http://localhost:$PORT/api/projects/board/get" \\\\
-  -H "Content-Type: application/json" \\\\
+curl -s -X POST "http://localhost:$PORT/api/projects/board/get" \\
+  -H "Content-Type: application/json" \\
   -d '{"projectId": "PROJECT_ID"}'
 \`\`\`
 
@@ -496,21 +473,23 @@ Response example:
 \`\`\`json
 {
   "columns": [
-    {"id": "col-today", "title": "Today", "order": 1, "status": "todo"},
-    {"id": "col-review", "title": "Code Review", "order": 2},
-    {"id": "col-done", "title": "Done", "order": 3, "status": "done"}
+    {"id": "col-8f9a2c41", "title": "Today", "order": 1, "status": "todo"},
+    {"id": "col-3b7e91d0", "title": "Code Review", "order": 2},
+    {"id": "col-c25d604f", "title": "Done", "order": 3, "status": "done"}
   ],
   "showDone": true
 }
 \`\`\`
+
+> Column IDs are generated values — always read them from this response. Never type an ID from memory or guess a semantic-looking one like \`col-today\`.
 
 ## Moving a Task to a Column
 
 After loading the project, find the correct column by name and use its ID:
 
 \`\`\`bash
-curl -s -X POST "http://localhost:$PORT/api/todos/update" \\\\
-  -H "Content-Type: application/json" \\\\
+curl -s -X POST "http://localhost:$PORT/api/todos/update" \\
+  -H "Content-Type: application/json" \\
   -d '{"todoId": "TODO_ID", "updates": {"customColumnId": "COLUMN_ID"}}'
 \`\`\`
 
@@ -519,8 +498,8 @@ curl -s -X POST "http://localhost:$PORT/api/todos/update" \\\\
 Create or update custom columns:
 
 \`\`\`bash
-curl -s -X POST "http://localhost:$PORT/api/projects/board/save" \\\\
-  -H "Content-Type: application/json" \\\\
+curl -s -X POST "http://localhost:$PORT/api/projects/board/save" \\
+  -H "Content-Type: application/json" \\
   -d '{
     "projectId": "PROJECT_ID",
     "board": {
@@ -544,20 +523,22 @@ User: "Move the Fix bug task to Code Review in the Nomendex project"
 3. Update todo with customColumnId
 
 \`\`\`bash
-# Step 1: Get project
-PROJECT=$(curl -s -X POST "http://localhost:$PORT/api/projects/get-by-name" \\\\
-  -H "Content-Type: application/json" \\\\
+# Step 1: Get project and extract its real ID
+PROJECT=$(curl -s -X POST "http://localhost:$PORT/api/projects/get-by-name" \\
+  -H "Content-Type: application/json" \\
   -d '{"name": "Nomendex"}')
+PROJECT_ID=$(echo "$PROJECT" | jq -r '.id')
 
-# Step 2: Get board config (extract projectId from response)
-BOARD=$(curl -s -X POST "http://localhost:$PORT/api/projects/board/get" \\\\
-  -H "Content-Type: application/json" \\\\
-  -d '{"projectId": "nomendex"}')
+# Step 2: Get board config (use the extracted ID, never a lowercased name)
+BOARD=$(curl -s -X POST "http://localhost:$PORT/api/projects/board/get" \\
+  -H "Content-Type: application/json" \\
+  -d "{\\"projectId\\": \\"$PROJECT_ID\\"}")
+COLUMN_ID=$(echo "$BOARD" | jq -r '.columns[] | select(.title == "Code Review") | .id')
 
-# Step 3: Update todo (find column ID from board response)
-curl -s -X POST "http://localhost:$PORT/api/todos/update" \\\\
-  -H "Content-Type: application/json" \\\\
-  -d '{"todoId": "fix-bug-123", "updates": {"customColumnId": "col-review"}}'
+# Step 3: Update todo (double quotes so variables expand)
+curl -s -X POST "http://localhost:$PORT/api/todos/update" \\
+  -H "Content-Type: application/json" \\
+  -d "{\\"todoId\\": \\"fix-bug-123\\", \\"updates\\": {\\"customColumnId\\": \\"$COLUMN_ID\\"}}"
 \`\`\`
 
 ## Column Status Mapping
@@ -778,8 +759,8 @@ Set a fixed \`height\` parameter to disable auto-resize.
     files: {
       "SKILL.md": `---
 name: daily-notes
-description: Manages daily notes using vault-config folder mapping and the vault's existing naming convention. Use when the user asks to view recent notes, create daily notes, read today's notes, summarize the week, or references dates.
-version: 5
+description: Helper for /daily — bootstrap and read daily-note files from the vault template via daily-note.sh (get-today, get-note, get-last-x). Not a routine; for morning/evening workflows use /daily, for weekly review use /weekly.
+version: 6
 source: nomendex
 ---
 
@@ -841,7 +822,7 @@ User: "Add this to my daily note: Completed feature X"
 
 ## Best Practices
 
-1. **Always set NOTES_DIR** - Don't rely on the default path
+1. **Always set NOTES_DIR** - The script exits with an error when it's unset
 2. **Detect before creating** - Never assume \`daily-notes/\` or a fixed date pattern
 3. **Handle missing notes gracefully** - Not every day has a note
 4. **Preserve existing content** - Use Edit tool, not Write when modifying
@@ -851,7 +832,12 @@ User: "Add this to my daily note: Completed feature X"
 # Daily Notes CLI
 # Detects the real daily-notes folder and filename pattern from vault-config.json and existing notes.
 
-NOTES_DIR="\${NOTES_DIR:-$HOME/.mcpclient/notes}"
+NOTES_DIR="\${NOTES_DIR:-}"
+if [[ -z "$NOTES_DIR" ]]; then
+    echo "Error: NOTES_DIR is not set. Get the workspace notes path first:" >&2
+    echo "  NOTES_DIR=\\\$(curl -s http://localhost:\\\$PORT/api/workspace/paths | jq -r '.data.notes')" >&2
+    exit 1
+fi
 
 read_configured_daily_dir() {
     local config_file="$NOTES_DIR/vault-config.json"
@@ -1344,7 +1330,7 @@ Works with:
       "SKILL.md": `---
 name: check-links
 description: Find broken wiki-links in the vault. Read-only analysis — scans for [[links]] and verifies target files exist. No writes, no dependencies.
-version: 2
+version: 3
 source: nomendex
 ---
 
@@ -1371,7 +1357,7 @@ Use **Grep** to find all \`[[...]]\` patterns in markdown files:
 
 \`\`\`
 Grep:
-  pattern: "\\\\[\\\\[([^\\\\]|]+)"
+  pattern: "\\[\\[([^\\]|]+)"
   glob: "*.md"
   output_mode: content
   -n: true
@@ -1458,7 +1444,7 @@ If all links are valid:
       "SKILL.md": `---
 name: daily
 description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 19
+version: 20
 source: nomendex
 ---
 
@@ -1470,7 +1456,7 @@ Morning planning, midday check-in, evening shutdown. The bpagent system prompt h
 Invoke with \`/daily\` or phrases like "start morning", "evening shutdown", "today's plan".
 
 ## Pre-computed context
-A \`<daily-context>\` block is injected with: today's ISO date, \`daily_notes_dir\`, \`filename_pattern\`, \`today_note { filename, path, exists }\`, \`latest_note { filename, streak }\`.
+A \`<daily-context>\` block is injected with: today's ISO date, \`time_of_day\` (morning/midday/evening — the prompt's Daily Review Routing routes on it), \`daily_notes_dir\`, \`filename_pattern\`, \`today_note { filename, path, exists }\`, \`latest_note { filename, streak }\`.
 
 **Use it as the source of truth.** Do not re-scan the filesystem, re-read \`vault-config.json\`, or re-derive today's date. Fall back to manual detection only if the block is missing or \`filename_pattern: "unknown"\`.
 
@@ -1581,6 +1567,10 @@ If the user reports partial completion, apply the bpagent **Partial completion**
 > Template scaffolding is handled by the script. Do NOT write template content manually.
 > This step is a no-op when morning already ran (file is already populated).
 
+### Step 0.5 — Auto-archive stale events
+
+Apply **Evening step 1** from the bpagent prompt: archive \`kind: "event"\` todos whose \`scheduledEnd\` is more than 2 days before today (\`archived: true\`, no confirmation needed). Do this before scoring so stale events don't pollute the lists below.
+
 ### Completion Scoring
 
 **Step 1 — Planned set.** Read \`<!-- workset: id1, id2, ... -->\` from today's daily note. Those IDs are the baseline. Reclassify any snapshot todo with a multi-day range (\`scheduledStart\`/\`scheduledEnd\` more than 1 local calendar day apart) into Multi-day Context and remove it from the planned set.
@@ -1648,7 +1638,7 @@ For each of today's timeblocks (\`source === "timeblock-generator"\` or legacy t
 
 ### Prepare
 - Tomorrow's priority (preview from rescheduled + upcoming todos).
-- Commit changes (\`/push\`).
+- Offer to commit today's vault changes (git sync).
 
 ### Shutdown checklist
 - Batch confirm + reschedule done (via fresh \`/api/todos/get\`)
@@ -1696,13 +1686,10 @@ Run sequentially, mark \`in_progress\` at start and \`completed\` when done.
 
 Works with:
 - \`/todos\` - Fetch today's todos, update completion status
-- \`/push\` - Commit end-of-day changes
 - \`/weekly\` - Weekly planning uses daily notes
 - \`/monthly\` - Monthly goals inform daily focus
 - \`/project\` - Use project-note next-actions only as fallback when live todos are insufficient
-- \`/onboard\` - Load context before planning
 - Goal tracking skill - Align daily tasks to goals
-- Productivity Coach - Accountability for daily routines
 `,
     },
   },
@@ -1712,7 +1699,7 @@ Works with:
       "SKILL.md": `---
 name: goal-tracking
 description: Track progress across the typed goal hierarchy (vision/yearly/quarterly/monthly), surface stalled goals, and connect projects/todos via project.goalRef and todo.goalRefs (with read-time inheritance from project). Use for goal reviews and progress tracking.
-version: 6
+version: 7
 source: nomendex
 ---
 
@@ -1865,7 +1852,7 @@ The \`monthly-reviewer\` subagent has access to: \`Read\`, \`Write\`, \`Edit\`, 
       "SKILL.md": `---
 name: obsidian-vault-ops
 description: Read and write Obsidian vault files, manage wiki-links, process markdown with YAML frontmatter. Use when working with vault file operations, creating notes, or managing links.
-version: 4
+version: 5
 source: nomendex
 ---
 
@@ -1926,12 +1913,7 @@ status: active
 
 ## Template Variables
 
-When processing templates, replace:
-- \`{{date}}\` - Today's date using the vault's existing convention
-- \`{{date:format}}\` - Formatted date
-- \`{{date-1}}\` - Yesterday
-- \`{{date+1}}\` - Tomorrow
-- \`{{time}}\` - Current time
+Template variable syntax (\`{{date}}\`, \`{{date:format}}\`, \`{{date-1}}\`, \`{{date+1}}\`, \`{{time}}\`) is documented in the \`/daily\` skill — follow it from there instead of a restated copy here.
 
 **CRITICAL — Daily note navigation links**: When a template contains wiki links to adjacent daily notes (e.g. \`[[{{yesterday}}]]\` or \`[[{{tomorrow}}]]\`), always include the full subfolder path in the resolved link. For example, if daily notes live in \`daily-notes/\`, the resolved link must be \`[[daily-notes/3-21-2026]]\`, NOT \`[[3-21-2026]]\`. A bare filename without the folder prefix cannot be resolved to the correct file and will create a broken or duplicate note.
 
@@ -1951,9 +1933,7 @@ When processing templates, replace:
 3. Suggest wiki-links to related notes
 
 ### Tag Operations
-- Priority: \`#priority/high\`, \`#priority/medium\`, \`#priority/low\`
-- Status: \`#active\`, \`#waiting\`, \`#completed\`, \`#archived\`
-- Context: \`#work\`, \`#personal\`, \`#health\`, \`#learning\`
+Use the tag taxonomy from the \`built-in-bpagent\` prompt ("Tag System" — priority/status/context tags). Do not use a restated copy; a copy here has already drifted once (missing \`#family\`).
 
 ## Best Practices
 
@@ -1972,7 +1952,7 @@ When processing templates, replace:
       "SKILL.md": `---
 name: project
 description: Create, track, and archive projects linked to goals using Nomendex Projects API and canonical project markdown notes. Use for project lifecycle management, status dashboards, and project note synchronization.
-version: 5
+version: 6
 source: nomendex
 ---
 
@@ -2166,8 +2146,6 @@ Works with:
 - \`/daily\` - Use live project todos first; surface project next-actions only as fallback
 - \`/weekly\` - Project status in weekly review
 - \`/goal-tracking\` - Project progress feeds goal calculations
-- \`/onboard\` - Discover and load project context
-- \`/push\` - Commit project changes
 `,
     },
   },
@@ -2177,7 +2155,7 @@ Works with:
       "SKILL.md": `---
 name: review
 description: Smart review router. Detects context (morning, Sunday, end of month) and launches the appropriate review workflow. Use anytime for the right review at the right time.
-version: 3
+version: 4
 source: nomendex
 ---
 
@@ -2239,8 +2217,10 @@ DAYS_IN_MONTH=$(date -v+1m -v1d -v-1d +%d 2>/dev/null || date -d "$(date +%Y-%m-
 Before routing, check for overdue reviews:
 
 \`\`\`bash
-# Read weekly review file for last date
-WEEKLY_REVIEW="Goals/3. Weekly Review.md"
+# Read weekly review file for last date — resolve the goals folder from vault-config, don't hardcode it
+NOTES_DIR=$(curl -s http://localhost:$PORT/api/workspace/paths | jq -r '.data.notes')
+GOALS_DIR=$(jq -r '.folderMapping.goals // "Goals"' "$NOTES_DIR/vault-config.json" 2>/dev/null || echo "Goals")
+WEEKLY_REVIEW="$NOTES_DIR/$GOALS_DIR/3. Weekly Review.md"
 # If last weekly review > 7 days ago, suggest weekly regardless of day
 \`\`\`
 
@@ -2296,7 +2276,6 @@ Works with:
 - \`/weekly\` — Full weekly review process
 - \`/timeblocking\` — Weekly or ad-hoc timeblock planning after review
 - \`/monthly\` — Monthly review and planning
-- Session init hook — Staleness data already calculated
 `,
     },
   },
@@ -2306,7 +2285,7 @@ Works with:
       "SKILL.md": `---
 name: search
 description: Search vault content by keyword using Grep. Zero dependencies — works in any vault without indexes or plugins. Groups results by directory for easy scanning.
-version: 2
+version: 3
 source: nomendex
 ---
 
@@ -2337,18 +2316,6 @@ Use the **Grep** tool to search all \`.md\` files for the term:
 Grep:
   pattern: <search term>
   glob: "*.md"
-  output_mode: content
-  -n: true
-  -C: 1
-\`\`\`
-
-Exclude hidden directories (\`.claude/\`, \`.obsidian/\`) and templates:
-
-\`\`\`
-Grep:
-  pattern: <search term>
-  glob: "*.md"
-  path: .
   output_mode: content
   -n: true
   -C: 1
@@ -2416,7 +2383,7 @@ If no matches are found:
       "SKILL.md": `---
 name: timeblocking
 description: "Schedule work across three item types: task-first scheduling for todos, timeblock creation for reserved focus time, and event creation for external fixed-time obligations. Includes retrospective linking of todos worked on inside each timeblock."
-version: 6
+version: 7
 source: nomendex
 ---
 
@@ -2488,7 +2455,7 @@ Render a diff preview before any mutation:
 Rules:
 - Blocking conflicts (invalid range, overlap, missing todo, non-task todo) abort apply.
 - Never invent generic filler blocks.
-- Before updating any existing todo, re-fetch via \`POST /api/todos/get\`. If refreshed data changed, stop and show latest.
+- Before updating any existing todo, apply the **Reschedule freshness** rule from the bpagent prompt's Todo Safety Rules (incl. the 60-second skip-GET exemption).
 
 ---
 
@@ -2496,49 +2463,9 @@ Rules:
 
 Trigger: user says "dopoledne / odpoledne / večer pracuju na X", "blok na Y", "vyhradím si čas na Z".
 
-### Step 1: Parse the intent
-- **Topic**: "Nomendex", "hluboká práce", "administrativa"
-- **Time range**: explicit ("9–12") vs vague ("dopoledne")
+Follow the **Timeblock Creation Workflow** in the \`built-in-bpagent\` prompt (Steps 1–5: parse intent, resolve vague time ranges by asking, match project via \`POST /api/todos/projects\`, create, offer the project's open todos). This skill does not restate the steps — the prompt is the single source; restated copies drift.
 
-### Step 2: Time range handling
-- **Explicit range** ("9–12 pracuju na Nomendex") → propose in one line, create after confirmation:
-  > Vytvořím timeblock **Nomendex — práce** 09:00–12:00. Potvrď.
-- **Vague range** ("dopoledne") → ask for a concrete range before creating:
-  > Jaký časový rozsah chceš pro dopolední blok Nomendex? (např. 9–12)
-
-### Step 3: Project matching
-Look up the topic against existing projects:
-\`\`\`bash
-curl -s -X POST "http://localhost:$PORT/api/todos/projects" -d '{}'
-\`\`\`
-- **Case-insensitive match** → set \`project: "<canonical name>"\` on the timeblock. This enables retrospective linking.
-- **No match** → ask: "Ke kterému projektu tento blok patří?" Accept "žádný"/"none"/"obecně" to leave \`project\` unset.
-
-### Step 4: Create
-\`\`\`bash
-curl -s -X POST "http://localhost:$PORT/api/todos/create" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "title": "Nomendex — práce",
-    "kind": "event",
-    "source": "timeblock-generator",
-    "tags": ["timeblock"],
-    "scheduledStart": "2026-04-18T09:00:00",
-    "scheduledEnd": "2026-04-18T12:00:00",
-    "project": "Nomendex"
-  }'
-\`\`\`
-
-Rules:
-- Do NOT set \`status\`, \`priority\`, or \`dueDate\` on timeblocks.
-- Do NOT create a parallel actionable todo for the same topic.
-- Do NOT auto-fill empty calendar space with generic timeblocks unless explicitly asked.
-
-### Step 5: Offer content
-After creation, surface the project's open todos so the user can pick what to work on inside:
-> Vytvořen timeblock Nomendex 9–12. Chceš vidět otevřené Nomendex todos?
-
-If yes: \`POST /api/todos/list { "project": "Nomendex", "statuses": ["todo","planned","in_progress"] }\`. Do NOT auto-assign them to the block.
+Schema reminder for the create call: \`kind: "event"\`, \`source: "timeblock-generator"\`, \`tags: ["timeblock"]\`, \`scheduledStart\`/\`scheduledEnd\` as full ISO datetimes (e.g. \`2026-04-18T09:00:00\`), plus \`project\` when matched. Do NOT set \`status\`, \`priority\`, or \`dueDate\`; do NOT create a parallel actionable todo for the same topic; do NOT auto-fill empty calendar space unless explicitly asked.
 
 ---
 
@@ -2576,49 +2503,13 @@ Goal: record which todos were worked on inside each timeblock, for weekly/monthl
 - **Evening** (\`/daily\` evening) — for today's timeblocks
 - **Weekly review** (\`/weekly\` Phase 1) — for past-week timeblocks without persisted data
 
-### Procedure (infer → confirm → persist)
+### Procedure
 
-**1. Load today's timeblocks:**
-\`\`\`bash
-curl -s -X POST "http://localhost:$PORT/api/todos/list" \\
-  -d '{"kinds":["event"],"scheduledOverlap":{"start":"TODAYT00:00","end":"TODAYT23:59"}}'
-\`\`\`
-Filter to \`source === "timeblock-generator"\` or legacy tag \`timeblock\`.
+Run the full **infer → confirm → persist** procedure from the \`built-in-bpagent\` prompt ("Timeblock Retrospective Linking"): load timeblocks via \`scheduledOverlap\`, infer candidates by time + project match, confirm with the user, persist the \`<!-- timeblock-worked-todos -->\` marker block into the timeblock's \`description\`. The prompt is the single source for the steps.
 
-**2. Infer candidate todos per timeblock:**
-For each timeblock, find todos where BOTH:
-- \`completedAt\` **or** \`scheduledStart\` falls inside the timeblock's \`scheduledStart\`–\`scheduledEnd\` range, AND
-- todo's \`project\` equals the timeblock's \`project\` (case-insensitive).
-
-If the timeblock has no \`project\`, drop the project filter and show time-overlap matches as lower-confidence candidates.
-
-**3. Confirm with user:**
-\`\`\`markdown
-V bloku **Nomendex — práce** (09:00–12:00) jsem podle času a projektu našel:
-- ✅ [[todo:abc-123|Fix tag deletion UI]] · done 10:22
-- 🟡 [[todo:def-456|Refactor chat routes]] · in_progress
-
-Souhlasí? Chceš něco přidat/odebrat?
-\`\`\`
-
-**4. Persist into the timeblock's \`description\`:**
-\`\`\`
-<!-- timeblock-worked-todos -->
-- [[todo:abc-123|Fix tag deletion UI]] · done 10:22
-- [[todo:def-456|Refactor chat routes]] · in_progress
-<!-- /timeblock-worked-todos -->
-\`\`\`
-
-Update via \`POST /api/todos/update { "todoId": "<timeblock-id>", "updates": { "description": "<full new description>" } }\`.
-
-Rules:
-- Preserve prior \`description\` content outside the marker block.
-- If the marker block already exists, **replace** it, do not duplicate.
-- Never silently mark a contained todo as \`done\` based on inference — ask explicitly.
-- Do NOT mark the timeblock itself as \`done\`.
-
-### Reading retrospective data later
-Prefer persisted \`<!-- timeblock-worked-todos -->\` blocks over re-inferring. Re-infer only for timeblocks without a persisted block.
+Skill-side reminders:
+- In the \`scheduledOverlap\` filter, substitute real ISO datetimes for the day (\`"start": "YYYY-MM-DDT00:00:00", "end": "YYYY-MM-DDT23:59:59"\` with the actual date) — never send a literal \`TODAYT00:00\` placeholder.
+- Prefer persisted \`<!-- timeblock-worked-todos -->\` blocks over re-inferring; re-infer only for timeblocks without a persisted block.
 
 ---
 
@@ -2631,8 +2522,7 @@ If the user explicitly asks for the old bulk container-event generator (not per-
 This is opt-in only. Modern timeblock creation uses the per-request flow above.
 
 ## Safety Rules
-- Before updating or moving any existing todo, re-fetch via \`POST /api/todos/get\`.
-- If refreshed data differs from previewed data, stop and show the latest state.
+- Follow **Todo Safety Rules** from the bpagent prompt — reschedule freshness (incl. the 60-second skip-GET exemption: skip the re-fetch when you fetched this same todo within the last 60 seconds), verify mutation effects, timeblock/event status semantics.
 - One concrete task = one schedulable todo. No duplicate shadow entities.
 - If the user explicitly rejects auto-proposed timeblocks ("nechci bloky od tebe sám"), save as durable memory and stop proposing. User-initiated timeblocks still go through.
 
