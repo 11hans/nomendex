@@ -316,7 +316,7 @@ Two-way sync between todos with scheduled dates and a dedicated "Nomendex Tasks"
 - Outgoing: `calendar-bridge.ts` → `window.webkit.messageHandlers.calendarSync` → `CalendarManager.swift` → `EKEventStore.save()/remove()`.
 - Incoming: `EKEventStoreChangedNotification` → `evaluateJavaScript(window.__onCalendarChange)` → `calendar-change-bridge.ts` → `todosAPI.updateTodo`.
 - Built from `scheduledStart`/`scheduledEnd`; `dueDate` is kept as deadline metadata (overdue logic stays in Nomendex).
-- Priority-based alarms: `high` = 15 min, `medium` = 30 min, `low`/`none` = none.
+- Optional 30 + 15 minute alerts on timed events via `calendarReminderPreset`.
 
 Details: `docs/features/apple-calendar-integration.md`.
 
