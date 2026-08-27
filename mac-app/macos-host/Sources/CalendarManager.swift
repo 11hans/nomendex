@@ -20,11 +20,46 @@ class CalendarManager {
     private var ignoredTaskIDs: Set<String> = []
     private var eventIdentifierCache: [String: String] = [:]  // taskId -> EKEvent.eventIdentifier
 
+    // MARK: - Deletion Confirmation
+    //
+    // EventKit has no deletion callback, so "the event is gone" can only ever be
+    // inferred from its absence in a scan — and a scan lies: it returns partial
+    // or empty results while an iCloud source is resyncing, and it cannot see
+    // events outside the lookup window at all. A false absence used to delete the
+    // matching event-todo permanently (incident 2026-08-27, 12 todos lost), so a
+    // deletion now has to survive a per-event lookup, a window check, a grace
+    // period, and a blast-radius cap before it reaches the app.
+
+    private var missingSince: [String: Date] = [:]  // taskId -> first pass that missed it
+    private var recheckScheduled = false
+    private var lastBulkSuspects: Set<String> = []
+
+    /// How long a task must stay unresolvable before its deletion is believed.
+    private let deletionGraceInterval: TimeInterval = 120
+    /// Deletions per pass that are always plausible as deliberate user action.
+    private let bulkDeletionFloor = 3
+
     struct EventState {
         let title: String
         let startDate: Date?
         let endDate: Date?
         let isAllDay: Bool
+
+        init(title: String, startDate: Date?, endDate: Date?, isAllDay: Bool) {
+            self.title = title
+            self.startDate = startDate
+            self.endDate = endDate
+            self.isAllDay = isAllDay
+        }
+
+        init(_ event: EKEvent) {
+            self.init(
+                title: event.title ?? "",
+                startDate: event.startDate,
+                endDate: event.endDate,
+                isAllDay: event.isAllDay
+            )
+        }
     }
 
     func startObserving(webView: WKWebView) {
@@ -41,6 +76,8 @@ class CalendarManager {
             self?.eventIdentifierCache.removeAll()
             self?.knownEventStates.removeAll()
             self?.ignoredTaskIDs.removeAll()
+            self?.missingSince.removeAll()
+            self?.lastBulkSuspects.removeAll()
         }
 
         // Initial snapshot
@@ -64,11 +101,7 @@ class CalendarManager {
     private func snapshotCurrentEvents() {
         syncQueue.async { [weak self] in
             guard let self = self else { return }
-            let nomendexCalendars = self.getNomendexCalendars()
-            guard !nomendexCalendars.isEmpty else { return }
-            let start = Date().addingTimeInterval(-365 * 24 * 3600)
-            let end = Date().addingTimeInterval(365 * 24 * 3600)
-            let predicate = self.eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
+            guard let predicate = self.nomendexEventsPredicate() else { return }
             let events = self.eventStore.events(matching: predicate)
 
             // Group by taskId so we can detect and clean up duplicates.
@@ -91,12 +124,7 @@ class CalendarManager {
                         try? self.eventStore.remove(duplicate, span: .thisEvent)
                     }
                 }
-                newState[taskId] = EventState(
-                    title: keeper.title ?? "",
-                    startDate: keeper.startDate,
-                    endDate: keeper.endDate,
-                    isAllDay: keeper.isAllDay
-                )
+                newState[taskId] = EventState(keeper)
                 self.eventIdentifierCache[taskId] = keeper.eventIdentifier
             }
             self.knownEventStates = newState
@@ -125,11 +153,7 @@ class CalendarManager {
 
     /// Returns all events across Nomendex calendars whose URL points to the given task.
     private func findAllEvents(taskId: String) -> [EKEvent] {
-        let nomendexCalendars = getNomendexCalendars()
-        guard !nomendexCalendars.isEmpty else { return [] }
-        let start = Date().addingTimeInterval(-5 * 365 * 24 * 3600)
-        let end = Date().addingTimeInterval(5 * 365 * 24 * 3600)
-        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
+        guard let predicate = nomendexEventsPredicate() else { return [] }
         let events = eventStore.events(matching: predicate)
         let targetURL = URL(string: "nomendex://task/\(taskId)")
         return events.filter { $0.url == targetURL }
@@ -139,12 +163,7 @@ class CalendarManager {
         guard let webView = webViewRef else { return }
         // Reset store to ensure we get fresh data after EKEventStoreChanged
         eventStore.reset()
-        let nomendexCalendars = getNomendexCalendars()
-        guard !nomendexCalendars.isEmpty else { return }
-
-        let start = Date().addingTimeInterval(-365 * 24 * 3600)
-        let end = Date().addingTimeInterval(365 * 24 * 3600)
-        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
+        guard let predicate = nomendexEventsPredicate() else { return }
         let currentEvents = eventStore.events(matching: predicate)
 
         // Group by taskId so we can detect and clean up duplicates on-the-fly.
@@ -165,66 +184,127 @@ class CalendarManager {
                     try? eventStore.remove(duplicate, span: .thisEvent)
                 }
             }
-            currentMap[taskId] = (keeper, EventState(
-                title: keeper.title ?? "",
-                startDate: keeper.startDate,
-                endDate: keeper.endDate,
-                isAllDay: keeper.isAllDay
-            ))
+            currentMap[taskId] = (keeper, EventState(keeper))
             eventIdentifierCache[taskId] = keeper.eventIdentifier
         }
 
         var changesToSend: [[String: Any]] = []
+        var deletionCandidates: [String] = []
+        // Tracked events that this scan didn't return but that must stay tracked —
+        // dropping them would silently stop syncing them (and lose the pending
+        // deletion evidence for the next pass).
+        var survivors: [String: EventState] = [:]
+        let now = Date()
 
         // Check for modified or deleted events
         for (taskId, oldState) in knownEventStates {
             if ignoredTaskIDs.contains(taskId) {
                 ignoredTaskIDs.remove(taskId)
+                missingSince.removeValue(forKey: taskId)
                 continue
             }
 
-            if let current = currentMap[taskId] {
-                let newState = current.1
+            // Resolve the event: this scan first, then an authoritative per-event
+            // lookup. `event(withIdentifier:)` is bound neither by the predicate
+            // window nor by which calendars the scan happened to see, so it is the
+            // tie-breaker whenever a tracked task is missing from the scan.
+            var newState: EventState? = currentMap[taskId]?.1
+            if newState == nil, let live = liveEvent(taskId: taskId) {
+                log("detectChanges: task \(taskId) missing from scan but still resolves by identifier — keeping it")
+                let recovered = EventState(live)
+                survivors[taskId] = recovered
+                newState = recovered
+            }
 
-                var hasChanges = false
-                var syncPayload: [String: Any] = ["taskId": taskId]
+            guard let newState = newState else {
+                // --- The event is genuinely unresolvable in this pass. ---
 
-                if oldState.title != newState.title {
-                    hasChanges = true
-                    let cleanTitle = newState.title.hasPrefix("✅ ") ? String(newState.title.dropFirst(2)) : newState.title
-                    syncPayload["title"] = cleanTitle
+                // Events that aged out of the lookup window, or were moved beyond
+                // it in Calendar.app, are simply unreachable — not deleted.
+                if !isWithinLookupWindow(oldState) {
+                    survivors[taskId] = oldState
+                    missingSince.removeValue(forKey: taskId)
+                    continue
                 }
 
-                if oldState.startDate != newState.startDate || oldState.endDate != newState.endDate || oldState.isAllDay != newState.isAllDay {
-                    hasChanges = true
-
-                    if let formattedStart = formatScheduledDate(newState.startDate, isAllDay: newState.isAllDay) {
-                        syncPayload["scheduledStart"] = formattedStart
-                    } else {
-                        syncPayload["scheduledStart"] = NSNull()
-                    }
-
-                    if let formattedEnd = formatScheduledDate(newState.endDate, isAllDay: newState.isAllDay) {
-                        syncPayload["scheduledEnd"] = formattedEnd
-                    } else {
-                        syncPayload["scheduledEnd"] = NSNull()
-                    }
+                // Require the absence to persist across passes and a grace period,
+                // so a partial read resolves itself on the next store change.
+                let firstMissed = missingSince[taskId] ?? now
+                missingSince[taskId] = firstMissed
+                if now.timeIntervalSince(firstMissed) < deletionGraceInterval {
+                    log("detectChanges: task \(taskId) missing — waiting for confirmation before propagating a deletion")
+                    survivors[taskId] = oldState
+                    continue
                 }
 
-                if hasChanges {
-                    changesToSend.append(syncPayload)
+                deletionCandidates.append(taskId)
+                continue
+            }
+
+            missingSince.removeValue(forKey: taskId)
+
+            var hasChanges = false
+            var syncPayload: [String: Any] = ["taskId": taskId]
+
+            if oldState.title != newState.title {
+                hasChanges = true
+                let cleanTitle = newState.title.hasPrefix("✅ ") ? String(newState.title.dropFirst(2)) : newState.title
+                syncPayload["title"] = cleanTitle
+            }
+
+            if oldState.startDate != newState.startDate || oldState.endDate != newState.endDate || oldState.isAllDay != newState.isAllDay {
+                hasChanges = true
+
+                if let formattedStart = formatScheduledDate(newState.startDate, isAllDay: newState.isAllDay) {
+                    syncPayload["scheduledStart"] = formattedStart
+                } else {
+                    syncPayload["scheduledStart"] = NSNull()
                 }
-            } else {
-                // Event was deleted
+
+                if let formattedEnd = formatScheduledEnd(newState.endDate, isAllDay: newState.isAllDay) {
+                    syncPayload["scheduledEnd"] = formattedEnd
+                } else {
+                    syncPayload["scheduledEnd"] = NSNull()
+                }
+            }
+
+            if hasChanges {
+                changesToSend.append(syncPayload)
+            }
+        }
+
+        // Blast-radius cap. Deleting a handful of events in Calendar.app is normal;
+        // half the tracked set vanishing at once is far more likely to be a bad read
+        // than intent, and the app-side consequence is irreversible. Hold those back
+        // and let the user decide instead of applying them silently.
+        let bulkThreshold = max(bulkDeletionFloor, knownEventStates.count / 2)
+        if deletionCandidates.count > bulkThreshold {
+            log("detectChanges: suspected bulk loss — \(deletionCandidates.count) of \(knownEventStates.count) tracked events vanished (threshold \(bulkThreshold)); not propagating")
+            for taskId in deletionCandidates {
+                if let oldState = knownEventStates[taskId] {
+                    survivors[taskId] = oldState
+                }
+            }
+            reportSuspectedBulkDeletion(taskIds: deletionCandidates, webView: webView)
+        } else {
+            lastBulkSuspects.removeAll()
+            for taskId in deletionCandidates {
+                log("detectChanges: confirmed deletion of task \(taskId) — propagating")
+                // `confirmed` tells the web layer this deletion cleared the gates
+                // above, so its own (necessarily blunter) cap can stand down. A host
+                // without this fix sends bare deletions and stays capped there.
                 changesToSend.append([
                     "taskId": taskId,
-                    "deleted": true
+                    "deleted": true,
+                    "confirmed": true
                 ])
+                missingSince.removeValue(forKey: taskId)
+                eventIdentifierCache.removeValue(forKey: taskId)
             }
         }
 
         // Update snapshot
-        var nextState: [String: EventState] = [:]
+        var nextState: [String: EventState] = survivors
         for (taskId, current) in currentMap {
             nextState[taskId] = current.1
             // Clear ignore entries for newly created events that weren't in
@@ -236,6 +316,16 @@ class CalendarManager {
             }
         }
         knownEventStates = nextState
+        missingSince = missingSince.filter { knownEventStates[$0.key] != nil }
+
+        // A pending deletion only converges if something looks again after the grace
+        // period — EKEventStoreChanged may never fire a second time. Candidates the
+        // bulk cap already held back (grace long elapsed) are not rescheduled: they
+        // stay held until the user acts, and re-polling them forever buys nothing.
+        let hasUnconfirmedPending = missingSince.values.contains { now.timeIntervalSince($0) < deletionGraceInterval }
+        if hasUnconfirmedPending {
+            scheduleDeletionRecheck()
+        }
 
         // Send to JS
         if !changesToSend.isEmpty {
@@ -251,6 +341,49 @@ class CalendarManager {
             } catch {
                 log("Failed to serialize calendar changes: \(error)")
             }
+        }
+    }
+
+    // MARK: - Deletion Confirmation Helpers
+
+    /// Authoritative single-event lookup by cached identifier, used to second-guess
+    /// a scan that didn't return a tracked task. Unlike `events(matching:)` this is
+    /// limited neither by the lookup window nor by calendar visibility, so it is the
+    /// one call that can distinguish "really deleted" from "this read was bad".
+    private func liveEvent(taskId: String) -> EKEvent? {
+        guard let cachedId = eventIdentifierCache[taskId],
+              let event = eventStore.event(withIdentifier: cachedId),
+              event.url?.absoluteString == "nomendex://task/\(taskId)" else { return nil }
+        return event
+    }
+
+    /// Re-runs detection once the grace period has elapsed. EKEventStoreChanged may
+    /// never fire again after the change that hid the events, so without this a
+    /// genuine deletion would sit pending until the next unrelated calendar change.
+    private func scheduleDeletionRecheck() {
+        guard !recheckScheduled else { return }
+        recheckScheduled = true
+        syncQueue.asyncAfter(deadline: .now() + deletionGraceInterval + 5) { [weak self] in
+            guard let self = self else { return }
+            self.recheckScheduled = false
+            self.detectChanges()
+        }
+    }
+
+    /// Tells the app that an implausible number of events vanished at once, so it can
+    /// warn the user instead of destroying data. Re-sent only when the suspected set
+    /// changes — every calendar change re-runs detection and would otherwise re-warn.
+    private func reportSuspectedBulkDeletion(taskIds: [String], webView: WKWebView) {
+        let suspects = Set(taskIds)
+        guard suspects != lastBulkSuspects else { return }
+        lastBulkSuspects = suspects
+
+        guard let data = try? JSONSerialization.data(withJSONObject: taskIds),
+              let jsonString = String(data: data, encoding: .utf8) else { return }
+
+        DispatchQueue.main.async {
+            let js = "if (window.__onCalendarBulkDeletionSuspected) { window.__onCalendarBulkDeletionSuspected(\(jsonString)); }"
+            webView.evaluateJavaScript(js, completionHandler: nil)
         }
     }
 
@@ -271,6 +404,8 @@ class CalendarManager {
                 switch action {
                 case "upsert":
                     self.upsertEvent(taskData: taskData, webView: webView, callback: callback)
+                case "upsertBatch":
+                    self.upsertEventBatch(taskData: taskData, webView: webView, callback: callback)
                 case "delete":
                     self.deleteEvent(taskData: taskData, webView: webView, callback: callback)
                 case "purge":
@@ -309,6 +444,36 @@ class CalendarManager {
     /// Returns all calendars whose title starts with "Nomendex"
     private func getNomendexCalendars() -> [EKCalendar] {
         return eventStore.calendars(for: .event).filter { $0.title.hasPrefix(calendarPrefix) }
+    }
+
+    /// Shared lookup window for all event queries. EventKit silently truncates
+    /// `predicateForEvents` ranges longer than four years to the FIRST four years,
+    /// so a ±5y window used to evaluate as [now-5y, now-1y] and missed every
+    /// current event. 365 + 1095 = 1460 days stays under the limit.
+    private func lookupWindow() -> (start: Date, end: Date) {
+        let now = Date()
+        return (now.addingTimeInterval(-365 * 24 * 3600), now.addingTimeInterval(1095 * 24 * 3600))
+    }
+
+    private func nomendexEventsPredicate() -> NSPredicate? {
+        let nomendexCalendars = getNomendexCalendars()
+        guard !nomendexCalendars.isEmpty else { return nil }
+        let window = lookupWindow()
+        return eventStore.predicateForEvents(withStart: window.start, end: window.end, calendars: nomendexCalendars)
+    }
+
+    /// True when a known event's dates sit far enough inside the lookup window that
+    /// its absence from a scan can actually mean deletion. Events near or past the
+    /// edges (aged out of the past bound, dragged years into the future) are simply
+    /// unreachable by the predicate — treating those as deletions destroys todos on
+    /// a calendar boundary crossing rather than on anything the user did.
+    private func isWithinLookupWindow(_ state: EventState) -> Bool {
+        guard let start = state.startDate else { return false }
+        let window = lookupWindow()
+        let margin: TimeInterval = 24 * 3600
+        let end = state.endDate ?? start
+        return start >= window.start.addingTimeInterval(margin)
+            && end <= window.end.addingTimeInterval(-margin)
     }
 
     /// Get or create a calendar for a specific project, or the default "Nomendex Tasks" calendar
@@ -353,34 +518,92 @@ class CalendarManager {
     // MARK: - Upsert Event
 
     private func upsertEvent(taskData: [String: Any], webView: WKWebView?, callback: String?) {
+        let result = applyUpsert(taskData: taskData, commit: true)
+        if let event = result.event, let taskId = taskData["taskId"] as? String {
+            eventIdentifierCache[taskId] = event.eventIdentifier
+        }
+        sendResult(webView: webView, callback: callback, success: result.error == nil, error: result.error)
+    }
+
+    /// Batch upsert used by Force Sync / Reconcile: applies all events with the
+    /// commit deferred, then commits once. One EventKit commit instead of N keeps
+    /// bulk syncs fast and avoids N separate iCloud round-trips.
+    private func upsertEventBatch(taskData: [String: Any], webView: WKWebView?, callback: String?) {
+        guard let tasks = taskData["tasks"] as? [[String: Any]] else {
+            sendResult(webView: webView, callback: callback, success: false, error: "Missing tasks")
+            return
+        }
+
+        var savedEvents: [(taskId: String, event: EKEvent)] = []
+        var failed = 0
+        var firstError: String? = nil
+
+        for task in tasks {
+            let result = applyUpsert(taskData: task, commit: false)
+            if let error = result.error {
+                failed += 1
+                if firstError == nil { firstError = error }
+            } else if let event = result.event, let taskId = task["taskId"] as? String {
+                savedEvents.append((taskId, event))
+            }
+        }
+
+        do {
+            try eventStore.commit()
+        } catch {
+            log("Batch commit failed: \(error)")
+            sendResult(webView: webView, callback: callback, success: false, error: error.localizedDescription)
+            return
+        }
+
+        // Identifiers are only stable after the commit.
+        for (taskId, event) in savedEvents {
+            eventIdentifierCache[taskId] = event.eventIdentifier
+        }
+
+        log("Batch upsert: \(savedEvents.count) saved, \(failed) failed")
+        sendResult(webView: webView, callback: callback, success: failed == 0, error: firstError,
+                   data: ["synced": savedEvents.count, "failed": failed])
+    }
+
+    /// Core upsert shared by the single and batch paths. Returns the saved event
+    /// (identifier caching is the caller's responsibility — identifiers are not
+    /// stable until commit) or an error message. (nil, nil) means "nothing to sync".
+    private func applyUpsert(taskData: [String: Any], commit: Bool) -> (event: EKEvent?, error: String?) {
         let projectName = taskData["projectName"] as? String
 
         guard let calendar = getOrCreateCalendar(projectName: projectName) else {
-            sendResult(webView: webView, callback: callback, success: false, error: "Cannot create calendar")
-            return
+            return (nil, "Cannot create calendar")
         }
 
         guard let taskId = taskData["taskId"] as? String,
               let title = taskData["title"] as? String else {
-            sendResult(webView: webView, callback: callback, success: false, error: "Missing taskId or title")
-            return
+            return (nil, "Missing taskId or title")
         }
 
-        // Find (and dedupe) existing events for this task. Multi-device iCloud
-        // races or lost-URL round-trips can leave multiple events for one task
-        // — clean them up opportunistically on every upsert.
-        let existing = findAllEvents(taskId: taskId)
+        // Fast path: cached identifier avoids a full calendar scan. Duplicate
+        // cleanup is skipped here — snapshot/detectChanges/reconcile cover it.
         var keeper: EKEvent? = nil
-        if !existing.isEmpty {
-            let picked = pickKeeper(existing)
-            if existing.count > 1 {
-                log("upsert: found \(existing.count) events for task \(taskId), removing \(existing.count - 1) duplicate(s)")
-                for duplicate in existing where duplicate != picked {
-                    ignoredTaskIDs.insert(taskId)
-                    try? eventStore.remove(duplicate, span: .thisEvent)
+        if let cachedId = eventIdentifierCache[taskId],
+           let cached = eventStore.event(withIdentifier: cachedId),
+           cached.url?.absoluteString == "nomendex://task/\(taskId)" {
+            keeper = cached
+        } else {
+            // Find (and dedupe) existing events for this task. Multi-device iCloud
+            // races or lost-URL round-trips can leave multiple events for one task
+            // — clean them up opportunistically on every upsert.
+            let existing = findAllEvents(taskId: taskId)
+            if !existing.isEmpty {
+                let picked = pickKeeper(existing)
+                if existing.count > 1 {
+                    log("upsert: found \(existing.count) events for task \(taskId), removing \(existing.count - 1) duplicate(s)")
+                    for duplicate in existing where duplicate != picked {
+                        ignoredTaskIDs.insert(taskId)
+                        try? eventStore.remove(duplicate, span: .thisEvent)
+                    }
                 }
+                keeper = picked
             }
-            keeper = picked
         }
 
         // If the kept event lives in a different calendar than the target
@@ -402,18 +625,13 @@ class CalendarManager {
 
         // Status prefix
         let status = taskData["status"] as? String
-        if status == "done" {
-            let cleanTitle = title.hasPrefix("✅ ") ? String(title.dropFirst(2)) : title
-            event.title = "✅ " + cleanTitle
-        } else {
-            let cleanTitle = title.hasPrefix("✅ ") ? String(title.dropFirst(2)) : title
-            event.title = cleanTitle
-        }
+        let cleanTitle = title.hasPrefix("✅ ") ? String(title.dropFirst(2)) : title
+        event.title = status == "done" ? "✅ " + cleanTitle : cleanTitle
 
-        // Notes / description
-        if let description = taskData["description"] as? String, !description.isEmpty {
-            event.notes = description
-        }
+        // Notes / description — clear when emptied in Nomendex, otherwise a
+        // reused event keeps its stale text forever.
+        let description = taskData["description"] as? String
+        event.notes = (description?.isEmpty == false) ? description : nil
 
         // Parse dates (scheduled fields preferred)
         let scheduledStart = taskData["scheduledStart"] as? String
@@ -442,17 +660,17 @@ class CalendarManager {
             if let end = end {
                 // EKEvent all-day events use exclusive end dates, so add 1 day to make
                 // the range inclusive. E.g. Mar 15–17 needs endDate = Mar 18 midnight.
-                event.endDate = isAllDay ? end.addingTimeInterval(86400) : end
+                // Calendar day-add (not +86400s) keeps midnight across DST changes.
+                event.endDate = isAllDay ? Calendar.current.date(byAdding: .day, value: 1, to: end) ?? end : end
             } else if isAllDay {
-                event.endDate = start.addingTimeInterval(86400)
+                event.endDate = Calendar.current.date(byAdding: .day, value: 1, to: start) ?? start
             } else {
                 event.endDate = start.addingTimeInterval(TimeInterval(duration * 60))
             }
             event.isAllDay = isAllDay
         } else {
             // No dates — nothing to sync
-            sendResult(webView: webView, callback: callback, success: true, error: nil)
-            return
+            return (nil, nil)
         }
 
         // Add reminder alarms based on preset (only for timed events)
@@ -469,14 +687,12 @@ class CalendarManager {
         ignoredTaskIDs.insert(taskId)
 
         do {
-            try eventStore.save(event, span: .thisEvent)
-            // Cache the identifier for reliable lookups in subsequent syncs
-            eventIdentifierCache[taskId] = event.eventIdentifier
+            try eventStore.save(event, span: .thisEvent, commit: commit)
             log("Saved calendar event for task: \(taskId)")
-            sendResult(webView: webView, callback: callback, success: true, error: nil)
+            return (event, nil)
         } catch {
             log("Failed to save event: \(error)")
-            sendResult(webView: webView, callback: callback, success: false, error: error.localizedDescription)
+            return (nil, error.localizedDescription)
         }
     }
 
@@ -488,11 +704,21 @@ class CalendarManager {
             return
         }
 
+        // Fast path: the startup snapshot and change observer keep the cache and
+        // knownEventStates covering the same window findEvent searches, so a task
+        // in neither has no event to remove. Every update of a todo without
+        // scheduled dates lands here — skip the calendar scan.
+        if eventIdentifierCache[taskId] == nil && knownEventStates[taskId] == nil {
+            sendResult(webView: webView, callback: callback, success: true, error: nil)
+            return
+        }
+
         if let event = findEvent(taskId: taskId) {
             // Prevent echo
             ignoredTaskIDs.insert(taskId)
             do {
                 try eventStore.remove(event, span: .thisEvent)
+                eventIdentifierCache.removeValue(forKey: taskId)
                 log("Deleted calendar event for task: \(taskId)")
             } catch {
                 log("Failed to delete event: \(error)")
@@ -566,11 +792,7 @@ class CalendarManager {
         }
 
         // Fall back to URL-based search
-        let nomendexCalendars = getNomendexCalendars()
-        guard !nomendexCalendars.isEmpty else { return nil }
-        let start = Date().addingTimeInterval(-5 * 365 * 24 * 3600)
-        let end = Date().addingTimeInterval(5 * 365 * 24 * 3600)
-        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
+        guard let predicate = nomendexEventsPredicate() else { return nil }
         let events = eventStore.events(matching: predicate)
 
         let targetURL = URL(string: "nomendex://task/\(taskId)")
@@ -599,6 +821,17 @@ class CalendarManager {
         formatter.timeZone = TimeZone.current
         formatter.dateFormat = isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm"
         return formatter.string(from: date)
+    }
+
+    /// Formats an event's end for Nomendex. All-day `EKEvent` end dates are
+    /// exclusive (upsert adds a day), so the day has to come back off on the way in
+    /// — otherwise every external edit of an all-day event stretched the todo by
+    /// another day on each round-trip.
+    private func formatScheduledEnd(_ date: Date?, isAllDay: Bool) -> String? {
+        guard let date = date else { return nil }
+        guard isAllDay else { return formatScheduledDate(date, isAllDay: false) }
+        let inclusiveEnd = Calendar.current.date(byAdding: .day, value: -1, to: date) ?? date
+        return formatScheduledDate(inclusiveEnd, isAllDay: true)
     }
 
     private func parseISO(_ string: String) -> Date? {
@@ -653,7 +886,9 @@ class CalendarManager {
             } catch {
                 jsonString = "{\"success\":false,\"error\":\"encode failed\"}"
             }
-            let js = "window.\(callback)(\(jsonString))"
+            // The JS bridge deletes the callback after its 5s timeout — guard so a
+            // late reply (e.g. first-run permission dialog) doesn't throw.
+            let js = "if (typeof window.\(callback) === 'function') { window.\(callback)(\(jsonString)); }"
             wv.evaluateJavaScript(js, completionHandler: nil)
         }
     }
@@ -666,15 +901,10 @@ class CalendarManager {
     /// live todos to refresh stale metadata — without the destructive purge.
     private func reconcileEvents(taskData: [String: Any], webView: WKWebView?, callback: String?) {
         eventStore.reset()
-        let nomendexCalendars = getNomendexCalendars()
-        guard !nomendexCalendars.isEmpty else {
+        guard let predicate = nomendexEventsPredicate() else {
             sendResult(webView: webView, callback: callback, success: true, error: nil, data: ["taskIds": [] as [String], "removed": 0])
             return
         }
-
-        let start = Date().addingTimeInterval(-5 * 365 * 24 * 3600)
-        let end = Date().addingTimeInterval(5 * 365 * 24 * 3600)
-        let predicate = eventStore.predicateForEvents(withStart: start, end: end, calendars: nomendexCalendars)
         let events = eventStore.events(matching: predicate)
 
         var grouped: [String: [EKEvent]] = [:]

@@ -1,6 +1,6 @@
 import { join } from 'path';
 import { homedir } from 'os';
-import { mkdirSync, appendFileSync, writeFileSync } from 'fs';
+import { mkdirSync, appendFileSync, writeFileSync, existsSync, renameSync, rmSync } from 'fs';
 
 // Centralized log directory in app support (shared across all workspaces)
 const LOG_DIR = join(homedir(), 'Library/Application Support/com.firstloop.nomendex');
@@ -37,11 +37,29 @@ try {
   console.error('Failed to create log directory:', error);
 }
 
-// Clear previous startup logs and start fresh
+// Keep the previous runs instead of truncating. The native host writes to this
+// same file, so wiping it on every sidecar start destroyed the only record of what
+// happened before a restart — which is why the 2026-08-27 calendar sync data loss
+// could not be traced to a trigger.
+const LOG_ROTATIONS = 3;
+
+function rotatedLogFile(index: number): string {
+  return join(LOG_DIR, `logs.${index}.txt`);
+}
+
 try {
+  if (existsSync(LOG_FILE)) {
+    rmSync(rotatedLogFile(LOG_ROTATIONS), { force: true });
+    for (let index = LOG_ROTATIONS - 1; index >= 1; index--) {
+      if (existsSync(rotatedLogFile(index))) {
+        renameSync(rotatedLogFile(index), rotatedLogFile(index + 1));
+      }
+    }
+    renameSync(LOG_FILE, rotatedLogFile(1));
+  }
   writeFileSync(LOG_FILE, '');
 } catch (error) {
-  console.error('Failed to clear log file:', error);
+  console.error('Failed to rotate log file:', error);
 }
 
 // Write a startup log entry (kept for API compatibility but now handles double-logging prevention natively)

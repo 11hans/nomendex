@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { initCalendarChangeListener } from "@/features/todos/calendar-change-bridge";
 import { removeTaskFromCalendar, syncTaskToCalendar } from "@/features/todos/calendar-bridge";
 import { stripUnexpectedNulls } from "@/features/todos/todo-sanitize";
@@ -38,7 +39,6 @@ async function fetchTodosAPI<T>(endpoint: string, body: object): Promise<T> {
 }
 
 const calendarTodosAPI = {
-    deleteTodo: (args: { todoId: string }) => fetchTodosAPI("delete", args),
     getTodoById: (args: { todoId: string }) => fetchTodosAPI<Todo | null>("get", args),
     updateTodo: (args: { todoId: string; updates: Record<string, unknown> }) => {
         const sanitizedUpdates = stripUnexpectedNulls(args.updates, UPDATE_NULLABLE_KEYS);
@@ -52,9 +52,11 @@ export function useTodoEvents(): void {
     const { appleCalendarSync } = useWorkspaceContext();
 
     useEffect(() => {
-        if (appleCalendarSync) {
-            initCalendarChangeListener(calendarTodosAPI);
-        }
+        const disposeCalendarListener = appleCalendarSync
+            ? initCalendarChangeListener(calendarTodosAPI, {
+                onWarning: (message) => toast.warning(message, { duration: 15000 }),
+            })
+            : null;
 
         let cancelled = false;
 
@@ -109,6 +111,7 @@ export function useTodoEvents(): void {
 
         return () => {
             cancelled = true;
+            disposeCalendarListener?.();
             eventSourceRef.current?.close();
             eventSourceRef.current = null;
         };

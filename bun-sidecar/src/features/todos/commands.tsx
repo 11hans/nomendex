@@ -6,7 +6,7 @@ import { todosPluginSerial } from "./index";
 import { WorkspaceTab } from "@/types/Workspace";
 import { SerializablePlugin } from "@/types/Plugin";
 import { todosAPI } from "@/hooks/useTodosAPI";
-import { syncTaskToCalendar, purgeCalendarEvents, reconcileCalendar, removeTaskFromCalendar } from "./calendar-bridge";
+import { syncTasksToCalendarBatch, purgeCalendarEvents, reconcileCalendar, removeTaskFromCalendar } from "./calendar-bridge";
 import { toast } from "sonner";
 
 interface CommandContext {
@@ -144,16 +144,12 @@ export async function getTodosCommands(context: CommandContext): Promise<Command
 
                     toast.info(`Syncing ${toSync.length} items to calendar...`);
 
-                    let count = 0;
-                    for (const todo of toSync) {
-                        try {
-                            await syncTaskToCalendar(todo);
-                            count++;
-                        } catch (e) {
-                            console.error("Failed to sync", todo, e);
-                        }
+                    const result = await syncTasksToCalendarBatch(toSync);
+                    if (!result) {
+                        toast.error("Calendar sync unavailable or timed out.");
+                        return;
                     }
-                    toast.success(`Synced ${count} items to Calendar.`);
+                    toast.success(`Synced ${result.synced} items to Calendar.${result.failed ? ` ${result.failed} failed.` : ""}`);
                 } catch (error) {
                     console.error("Sync failed", error);
                     toast.error("Failed to sync to calendar.");
@@ -184,18 +180,10 @@ export async function getTodosCommands(context: CommandContext): Promise<Command
                     }
 
                     const toSync = allTodos.filter(t => t.scheduledStart || t.scheduledEnd);
-                    let refreshed = 0;
-                    for (const todo of toSync) {
-                        try {
-                            await syncTaskToCalendar(todo);
-                            refreshed++;
-                        } catch (e) {
-                            console.error("Reconcile upsert failed", todo.id, e);
-                        }
-                    }
+                    const refresh = await syncTasksToCalendarBatch(toSync);
 
                     toast.success(
-                        `Reconcile done: ${result.removed} duplicate(s) removed, ${orphanIds.length} orphan(s) cleared, ${refreshed} todo(s) refreshed.`
+                        `Reconcile done: ${result.removed} duplicate(s) removed, ${orphanIds.length} orphan(s) cleared, ${refresh?.synced ?? 0} todo(s) refreshed.`
                     );
                 } catch (error) {
                     console.error("Reconcile failed", error);
