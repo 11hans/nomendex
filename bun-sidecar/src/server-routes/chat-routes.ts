@@ -18,6 +18,7 @@ import { buildDailyContextBlock } from "@/features/bpagent-pack/daily-context";
 import { buildMemoryPromptBlock } from "@/features/agent-memory/fx";
 import { buildTurnContextHook, getDeliveredTurnContext } from "@/features/bpagent-pack/turn-context";
 import { buildAgentMemoryMcpServer } from "@/mcp-servers/agent-memory";
+import { ThinkingEffortSchema, type ThinkingEffort } from "@/features/chat/thinking-types";
 import { triggerPostSessionExtraction, loadExtractionConfig } from "@/features/agent-memory/extraction/orchestrator";
 import { sdkMessagesToTurns } from "@/features/agent-memory/extraction/history-utils";
 import {
@@ -302,15 +303,15 @@ export const chatRoutes = {
                 const body = await req.json();
                 console.log("[API] Request body:", body);
 
-                const { message, images, sessionId, agentId: requestAgentId, maxThinkingTokens, transient, persistAgentPreference } = body as {
+                const { message, images, sessionId, agentId: requestAgentId, transient, persistAgentPreference } = body as {
                     message: string;
                     images?: string[];
                     sessionId?: string;
                     agentId?: string;
-                    maxThinkingTokens?: number;
                     transient?: boolean;
                     persistAgentPreference?: boolean;
                 };
+                const effort = ThinkingEffortSchema.optional().catch(undefined).parse(body.effort);
 
                 if (!message && (!images || images.length === 0)) {
                     console.log("[API] Error: No message or images provided");
@@ -538,7 +539,8 @@ export const chatRoutes = {
                     settingSources: Array<"user" | "project">;
                     tools: string[];
                     agents?: Record<string, AgentDefinition>;
-                    maxThinkingTokens?: number;
+                    thinking: { type: "adaptive"; display: "summarized" };
+                    effort?: ThinkingEffort;
                     persistSession?: boolean;
                     env: Record<string, string | undefined>;
                 } = {
@@ -563,7 +565,10 @@ export const chatRoutes = {
                     env: buildClaudeCliEnv({
                         CLAUDE_CODE_MAX_OUTPUT_TOKENS: process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS ?? "8000",
                     }),
-                    ...(maxThinkingTokens !== undefined && { maxThinkingTokens }),
+                    // Without display: "summarized" current models return thinking blocks
+                    // with empty text, so the chat had no reasoning to show.
+                    thinking: { type: "adaptive", display: "summarized" },
+                    ...(effort && { effort }),
                 };
 
                 // Build context-aware system prompt

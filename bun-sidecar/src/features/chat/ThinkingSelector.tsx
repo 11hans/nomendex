@@ -7,24 +7,25 @@ import {
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/useTheme";
 import { Brain } from "lucide-react";
+import type { ThinkingEffort } from "@/features/chat/thinking-types";
 
 type ThinkingPreset = {
     label: string;
-    value: number | undefined;
+    value: ThinkingEffort | undefined;
     description: string;
 };
 
 const PRESETS: ThinkingPreset[] = [
-    { label: "Auto", value: undefined, description: "~Medium (default)" },
-    { label: "Low", value: 1024, description: "~1K tokens" },
-    { label: "Medium", value: 5000, description: "~5K tokens" },
-    { label: "High", value: 10000, description: "~10K tokens" },
-    { label: "Max", value: 20000, description: "~20K tokens" },
+    { label: "Auto", value: undefined, description: "Model default" },
+    { label: "Low", value: "low", description: "Fastest, least thinking" },
+    { label: "Medium", value: "medium", description: "Balanced" },
+    { label: "High", value: "high", description: "Thorough" },
+    { label: "Max", value: "max", description: "Deepest, slowest" },
 ];
 
 interface ThinkingSelectorProps {
-    value: number | undefined;
-    onChange: (value: number | undefined) => void;
+    value: ThinkingEffort | undefined;
+    onChange: (value: ThinkingEffort | undefined) => void;
     disabled?: boolean;
 }
 
@@ -44,7 +45,7 @@ export function ThinkingSelector({ value, onChange, disabled }: ThinkingSelector
                     disabled={disabled}
                     className="gap-1.5"
                     style={{ color: isNonDefault ? styles.semanticPrimary : styles.contentSecondary }}
-                    title="Thinking budget"
+                    title="Thinking effort"
                 >
                     <Brain className="h-4 w-4" />
                     {isNonDefault && <span>{current.label}</span>}

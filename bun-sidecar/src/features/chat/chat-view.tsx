@@ -59,6 +59,7 @@ import { useWorkspaceContext } from "@/contexts/WorkspaceContext";
 import { toast } from "sonner";
 import { AgentSelector } from "@/features/agents/agent-selector";
 import { ThinkingSelector } from "@/features/chat/ThinkingSelector";
+import type { ThinkingEffort } from "@/features/chat/thinking-types";
 import { agentsAPI } from "@/hooks/useAgentsAPI";
 import { QueuedMessagesList } from "./QueuedMessagesList";
 import type { QueuedMessage } from "./index";
@@ -527,7 +528,7 @@ function AppChatView({ sessionId: initialSessionId, tabId, initialPrompt, autoSe
     const [sessionSaved, setSessionSaved] = useState(!!initialSessionId);
     const [pendingPermission, setPendingPermission] = useState<PendingPermission | null>(null);
     const [currentAgentId, setCurrentAgentId] = useState<string | undefined>(undefined);
-    const [maxThinkingTokens, setMaxThinkingTokens] = useState<number | undefined>(undefined);
+    const [thinkingEffort, setThinkingEffort] = useState<ThinkingEffort | undefined>(undefined);
     const [queryTrackingId, setQueryTrackingId] = useState<string | null>(null);
 
     // Plan reorder widget state
@@ -920,7 +921,7 @@ function AppChatView({ sessionId: initialSessionId, tabId, initialPrompt, autoSe
                     images: imageUrls,
                     sessionId,
                     agentId: currentAgentId,
-                    maxThinkingTokens,
+                    effort: thinkingEffort,
                     persistAgentPreference: !forcedAgentId,
                 }),
             });
@@ -1671,8 +1672,8 @@ function AppChatView({ sessionId: initialSessionId, tabId, initialPrompt, autoSe
                                     />
                                 )}
                                 <ThinkingSelector
-                                    value={maxThinkingTokens}
-                                    onChange={setMaxThinkingTokens}
+                                    value={thinkingEffort}
+                                    onChange={setThinkingEffort}
                                     disabled={isLoading}
                                 />
                                 <ProseMirrorPromptAttach disabled={!!pendingPermission} />

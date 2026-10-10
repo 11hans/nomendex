@@ -205,7 +205,7 @@ Main integration files:
 - `bun-sidecar/src/mcp-servers/agent-memory.ts`
 
 ### Chat Request Flow
-1. Frontend `POST /api/chat` with `{ message, images?, sessionId?, agentId?, maxThinkingTokens? }`.
+1. Frontend `POST /api/chat` with `{ message, images?, sessionId?, agentId?, effort? }`.
 2. Backend resolves agent (`model`, `systemPrompt`, `mcpServers`).
 3. Backend builds MCP config (user-defined + built-in), injects a fresh per-query internal `noetect-ui` MCP server (an SDK server instance binds to one query, so it must not be shared), and (for BPagent) the `agent-memory` MCP server (read-only when extraction is enabled).
 4. For BPagent: system prompt is runtime-composed: BP template + memory-mode note, `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`, `<agent-context>`. Daily-notes context and memory recall (`buildMemoryPromptBlock()`) go into the user turn via a `UserPromptSubmit` hook (`turn-context.ts`), so the system prompt stays cacheable across messages.
@@ -225,7 +225,7 @@ Main integration files:
 Users can queue messages while a query is streaming. Queue is local to the chat tab (not persisted), supports drag-to-reorder, edit, remove; pauses on error/cancel with Resume. See `message-queue.md`.
 
 ### Extended Thinking
-Per-message `maxThinkingTokens` budget — switchable without changing agent config. `undefined` = SDK default. See `extended-thinking.md`.
+Adaptive thinking with summarized display on every message, plus a per-message `effort` (`low`/`medium`/`high`/`max`) — switchable without changing agent config. `undefined` = model default. See `extended-thinking.md`.
 
 ### Session Storage
 - **Session metadata**: `{workspace}/.nomendex/chat-sessions.jsonl`
