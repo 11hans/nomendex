@@ -3,14 +3,20 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SPARKLE_VERSION="2.6.4"
+SPARKLE_VERSION="2.10.0"
 SPARKLE_DIR="Frameworks/Sparkle"
 SPARKLE_ZIP="Sparkle-${SPARKLE_VERSION}.tar.xz"
 SPARKLE_URL="https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/${SPARKLE_ZIP}"
 
 if [[ -d "$SPARKLE_DIR/Sparkle.framework" ]]; then
-    echo "[sparkle] Sparkle.framework already exists, skipping download"
-    exit 0
+    INSTALLED_VERSION=$(plutil -extract CFBundleShortVersionString raw \
+        "$SPARKLE_DIR/Sparkle.framework/Versions/B/Resources/Info.plist" 2>/dev/null || true)
+    if [[ "$INSTALLED_VERSION" == "$SPARKLE_VERSION" ]]; then
+        echo "[sparkle] Sparkle ${SPARKLE_VERSION} already exists, skipping download"
+        exit 0
+    fi
+    echo "[sparkle] Replacing Sparkle ${INSTALLED_VERSION:-unknown} with ${SPARKLE_VERSION}..."
+    rm -rf "$SPARKLE_DIR"
 fi
 
 echo "[sparkle] Downloading Sparkle ${SPARKLE_VERSION}..."
