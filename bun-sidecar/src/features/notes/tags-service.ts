@@ -7,7 +7,7 @@
 
 import { mkdir } from "node:fs/promises";
 import { join } from "path";
-import yaml from "js-yaml";
+import * as yaml from "@/lib/yaml";
 import { getNomendexPath, getNotesPath, getTodosPath, hasActiveWorkspace } from "@/storage/root-path";
 import { StringSet } from "./backlinks-types";
 import { TagsIndex, TagSuggestion, createEmptyTagsIndex, ExplicitTagDefinition } from "./tags-types";

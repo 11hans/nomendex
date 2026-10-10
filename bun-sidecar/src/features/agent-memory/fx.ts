@@ -1,5 +1,5 @@
 import { createHash } from "crypto";
-import { load as parseYaml } from "js-yaml";
+import { load as parseYaml } from "@/lib/yaml";
 import path from "node:path";
 import { stat } from "node:fs/promises";
 import { FileDatabase } from "@/storage/FileDatabase";

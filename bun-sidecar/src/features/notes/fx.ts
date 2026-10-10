@@ -4,7 +4,7 @@ import { FunctionsFromStubs } from "@/types/Functions";
 import { FeatureStorage } from "@/storage/FeatureStorage";
 import { getNotesPath, getDailyNotesPath, hasActiveWorkspace } from "@/storage/root-path";
 import { getDailyNoteFileName } from "./date-utils";
-import yaml from "js-yaml";
+import * as yaml from "@/lib/yaml";
 import path from "path";
 import { mkdir } from "node:fs/promises";
 

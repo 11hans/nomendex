@@ -4,7 +4,7 @@ import { createGoal } from "./fx";
 import { updateProject } from "@/features/projects/fx";
 import path from "path";
 import { readdir, stat } from "node:fs/promises";
-import yaml from "js-yaml";
+import * as yaml from "@/lib/yaml";
 
 const migrationLogger = createServiceLogger("GOALS_MIGRATION");
 

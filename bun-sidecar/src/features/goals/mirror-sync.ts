@@ -6,7 +6,7 @@ import { listProjects, getProject } from "@/features/projects/fx";
 import { getTodos } from "@/features/todos/fx";
 import { mkdir, stat } from "node:fs/promises";
 import path from "path";
-import yaml from "js-yaml";
+import * as yaml from "@/lib/yaml";
 import type { GoalRecord } from "./goal-types";
 import type { ProjectConfig } from "@/features/projects/project-types";
 import type { Todo } from "@/features/todos/todo-types";

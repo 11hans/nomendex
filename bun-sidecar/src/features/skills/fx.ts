@@ -3,7 +3,7 @@ import { FunctionsFromStubs } from "@/types/Functions";
 import { getSkillsPath, hasActiveWorkspace } from "@/storage/root-path";
 import { readdir, stat } from "node:fs/promises";
 import path from "path";
-import yaml from "js-yaml";
+import * as yaml from "@/lib/yaml";
 
 type SkillFrontMatter = {
     name?: string;

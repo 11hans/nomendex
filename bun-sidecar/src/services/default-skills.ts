@@ -3,7 +3,7 @@ import { getSkillsPath, hasActiveWorkspace } from "@/storage/root-path";
 import { SkillMetadata, SkillMetadataSchema, SkillUpdateCheckResult, SkillUpdateInfo } from "./skills-types";
 import { mkdir, chmod, readdir, stat } from "node:fs/promises";
 import path from "path";
-import yaml from "js-yaml";
+import * as yaml from "@/lib/yaml";
 
 const logger = createServiceLogger("DEFAULT-SKILLS");
 

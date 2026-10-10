@@ -4,7 +4,7 @@ import { getTodos, updateTodo, deleteTodo } from "@/features/todos/fx";
 import { getNotes, updateNoteProject, deleteNote } from "@/features/notes/fx";
 import { mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import path from "path";
-import yaml from "js-yaml";
+import * as yaml from "@/lib/yaml";
 import {
     BoardConfig,
     ProjectConfig,
