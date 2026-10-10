@@ -1,5 +1,5 @@
-import { McpServer } from "@socotra/modelcontextprotocol-sdk/server/mcp.js";
-import { StdioServerTransport } from "@socotra/modelcontextprotocol-sdk/server/stdio.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createTodo, getProjects, getTodos, updateTodo } from "./fx";
 import { z } from "zod";
 
@@ -75,7 +75,7 @@ server.registerTool(
         return { content: [{ type: "text", text: `Created todo: ${created.title}` }] };
     }
 );
-server.registerResource("test-task-resource", "task://test", { name: "test" }, async (uri) => {
+server.registerResource("test", "task://test", {}, async (uri) => {
     return {
         contents: [
             {

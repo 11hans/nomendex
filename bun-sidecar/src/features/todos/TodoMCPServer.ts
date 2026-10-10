@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
-import { McpServer } from "@socotra/modelcontextprotocol-sdk/server/mcp.js";
-import { StdioServerTransport } from "@socotra/modelcontextprotocol-sdk/server/stdio.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { FileDatabase } from "@/storage/FileDatabase";
 import { Todo, getEffectiveGoalRefs } from "./todo-types";
 import { createTodo, updateTodo, skipRecurrenceOccurrence } from "./fx";
@@ -528,10 +528,9 @@ const activeTodos = todos.filter(t => !t.archived);
 
 for (const todo of activeTodos) {
     server.registerResource(
-        `todo-${todo.id}`,
+        todo.title || `Untitled (${todo.id})`,
         `todo://${todo.id}`,
         {
-            name: todo.title || `Untitled (${todo.id})`,
             description: todo.description,
         },
         async () => {
