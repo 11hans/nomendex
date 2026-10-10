@@ -15,3 +15,6 @@ declare module "*.module.css" {
   const classes: { readonly [key: string]: string };
   export = classes;
 }
+
+// Plain stylesheets are imported for side effects only (TS 6 checks side-effect imports)
+declare module "*.css";
