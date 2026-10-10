@@ -410,9 +410,9 @@ function MemoryTab({ tabId }: { tabId: string }) {
     });
 
     return (
-        <ResizablePanelGroup direction="horizontal" className="h-full">
+        <ResizablePanelGroup orientation="horizontal" className="h-full">
             {/* Left panel: Memory list */}
-            <ResizablePanel defaultSize={35} minSize={25}>
+            <ResizablePanel defaultSize="35%" minSize="25%">
                 <div className="h-full flex flex-col min-h-0" style={{ backgroundColor: styles.surfacePrimary }}>
                     {/* Header */}
                     <div className="shrink-0 px-3 pt-2 pb-2">
@@ -601,7 +601,7 @@ function MemoryTab({ tabId }: { tabId: string }) {
             <ResizableHandle />
 
             {/* Right panel: Editor */}
-            <ResizablePanel defaultSize={65} minSize={30}>
+            <ResizablePanel defaultSize="65%" minSize="30%">
                 <div className="h-full flex flex-col min-h-0" style={{ backgroundColor: styles.surfacePrimary }}>
                     {selectedId || isNew ? (
                         <>
@@ -1012,9 +1012,9 @@ function JournalTab({ tabId: _tabId }: { tabId: string }) {
     }
 
     return (
-        <ResizablePanelGroup direction="horizontal" className="h-full">
+        <ResizablePanelGroup orientation="horizontal" className="h-full">
             {/* Left: Date list */}
-            <ResizablePanel defaultSize={30} minSize={20}>
+            <ResizablePanel defaultSize="30%" minSize="20%">
                 <div className="h-full flex flex-col min-h-0" style={{ backgroundColor: styles.surfacePrimary }}>
                     <div className="shrink-0 px-3 pt-2 pb-2">
                         <MemoryJournalTabs styles={styles} />
@@ -1067,7 +1067,7 @@ function JournalTab({ tabId: _tabId }: { tabId: string }) {
             <ResizableHandle />
 
             {/* Right: Content preview */}
-            <ResizablePanel defaultSize={70} minSize={30}>
+            <ResizablePanel defaultSize="70%" minSize="30%">
                 <div className="h-full flex flex-col min-h-0" style={{ backgroundColor: styles.surfacePrimary }}>
                     {selectedEntry ? (
                         <>

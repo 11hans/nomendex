@@ -899,9 +899,9 @@ export function InboxListView() {
                 onDragCancel={handleDragCancel}
                 onDragEnd={handleDragEnd}
             >
-                <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
+                <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
                     {/* Left Panel — Sidebar */}
-                    <ResizablePanel defaultSize={20} minSize={12} maxSize={35} className="flex flex-col min-h-0" style={{ backgroundColor: styles.surfaceSecondary }}>
+                    <ResizablePanel defaultSize="20%" minSize="12%" maxSize="35%" className="flex flex-col min-h-0" style={{ backgroundColor: styles.surfaceSecondary }}>
                         {/* Sidebar header */}
                         <div className="shrink-0 px-3 pt-2.5 pb-1.5">
                             <div className="px-1 py-0.5 text-[11px] font-semibold tracking-[0.01em]" style={{ color: styles.contentPrimary }}>

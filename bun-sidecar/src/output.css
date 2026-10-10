@@ -3072,6 +3072,34 @@
   .aria-selected\:text-muted-foreground[aria-selected="true"] {
     color: var(--color-muted-foreground);
   }
+  .aria-\[orientation\=horizontal\]\:h-px[aria-orientation="horizontal"] {
+    height: 1px;
+  }
+  .aria-\[orientation\=horizontal\]\:w-full[aria-orientation="horizontal"] {
+    width: 100%;
+  }
+  .aria-\[orientation\=horizontal\]\:after\:left-0[aria-orientation="horizontal"]::after {
+    content: var(--tw-content);
+    left: 0px;
+  }
+  .aria-\[orientation\=horizontal\]\:after\:h-1[aria-orientation="horizontal"]::after {
+    content: var(--tw-content);
+    height: var(--spacing);
+  }
+  .aria-\[orientation\=horizontal\]\:after\:w-full[aria-orientation="horizontal"]::after {
+    content: var(--tw-content);
+    width: 100%;
+  }
+  .aria-\[orientation\=horizontal\]\:after\:translate-x-0[aria-orientation="horizontal"]::after {
+    content: var(--tw-content);
+    --tw-translate-x: 0px;
+    translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
+  .aria-\[orientation\=horizontal\]\:after\:-translate-y-1\/2[aria-orientation="horizontal"]::after {
+    content: var(--tw-content);
+    --tw-translate-y: calc(calc(1 / 2 * 100%) * -1);
+    translate: var(--tw-translate-x) var(--tw-translate-y);
+  }
   .data-\[disabled\]\:pointer-events-none[data-disabled] {
     pointer-events: none;
   }
@@ -3098,37 +3126,6 @@
   }
   .data-\[orientation\=vertical\]\:w-px[data-orientation="vertical"] {
     width: 1px;
-  }
-  .data-\[panel-group-direction\=vertical\]\:h-px[data-panel-group-direction="vertical"] {
-    height: 1px;
-  }
-  .data-\[panel-group-direction\=vertical\]\:w-full[data-panel-group-direction="vertical"] {
-    width: 100%;
-  }
-  .data-\[panel-group-direction\=vertical\]\:flex-col[data-panel-group-direction="vertical"] {
-    flex-direction: column;
-  }
-  .data-\[panel-group-direction\=vertical\]\:after\:left-0[data-panel-group-direction="vertical"]::after {
-    content: var(--tw-content);
-    left: 0px;
-  }
-  .data-\[panel-group-direction\=vertical\]\:after\:h-1[data-panel-group-direction="vertical"]::after {
-    content: var(--tw-content);
-    height: var(--spacing);
-  }
-  .data-\[panel-group-direction\=vertical\]\:after\:w-full[data-panel-group-direction="vertical"]::after {
-    content: var(--tw-content);
-    width: 100%;
-  }
-  .data-\[panel-group-direction\=vertical\]\:after\:translate-x-0[data-panel-group-direction="vertical"]::after {
-    content: var(--tw-content);
-    --tw-translate-x: 0px;
-    translate: var(--tw-translate-x) var(--tw-translate-y);
-  }
-  .data-\[panel-group-direction\=vertical\]\:after\:-translate-y-1\/2[data-panel-group-direction="vertical"]::after {
-    content: var(--tw-content);
-    --tw-translate-y: calc(calc(1 / 2 * 100%) * -1);
-    translate: var(--tw-translate-x) var(--tw-translate-y);
   }
   .data-\[placeholder\]\:text-muted-foreground[data-placeholder] {
     color: var(--color-muted-foreground);
@@ -3892,7 +3889,7 @@
     border-bottom-style: var(--tw-border-style);
     border-bottom-width: 0px;
   }
-  .\[\&\[data-panel-group-direction\=vertical\]\>div\]\:rotate-90[data-panel-group-direction=vertical] > div {
+  .\[\&\[aria-orientation\=horizontal\]\>div\]\:rotate-90[aria-orientation=horizontal] > div {
     rotate: 90deg;
   }
   .\[\&\[data-state\=open\]\>svg\]\:rotate-180[data-state=open] > svg {

@@ -17,8 +17,8 @@ export function Layout() {
                         style={{ height: `${TITLE_BAR_HEIGHT}px`, WebkitAppRegion: "drag" } as React.CSSProperties}
                     />
                     {/* Sidebar + main content below the title bar */}
-                    <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
-                        <ResizablePanel defaultSize={15} minSize={10} maxSize={25} className="bg-card glass overflow-hidden">
+                    <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
+                        <ResizablePanel defaultSize="15%" minSize="10%" maxSize="25%" className="bg-card glass overflow-hidden">
                             <WorkspaceSidebar />
                         </ResizablePanel>
                         <ResizableHandle withHandle />
