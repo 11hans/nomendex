@@ -318,8 +318,10 @@ MCP server name: `agent-memory`
 Tools (read-only when extraction is enabled):
 - `memory_search`
 - `memory_list_recent`
-- `memory_delete`
+- `memory_delete` _(disabled in read-only mode)_
 - `memory_save` _(disabled in read-only mode)_
+
+The server is created with `alwaysLoad: true`, so its tools sit in the prompt from the first turn instead of being deferred behind tool search (which cost an extra `ToolSearch` turn before nearly every `memory_search`).
 
 BPagent auto-allows `mcp__agent-memory__*` tools in chat permission flow.
 

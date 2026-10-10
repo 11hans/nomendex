@@ -68,6 +68,9 @@ export function buildAgentMemoryMcpServer(ctx: { agentId: string; sessionId?: st
     return createSdkMcpServer({
         name: "agent-memory",
         version: "1.0.0",
+        // memory_search is the agent's first step in most sessions; deferred
+        // behind tool search it cost an extra ToolSearch turn every time.
+        alwaysLoad: true,
         tools: [
             tool(
                 "memory_search",
