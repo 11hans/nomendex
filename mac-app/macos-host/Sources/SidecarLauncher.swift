@@ -51,12 +51,12 @@ class SidecarLauncher {
 
         // Pinned Claude CLI bundled by package_app.sh — the compiled sidecar
         // cannot resolve it from node_modules, so hand it the explicit path.
-        let claudeCli = resources.appendingPathComponent("claude-cli/cli.js")
+        let claudeCli = resources.appendingPathComponent("claude-cli/claude")
         if FileManager.default.fileExists(atPath: claudeCli.path) {
             env["CLAUDE_CLI_PATH"] = claudeCli.path
         }
-        // GUI apps inherit a minimal PATH; expose the bundled bun runtime so
-        // the sidecar (and the Agent SDK inside it) can spawn the JS CLI.
+        // GUI apps inherit a minimal PATH; expose the bundled bun runtime for
+        // processes the sidecar spawns (e.g. stdio MCP servers run via bun).
         let bundledBin = resources.appendingPathComponent("bin")
         if FileManager.default.fileExists(atPath: bundledBin.path) {
             let basePath = env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"

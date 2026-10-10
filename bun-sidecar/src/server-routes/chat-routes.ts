@@ -1,4 +1,4 @@
-import { query, type SDKMessage, type McpServerConfig, type HookCallback, type PreToolUseHookInput, type AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
+import { query, type SDKMessage, type SDKUserMessage, type McpServerConfig, type HookCallback, type PreToolUseHookInput, type AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { getRootPath, getNomendexPath, getUploadsPath, getNotesPath } from "@/storage/root-path";
@@ -6,8 +6,8 @@ import { getAgent, getPreferences, savePreferences, addAllowedTool, getAgentAllo
 import { DEFAULT_AGENT, getAgentEffectivePromptSource } from "@/features/agents/index";
 import type { AgentConfig } from "@/features/agents/index";
 import { createServiceLogger } from "@/lib/logger";
-import { buildAgentContext, buildMcpServersFromConfig } from "@/lib/agent-runtime";
-import { getClaudeCliPath } from "@/lib/claude-cli";
+import { buildAgentContext, buildMcpServersFromConfig, customSystemPrompt } from "@/lib/agent-runtime";
+import { buildClaudeCliEnv, getClaudeCliPath } from "@/lib/claude-cli";
 import { findSessionFilePath, getClaudeSessionsDir } from "@/lib/claude-session-files";
 import { getRaindropQuery, getRaindropUserId, eventMetadata } from "@/lib/raindrop-client";
 import { uiRendererServer } from "@/mcp-servers/ui-renderer";
@@ -31,8 +31,18 @@ import {
 // Create logger for chat routes
 const chatLogger = createServiceLogger("CHAT");
 
+type UserContentBlock = Exclude<SDKUserMessage["message"]["content"], string>[number];
+type ImageMediaType = Extract<Extract<UserContentBlock, { type: "image" }>["source"], { type: "base64" }>["media_type"];
+
+// Same set the uploads route accepts
+const IMAGE_MEDIA_TYPES: readonly ImageMediaType[] = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+
+function isImageMediaType(value: string): value is ImageMediaType {
+    return (IMAGE_MEDIA_TYPES as readonly string[]).includes(value);
+}
+
 // Helper to read image from uploads folder and convert to base64
-async function readImageAsBase64(imageUrl: string): Promise<{ data: string; mediaType: string } | null> {
+async function readImageAsBase64(imageUrl: string): Promise<{ data: string; mediaType: ImageMediaType } | null> {
     try {
         // Extract filename from URL (e.g., "/api/uploads/image.png" -> "image.png")
         const filename = imageUrl.replace("/api/uploads/", "");
@@ -50,6 +60,10 @@ async function readImageAsBase64(imageUrl: string): Promise<{ data: string; medi
         const arrayBuffer = await file.arrayBuffer();
         const base64 = Buffer.from(arrayBuffer).toString("base64");
         const mimeType = file.type || "image/png";
+        if (!isImageMediaType(mimeType)) {
+            chatLogger.warn(`Unsupported image type ${mimeType}: ${filePath}`);
+            return null;
+        }
 
         return { data: base64, mediaType: mimeType };
     } catch (error) {
@@ -499,7 +513,7 @@ export const chatRoutes = {
                 mcpServers["noetect-ui"] = uiRendererServer;
 
                 // Resolve the Claude CLI the SDK drives — pinned to the bundled
-                // version so global-CLI auto-updates can't change subagent semantics.
+                // version so global-CLI auto-updates can't change its behavior.
                 const claudeCliPath = getClaudeCliPath();
 
                 const sdkOptions: {
@@ -508,6 +522,7 @@ export const chatRoutes = {
                     resume?: string;
                     maxTurns: number;
                     includePartialMessages: boolean;
+                    forwardSubagentText: boolean;
                     systemPrompt?: string;
                     mcpServers: Record<string, McpServerConfig>;
                     pathToClaudeCodeExecutable: string;
@@ -522,16 +537,18 @@ export const chatRoutes = {
                     resume: transient ? undefined : sessionId,
                     maxTurns: 100,
                     includePartialMessages: true,
+                    // Stream subagent text/thinking too (SDK default is tool blocks only) —
+                    // the chat UI renders the subagent's conversation inline.
+                    forwardSubagentText: true,
                     mcpServers,
                     pathToClaudeCodeExecutable: claudeCliPath,
                     settingSources: ["project"], // Load skills from project .claude/skills/, MCP servers come from mcpServers option
                     // Cap per-turn output. SDK default is 32000 — most BPagent turns finish well under
                     // 4K, and 8000 still leaves headroom for long Edit/Write responses while trimming
                     // the rare 8K+ runaway. Override via CLAUDE_CODE_MAX_OUTPUT_TOKENS in environment.
-                    env: {
-                        ...process.env,
+                    env: buildClaudeCliEnv({
                         CLAUDE_CODE_MAX_OUTPUT_TOKENS: process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS ?? "8000",
-                    },
+                    }),
                     ...(maxThinkingTokens !== undefined && { maxThinkingTokens }),
                 };
 
@@ -653,22 +670,11 @@ export const chatRoutes = {
                     console.log("[API] Calling query()...");
 
                     // Build prompt - use multimodal format if images are present
-                    type ContentBlock =
-                        | { type: "text"; text: string }
-                        | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
-
-                    type UserMessageInput = {
-                        type: "user";
-                        message: { role: "user"; content: ContentBlock[] };
-                        parent_tool_use_id: null;
-                        session_id: string;
-                    };
-
-                    let promptInput: string | AsyncIterable<UserMessageInput>;
+                    let promptInput: string | AsyncIterable<SDKUserMessage>;
 
                     if (images && images.length > 0) {
                         // Read images and encode as base64
-                        const contentBlocks: ContentBlock[] = [];
+                        const contentBlocks: UserContentBlock[] = [];
 
                         for (const imageUrl of images) {
                             const imageData = await readImageAsBase64(imageUrl);
@@ -692,7 +698,7 @@ export const chatRoutes = {
                         console.log("[API] Images processed:", contentBlocks.filter(b => b.type === "image").length);
 
                         // Create async iterable for multimodal message
-                        async function* generateUserMessage(): AsyncIterable<UserMessageInput> {
+                        async function* generateUserMessage(): AsyncIterable<SDKUserMessage> {
                             yield {
                                 type: "user" as const,
                                 message: {
@@ -718,6 +724,9 @@ export const chatRoutes = {
                         prompt: promptInput,
                         options: {
                             ...sdkOptions,
+                            systemPrompt: sdkOptions.systemPrompt === undefined
+                                ? undefined
+                                : customSystemPrompt(sdkOptions.systemPrompt),
                             abortController,
                             canUseTool,
                             hooks: {

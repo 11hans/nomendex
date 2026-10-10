@@ -6,7 +6,7 @@ import type { AgentConfig } from "@/features/agents/index";
 import { listUserMcpServers, expandEnvVars } from "@/features/mcp-servers/fx";
 import { secrets } from "@/lib/secrets";
 import { createServiceLogger } from "@/lib/logger";
-import { getClaudeCliPath } from "@/lib/claude-cli";
+import { buildClaudeCliEnv, getClaudeCliPath } from "@/lib/claude-cli";
 
 const runtimeLogger = createServiceLogger("AGENT-RUNTIME");
 
@@ -14,6 +14,16 @@ const runtimeLogger = createServiceLogger("AGENT-RUNTIME");
 const MCP_SERVER_SECRETS: Record<string, string> = {
     "linear": "LINEAR_OAUTH_TOKEN",
 };
+
+/**
+ * Wrap a runtime-composed system prompt for the SDK. By default the CLI
+ * records a session's system prompt on its first request and replays it on
+ * every resume, ignoring the prompt passed later — but ours changes between
+ * messages (date, daily context, memory recall), so render it fresh each time.
+ */
+export function customSystemPrompt(prompt: string) {
+    return { type: "custom" as const, prompt, snapshot: false };
+}
 
 // Build context information for the agent's system prompt
 export function buildAgentContext(workspaceFolder: string): string {
@@ -263,7 +273,7 @@ export async function runAgentTextQuery(input: RunAgentTextQueryInput): Promise<
 
     const options = {
         model: agentConfig.model,
-        systemPrompt,
+        systemPrompt: customSystemPrompt(systemPrompt),
         cwd,
         mcpServers,
         pathToClaudeCodeExecutable: claudeCliPath,
@@ -271,10 +281,9 @@ export async function runAgentTextQuery(input: RunAgentTextQueryInput): Promise<
         canUseTool,
         includePartialMessages: false,
         maxTurns: input.maxTurns ?? 4,
-        env: {
-            ...process.env,
+        env: buildClaudeCliEnv({
             CLAUDE_CODE_MAX_OUTPUT_TOKENS: process.env.CLAUDE_CODE_MAX_OUTPUT_TOKENS ?? "8000",
-        },
+        }),
         stderr: (data: string) => {
             input.onStderr?.(data);
         },

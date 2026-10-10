@@ -134,14 +134,12 @@ if [[ -f "$BUNDLED_BUN" ]]; then
     "$BUNDLED_BUN"
 fi
 
-# Sign bundled Claude CLI vendor binaries (ripgrep)
-CLAUDE_CLI_DIR="$APP_PATH/Contents/Resources/claude-cli"
-if [[ -d "$CLAUDE_CLI_DIR" ]]; then
-  while IFS= read -r -d '' vendored_bin; do
-    run codesign --force --timestamp --options runtime \
-      --sign "$CODESIGN_IDENTITY" \
-      "$vendored_bin"
-  done < <(find "$CLAUDE_CLI_DIR" -type f \( -name "rg" -o -name "*.node" \) -print0)
+# The bundled Claude CLI ships signed by Anthropic (Developer ID, hardened
+# runtime, its own entitlements) — keep that signature, re-signing would drop
+# entitlements it needs. Just make sure it is still intact.
+CLAUDE_CLI_BIN="$APP_PATH/Contents/Resources/claude-cli/claude"
+if [[ -f "$CLAUDE_CLI_BIN" ]]; then
+  run codesign --verify --strict --verbose=2 "$CLAUDE_CLI_BIN"
 fi
 
 # Sign sidecar binary with entitlements

@@ -36,29 +36,25 @@ else
   cp -f sidecar/server.ts "$APP_DIR/Contents/Resources/sidecar/server.ts"
 fi
 
-# Bundle the pinned Claude CLI from the Agent SDK. The compiled sidecar cannot
-# require.resolve node_modules, so SidecarLauncher points CLAUDE_CLI_PATH here.
-# See bun-sidecar/src/lib/claude-cli.ts for why the global CLI must not be used.
-SDK_DIR="../bun-sidecar/node_modules/@anthropic-ai/claude-agent-sdk"
+# Bundle the pinned native Claude CLI from the Agent SDK's platform package. The
+# compiled sidecar cannot require.resolve node_modules, so SidecarLauncher points
+# CLAUDE_CLI_PATH here. See bun-sidecar/src/lib/claude-cli.ts for why the global
+# CLI must not be used. The binary ships signed (Anthropic Developer ID, hardened
+# runtime), so it is copied as-is and never re-signed.
+CLI_SRC="../bun-sidecar/node_modules/@anthropic-ai/claude-agent-sdk-darwin-arm64/claude"
 CLI_DEST="$APP_DIR/Contents/Resources/claude-cli"
-if [ -f "$SDK_DIR/cli.js" ]; then
+if [ -f "$CLI_SRC" ]; then
   echo "[pkg] bundling Claude CLI from Agent SDK..."
-  mkdir -p "$CLI_DEST/vendor/ripgrep"
-  cp -f "$SDK_DIR/cli.js" "$SDK_DIR/package.json" "$CLI_DEST/"
-  cp -f "$SDK_DIR"/*.wasm "$CLI_DEST/" 2>/dev/null || true
-  cp -f "$SDK_DIR/vendor/ripgrep/COPYING" "$CLI_DEST/vendor/ripgrep/" 2>/dev/null || true
-  # Only darwin ripgrep builds; linux/win32 vendor dirs would triple the size
-  for rg_arch in arm64-darwin x64-darwin; do
-    if [ -d "$SDK_DIR/vendor/ripgrep/$rg_arch" ]; then
-      cp -R "$SDK_DIR/vendor/ripgrep/$rg_arch" "$CLI_DEST/vendor/ripgrep/"
-    fi
-  done
+  mkdir -p "$CLI_DEST"
+  cp -f "$CLI_SRC" "$CLI_DEST/claude"
+  chmod +x "$CLI_DEST/claude"
 else
-  echo "[pkg] Warning: Agent SDK cli.js not found; packaged app will fall back to the global claude CLI"
+  echo "[pkg] Warning: Agent SDK native CLI not found; packaged app will fall back to the global claude CLI"
 fi
 
-# Bundle the bun runtime so the sidecar can spawn the JS CLI — GUI apps get a
-# minimal PATH without bun/node. SidecarLauncher prepends Resources/bin to PATH.
+# Bundle the bun runtime — GUI apps get a minimal PATH without bun/node, and
+# user-defined stdio MCP servers may launch via bun. SidecarLauncher prepends
+# Resources/bin to PATH.
 BUN_BIN="$(command -v bun || true)"
 if [ -n "$BUN_BIN" ]; then
   mkdir -p "$APP_DIR/Contents/Resources/bin"
