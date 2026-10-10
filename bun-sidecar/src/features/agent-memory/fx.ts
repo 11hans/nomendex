@@ -846,8 +846,8 @@ export async function syncAgentMemoryFromVault(input: {
     const notesPath = getNotesPath();
     const now = new Date().toISOString();
 
-    let items: VaultMemoryCandidate[] = [];
-    let skipped = 0;
+    let items: VaultMemoryCandidate[];
+    let skipped: number;
     try {
         const result = await buildVaultMemoryCandidates({
             notesPath,
@@ -858,7 +858,8 @@ export async function syncAgentMemoryFromVault(input: {
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(
-            `Nepodařilo se načíst TheVault z '${notesPath}'. Zkontroluj přístupová oprávnění a existenci Goals/Projects. Detail: ${message}`
+            `Nepodařilo se načíst TheVault z '${notesPath}'. Zkontroluj přístupová oprávnění a existenci Goals/Projects. Detail: ${message}`,
+            { cause: error }
         );
     }
 

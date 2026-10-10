@@ -24,7 +24,7 @@ interface CommandContext {
 
 export async function getTodosCommands(context: CommandContext): Promise<Command[]> {
     // Fetch available projects
-    let projects: string[] = [];
+    let projects: string[];
     try {
         projects = await todosAPI.getProjects();
     } catch (error) {

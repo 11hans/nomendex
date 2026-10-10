@@ -587,7 +587,7 @@ export async function runAIConsolidation(): Promise<ConsolidationReport> {
         };
     }
 
-    let proposals: ConsolidationProposal[] = [];
+    let proposals: ConsolidationProposal[];
     try {
         proposals = await callOpenRouterForProposals({
             apiKey,

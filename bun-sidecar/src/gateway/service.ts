@@ -340,7 +340,7 @@ class GatewayService {
       throw new GatewayHttpError(400, "TELEGRAM_PROMPT_REQUIRED", "No prompt available for AI reply");
     }
 
-    let replyText = "";
+    let replyText: string;
     let fallbackUsed = false;
 
     try {

@@ -423,7 +423,7 @@ export function createGitClient(config: GitClientConfig) {
 
             let baseBytes: Uint8Array | null = null;
             let currentBytes: Uint8Array | null = null;
-            let headOid: string | null = null;
+            let headOid: string | null;
 
             try {
                 headOid = await git.resolveRef({ fs, dir, ref: "HEAD" });
@@ -1168,7 +1168,7 @@ export function createGitClient(config: GitClientConfig) {
                 logger.info("Conflict resolved", { filepath, resolution, ref: refToUse });
             } catch (e) {
                 logger.error("Failed to resolve conflict", { filepath, resolution, error: String(e) });
-                throw new Error(`Failed to resolve conflict: ${String(e)}`);
+                throw new Error(`Failed to resolve conflict: ${String(e)}`, { cause: e });
             }
         },
 

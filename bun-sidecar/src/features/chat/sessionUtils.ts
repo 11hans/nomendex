@@ -100,7 +100,7 @@ export function reconstructMessages(sdkMessages: SDKMessage[]): ChatMessage[] {
       }
 
       // Extract text content from the message
-      let textContent = "";
+      let textContent: string;
 
       if (typeof msg.message === "string") {
         textContent = msg.message;

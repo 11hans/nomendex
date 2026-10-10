@@ -312,7 +312,7 @@ async function saveNote(args: { fileName: string; content: string }) {
 
         return { fileName: args.fileName, content: cleanContent, frontMatter, mtime: mtime ?? undefined };
     } catch (error) {
-        throw new Error(`Failed to save note: ${error instanceof Error ? error.message : "Unknown error"}`);
+        throw new Error(`Failed to save note: ${error instanceof Error ? error.message : "Unknown error"}`, { cause: error });
     }
 }
 
@@ -336,7 +336,7 @@ async function createNote(args: { fileName: string; content?: string }) {
         const { frontMatter } = parseFrontMatter(contentToWrite);
         return { fileName: args.fileName, content: contentToWrite, frontMatter };
     } catch (error) {
-        throw new Error(`Failed to create note: ${error instanceof Error ? error.message : "Unknown error"}`);
+        throw new Error(`Failed to create note: ${error instanceof Error ? error.message : "Unknown error"}`, { cause: error });
     }
 }
 
@@ -351,7 +351,7 @@ async function deleteNote(args: { fileName: string }) {
         await getStorage().deleteFile(args.fileName);
         return { success: true };
     } catch (error) {
-        throw new Error(`Failed to delete note: ${error instanceof Error ? error.message : "Unknown error"}`);
+        throw new Error(`Failed to delete note: ${error instanceof Error ? error.message : "Unknown error"}`, { cause: error });
     }
 }
 
@@ -388,7 +388,7 @@ async function renameNote(args: { oldFileName: string; newFileName: string }) {
         const { frontMatter, content } = parseFrontMatter(rawContent);
         return { fileName: newName, content, frontMatter };
     } catch (error) {
-        throw new Error(`Failed to rename note: ${error instanceof Error ? error.message : "Unknown error"}`);
+        throw new Error(`Failed to rename note: ${error instanceof Error ? error.message : "Unknown error"}`, { cause: error });
     }
 }
 
@@ -412,7 +412,7 @@ async function updateNoteTags(args: { fileName: string; tags: string[] }) {
         // Return content WITHOUT front matter (for editor display)
         return { fileName: args.fileName, content, frontMatter: updatedFrontMatter };
     } catch (error) {
-        throw new Error(`Failed to update tags: ${error instanceof Error ? error.message : "Unknown error"}`);
+        throw new Error(`Failed to update tags: ${error instanceof Error ? error.message : "Unknown error"}`, { cause: error });
     }
 }
 
@@ -442,7 +442,7 @@ async function updateNoteProject(args: { fileName: string; project: string | nul
         // Return content WITHOUT front matter (for editor display)
         return { fileName: args.fileName, content, frontMatter: updatedFrontMatter };
     } catch (error) {
-        throw new Error(`Failed to update project: ${error instanceof Error ? error.message : "Unknown error"}`);
+        throw new Error(`Failed to update project: ${error instanceof Error ? error.message : "Unknown error"}`, { cause: error });
     }
 }
 

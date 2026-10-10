@@ -48,7 +48,7 @@ export async function buildDailyContextBlock(
     const dailyDir = config?.folderMapping?.dailyNotes ?? "daily-notes";
     const dir = path.join(notesPath, dailyDir);
 
-    let files: string[] = [];
+    let files: string[];
     try {
         const entries = await readdir(dir);
         files = entries.filter((f) => f.endsWith(".md") && detectPattern(f));

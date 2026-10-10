@@ -2673,7 +2673,7 @@ async function isRecoverableNomendexSkillDirectory(skillName: string, skillDirPa
   const skillMdFile = Bun.file(skillMdPath);
 
   if (!(await skillMdFile.exists())) {
-    let entries: string[] = [];
+    let entries: string[];
     try {
       entries = await readdir(skillDirPath);
     } catch {
