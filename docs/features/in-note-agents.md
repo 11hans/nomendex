@@ -77,7 +77,7 @@ Sada v1: **Rewrite, Summarize, Translate, Fix grammar, Expand**.
 ## Rizika
 
 - **Flicker widget decorations**: při každé transakci by se widget mohl přerenderovat. Mitigace: klíčovat widget přes `blockId` a znovupoužít DOM + React root přes modulární `Map`.
-- **Transient SDK sessions**: Claude Code SDK zapisuje session JSONL horlivě. Nutno ověřit, zda jde potlačit, jinak akceptovat "leaked" soubory + přidat úklidový pass.
+- **Transient SDK sessions**: vyřešeno — `transient: true` v `/api/chat` nastaví `persistSession: false`, CLI tedy JSONL do `~/.claude/projects/` nezapíše a transient běh se neobjeví v seznamu chatů.
 - **Coord positioning toolbaru**: při zalomení řádku může být pozice špatně; clampovat na viewport.
 - **Undo semantika**: Accept jako jediná `tr` → jedno undo vrátí celé Accept.
 
@@ -85,7 +85,7 @@ Sada v1: **Rewrite, Summarize, Translate, Fix grammar, Expand**.
 
 1. **Rozsah kontextu pro quick actions**: jen výběr, nebo i okolní odstavec / celá nota? Doporučení v1: jen výběr, později checkbox "include note context". Viz UX roadmap §13 (@-mention kontextu).
 2. **Translate cílový jazyk**: picker v dropdownu, nebo heuristika (výchozí jazyk workspace)? Rozhodnutí: submenu s jazyky + last-used v localStorage (viz UX roadmap §7).
-3. **Persistence transient sessions**: tolerovat leaked JSONL, nebo přidat cleanup?
+3. **Persistence transient sessions**: vyřešeno přes `persistSession: false` (žádné leaked JSONL, cleanup netřeba).
 4. **Seeded chat**: concat-into-first-prompt (jednodušší) vs. skutečný `messages[]` array? Doporučení v1: concat.
 5. **Klávesové zkratky**: Cmd-K / Cmd-J nad výběrem pro toolbar. Rozhodnutí: Cmd-J (viz UX roadmap §11).
 6. **Limit souběžných bloků**: 3? Konfigurovatelné?

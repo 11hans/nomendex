@@ -529,12 +529,15 @@ export const chatRoutes = {
                     settingSources: Array<"user" | "project">;
                     agents?: Record<string, AgentDefinition>;
                     maxThinkingTokens?: number;
+                    persistSession?: boolean;
                     env: Record<string, string | undefined>;
                 } = {
                     model: agentConfig.model,
                     cwd: targetDir,
                     // transient sessions never resume — each call starts a fresh context
                     resume: transient ? undefined : sessionId,
+                    // ...and never need a transcript; persisting one would surface them in the chat list
+                    ...(transient && { persistSession: false }),
                     maxTurns: 100,
                     includePartialMessages: true,
                     // Stream subagent text/thinking too (SDK default is tool blocks only) —
