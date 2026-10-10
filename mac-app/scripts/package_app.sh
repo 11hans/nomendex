@@ -68,6 +68,13 @@ else
   echo "[pkg] Warning: bun not on PATH; sidecar will use its BUN_BE_BUN fallback for direct CLI spawns"
 fi
 
+# `bun build --compile` leaves an invalid linker signature on the sidecar, and
+# `--deep` below does not re-sign binaries under Resources/. macOS then SIGKILLs
+# the sidecar at launch (Code Signature Invalid) → white screen. Sign it explicitly.
+if [ -f "$APP_DIR/Contents/Resources/sidecar/sidecar" ]; then
+  codesign --force --sign - "$APP_DIR/Contents/Resources/sidecar/sidecar"
+fi
+
 # Codesign ad-hoc with entitlements (required for EventKit calendar access)
 codesign --force --deep --sign - --entitlements macos-host/entitlements.plist "$APP_DIR"
 
