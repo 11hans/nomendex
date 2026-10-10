@@ -31,13 +31,15 @@ useRewriteDraft hook
 Server (todos-routes.ts)
     ↓
 rewriteTodoDraft() in rewrite.ts
-    ↓ Bun.spawn(claude --print --output-format json --json-schema ...)
+    ↓ Bun.spawn(claude --print --system-prompt ... --tools "" ... --json-schema ...)
 Claude Haiku (claude-haiku-4-5)
     ↓ structured JSON { title, description }
 Response back to UI
 ```
 
-The server shells out to the **Claude CLI** (`~/.local/bin/claude` by default, overridable via `CLAUDE_CLI_PATH`). It uses `--output-format json` with `--json-schema` to get a guaranteed-structured response.
+The server shells out to the **Claude CLI** resolved by `getClaudeCliPath()` (`lib/claude-cli.ts`): `CLAUDE_CLI_PATH` (the packaged app points it at the CLI bundled in `Resources/claude-cli`), then the CLI shipped with the Agent SDK package, and only as a last resort `~/.local/bin/claude`. It uses `--output-format json` with `--json-schema` to get a guaranteed-structured response.
+
+The spawn is isolated via `isolatedTextTransformArgs()` (shared with note quick actions): `--system-prompt` replaces the Claude Code system prompt instead of appending to it, and `--tools ""`, `--strict-mcp-config`, `--setting-sources ""`, `--disable-slash-commands` and `--no-session-persistence` keep out tools, MCP servers (incl. claude.ai connectors), user/project settings, plugins, skills and the session transcript. Without them every model turn of a rewrite carried ~18k tokens of Claude Code context and left a ~140 KB transcript in `~/.claude/projects/`; isolated, a rewrite is ~1.4k input tokens.
 
 ### System Prompt Rules
 
@@ -81,7 +83,7 @@ An `AbortController` is passed to the underlying API call. If the component unmo
 
 | Error | Cause | Action |
 |-------|-------|--------|
-| "Claude CLI not found. Is Claude Code installed?" | Claude CLI missing from expected path | Install Claude Code or set `CLAUDE_CLI_PATH` |
+| "Claude CLI not found. Is Claude Code installed?" | No CLI binary at the path `getClaudeCliPath()` resolved | Check the bundled CLI or set `CLAUDE_CLI_PATH` |
 | "Rewrite failed. Try again." | Claude returned an error or malformed JSON | Click the button again |
 
 ## Developer Guide
@@ -129,7 +131,7 @@ const MODEL = "claude-haiku-4-5";
 
 ### Requires Claude CLI
 
-The server spawns the CLI binary at `CLAUDE_CLI_PATH || ~/.local/bin/claude`. This means the feature only works if Claude Code is installed on the machine running the Bun sidecar. The error class `NoClaudeCliError` (HTTP 503) surfaces this clearly.
+The server spawns the CLI binary resolved by `getClaudeCliPath()` (see above). The packaged app ships its own CLI; in dev the one from the Agent SDK package is used. If no binary exists at the resolved path, `NoClaudeCliError` (HTTP 503) surfaces this clearly.
 
 ### Input Sanitization
 
@@ -139,7 +141,7 @@ User input is wrapped in `<user_input>` XML tags to prevent prompt injection. Th
 
 **Button is disabled** — Title and description are both empty. Type at least a title first.
 
-**"Claude CLI not found"** — Install Claude Code, or set the `CLAUDE_CLI_PATH` environment variable to point to the `claude` binary.
+**"Claude CLI not found"** — The resolved CLI path does not exist. Check the bundled CLI (packaged app: `Resources/claude-cli`; dev: `bun install`), or set `CLAUDE_CLI_PATH` to a `claude` binary.
 
 **Rewrite changes the language** — The system prompt instructs the model to match the input language. If switching occurs, it may be a model regression; file a bug with the input text.
 

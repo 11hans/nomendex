@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildClaudeCliEnv, PINNED_CLAUDE_CLI_VERSION } from "./claude-cli";
+import { buildClaudeCliEnv, isolatedTextTransformArgs, PINNED_CLAUDE_CLI_VERSION } from "./claude-cli";
 
 describe("claude-cli", () => {
     test("pinned CLI version matches the installed Agent SDK", async () => {
@@ -22,5 +22,15 @@ describe("claude-cli", () => {
         expect(env.CLAUDE_CODE_DISABLE_AUTO_MEMORY).toBe("1");
         expect(env.CLAUDE_CODE_DISABLE_BUNDLED_SKILLS).toBe("1");
         expect(env.FOO).toBe("bar");
+    });
+
+    test("isolated text transforms replace the system prompt and pass empty --tools / --setting-sources values", () => {
+        const args = isolatedTextTransformArgs("Fix the grammar.");
+        expect(args.slice(0, 2)).toEqual(["--system-prompt", "Fix the grammar."]);
+        expect(args).not.toContain("--append-system-prompt");
+        // A missing "" would make the CLI read the next argument as the tool list
+        expect(args[args.indexOf("--tools") + 1]).toBe("");
+        expect(args[args.indexOf("--setting-sources") + 1]).toBe("");
+        expect(args).toContain("--no-session-persistence");
     });
 });

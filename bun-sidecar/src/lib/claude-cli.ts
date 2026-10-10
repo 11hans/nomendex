@@ -106,6 +106,26 @@ export function buildClaudeCliSpawn(args: string[]): ClaudeCliSpawn {
     return { cmd: [getClaudeCliPath(), ...args], env: buildClaudeCliEnv() };
 }
 
+/**
+ * CLI flags for one-shot text transforms (note quick actions, todo rewrite).
+ * `--system-prompt` replaces the Claude Code prompt instead of appending to it,
+ * and the rest keeps the run free of tools, MCP servers (claude.ai connectors
+ * included), user/project settings and plugins, skills and slash commands, and
+ * a persisted transcript. Without them every spawn carried the user's whole
+ * Claude Code setup (~18k tokens of context per model turn) and left a
+ * ~140 KB transcript in ~/.claude/projects.
+ */
+export function isolatedTextTransformArgs(systemPrompt: string): string[] {
+    return [
+        "--system-prompt", systemPrompt,
+        "--tools", "",
+        "--strict-mcp-config",
+        "--setting-sources", "",
+        "--disable-slash-commands",
+        "--no-session-persistence",
+    ];
+}
+
 export type ClaudeCliInfo = {
     path: string;
     source: ClaudeCliSource;

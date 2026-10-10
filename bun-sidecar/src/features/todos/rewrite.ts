@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createServiceLogger } from "@/lib/logger";
-import { getClaudeCliPath, buildClaudeCliSpawn } from "@/lib/claude-cli";
+import { getClaudeCliPath, buildClaudeCliSpawn, isolatedTextTransformArgs } from "@/lib/claude-cli";
 import type { TodoKind } from "./todo-types";
 
 const logger = createServiceLogger("TODO_REWRITE");
@@ -42,7 +42,7 @@ export interface RewriteDraftOutput {
     description: string;
 }
 
-function buildSystemPromptSuffix(kind: TodoKind): string {
+function buildSystemPrompt(kind: TodoKind): string {
     const toneRules = kind === "event"
         ? `Tone: factual, state when/where/who clearly, avoid imperative verbs. Focus on context and logistics, not action steps.`
         : `Tone: actionable, use imperative mood, focus on outcomes and steps. Focus on what needs to be done and concrete deliverables.`;
@@ -80,12 +80,12 @@ export async function rewriteTodoDraft(input: RewriteDraftInput): Promise<Rewrit
     if (!existsSync(claudePath)) throw new NoClaudeCliError();
 
     const userPrompt = buildUserPrompt(trimmedTitle, trimmedDesc);
-    const systemSuffix = buildSystemPromptSuffix(input.kind);
+    const systemPrompt = buildSystemPrompt(input.kind);
 
     const spawn = buildClaudeCliSpawn([
         "--print",
         "--model", MODEL,
-        "--append-system-prompt", systemSuffix,
+        ...isolatedTextTransformArgs(systemPrompt),
         "--json-schema", JSON_SCHEMA,
         "--output-format", "json",
         userPrompt,

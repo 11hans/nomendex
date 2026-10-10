@@ -60,7 +60,7 @@ describe("rewriteTodoDraft", () => {
     test("passes task system prompt containing actionable language", async () => {
         await rewriteTodoDraft({ title: "Fix the login bug", kind: "task" });
         const args = spawnSpy.mock.calls[0][0] as string[];
-        const systemIdx = args.indexOf("--append-system-prompt");
+        const systemIdx = args.indexOf("--system-prompt");
         expect(systemIdx).toBeGreaterThan(-1);
         expect(args[systemIdx + 1]).toContain("actionable");
     });
@@ -68,7 +68,7 @@ describe("rewriteTodoDraft", () => {
     test("passes event system prompt with factual tone", async () => {
         await rewriteTodoDraft({ title: "Team meeting", kind: "event" });
         const args = spawnSpy.mock.calls[0][0] as string[];
-        const systemIdx = args.indexOf("--append-system-prompt");
+        const systemIdx = args.indexOf("--system-prompt");
         expect(args[systemIdx + 1]).toContain("factual");
         expect(args[systemIdx + 1]).not.toContain("actionable");
     });
