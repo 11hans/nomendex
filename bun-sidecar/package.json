@@ -55,7 +55,7 @@
         "prosemirror-state": "^1.4.4",
         "prosemirror-view": "^1.42.6",
         "react": "^19.3.0",
-        "react-day-picker": "^9.14.0",
+        "react-day-picker": "^10.0.2",
         "react-dom": "^19.3.0",
         "react-resizable-panels": "^4.14.3",
         "react-router-dom": "^7.18.4",
