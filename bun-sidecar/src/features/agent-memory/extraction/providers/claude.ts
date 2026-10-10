@@ -54,18 +54,19 @@ export class ClaudeExtractionProvider implements MemoryExtractionProvider {
         });
 
         if (DEV_COST_HUD_ENABLED) {
-            // AI SDK v5 splits cache_read into `cachedInputTokens`; cache_creation is not
-            // exposed cleanly and is 0 for extraction (no cache_control set on the prompt).
+            // AI SDK `inputTokens` is the total including cache reads/writes; the HUD expects
+            // Anthropic's `input_tokens` (uncached only), so use the per-bucket details.
+            const details = usage?.inputTokenDetails;
             void logUsageEvent(buildExtractionEvent({
                 sessionId: input.sessionId,
                 agentId: input.agentId,
                 model,
                 provider: "claude",
                 usage: {
-                    inputTokens: usage?.inputTokens ?? 0,
+                    inputTokens: details?.noCacheTokens ?? usage?.inputTokens ?? 0,
                     outputTokens: usage?.outputTokens ?? 0,
-                    cacheReadTokens: usage?.cachedInputTokens ?? 0,
-                    cacheCreationTokens: 0,
+                    cacheReadTokens: details?.cacheReadTokens ?? 0,
+                    cacheCreationTokens: details?.cacheWriteTokens ?? 0,
                 },
                 durationMs,
             }));
