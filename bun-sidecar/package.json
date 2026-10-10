@@ -45,7 +45,7 @@
         "diff": "^8.0.4",
         "isomorphic-git": "^1.43.3",
         "js-yaml": "^4.3.2",
-        "lucide-react": "^0.542.0",
+        "lucide-react": "^1.55.0",
         "prosemirror-commands": "^1.7.2",
         "prosemirror-example-setup": "^1.2.3",
         "prosemirror-keymap": "^1.2.3",
