@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import type { ComponentProps, HTMLAttributes } from "react";
 import { memo } from "react";
+import { code } from "@streamdown/code";
+import { math } from "@streamdown/math";
+import { mermaid } from "@streamdown/mermaid";
 import { Streamdown } from "streamdown";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
@@ -131,6 +134,11 @@ function preprocessWikiLinks(content: string): string {
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
+// Streamdown 2 made highlighting/diagrams/math opt-in and added defaults v1 lacked
+// (link confirmation modal, line numbers, max heights); keep the v1 behavior.
+const streamdownPlugins = { code, math, mermaid };
+const noLinkSafety = { enabled: false };
+
 export const MessageResponse = memo(
   ({ className, children, ...props }: MessageResponseProps) => (
     <Streamdown
@@ -138,6 +146,11 @@ export const MessageResponse = memo(
         "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
+      plugins={streamdownPlugins}
+      linkSafety={noLinkSafety}
+      lineNumbers={false}
+      codeBlockMaxHeight="none"
+      tableMaxHeight="none"
       {...props}
     >
       {typeof children === "string" ? preprocessWikiLinks(children) : children}
