@@ -142,6 +142,36 @@ const HOOK_SETTINGS = {
 // Marker to identify Nomendex-managed hooks in settings.json
 const NOMENDEX_HOOK_MARKER = "nomendex-lock-note.sh";
 
+const NOMENDEX_HOOK_SCRIPTS = [
+    "nomendex-lock-note.sh",
+    "nomendex-unlock-note.sh",
+    "nomendex-cleanup-locks.sh",
+];
+
+// A hook group is ours if it runs any of our scripts — matching only the lock
+// script left the PostToolUse/SessionEnd groups behind, so every workspace
+// start appended another copy of them.
+function isNomendexHookGroup(group: unknown): boolean {
+    const text = JSON.stringify(group);
+    return NOMENDEX_HOOK_SCRIPTS.some((script) => text.includes(script));
+}
+
+/**
+ * Replace any Nomendex hook groups in a settings.json `hooks` object with the
+ * current ones, keeping user-defined groups. Idempotent; also collapses the
+ * duplicates older versions accumulated.
+ */
+export function mergeNomendexHooks(existingHooks: Record<string, unknown[]>): Record<string, unknown[]> {
+    const merged: Record<string, unknown[]> = {};
+    for (const [event, groups] of Object.entries(existingHooks)) {
+        merged[event] = groups.filter((group) => !isNomendexHookGroup(group));
+    }
+    for (const [event, hookGroups] of Object.entries(HOOK_SETTINGS.hooks)) {
+        merged[event] = [...(merged[event] ?? []), ...hookGroups];
+    }
+    return merged;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -198,19 +228,8 @@ export async function enableAgentEditing(): Promise<{ success: boolean; error?: 
             }
         }
 
-        // Merge hooks — preserve existing hooks, add ours
-        const existingHooks = (settings.hooks ?? {}) as Record<string, unknown[]>;
-
-        for (const [event, hookGroups] of Object.entries(HOOK_SETTINGS.hooks)) {
-            const existing = existingHooks[event] ?? [];
-            // Remove any previous Nomendex hooks
-            const filtered = existing.filter(
-                (group) => !JSON.stringify(group).includes(NOMENDEX_HOOK_MARKER)
-            );
-            existingHooks[event] = [...filtered, ...hookGroups];
-        }
-
-        settings.hooks = existingHooks;
+        // Merge hooks — preserve existing hooks, replace ours
+        settings.hooks = mergeNomendexHooks((settings.hooks ?? {}) as Record<string, unknown[]>);
         await Bun.write(settingsPath, JSON.stringify(settings, null, 2) + "\n");
 
         logger.info("Agent editing enabled", { workspace: rootPath });
@@ -232,12 +251,7 @@ export async function disableAgentEditing(): Promise<{ success: boolean; error?:
         const hooksDir = path.join(claudeDir, "hooks");
 
         // Remove hook scripts
-        const scripts = [
-            "nomendex-lock-note.sh",
-            "nomendex-unlock-note.sh",
-            "nomendex-cleanup-locks.sh",
-        ];
-        for (const script of scripts) {
+        for (const script of NOMENDEX_HOOK_SCRIPTS) {
             const scriptPath = path.join(hooksDir, script);
             const file = Bun.file(scriptPath);
             if (await file.exists()) {
@@ -254,9 +268,7 @@ export async function disableAgentEditing(): Promise<{ success: boolean; error?:
                 const hooks = settings.hooks as Record<string, unknown[]> | undefined;
                 if (hooks) {
                     for (const event of Object.keys(hooks)) {
-                        hooks[event] = hooks[event].filter(
-                            (group) => !JSON.stringify(group).includes(NOMENDEX_HOOK_MARKER)
-                        );
+                        hooks[event] = hooks[event].filter((group) => !isNomendexHookGroup(group));
                         // Clean up empty arrays
                         if (hooks[event].length === 0) {
                             delete hooks[event];
