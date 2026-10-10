@@ -7,8 +7,11 @@ import { z } from "zod";
  *
  * The tool output is detected by the frontend and rendered in a sandboxed iframe
  * instead of being displayed as JSON.
+ *
+ * Build a fresh instance per query: an SDK MCP server instance binds to one
+ * query's transport, so a shared singleton drops render_ui from concurrent chats.
  */
-export const uiRendererServer = createSdkMcpServer({
+export const buildUiRendererMcpServer = () => createSdkMcpServer({
     name: "noetect-ui",
     version: "1.0.0",
     tools: [

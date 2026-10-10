@@ -207,7 +207,7 @@ Main integration files:
 ### Chat Request Flow
 1. Frontend `POST /api/chat` with `{ message, images?, sessionId?, agentId?, maxThinkingTokens? }`.
 2. Backend resolves agent (`model`, `systemPrompt`, `mcpServers`).
-3. Backend builds MCP config (user-defined + built-in), injects internal `noetect-ui` MCP server, and (for BPagent) the `agent-memory` MCP server (read-only when extraction is enabled).
+3. Backend builds MCP config (user-defined + built-in), injects a fresh per-query internal `noetect-ui` MCP server (an SDK server instance binds to one query, so it must not be shared), and (for BPagent) the `agent-memory` MCP server (read-only when extraction is enabled).
 4. For BPagent: system prompt is runtime-composed: `<agent-context>` + BP template + optional memory recall block from `buildMemoryPromptBlock()`.
 5. Backend calls SDK `query()`, streams SSE events to frontend.
 6. Frontend consumes SSE and renders blocks incrementally, ordered by `(messageId, turn, streamIndex)`.

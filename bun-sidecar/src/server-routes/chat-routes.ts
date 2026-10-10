@@ -10,7 +10,7 @@ import { buildAgentContext, buildMcpServersFromConfig, customSystemPrompt } from
 import { buildClaudeCliEnv, getClaudeCliPath } from "@/lib/claude-cli";
 import { findSessionFilePath, getClaudeSessionsDir } from "@/lib/claude-session-files";
 import { getRaindropQuery, getRaindropUserId, eventMetadata } from "@/lib/raindrop-client";
-import { uiRendererServer } from "@/mcp-servers/ui-renderer";
+import { buildUiRendererMcpServer } from "@/mcp-servers/ui-renderer";
 import { acquireFileLock, getActiveNoteFileNameForPath, releaseFileLockForToolUse } from "@/services/file-locks";
 import { buildBpagentSubagents } from "@/features/bpagent-pack/subagents";
 import { buildBpagentSystemPrompt, readVaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
@@ -510,7 +510,7 @@ export const chatRoutes = {
                 const mcpServers = await buildMcpServersFromConfig(agentConfig.mcpServers);
 
                 // Add the UI renderer server for skills to render custom UI
-                mcpServers["noetect-ui"] = uiRendererServer;
+                mcpServers["noetect-ui"] = buildUiRendererMcpServer();
 
                 // Resolve the Claude CLI the SDK drives — pinned to the bundled
                 // version so global-CLI auto-updates can't change its behavior.
