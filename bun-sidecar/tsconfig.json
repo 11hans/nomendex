@@ -22,7 +22,6 @@
     "noImplicitOverride": true,
     "noImplicitAny": false, // TODO: Re-enable this for better type safety
 
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "debug": ["./src/polyfills/debug.ts"]
