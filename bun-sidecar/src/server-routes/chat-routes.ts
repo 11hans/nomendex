@@ -6,7 +6,7 @@ import { getAgent, getPreferences, savePreferences, addAllowedTool, getAgentAllo
 import { DEFAULT_AGENT, getAgentEffectivePromptSource } from "@/features/agents/index";
 import type { AgentConfig } from "@/features/agents/index";
 import { createServiceLogger } from "@/lib/logger";
-import { buildAgentContext, buildMcpServersFromConfig, customSystemPrompt } from "@/lib/agent-runtime";
+import { buildAgentContext, buildMcpServersFromConfig, CHAT_AGENT_TOOLS, customSystemPrompt } from "@/lib/agent-runtime";
 import { buildClaudeCliEnv, getClaudeCliPath } from "@/lib/claude-cli";
 import { findSessionFilePath, getClaudeSessionsDir } from "@/lib/claude-session-files";
 import { getRaindropQuery, getRaindropUserId, eventMetadata } from "@/lib/raindrop-client";
@@ -536,6 +536,7 @@ export const chatRoutes = {
                     mcpServers: Record<string, McpServerConfig>;
                     pathToClaudeCodeExecutable: string;
                     settingSources: Array<"user" | "project">;
+                    tools: string[];
                     agents?: Record<string, AgentDefinition>;
                     maxThinkingTokens?: number;
                     persistSession?: boolean;
@@ -555,6 +556,7 @@ export const chatRoutes = {
                     mcpServers,
                     pathToClaudeCodeExecutable: claudeCliPath,
                     settingSources: ["project"], // Load skills from project .claude/skills/, MCP servers come from mcpServers option
+                    tools: CHAT_AGENT_TOOLS,
                     // Cap per-turn output. SDK default is 32000 — most BPagent turns finish well under
                     // 4K, and 8000 still leaves headroom for long Edit/Write responses while trimming
                     // the rare 8K+ runaway. Override via CLAUDE_CODE_MAX_OUTPUT_TOKENS in environment.

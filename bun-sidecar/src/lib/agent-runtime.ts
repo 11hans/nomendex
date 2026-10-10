@@ -27,6 +27,33 @@ export function customSystemPrompt(prompt: string | string[]) {
     return { type: "custom" as const, prompt, snapshot: false };
 }
 
+/**
+ * Built-in tools of chat agents (SDK `tools`; MCP tools come on top). Without
+ * an explicit list the native CLI offers no Grep/Glob, so the Grep/Glob that
+ * subagent definitions ask for were silently dropped, and it adds tools with no
+ * use here (cron, worktrees, plan mode, notebooks, push notifications, agent
+ * teams). Session tasks stay: the default skills and subagents use them to
+ * report progress. `Agent` is the subagent tool (listed as Task in init).
+ */
+export const CHAT_AGENT_TOOLS = [
+    "Agent",
+    "AskUserQuestion",
+    "Bash",
+    "Read",
+    "Write",
+    "Edit",
+    "Glob",
+    "Grep",
+    "Skill",
+    "ToolSearch",
+    "WebFetch",
+    "WebSearch",
+    "TaskCreate",
+    "TaskGet",
+    "TaskList",
+    "TaskUpdate",
+];
+
 // Build context information for the agent's system prompt
 export function buildAgentContext(workspaceFolder: string): string {
     const now = new Date();
@@ -325,6 +352,7 @@ export async function runAgentTextQuery(input: RunAgentTextQueryInput): Promise<
         mcpServers,
         pathToClaudeCodeExecutable: claudeCliPath,
         settingSources: ["project"] as Array<"user" | "project">,
+        tools: CHAT_AGENT_TOOLS,
         canUseTool,
         hooks: {
             PreToolUse: [{ hooks: [buildHeadlessToolGate({ allowedTools, toolPolicy, deniedMessage })] }],

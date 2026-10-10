@@ -346,6 +346,8 @@ Each chat session uses an agent configuration that determines:
 - **MCP Servers** - Available tool integrations
 - **Allowed Tools** - Pre-approved tool permissions
 
+The built-in tool set is fixed for all agents (`CHAT_AGENT_TOOLS`, see [agents.md](./agents.md#built-in-tools)).
+
 See [agents.md](./agents.md) for full agent documentation.
 
 ### Agent Selection Priority
