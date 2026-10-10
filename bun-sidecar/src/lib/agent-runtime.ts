@@ -1,4 +1,4 @@
-import { query, type McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
+import { query, type HookCallback, type McpServerConfig, type PreToolUseHookInput } from "@anthropic-ai/claude-agent-sdk";
 import { getRootPath } from "@/storage/root-path";
 import { getAgent, getAgentAllowedTools } from "@/features/agents/fx";
 import { DEFAULT_AGENT, MCP_REGISTRY } from "@/features/agents/index";
@@ -217,6 +217,50 @@ export type RunAgentTextQueryInput = {
     allowedToolsOverride?: string[];
 };
 
+// Session-internal tools with no effect outside the run. Agent/Task are safe to
+// let through because a subagent's own tool calls hit the same PreToolUse gate.
+const HEADLESS_META_TOOLS = new Set([
+    "ToolSearch",
+    "Agent",
+    "Task",
+    "TodoWrite",
+    "TaskCreate",
+    "TaskGet",
+    "TaskList",
+    "TaskUpdate",
+]);
+
+/**
+ * PreToolUse gate that enforces the headless grant set. `canUseTool` alone is
+ * not enough: the CLI auto-approves read-only tools (Read, Glob, Grep,
+ * read-only Bash such as `find`/`cat`) without consulting it, so ungranted
+ * runs could still read any file in the workspace. Hooks fire for every tool
+ * call, including auto-approved ones and those made inside subagents.
+ */
+export function buildHeadlessToolGate(args: {
+    allowedTools: ReadonlySet<string>;
+    toolPolicy: ToolPolicy;
+    deniedMessage: string;
+}): HookCallback {
+    return async (input) => {
+        if (input.hook_event_name !== "PreToolUse") return {};
+        const toolName = (input as PreToolUseHookInput).tool_name;
+        const denied =
+            toolName === "AskUserQuestion" ||
+            (args.toolPolicy === "deny-unapproved" && !args.allowedTools.has(toolName) && !HEADLESS_META_TOOLS.has(toolName));
+        if (!denied) return {};
+        return {
+            hookSpecificOutput: {
+                hookEventName: "PreToolUse",
+                permissionDecision: "deny",
+                permissionDecisionReason: toolName === "AskUserQuestion"
+                    ? "AskUserQuestion is not available in headless agent queries"
+                    : args.deniedMessage,
+            },
+        };
+    };
+}
+
 function collectAssistantText(msg: unknown): string {
     if (!msg || typeof msg !== "object") return "";
     const assistant = msg as { type?: string; message?: { content?: Array<{ type?: string; text?: string }> } };
@@ -246,6 +290,7 @@ export async function runAgentTextQuery(input: RunAgentTextQueryInput): Promise<
     const cwd = input.cwd || getRootPath();
     const claudeCliPath = getClaudeCliPath();
     const toolPolicy = input.toolPolicy || "deny-unapproved";
+    const deniedMessage = input.unapprovedToolMessage || "Tool not pre-approved for this channel";
     const systemPrompt = input.systemPromptOverride || (
         agentConfig.systemPrompt
             ? `${buildAgentContext(cwd)}\n\n${agentConfig.systemPrompt}`
@@ -267,7 +312,7 @@ export async function runAgentTextQuery(input: RunAgentTextQueryInput): Promise<
         }
         return {
             behavior: "deny" as const,
-            message: input.unapprovedToolMessage || "Tool not pre-approved for this channel",
+            message: deniedMessage,
         };
     };
 
@@ -279,6 +324,12 @@ export async function runAgentTextQuery(input: RunAgentTextQueryInput): Promise<
         pathToClaudeCodeExecutable: claudeCliPath,
         settingSources: ["project"] as Array<"user" | "project">,
         canUseTool,
+        hooks: {
+            PreToolUse: [{ hooks: [buildHeadlessToolGate({ allowedTools, toolPolicy, deniedMessage })] }],
+        },
+        // Headless runs never resume; persisted transcripts would only show up
+        // as phantom sessions in the app's chat list.
+        persistSession: false,
         includePartialMessages: false,
         maxTurns: input.maxTurns ?? 4,
         env: buildClaudeCliEnv({

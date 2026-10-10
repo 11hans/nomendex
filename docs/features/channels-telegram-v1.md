@@ -77,7 +77,7 @@ Message text, `externalChatId`, and `externalUsername` are stripped from WS even
 
 ### Shared libs
 
-- `bun-sidecar/src/lib/agent-runtime.ts` — `runAgentTextQuery` headless agent runner used by `ai.ts`. Resolves agent config, builds MCP servers, always denies `AskUserQuestion`, applies `allowedToolsOverride` instead of persisted agent preferences when provided. `buildMcpServersFromConfig` and `buildAgentContext` moved here from `chat-routes`; `chat-routes` now imports from here.
+- `bun-sidecar/src/lib/agent-runtime.ts` — `runAgentTextQuery` headless agent runner used by `ai.ts`. Resolves agent config, builds MCP servers, enforces the grant set with a `PreToolUse` hook (`buildHeadlessToolGate` — also covers tools the CLI auto-approves without `canUseTool`), always denies `AskUserQuestion`, applies `allowedToolsOverride` instead of persisted agent preferences when provided, and runs with `persistSession: false`. `buildMcpServersFromConfig` and `buildAgentContext` moved here from `chat-routes`; `chat-routes` now imports from here.
 - `bun-sidecar/src/lib/request-security.ts` — origin/host validation and mutation policy. Details in `channels-security.md`.
 
 ### Frontend
@@ -122,7 +122,7 @@ The bot token lives in `.nomendex/secrets.json` under `TELEGRAM_BOT_TOKEN` (or a
 
 1. Send policy is evaluated **before** the agent runs — a disabled channel or de-allowlisted sender cannot trigger an agent query.
 2. `prompt` from the request body is an operator prompt from the app UI. If absent, the latest inbound message text for the thread is used. Both carry operator authority (the allowlist binds the channel to the operator's account); they differ only in framing — inbound text is wrapped in `<telegram-message>` by `ai.ts:frameInboundPrompt` and presented as an operator command.
-3. `generateTelegramReply` calls `runAgentTextQuery` with the agent's persisted tool grants (same "Always Allow" set as app chat; ungranted tools are denied, `AskUserQuestion` always denied) and `maxTurns: 16`.
+3. `generateTelegramReply` calls `runAgentTextQuery` with the agent's persisted tool grants (same "Always Allow" set as app chat; ungranted tools are denied by a `PreToolUse` hook, including read-only tools the CLI would auto-approve; `AskUserQuestion` always denied) and `maxTurns: 16`.
 4. If the agent returns empty text or throws, `fallbackText` from settings is used (`fallbackUsed: true` in the response).
 5. The reply is sent via `sendTelegramMessage` (which runs the send policy again and records the outbound message + thread update).
 

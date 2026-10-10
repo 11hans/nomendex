@@ -39,6 +39,8 @@ This closes off cross-site "simple requests" (`text/plain` POSTs need no CORS pr
 
 The Telegram channel is the **operator's personal remote chat**: the allowlist binds the bot to the operator's own account(s), and that binding *is* the trust boundary. Inbound messages from allowlisted senders carry operator authority — the agent acts on them like app-chat messages, with the agent's full persisted tool grants (the same "Always Allow" set it has in the app; tools outside that set are denied, since headless runs cannot prompt). `AskUserQuestion` is always denied.
 
+The grant set is enforced by a `PreToolUse` hook (`buildHeadlessToolGate` in `agent-runtime.ts`), not only by `canUseTool`: the CLI auto-approves read-only tools (`Read`, `Glob`, `Grep`, read-only `Bash` such as `find`/`cat`) without calling `canUseTool`, so before the hook an agent with no grants could still read any workspace file, `.nomendex/secrets.json` included. Hooks fire for every tool call, auto-approved ones and calls inside subagents included. Session-internal tools with no outside effect (`ToolSearch`, `Agent`/`Task`, `TodoWrite`, `Task*`) pass the gate; a subagent's own tool calls are gated again. Headless runs use `persistSession: false`, so they leave no transcript under `~/.claude/projects/` and never appear in the app's chat list.
+
 Consequences:
 
 - **Everyone on the allowlist has operator-level access** to the agent's granted tools (potentially `Bash`). Keep the allowlist to accounts you control.
