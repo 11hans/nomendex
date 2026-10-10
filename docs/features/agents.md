@@ -29,7 +29,7 @@ type AgentConfig = {
     id: string;                    // UUID or "default"
     name: string;                  // Display name
     description?: string;          // Optional description
-    systemPrompt: string;          // Custom system prompt (empty = SDK default)
+    systemPrompt: string;          // Custom system prompt (empty = runtime <agent-context> only)
     model: AgentModel;             // Model to use
     mcpServers: string[];          // Array of MCP server IDs
     allowedTools?: string[];       // Tools that are always allowed (persisted permissions)
@@ -93,7 +93,7 @@ Built-in agents ship with the app. They cannot be edited or deleted (duplicate-o
     id: "default",
     name: "General Assistant",
     description: "A general-purpose coding assistant",
-    systemPrompt: "",  // Uses Claude Code default prompt + runtime <agent-context>
+    systemPrompt: "",  // Runtime <agent-context> is the whole system prompt
     model: "claude-sonnet-4-5",
     mcpServers: [],
     allowedTools: [],
@@ -116,7 +116,7 @@ Built-in agents ship with the app. They cannot be edited or deleted (duplicate-o
 The Agents UI shows an explicit source for each agent's effective prompt:
 
 - `custom`: Uses the custom `systemPrompt` saved on the agent profile
-- `default_with_context`: Uses Claude Code default prompt plus runtime `<agent-context>` (date + workspace folder)
+- `default_with_context`: Runtime `<agent-context>` (date, workspace folder, API base URL, AskUserQuestion guidance) as the whole system prompt. A custom prompt replaces the Claude Code default prompt, so the agent does not get it
 - `bpagent_runtime`: Runtime-composed BPagent prompt:
   - BPagent template from `built-in-bpagent.ts` + memory-mode note — static, cached across sessions
   - `<agent-context>` using notes path, after `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`
@@ -240,7 +240,7 @@ When sending a message, the chat route:
    - `model` - Which Claude model to use
    - `systemPrompt` behavior:
      - Custom agents with prompt: `<agent-context> + custom prompt`
-     - General Assistant: Claude Code default prompt + `<agent-context>`
+     - General Assistant (and custom agents with an empty prompt): `<agent-context>` only
      - BPagent: runtime-composed BPagent prompt (BP template + `<agent-context>`; daily context and memory recall in the user turn)
    - `mcpServers` - Builds MCP config from registry
 

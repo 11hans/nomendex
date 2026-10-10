@@ -243,7 +243,7 @@ type AgentConfig = {
     id: string;
     name: string;
     description?: string;
-    systemPrompt: string;          // empty → use built-in default
+    systemPrompt: string;          // empty → runtime <agent-context> only
     model: AgentModel;
     mcpServers: string[];
     allowedTools?: string[];
@@ -257,7 +257,7 @@ Built-in agents: `default` (General Assistant), `bpagent`. Not editable (duplica
 
 Effective prompt sources (shown in Agents UI):
 - `custom` — custom `systemPrompt`
-- `default_with_context` — Claude Code default + runtime `<agent-context>`
+- `default_with_context` — runtime `<agent-context>` only (it replaces the Claude Code default prompt, not appended to it)
 - `bpagent_runtime` — BP template + `<agent-context>` (daily context + memory recall go into the user turn)
 
 Model catalog: `/api/agents/models` merges Anthropic `/v1/models` (if `ANTHROPIC_API_KEY` present) with a local fallback list.

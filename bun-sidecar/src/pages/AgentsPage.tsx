@@ -501,11 +501,11 @@ function AgentsContent() {
                                 id="systemPrompt"
                                 value={formSystemPrompt}
                                 onChange={(e) => setFormSystemPrompt(e.target.value)}
-                                placeholder="Leave empty to use the default Claude Code system prompt"
+                                placeholder="Leave empty to use only the runtime agent context"
                                 className="min-h-[120px] font-mono text-sm"
                             />
                             <p className="text-xs text-muted-foreground">
-                                Empty value falls back to Claude Code default behavior.
+                                Empty value: the agent gets only the runtime context (date, workspace folder, API URL).
                             </p>
                         </div>
 

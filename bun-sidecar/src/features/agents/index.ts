@@ -165,8 +165,8 @@ export function getAgentEffectivePromptInfo(
 
     return {
         source,
-        summary: "Uses Claude Code default system prompt with runtime context injection.",
-        previewText: "Claude Code default system prompt + runtime <agent-context> (date + workspace folder).",
+        summary: "Uses the runtime context as the whole system prompt (not the Claude Code default prompt).",
+        previewText: "Runtime <agent-context> only: date, workspace folder, API base URL, AskUserQuestion guidance.",
     };
 }
 

@@ -642,7 +642,8 @@ export const chatRoutes = {
                     // Custom agent: prepend context to their system prompt
                     sdkOptions.systemPrompt = `${agentContext}\n\n${agentConfig.systemPrompt}`;
                 } else {
-                    // Default agent: just add context (SDK will use its default prompt)
+                    // Empty prompt: the agent context is the whole system prompt — a custom
+                    // prompt replaces Claude Code's default one, it is not appended to it
                     sdkOptions.systemPrompt = agentContext;
                 }
 
@@ -653,7 +654,7 @@ export const chatRoutes = {
                     ? "(custom + context)"
                     : promptSource === "bpagent_runtime"
                         ? "(bpagent runtime-composed)"
-                        : "(default Claude prompt + context)";
+                        : "(agent context only)";
                 console.log("[API] SDK options:", {
                     ...sdkOptions,
                     resume: sessionId || "(new session)",
