@@ -118,9 +118,9 @@ The Agents UI shows an explicit source for each agent's effective prompt:
 - `custom`: Uses the custom `systemPrompt` saved on the agent profile
 - `default_with_context`: Uses Claude Code default prompt plus runtime `<agent-context>` (date + workspace folder)
 - `bpagent_runtime`: Runtime-composed BPagent prompt:
-  - `<agent-context>` using notes path
-  - BPagent template from `built-in-bpagent.ts`
-  - Optional memory recall block
+  - BPagent template from `built-in-bpagent.ts` + memory-mode note — static, cached across sessions
+  - `<agent-context>` using notes path, after `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`
+  - Daily-notes context and memory recall are attached to each user message instead (`turn-context.ts`)
 
 For detailed memory architecture and Memory Studio behavior, see [agent-memory.md](./agent-memory.md).
 
@@ -241,7 +241,7 @@ When sending a message, the chat route:
    - `systemPrompt` behavior:
      - Custom agents with prompt: `<agent-context> + custom prompt`
      - General Assistant: Claude Code default prompt + `<agent-context>`
-     - BPagent: runtime-composed BPagent prompt (context + BP template + optional memory block)
+     - BPagent: runtime-composed BPagent prompt (BP template + `<agent-context>`; daily context and memory recall in the user turn)
    - `mcpServers` - Builds MCP config from registry
 
 Model catalog behavior:

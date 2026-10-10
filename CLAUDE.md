@@ -208,7 +208,7 @@ Main integration files:
 1. Frontend `POST /api/chat` with `{ message, images?, sessionId?, agentId?, maxThinkingTokens? }`.
 2. Backend resolves agent (`model`, `systemPrompt`, `mcpServers`).
 3. Backend builds MCP config (user-defined + built-in), injects a fresh per-query internal `noetect-ui` MCP server (an SDK server instance binds to one query, so it must not be shared), and (for BPagent) the `agent-memory` MCP server (read-only when extraction is enabled).
-4. For BPagent: system prompt is runtime-composed: `<agent-context>` + BP template + optional memory recall block from `buildMemoryPromptBlock()`.
+4. For BPagent: system prompt is runtime-composed: BP template + memory-mode note, `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`, `<agent-context>`. Daily-notes context and memory recall (`buildMemoryPromptBlock()`) go into the user turn via a `UserPromptSubmit` hook (`turn-context.ts`), so the system prompt stays cacheable across messages.
 5. Backend calls SDK `query()`, streams SSE events to frontend.
 6. Frontend consumes SSE and renders blocks incrementally, ordered by `(messageId, turn, streamIndex)`.
 7. On session end, BPagent triggers async post-session memory extraction (see Agent Memory).
@@ -258,7 +258,7 @@ Built-in agents: `default` (General Assistant), `bpagent`. Not editable (duplica
 Effective prompt sources (shown in Agents UI):
 - `custom` — custom `systemPrompt`
 - `default_with_context` — Claude Code default + runtime `<agent-context>`
-- `bpagent_runtime` — `<agent-context>` + BP template + optional memory block
+- `bpagent_runtime` — BP template + `<agent-context>` (daily context + memory recall go into the user turn)
 
 Model catalog: `/api/agents/models` merges Anthropic `/v1/models` (if `ANTHROPIC_API_KEY` present) with a local fallback list.
 

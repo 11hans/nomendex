@@ -1,4 +1,4 @@
-import { query, type SDKMessage, type SDKResultMessage, type SDKUserMessage, type McpServerConfig, type HookCallback, type PreToolUseHookInput, type AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
+import { query, SYSTEM_PROMPT_DYNAMIC_BOUNDARY, type SDKMessage, type SDKResultMessage, type SDKUserMessage, type McpServerConfig, type HookCallback, type PreToolUseHookInput, type AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { getRootPath, getNomendexPath, getUploadsPath, getNotesPath } from "@/storage/root-path";
@@ -16,6 +16,7 @@ import { buildBpagentSubagents } from "@/features/bpagent-pack/subagents";
 import { buildBpagentSystemPrompt, readVaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
 import { buildDailyContextBlock } from "@/features/bpagent-pack/daily-context";
 import { buildMemoryPromptBlock } from "@/features/agent-memory/fx";
+import { buildTurnContextHook, getDeliveredTurnContext } from "@/features/bpagent-pack/turn-context";
 import { buildAgentMemoryMcpServer } from "@/mcp-servers/agent-memory";
 import { triggerPostSessionExtraction, loadExtractionConfig } from "@/features/agent-memory/extraction/orchestrator";
 import { sdkMessagesToTurns } from "@/features/agent-memory/extraction/history-utils";
@@ -531,7 +532,7 @@ export const chatRoutes = {
                     maxTurns: number;
                     includePartialMessages: boolean;
                     forwardSubagentText: boolean;
-                    systemPrompt?: string;
+                    systemPrompt?: string | string[];
                     mcpServers: Record<string, McpServerConfig>;
                     pathToClaudeCodeExecutable: string;
                     settingSources: Array<"user" | "project">;
@@ -566,6 +567,8 @@ export const chatRoutes = {
                 // Build context-aware system prompt
                 // Always include agent context (date, workspace folder) for all agents
                 const agentContext = buildAgentContext(targetDir);
+                // BPagent's per-message context (daily notes, memory recall), see turn-context.ts
+                let turnContextHook: HookCallback | undefined;
 
                 if (agentConfig.id === "bpagent") {
                     // BPagent: use dedicated system prompt with real notes path + context
@@ -580,55 +583,44 @@ export const chatRoutes = {
                     }));
                     const extractionEnabled = extractionConfig.provider !== "disabled";
 
-                    // Order from most → least cache-stable so the Anthropic prompt cache
-                    // can hit on a long static prefix across sessions and days.
-                    // Putting the date (agentContext) first invalidates the entire prefix daily.
-                    const promptParts: string[] = [];
+                    // Static prefix (template + workspace-stable memory-mode note) before
+                    // the cache boundary, today's agent context after it. Everything that
+                    // changes per message goes into the user's turn via turnContextHook —
+                    // a changing system prompt rewrites the whole prompt cache on resume.
+                    const memoryModeNote = extractionEnabled
+                        ? "## Memory\n\nYour conversations are automatically analyzed for memories after each session ends. You do NOT need to call memory_save manually. Use memory_search and memory_list_recent to recall what you know."
+                        : "## Memory\n\nUse memory_save proactively to preserve important context, preferences, decisions, and goals that should survive across sessions.";
+                    sdkOptions.systemPrompt = [
+                        buildBpagentSystemPrompt(notesPath, vaultConfig, serverPort),
+                        memoryModeNote,
+                        SYSTEM_PROMPT_DYNAMIC_BOUNDARY,
+                        buildAgentContext(notesPath),
+                    ];
 
-                    // 1. Static template (~15k tokens) — same across all sessions/days for a workspace.
-                    promptParts.push(buildBpagentSystemPrompt(notesPath, vaultConfig, serverPort));
-
-                    // 2. Workspace-stable extraction-mode note — only flips when the user toggles the setting.
-                    if (extractionEnabled) {
-                        promptParts.push("## Memory\n\nYour conversations are automatically analyzed for memories after each session ends. You do NOT need to call memory_save manually. Use memory_search and memory_list_recent to recall what you know.");
-                    } else {
-                        promptParts.push("## Memory\n\nUse memory_save proactively to preserve important context, preferences, decisions, and goals that should survive across sessions.");
-                    }
-
-                    // 3. Semi-dynamic daily-notes context (changes once per day at most).
+                    let dailyBlock: string | null = null;
                     try {
-                        const dailyBlock = await buildDailyContextBlock(notesPath, vaultConfig);
-                        if (dailyBlock) {
-                            promptParts.push(dailyBlock);
-                        }
+                        dailyBlock = await buildDailyContextBlock(notesPath, vaultConfig);
                     } catch (err) {
                         chatLogger.warn("Failed to build daily context block", {
                             error: err instanceof Error ? err.message : String(err),
                         });
                     }
-
-                    // 4. Dynamic agent context (today's date) — moved to the tail so the
-                    //    cacheable prefix above survives across days.
-                    promptParts.push(buildAgentContext(notesPath));
-
-                    // 5. Per-query memory recall — most volatile, goes last.
-                    try {
-                        const memoryBlock = await buildMemoryPromptBlock({
-                            agentId: agentConfig.id,
-                            query: message || "",
-                            maxItems: 5,
-                        });
-                        if (memoryBlock) {
-                            promptParts.push(memoryBlock);
-                            chatLogger.info("BPagent session: injected memory prompt block");
-                        }
-                    } catch (memError) {
-                        chatLogger.warn("Failed to build memory prompt block", {
-                            error: memError instanceof Error ? memError.message : String(memError),
-                        });
+                    const delivered = getDeliveredTurnContext(sessionId);
+                    const recall = await buildMemoryPromptBlock({
+                        agentId: agentConfig.id,
+                        query: message || "",
+                        maxItems: 5,
+                        excludeIds: delivered?.memoryIds,
+                    });
+                    if (recall.block) {
+                        chatLogger.info("BPagent session: recalled memories", { count: recall.ids.length });
                     }
-
-                    sdkOptions.systemPrompt = promptParts.join("\n\n");
+                    turnContextHook = buildTurnContextHook({
+                        daily: dailyBlock,
+                        memoryBlock: recall.block,
+                        memoryIds: recall.ids,
+                        previous: delivered,
+                    });
 
                     // Inject agent memory MCP server — read-only when extraction is handling writes
                     mcpServers["agent-memory"] = buildAgentMemoryMcpServer({
@@ -744,6 +736,7 @@ export const chatRoutes = {
                                 PreToolUse: [{ matcher: "Write|Edit|ApplyPatch", hooks: [lockOpenNoteFile] }],
                                 PostToolUse: [{ matcher: "Write|Edit|ApplyPatch", hooks: [unlockNoteFile] }],
                                 PostToolUseFailure: [{ matcher: "Write|Edit|ApplyPatch", hooks: [unlockNoteFile] }],
+                                ...(turnContextHook && { UserPromptSubmit: [{ hooks: [turnContextHook] }] }),
                             },
                             stderr: (data: string) => {
                                 chatLogger.error("SDK STDERR", { data });

@@ -19,9 +19,11 @@ const MCP_SERVER_SECRETS: Record<string, string> = {
  * Wrap a runtime-composed system prompt for the SDK. By default the CLI
  * records a session's system prompt on its first request and replays it on
  * every resume, ignoring the prompt passed later — but ours changes between
- * messages (date, daily context, memory recall), so render it fresh each time.
+ * messages (date, agent context), so render it fresh each time. An array may
+ * carry SYSTEM_PROMPT_DYNAMIC_BOUNDARY as a standalone element to split the
+ * cacheable static prefix from the dynamic tail.
  */
-export function customSystemPrompt(prompt: string) {
+export function customSystemPrompt(prompt: string | string[]) {
     return { type: "custom" as const, prompt, snapshot: false };
 }
 

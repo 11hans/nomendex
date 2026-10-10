@@ -6,7 +6,7 @@ Agent Memory provides long-term, structured memory for BPagent sessions. It incl
 - REST APIs for search/save/manage workflows
 - Memory Studio UI for human review/edit/delete
 - Automatic post-session extraction (new — see below)
-- Optional memory recall injection into BPagent runtime prompt
+- Optional memory recall attached to each BPagent user message
 - Optional semantic (vector) search via Voyage AI embeddings — see "Vector Search"
 
 ## Overview
@@ -16,7 +16,7 @@ The feature solves a gap in normal chat history: context that should survive acr
 At runtime, BPagent can:
 1. Search memory before responding (keyword + optional vector hybrid scoring)
 2. Save durable context while working (or rely on automatic extraction)
-3. Receive a compact serialized memory block in its system prompt
+3. Receive a compact serialized memory block with each message (memories not yet recalled in the session)
 
 ## Architecture
 
@@ -31,7 +31,7 @@ Service init (initializeAgentMemoryService)
 
 BPagent chat request
   -> chat-routes.ts
-     -> buildMemoryPromptBlock()        (recall into prompt)
+     -> buildMemoryPromptBlock()        (recall, attached to the user turn by turn-context.ts)
      -> buildAgentMemoryMcpServer()     (MCP tools, read-only when extraction enabled)
 
 Session ends
@@ -309,7 +309,7 @@ If the workspace toggles `embeddings.provider` at runtime, call `invalidateEmbed
 - Hard cap on total prompt payload size
 - JSON serialization (not free-form markdown) to reduce prompt-injection risk
 
-Resulting block is appended to BPagent system prompt when available.
+The block reaches the model as `additionalContext` of a `UserPromptSubmit` hook (`features/bpagent-pack/turn-context.ts`), next to the daily-notes context — not in the system prompt, because a system prompt that changes per message rewrites the whole prompt cache on every resume. The context stays in the session transcript, so within a session each memory is sent once: later messages pass the already delivered ids as `excludeIds`. Delivered ids are tracked in sidecar memory; after a restart a resumed session gets its recall once more.
 
 ## MCP Tools
 

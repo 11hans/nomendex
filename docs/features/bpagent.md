@@ -229,7 +229,7 @@ Kategorie: `#next-action`, `#project`, `#waiting`, `#someday`, `#reference`
 
 ## Paměť agenta
 
-BPagent si pamatuje kontext mezi sezeními. Paměti se ukládají automaticky při chatu a jsou dostupné v dalších sezeních.
+BPagent si pamatuje kontext mezi sezeními. Jak se paměti ukládají, určuje nastavení extrakce (`workspace.json → memoryExtraction.provider`): ve výchozím stavu (`disabled`) si je agent ukládá sám během chatu nástrojem `memory_save`; se zapnutou extrakcí (`openrouter` / `claude`) se vytáhnou automaticky po skončení sezení a agent má paměť jen pro čtení.
 
 ### Typy pamětí
 
@@ -244,8 +244,8 @@ BPagent si pamatuje kontext mezi sezeními. Paměti se ukládají automaticky p�
 
 ### Jak paměti fungují
 
-- Agent automaticky prohledá relevantní paměti při každém dotazu
-- Nejrelevantnější paměti vloží do kontextu konverzace
+- Ke každé zprávě se automaticky dohledají nejrelevantnější paměti a přiloží se k ní jako kontext — v rámci jednoho sezení každá paměť jen jednou
+- Další paměti si agent může dohledat sám (`memory_search`)
 - Deduplicita: stejná paměť se neukládá dvakrát (automatické sloučení)
 - Paměti s platností expirují automaticky po uplynutí doby
 

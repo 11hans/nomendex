@@ -149,7 +149,7 @@ export function getAgentEffectivePromptInfo(
         return {
             source,
             summary: "Prompt is composed at runtime for BPagent sessions.",
-            previewText: "Runtime-composed: <agent-context> (notes path) + BP template + optional memory block.",
+            previewText: "Runtime-composed: BP template + <agent-context> (notes path). Daily context and memory recall are attached to each message.",
         };
     }
 

@@ -37,7 +37,7 @@ function parseFileDate(filename: string, pattern: Pattern): Date | null {
 }
 
 /**
- * Pre-computed daily-notes context injected into the BPagent system prompt.
+ * Pre-computed daily-notes context added to BPagent's user turn (see turn-context.ts).
  * Saves the agent from probing the filesystem to figure out today's date,
  * folder, filename pattern, and streak on every /daily invocation.
  */
