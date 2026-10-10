@@ -174,8 +174,8 @@ The Claude SDK manages message history in its own directory structure. The works
 | `message` | `SDKMessage` | SDK message (system, assistant, user, result) |
 | `permission_request` | `{ id, toolName, input }` | Tool needs approval |
 | `done` | `{ sessionId }` | Query completed |
-| `error` | `{ message }` | Query failed |
-| `cancelled` | `{}` | Query was cancelled |
+| `error` | `{ error }` | Query failed: the SDK iterator threw, or the run ended with a `result` whose `is_error` is true (usage/session limit, API error, max turns) — then it follows that `result` message |
+| `cancelled` | `{}` | Query was cancelled; `done` still follows |
 
 ### SDK Message Types
 
@@ -423,7 +423,9 @@ When cancelled:
 1. Look up controller by `queryTrackingId`
 2. Call `controller.abort()`
 3. SDK catches abort, stops streaming
-4. Send `cancelled` SSE event
+4. Send `cancelled` SSE event, then `done`
+
+The frontend keeps reading after `cancelled` so `done` still updates the session metadata, then shows *Cancelled* (only if nothing was rendered yet) and pauses the message queue.
 
 ## Error Handling
 
@@ -433,10 +435,12 @@ Errors during query execution are sent as SSE events:
 
 ```typescript
 // SSE: event: error
-data: { "message": "Error description" }
+data: { "type": "error", "error": "Error description" }
 ```
 
-Frontend displays error toast and clears loading state.
+A failed run can still end with a normal `result` (`subtype: "success"`, `is_error: true`, e.g. `terminal_reason: "api_error"` with `api_error_status: 429` on a usage limit). The backend detects `is_error` (unless the user aborted) and sends an `error` event with the result text or `errors`, so it is not shown as a regular answer.
+
+The frontend appends an **Error:** block below any already streamed content (or replaces the empty placeholder), clears the loading state and pauses the message queue.
 
 ### Tool Errors
 

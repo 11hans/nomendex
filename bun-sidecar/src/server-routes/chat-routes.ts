@@ -1,4 +1,4 @@
-import { query, type SDKMessage, type SDKUserMessage, type McpServerConfig, type HookCallback, type PreToolUseHookInput, type AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
+import { query, type SDKMessage, type SDKResultMessage, type SDKUserMessage, type McpServerConfig, type HookCallback, type PreToolUseHookInput, type AgentDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { existsSync, mkdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { getRootPath, getNomendexPath, getUploadsPath, getNotesPath } from "@/storage/root-path";
@@ -282,6 +282,14 @@ async function inferSessionMetadataFromHistory(params: {
         updatedAt,
         messageCount,
     };
+}
+
+function describeResultError(result: SDKResultMessage): string {
+    if (result.subtype === "success") {
+        return result.result.trim() || `Agent run failed (${result.terminal_reason ?? "unknown error"})`;
+    }
+    if (result.errors.length > 0) return result.errors.join("\n");
+    return result.subtype === "error_max_turns" ? "Agent stopped: maximum number of turns reached" : `Agent run failed (${result.subtype})`;
 }
 
 export const chatRoutes = {
@@ -934,6 +942,14 @@ export const chatRoutes = {
                             if (msg.type === "result") {
                                 resultReceived = true;
                                 console.log(`[API] Query complete in ${elapsed}s, ${messageCount} messages`);
+                                // Failed runs (usage limit, API error, max turns) still end with a
+                                // result; without this the UI shows them as a normal answer and the
+                                // message queue keeps sending.
+                                const resultError = msg.is_error && !abortController.signal.aborted ? describeResultError(msg) : null;
+                                if (resultError) {
+                                    chatLogger.error("SDK result reported an error", { subtype: msg.subtype, terminalReason: msg.terminal_reason, error: resultError });
+                                    pushToQueue({ type: "error", error: resultError });
+                                }
                                 break;
                             }
 

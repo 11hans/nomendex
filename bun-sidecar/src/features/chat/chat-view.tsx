@@ -217,6 +217,10 @@ function parseStreamBlockOrder(blockId: string, assistantMessageId: string): Str
     return { turn, index };
 }
 
+function hasRenderedContent(message: ChatMessage): boolean {
+    return !(message.blocks.length === 0 || (message.blocks.length === 1 && message.blocks[0].type === "text" && !message.blocks[0].content));
+}
+
 function insertBlockByStreamOrder(
     blocks: ContentBlock[],
     assistantMessageId: string,
@@ -888,6 +892,22 @@ function AppChatView({ sessionId: initialSessionId, tabId, initialPrompt, autoSe
         };
         setMessages((prev) => [...prev, initialAssistantMessage]);
 
+        const markCancelled = () => {
+            // Add a "Cancelled" indicator only if nothing was rendered yet
+            setMessages((prev) =>
+                prev.map((m) =>
+                    m.id === assistantMessageId && !hasRenderedContent(m)
+                        ? { ...m, blocks: [{ type: "text", content: "*Cancelled*", id: `cancelled-${Date.now()}` }] }
+                        : m
+                )
+            );
+            // Pause the queue on cancel
+            if (messageQueue.length > 0) {
+                setQueuePaused(true);
+                toast.info(`Queue paused. ${messageQueue.length} message${messageQueue.length > 1 ? "s" : ""} remaining.`);
+            }
+        };
+
         try {
             // Convert attachments to the format expected by the API
             const imageUrls = attachments.map(a => a.url);
@@ -921,6 +941,7 @@ function AppChatView({ sessionId: initialSessionId, tabId, initialPrompt, autoSe
             const decoder = new TextDecoder();
             let buffer = "";
             let currentTurn = 0;
+            let wasCancelled = false;
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -1296,14 +1317,18 @@ function AppChatView({ sessionId: initialSessionId, tabId, initialPrompt, autoSe
                                 await updateSessionMetadata(data.sessionId || sessionId!, currentMessageCount);
                             }
                         } else if (data.type === "cancelled") {
-                            // User cancelled - not an error, just stop processing
+                            // User cancelled - not an error. Keep reading: the server still sends
+                            // "done", which updates the session metadata.
                             console.log("[Chat] Query was cancelled by user");
-                            break;
+                            wasCancelled = true;
                         } else if (data.type === "error") {
                             throw new Error(data.error);
                         }
                     }
                 }
+            }
+            if (wasCancelled) {
+                markCancelled();
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -1315,29 +1340,16 @@ function AppChatView({ sessionId: initialSessionId, tabId, initialPrompt, autoSe
 
             if (isAbort) {
                 console.log("[Chat] Query was cancelled");
-                // Optionally add a "Cancelled" indicator to the message
-                setMessages((prev) =>
-                    prev.map((m) => {
-                        if (m.id !== assistantMessageId) return m;
-                        // Only add cancelled message if there's no content yet
-                        if (m.blocks.length === 0 || (m.blocks.length === 1 && m.blocks[0].type === "text" && !m.blocks[0].content)) {
-                            return { ...m, blocks: [{ type: "text", content: "*Cancelled*", id: `cancelled-${Date.now()}` }] };
-                        }
-                        return m;
-                    })
-                );
-                // Pause the queue on cancel
-                if (messageQueue.length > 0) {
-                    setQueuePaused(true);
-                    toast.info(`Queue paused. ${messageQueue.length} message${messageQueue.length > 1 ? "s" : ""} remaining.`);
-                }
+                markCancelled();
             } else {
                 console.error("Error sending message:", error);
-                const errorContent = `**Error:** ${errorMessage}`;
+                const errorBlock = { type: "text" as const, content: `**Error:** ${errorMessage}`, id: `error-${Date.now()}` };
+                // Errors can now arrive after streamed content (e.g. a usage limit hit mid-run):
+                // keep what was already rendered and append the error below it.
                 setMessages((prev) =>
                     prev.map((m) =>
                         m.id === assistantMessageId
-                            ? { ...m, blocks: [{ type: "text", content: errorContent, id: `error-${Date.now()}` }] }
+                            ? { ...m, blocks: hasRenderedContent(m) ? [...m.blocks, errorBlock] : [errorBlock] }
                             : m
                     )
                 );
