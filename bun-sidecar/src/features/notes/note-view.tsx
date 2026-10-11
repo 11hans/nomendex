@@ -738,9 +738,16 @@ export function NotesView(props: NotesViewProps) {
     const adjustPlainTextareaHeight = useCallback(() => {
         const textarea = plainTextareaRef.current;
         if (!textarea) return;
+        // Collapsing the height to "auto" briefly shrinks the scroll container, which makes the
+        // browser clamp scrollTop to ~0. Restore it so typing at the end of a long note doesn't jump to the top.
+        const scroller = scrollRef.current;
+        const savedScrollTop = scroller?.scrollTop ?? 0;
         textarea.style.height = "auto";
         textarea.style.height = `${textarea.scrollHeight}px`;
-    }, []);
+        if (scroller && scroller.scrollTop !== savedScrollTop) {
+            scroller.scrollTop = savedScrollTop;
+        }
+    }, [scrollRef]);
 
     const setEditorMode = useCallback((mode: "rich" | "markdown") => {
         if (mode === "markdown" && viewRef.current) {
