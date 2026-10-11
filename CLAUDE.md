@@ -216,6 +216,7 @@ Main integration files:
 ### Permission Model
 - `canUseTool` callback gates tools.
 - Pre-allowed tools (agent `allowedTools`) are auto-allowed — **except `AskUserQuestion`**, which is always interactive.
+- BPagent: plain `curl` calls to allowlisted local API endpoints are auto-allowed (`bpagent-pack/local-api-curl.ts`); everything else still prompts.
 - Otherwise backend emits `permission_request` SSE event; frontend posts to `/api/chat/permission-response`.
 - `Always Allow` persists to custom agent's `allowedTools` or to built-in `_preferences.json`.
 - `AskUserQuestion`: UI renders option chips / multi-select + custom "Other"; response sends back via `updatedInput.answers`. Never persisted.

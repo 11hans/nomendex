@@ -294,6 +294,7 @@ BPagent:  [Deleguje na note-organizer, provede analýzu, navrhne plán – ČEK�
 
 ### Co BPagent dělá automaticky
 - Prohledává paměti při každém dotazu
+- Volá lokální API (`curl` na todos, goals, projects, insights…) bez dotazu na oprávnění; mazání a ostatní příkazy dál vyžadují potvrzení (viz [agents.md](./agents.md#bpagent-local-api-calls))
 - Deleguje složité úkoly na specializované subagenty
 - Zobrazuje průběh dlouhých operací jako progress indikátory
 

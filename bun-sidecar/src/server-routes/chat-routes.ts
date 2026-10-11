@@ -15,6 +15,7 @@ import { acquireFileLock, getActiveNoteFileNameForPath, releaseFileLockForToolUs
 import { buildBpagentSubagents } from "@/features/bpagent-pack/subagents";
 import { buildBpagentSystemPrompt, readVaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
 import { buildDailyContextBlock } from "@/features/bpagent-pack/daily-context";
+import { isAutoAllowedLocalApiCurl } from "@/features/bpagent-pack/local-api-curl";
 import { buildMemoryPromptBlock } from "@/features/agent-memory/fx";
 import { buildTurnContextHook, getDeliveredTurnContext } from "@/features/bpagent-pack/turn-context";
 import { buildAgentMemoryMcpServer } from "@/mcp-servers/agent-memory";
@@ -397,6 +398,21 @@ export const chatRoutes = {
                     // Auto-allow to avoid blocking memory recall/save behind repeated prompts.
                     if (agentConfig.id === "bpagent" && toolName.startsWith("mcp__agent-memory__")) {
                         console.log(`[Permissions] Tool "${toolName}" auto-allowed for BPagent internal memory`);
+                        return {
+                            behavior: "allow" as const,
+                            updatedInput: input,
+                        };
+                    }
+
+                    // BPagent skills work through curl to the local API; a prompt per call
+                    // stalled /daily. Only plain calls to known entity endpoints qualify.
+                    if (
+                        agentConfig.id === "bpagent" &&
+                        toolName === "Bash" &&
+                        typeof input.command === "string" &&
+                        isAutoAllowedLocalApiCurl(input.command, parseInt(process.env.PORT || "1234", 10))
+                    ) {
+                        console.log(`[Permissions] Local API curl auto-allowed for BPagent`);
                         return {
                             behavior: "allow" as const,
                             updatedInput: input,

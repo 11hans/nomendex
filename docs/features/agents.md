@@ -144,6 +144,16 @@ Each agent maintains its own list of allowed tools. When a user clicks "Always A
    - For built-in agents: Tool is added to `builtInAgentAllowedTools[agentId]` in `_preferences.json`
 5. **Session Cache**: Allowed tools are also cached in memory for the current session to avoid re-reading from disk
 
+### BPagent Local API Calls
+
+BPagent's skills read and write todos, goals and projects with `curl` to the local API, which used to cost 5–8 permission prompts per `/daily`. In chat, `canUseTool` auto-allows a Bash call for BPagent (and its subagents) when `isAutoAllowedLocalApiCurl()` (`src/features/bpagent-pack/local-api-curl.ts`) accepts it:
+
+- a single `curl` to `http://localhost:PORT/api/...` (the sidecar's own port), optionally piped to `head -c N` / `head -n N`
+- the endpoint is on an allowlist of the entity endpoints the skills use; deletes and settings, agents, chat, git, MCP and secrets routes are not on it
+- only known flags (`-s`, `-S`, `-f`, `-X GET|POST`, `-H`, `-d`/`--data*`/`--json` without `@file`, `-m`); anything else — another URL, `-o`, `;`, `&&`, `$(...)`, redirects — falls back to the normal prompt
+
+This is deliberately not a CLI permission rule: `Bash(curl *http://localhost:PORT/api/*)` also auto-allows a second, external URL and `-o <file>` (measured on CLI 2.1.296). Headless runs keep their own grant set.
+
 ### Storage
 
 - **Custom agents**: `{workspace}/agents/{agent-id}.json` → `allowedTools` array
