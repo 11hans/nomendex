@@ -106,7 +106,7 @@ type SessionMetadata = z.infer<typeof SessionMetadataSchema>;
 
 **Session Metadata:**
 ```
-{workspace}/chat-sessions.jsonl
+{workspace}/.nomendex/chat-sessions.jsonl
 ```
 
 Each line is a JSON object with session metadata. New sessions are appended, updates replace matching IDs.
@@ -116,7 +116,7 @@ Each line is a JSON object with session metadata. New sessions are appended, upd
 ~/.claude/projects/{workspace-path}/{sessionId}.jsonl
 ```
 
-The Claude SDK manages message history in its own directory structure. The workspace path is converted (e.g., `/Users/foo/workspace` → `-Users-foo-workspace`).
+The Claude SDK manages message history in its own directory structure. Every non-alphanumeric character of the workspace path (slashes, spaces, dots, `~`) becomes `-` (e.g., `/Users/foo/My Vault` → `-Users-foo-My-Vault`); see `claudeProjectDirName()` in `src/lib/claude-session-files.ts`.
 
 ### Session Lifecycle
 

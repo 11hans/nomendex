@@ -100,7 +100,7 @@ interface GlobalConfig {
     └── agent-memory.jsonl         # BPagent long-term memory (FileDatabase)
 ```
 
-Claude SDK message history is stored outside the workspace, under `~/.claude/projects/<workspace-path-dashed>/<sessionId>.jsonl` (path with `/` replaced by `-`).
+Claude SDK message history is stored outside the workspace, under `~/.claude/projects/<workspace-path-dashed>/<sessionId>.jsonl` (every non-alphanumeric character of the path replaced by `-`, see `claudeProjectDirName()`).
 
 **Key Hooks**:
 - `useWorkspace.tsx` — manages UI state (tabs, theme, layout)
