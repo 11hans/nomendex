@@ -10,7 +10,7 @@ export interface QuickAction {
     category: QuickActionCategory;
 }
 
-export const CUSTOM_PROMPT_MODEL = "claude-haiku-4-5";
+export const CUSTOM_PROMPT_MODEL = "claude-haiku-5-5";
 export const CUSTOM_PROMPT_SUFFIX = "Return only the result — no explanations, no preamble.";
 
 export function buildCustomSystemPrompt(userInstruction: string): string {
@@ -38,7 +38,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
         label: "Rewrite",
         systemPrompt:
             "Rewrite the following text to be clearer, more concise, and better structured. Preserve the original meaning, intent, and language. Return only the rewritten text — no explanations, no preamble.",
-        model: "claude-haiku-4-5",
+        model: "claude-haiku-5-5",
         category: "edit",
     },
     {
@@ -46,7 +46,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
         label: "Fix grammar",
         systemPrompt:
             "Fix the grammar, spelling, and punctuation of the following text. Preserve the original language, meaning, and style as closely as possible. Return only the corrected text — no explanations, no preamble.",
-        model: "claude-haiku-4-5",
+        model: "claude-haiku-5-5",
         category: "edit",
     },
     {
@@ -54,7 +54,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
         label: "Summarize",
         systemPrompt:
             "Write a concise summary of the following text. Preserve the language of the original. Return only the summary — no explanations, no preamble.",
-        model: "claude-haiku-4-5",
+        model: "claude-haiku-5-5",
         category: "generate",
     },
     {
@@ -62,7 +62,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
         label: "Translate",
         systemPrompt:
             "Translate the following text. If the text is in English, translate to Czech. If the text is in Czech or another language, translate to English. Return only the translated text — no explanations, no preamble.",
-        model: "claude-haiku-4-5",
+        model: "claude-haiku-5-5",
         category: "generate",
     },
     {
@@ -70,7 +70,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
         label: "Expand",
         systemPrompt:
             "Expand the following text by adding more detail, context, and elaboration. Preserve the original language, tone, and intent. Return only the expanded text — no explanations, no preamble.",
-        model: "claude-haiku-4-5",
+        model: "claude-haiku-5-5",
         category: "generate",
     },
 ];

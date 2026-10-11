@@ -60,7 +60,7 @@ Agent block je `Decoration.widget`, NE skutečný node — nemůže být seriali
 Statická definice v kódu (v1 neupravitelné uživatelem):
 
 ```
-{ id, label, systemPrompt, model: "claude-haiku-4-5" }
+{ id, label, systemPrompt, model: "claude-haiku-5-5" }
 ```
 
 Sada v1: **Rewrite, Summarize, Translate, Fix grammar, Expand**.

@@ -32,7 +32,7 @@ Server (todos-routes.ts)
     ↓
 rewriteTodoDraft() in rewrite.ts
     ↓ Bun.spawn(claude --print --system-prompt ... --tools "" ... --json-schema ...)
-Claude Haiku (claude-haiku-4-5)
+Claude Haiku 5.5 (claude-haiku-5-5)
     ↓ structured JSON { title, description }
 Response back to UI
 ```
@@ -123,10 +123,10 @@ if (result) {
 
 ### Model
 
-Uses `claude-haiku-4-5` for speed and cost efficiency. The model is hardcoded in `rewrite.ts`:
+Uses `claude-haiku-5-5` for speed and cost efficiency. The model is hardcoded in `rewrite.ts`:
 
 ```typescript
-const MODEL = "claude-haiku-4-5";
+const MODEL = "claude-haiku-5-5";
 ```
 
 ### Requires Claude CLI

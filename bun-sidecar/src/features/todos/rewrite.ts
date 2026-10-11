@@ -4,7 +4,7 @@ import { getClaudeCliPath, buildClaudeCliSpawn, isolatedTextTransformArgs } from
 import type { TodoKind } from "./todo-types";
 
 const logger = createServiceLogger("TODO_REWRITE");
-const MODEL = "claude-haiku-4-5";
+const MODEL = "claude-haiku-5-5";
 
 const JSON_SCHEMA = JSON.stringify({
     type: "object",

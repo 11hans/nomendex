@@ -7,6 +7,9 @@ export type AgentModel = z.infer<typeof ModelSchema>;
 
 // Curated fallback models (canonical IDs) used when dynamic model listing is unavailable.
 export const PREDEFINED_MODELS = [
+    "claude-sonnet-5-5",
+    "claude-opus-5-5",
+    "claude-haiku-5-5",
     "claude-sonnet-5",
     "claude-opus-4-7",
     "claude-opus-4-5",
@@ -25,6 +28,9 @@ const MODEL_CANONICAL_ID_MAP: Record<string, string> = {
 
 // Display names for known model IDs (canonical + legacy aliases).
 export const MODEL_DISPLAY_NAMES: Record<string, string> = {
+    "claude-sonnet-5-5": "Claude Sonnet 5.5",
+    "claude-opus-5-5": "Claude Opus 5.5",
+    "claude-haiku-5-5": "Claude Haiku 5.5",
     "claude-sonnet-5": "Claude Sonnet 5",
     "claude-sonnet-4-6": "Claude Sonnet 4.6",
     "claude-sonnet-4-5": "Claude Sonnet 4.5",
@@ -239,7 +245,7 @@ export const DEFAULT_AGENT: AgentConfig = {
     name: "General Assistant",
     description: "A general-purpose coding assistant",
     systemPrompt: "", // Empty = uses SDK's default Claude Code system prompt
-    model: "claude-sonnet-5",
+    model: "claude-sonnet-5-5",
     mcpServers: [], // No MCP servers enabled by default
     allowedTools: [], // No tools pre-allowed
     isDefault: true,
@@ -253,7 +259,7 @@ export const BPAGENT_AGENT: AgentConfig = {
     name: "BPagent",
     description: "Planning workflows: review, goals, projects, and note organization",
     systemPrompt: "", // Set at runtime from built-in-bpagent.ts
-    model: "claude-opus-4-7", // Default BP model, can be overridden in preferences
+    model: "claude-opus-5-5", // Default BP model, can be overridden in preferences
     mcpServers: [],
     allowedTools: [],
     isDefault: false,

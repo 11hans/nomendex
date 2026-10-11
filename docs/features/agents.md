@@ -38,13 +38,9 @@ type AgentConfig = {
     updatedAt: string;             // ISO timestamp
 }
 
-type AgentModel =
-    | "claude-sonnet-4-6"
-    | "claude-sonnet-4-5"
-    | "claude-opus-4-6"
-    | "claude-opus-4-1"
-    | "claude-haiku-4-5"
-    | "claude-3-5-haiku-20241022";
+type AgentModel = string; // any model ID; the picker falls back to PREDEFINED_MODELS:
+    // "claude-sonnet-5-5" | "claude-opus-5-5" | "claude-haiku-5-5"
+    // | "claude-sonnet-5" | "claude-opus-4-7" | "claude-opus-4-5" | "claude-haiku-4-5"
 ```
 
 Note: legacy dated model IDs are normalized to canonical IDs in the picker to avoid duplicate entries.
