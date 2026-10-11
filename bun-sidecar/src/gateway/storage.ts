@@ -36,13 +36,18 @@ async function ensureWorkspaceDir(): Promise<boolean> {
   return true;
 }
 
+// Picks known keys only, so retired settings (the AI auto-reply fields) drop
+// out of channels-settings.json on the next save.
 function mergeSettings(raw: Partial<ChannelsSettings> | undefined): ChannelsSettings {
-  const telegram = raw?.telegram;
+  const telegram: Partial<ChannelsSettings["telegram"]> = raw?.telegram || {};
+  const defaults = DEFAULT_CHANNELS_SETTINGS.telegram;
   return {
     telegram: {
-      ...DEFAULT_CHANNELS_SETTINGS.telegram,
-      ...(telegram || {}),
-      allowlist: Array.isArray(telegram?.allowlist) ? telegram.allowlist : DEFAULT_CHANNELS_SETTINGS.telegram.allowlist,
+      enabled: telegram.enabled ?? defaults.enabled,
+      tokenSecretKey: telegram.tokenSecretKey ?? defaults.tokenSecretKey,
+      allowlist: Array.isArray(telegram.allowlist) ? telegram.allowlist : defaults.allowlist,
+      timeZone: telegram.timeZone ?? defaults.timeZone,
+      pollingTimeoutSec: telegram.pollingTimeoutSec ?? defaults.pollingTimeoutSec,
     },
   };
 }
@@ -178,13 +183,3 @@ export async function listTelegramMessages(threadId: string): Promise<UnifiedMes
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
-export async function getLatestTelegramInboundText(threadId: string): Promise<string | null> {
-  const messages = await listTelegramMessages(threadId);
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const msg = messages[index];
-    if (msg.role === "user" && msg.text.trim()) {
-      return msg.text;
-    }
-  }
-  return null;
-}

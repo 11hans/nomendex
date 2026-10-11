@@ -27,7 +27,7 @@ When the server is bound to loopback, the `Host` header must resolve to a loopba
 
 ## CSRF guard on mutating channel routes
 
-`POST /api/channels/telegram/send`, `POST /api/channels/telegram/ai-reply`, and `PUT /api/channels/settings` are guarded by `evaluateMutatingRequestPolicy()`:
+`POST /api/channels/telegram/send` and `PUT /api/channels/settings` are guarded by `evaluateMutatingRequestPolicy()`:
 
 1. **Host not loopback** (loopback-bound server) → `403 FORBIDDEN_HOST`
 2. **Foreign `Origin` header** → `403 FORBIDDEN_ORIGIN`
@@ -35,27 +35,21 @@ When the server is bound to loopback, the `Host` header must resolve to a loopba
 
 This closes off cross-site "simple requests" (`text/plain` POSTs need no CORS preflight) while keeping non-browser clients without an `Origin` header working.
 
-## Operator trust model (headless agent)
+## Capture-only trust model
 
-The Telegram channel is the **operator's personal remote chat**: the allowlist binds the bot to the operator's own account(s), and that binding *is* the trust boundary. Inbound messages from allowlisted senders carry operator authority — the agent acts on them like app-chat messages, with the agent's full persisted tool grants (the same "Always Allow" set it has in the app; tools outside that set are denied, since headless runs cannot prompt). `AskUserQuestion` is always denied.
+The Telegram channel is a **capture channel**, not a remote shell. An allowlisted message only ever becomes an Inbox todo (`gateway/inbox-capture.ts`) — no agent runs and no tool executes on the Mac, so a stolen or compromised allowlisted Telegram account can add Inbox items and nothing more. The bot's replies are fixed strings (`uloženo` / `neuloženo – …`), so nothing from the vault transits Telegram's servers.
 
-The grant set is enforced by a `PreToolUse` hook (`buildHeadlessToolGate` in `agent-runtime.ts`), not only by `canUseTool`: the CLI auto-approves read-only tools (`Read`, `Glob`, `Grep`, read-only `Bash` such as `find`/`cat`) without calling `canUseTool`, so before the hook an agent with no grants could still read any workspace file, `.nomendex/secrets.json` included. Hooks fire for every tool call, auto-approved ones and calls inside subagents included. Session-internal tools with no outside effect (`ToolSearch`, `Agent`/`Task`, `TodoWrite`, `Task*`) pass the gate; a subagent's own tool calls are gated again. Headless runs use `persistSession: false`, so they leave no transcript under `~/.claude/projects/` and never appear in the app's chat list.
+This replaced (October 2026) the earlier operator trust model, where allowlisted senders drove a headless agent with the agent's full "Always Allow" tool grants (potentially `Bash`). Reintroducing an agent on inbound messages means reopening that trade-off.
 
-Consequences:
+Photo downloads go through `ChannelManager.downloadTelegramFile`: capped at 10 MB (declared size checked before the download, actual size after), written under a generated `upload-…` filename (the Telegram file path never names a local file), and errors are token-scrubbed before they are logged — the Bot API file URL carries the token.
 
-- **Everyone on the allowlist has operator-level access** to the agent's granted tools (potentially `Bash`). Keep the allowlist to accounts you control.
-- A compromised or stolen Telegram account on the allowlist means agent access; the username→chatId binding (above) covers username re-registration, not account takeover.
-- Replies transit Telegram's servers — the reply framing instructs the agent never to include secrets (API keys, tokens, credentials) in a message.
+### Headless agent runtime (not used by the gateway)
 
-The policy check in `aiReplyTelegram` still runs **before** the agent query, so a disabled channel or de-allowlisted sender cannot trigger an agent run at all. Inbound text is wrapped in `<telegram-message>` framing that also pins the output contract (sent verbatim, no meta commentary).
+`lib/agent-runtime.ts:runAgentTextQuery` remains for future headless use. Its grant set is enforced by a `PreToolUse` hook (`buildHeadlessToolGate`), not only by `canUseTool`: the CLI auto-approves read-only tools (`Read`, `Glob`, `Grep`, read-only `Bash` such as `find`/`cat`) without calling `canUseTool`, so without the hook an agent with no grants could still read any workspace file, `.nomendex/secrets.json` included. Hooks fire for every tool call, auto-approved ones and calls inside subagents included. Session-internal tools with no outside effect (`ToolSearch`, `Agent`/`Task`, `TodoWrite`, `Task*`) pass the gate; a subagent's own tool calls are gated again. `AskUserQuestion` is always denied. Headless runs use `persistSession: false`.
 
 ## Polling retry policy
 
 `TelegramMonitor.runLoop` retries failed `getUpdates` polls with exponential backoff (1s base, doubling, 60s cap; reset on success). HTTP 4xx responses other than 429 (bad token, competing `getUpdates` consumer) are non-retryable: the monitor logs an error, reports it via `onError`, and stops instead of hammering the API.
-
-## Auto-reply rate limit
-
-AI auto-replies are limited to one per chat per 5 seconds (`AUTO_REPLY_MIN_INTERVAL_MS` in `src/gateway/service.ts`) — short enough for chat-like use, nonzero as a flood guard. Rate-limited inbound messages are still persisted and emitted; only the agent query + outbound send is skipped. Manual sends and explicit AI replies from the UI are not limited.
 
 ## Git staging guard
 
@@ -63,7 +57,7 @@ AI auto-replies are limited to one per chat per 5 seconds (`AUTO_REPLY_MIN_INTER
 
 ## Telegram send policy
 
-All outbound Telegram messages (manual and AI auto-reply) go through `evaluateTelegramSendPolicy()` in `src/gateway/security.ts`:
+All outbound Telegram messages (manual sends and capture confirmations) go through `evaluateTelegramSendPolicy()` in `src/gateway/security.ts`:
 
 1. **Channel disabled** → `403 TELEGRAM_DISABLED`
 2. **Recipient not on allowlist** → `403 TELEGRAM_NOT_ALLOWLISTED`
@@ -102,7 +96,7 @@ Unsubscribing is also supported. Clients that never subscribe receive no events.
 
 ## Input limits
 
-API inputs are bounded by Zod schemas in `src/gateway/types.ts`: message text and AI-reply prompt at 4096 chars (Telegram's own message limit), allowlist at 100 entries of 64 chars, plus caps on the remaining settings strings.
+API inputs are bounded by Zod schemas in `src/gateway/types.ts`: message text at 4096 chars (Telegram's own message limit), allowlist at 100 entries of 64 chars, plus caps on the remaining settings strings.
 
 ## Polling loop robustness
 
@@ -127,4 +121,4 @@ Inbound Telegram messages are normalized in `src/gateway/telegram-normalization.
 
 - `src/gateway/security.test.ts` — allowlist matching, send policy evaluation, event payload redaction
 - `src/lib/request-security.test.ts` — loopback detection, server hostname resolution, WebSocket origin validation
-- `src/gateway/telegram-monitor.test.ts` — username and inbound text normalization
+- `src/gateway/telegram-monitor.test.ts` — username and inbound text normalization, Inbox todo title/description, update mapping (text, photo, unsupported), polling retry policy

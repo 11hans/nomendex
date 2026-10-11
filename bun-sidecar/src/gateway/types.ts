@@ -33,9 +33,6 @@ export type ChannelsSettings = {
     enabled: boolean;
     tokenSecretKey: string;
     allowlist: string[];
-    autoReplyEnabled: boolean;
-    telegramAgentId: string;
-    fallbackText: string;
     timeZone: string;
     pollingTimeoutSec: number;
   };
@@ -60,15 +57,11 @@ export type ChannelsDebugStatus = {
   telegram: {
     enabled: boolean;
     hasToken: boolean;
-    autoReplyEnabled: boolean;
     allowlistSize: number;
     timeZone: string;
     pollingTimeoutSec: number;
     lastUpdateId: number;
     telegramThreadCount: number;
-  };
-  ai: {
-    hasClaudeOauthToken: boolean;
   };
 };
 
@@ -86,34 +79,32 @@ export type TelegramInboundMessage = {
   updateId: number;
   chatId: string;
   username?: string;
+  // Message text, or the caption of a photo (may be empty for a photo without
+  // caption and for unsupported messages).
   text: string;
   messageId: string;
   timestampMs: number;
+  // What the message carries: text and photos are captured to Inbox,
+  // everything else (voice, stickers, files, ...) is rejected with a reply.
+  kind: "text" | "photo" | "unsupported";
+  photoFileId?: string;
 };
 
 // Zod schemas for API input validation
 
 // Telegram rejects messages over 4096 characters, and unbounded input would
-// flow into agent prompts and the append-only messages log.
+// flow into the append-only messages log.
 export const TelegramSendSchema = z.object({
   threadId: z.string().max(256).optional(),
   chatId: z.string().max(64).optional(),
   text: z.string().min(1).max(4096),
 });
 
-export const TelegramAiReplySchema = z.object({
-  threadId: z.string().min(1).max(256),
-  prompt: z.string().max(4096).optional(),
-});
-
 export const ChannelsSettingsPatchSchema = z.object({
   telegram: z.object({
     enabled: z.boolean().optional(),
-    autoReplyEnabled: z.boolean().optional(),
     allowlist: z.array(z.string().min(1).max(64)).max(100).optional(),
-    telegramAgentId: z.string().max(128).optional(),
     timeZone: z.string().max(64).optional(),
-    fallbackText: z.string().max(4096).optional(),
   }).strict().optional(),
 }).strict();
 
@@ -124,9 +115,6 @@ export const DEFAULT_CHANNELS_SETTINGS: ChannelsSettings = {
     enabled: false,
     tokenSecretKey: "TELEGRAM_BOT_TOKEN",
     allowlist: [],
-    autoReplyEnabled: false,
-    telegramAgentId: "default",
-    fallbackText: "Omlouvam se, nastala chyba. Zkus to prosim znovu za chvili.",
     timeZone: "Europe/Prague",
     pollingTimeoutSec: 25,
   },

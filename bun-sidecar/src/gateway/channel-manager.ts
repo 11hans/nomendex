@@ -1,7 +1,7 @@
 import { createServiceLogger } from "@/lib/logger";
 import { secrets } from "@/lib/secrets";
 import { GatewayHttpError } from "./errors";
-import { TelegramMonitor, sendTelegramText } from "./telegram-monitor";
+import { TelegramMonitor, downloadTelegramFile, sendTelegramText } from "./telegram-monitor";
 import type { ChannelStatus, ChannelsSettings, TelegramInboundMessage } from "./types";
 
 const gatewayLogger = createServiceLogger("CHANNEL-MANAGER");
@@ -59,6 +59,24 @@ export class ChannelManager {
   }
 
   async sendTelegram(chatId: string, message: string): Promise<{ messageId: string }> {
+    const token = await this.requireToken();
+    return sendTelegramText(token, chatId, message);
+  }
+
+  async downloadTelegramFile(fileId: string, maxBytes: number): Promise<{ data: ArrayBuffer; filePath: string }> {
+    const token = await this.requireToken();
+    try {
+      return await downloadTelegramFile(token, fileId, maxBytes);
+    } catch (error) {
+      // Network errors from fetch can embed the request URL, which carries the
+      // token — so the original error is deliberately not attached as cause.
+      const message = error instanceof Error ? error.message : String(error);
+      // eslint-disable-next-line preserve-caught-error
+      throw new Error(scrubToken(message, token));
+    }
+  }
+
+  private async requireToken(): Promise<string> {
     const settings = await this.opts.getSettings();
     if (!settings.telegram.enabled) {
       throw new GatewayHttpError(403, "TELEGRAM_DISABLED", "Telegram channel is disabled");
@@ -72,7 +90,7 @@ export class ChannelManager {
       throw new GatewayHttpError(409, "TELEGRAM_TOKEN_MISSING", "Telegram token is not configured");
     }
 
-    return sendTelegramText(this.telegramToken, chatId, message);
+    return this.telegramToken;
   }
 
   private async startTelegram(): Promise<void> {
@@ -119,7 +137,6 @@ export class ChannelManager {
 
     gatewayLogger.info("Telegram monitor started", {
       allowlistSize: telegramSettings.allowlist.length,
-      autoReplyEnabled: telegramSettings.autoReplyEnabled,
     });
   }
 

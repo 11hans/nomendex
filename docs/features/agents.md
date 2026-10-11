@@ -122,7 +122,7 @@ For detailed memory architecture and Memory Studio behavior, see [agent-memory.m
 
 ## Built-in Tools
 
-Every agent — in app chat and in headless runs (`runAgentTextQuery`, e.g. Telegram replies) — gets the same built-in tool set, `CHAT_AGENT_TOOLS` in `src/lib/agent-runtime.ts`, passed as the SDK `tools` option: `Agent`, `AskUserQuestion`, `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Skill`, `ToolSearch`, `WebFetch`, `WebSearch` and the session task tools (`TaskCreate`, `TaskGet`, `TaskList`, `TaskUpdate`). MCP tools come on top of it.
+Every agent — in app chat and in headless runs (`runAgentTextQuery`) — gets the same built-in tool set, `CHAT_AGENT_TOOLS` in `src/lib/agent-runtime.ts`, passed as the SDK `tools` option: `Agent`, `AskUserQuestion`, `Bash`, `Read`, `Write`, `Edit`, `Glob`, `Grep`, `Skill`, `ToolSearch`, `WebFetch`, `WebSearch` and the session task tools (`TaskCreate`, `TaskGet`, `TaskList`, `TaskUpdate`). MCP tools come on top of it.
 
 The list is explicit because the native CLI offers no `Glob`/`Grep` unless they are listed (subagent definitions asked for them and silently got nothing), and by default adds tools with no use in the app (cron, worktrees, plan mode, notebooks, push notifications, agent teams). `allowedTools` does not add tools; it only decides which ones run without a prompt.
 

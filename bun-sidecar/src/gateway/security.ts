@@ -26,7 +26,6 @@ export function isAllowlisted(chatId: string, username: string | undefined, allo
 
 export function evaluateTelegramSendPolicy(input: {
   enabled: boolean;
-  autoReplyEnabled: boolean;
   allowlist: string[];
   chatId: string;
   username?: string;

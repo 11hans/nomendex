@@ -615,9 +615,6 @@ type ChannelsSettingsResponse = {
     telegram: {
         enabled: boolean;
         allowlist: string[];
-        autoReplyEnabled: boolean;
-        telegramAgentId: string;
-        fallbackText: string;
         timeZone: string;
         pollingTimeoutSec: number;
         hasToken: boolean;
@@ -629,15 +626,11 @@ type ChannelsStatusResponse = {
     telegram: {
         enabled: boolean;
         hasToken: boolean;
-        autoReplyEnabled: boolean;
         allowlistSize: number;
         timeZone: string;
         pollingTimeoutSec: number;
         lastUpdateId: number;
         telegramThreadCount: number;
-    };
-    ai: {
-        hasClaudeOauthToken: boolean;
     };
 };
 
@@ -691,13 +684,10 @@ function ChannelsSettings() {
             const payload = {
                 telegram: {
                     enabled: settings.telegram.enabled,
-                    autoReplyEnabled: settings.telegram.autoReplyEnabled,
                     allowlist: allowlistText
                         .split("\n")
                         .map((line) => line.trim())
                         .filter(Boolean),
-                    telegramAgentId: settings.telegram.telegramAgentId,
-                    fallbackText: settings.telegram.fallbackText,
                     timeZone: settings.telegram.timeZone,
                 },
             };
@@ -734,7 +724,7 @@ function ChannelsSettings() {
         <Card>
             <CardHeader>
                 <CardTitle>Channels</CardTitle>
-                <CardDescription>Configure Telegram integration and auto-reply policy</CardDescription>
+                <CardDescription>Capture Telegram messages from allowlisted senders into Inbox</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
                 {status && (
@@ -752,7 +742,6 @@ function ChannelsSettings() {
                             <div>lastUpdateId: <strong>{status.telegram.lastUpdateId}</strong></div>
                             <div>threads: <strong>{status.telegram.telegramThreadCount}</strong></div>
                             <div>allowlist size: <strong>{status.telegram.allowlistSize}</strong></div>
-                            <div>Claude token present: <strong>{String(status.ai.hasClaudeOauthToken)}</strong></div>
                             <div>timezone: <strong>{status.telegram.timeZone}</strong></div>
                             <div>poll timeout: <strong>{status.telegram.pollingTimeoutSec}s</strong></div>
                         </div>
@@ -762,7 +751,7 @@ function ChannelsSettings() {
                             </div>
                         )}
                         <div className="mt-1 text-muted-foreground">
-                            V1 supports only Telegram DM text messages.
+                            Telegram DM text and photos are saved to Inbox; the bot only confirms.
                         </div>
                     </div>
                 )}
@@ -782,20 +771,6 @@ function ChannelsSettings() {
                             }
                         />
                     </div>
-                    <div className="flex items-center justify-between gap-2">
-                        <Label htmlFor="telegram-auto-reply">Telegram Auto-Reply</Label>
-                        <Switch
-                            id="telegram-auto-reply"
-                            checked={settings.telegram.autoReplyEnabled}
-                            onCheckedChange={(checked) =>
-                                setSettings((prev) =>
-                                    prev
-                                        ? { ...prev, telegram: { ...prev.telegram, autoReplyEnabled: checked } }
-                                        : prev
-                                )
-                            }
-                        />
-                    </div>
                 </div>
 
                 <p className="text-xs text-muted-foreground">
@@ -804,20 +779,6 @@ function ChannelsSettings() {
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                        <Label htmlFor="telegram-agent-id">Telegram Agent ID</Label>
-                        <Input
-                            id="telegram-agent-id"
-                            value={settings.telegram.telegramAgentId}
-                            onChange={(e) =>
-                                setSettings((prev) =>
-                                    prev
-                                        ? { ...prev, telegram: { ...prev.telegram, telegramAgentId: e.target.value } }
-                                        : prev
-                                )
-                            }
-                        />
-                    </div>
                     <div className="space-y-1.5">
                         <Label htmlFor="telegram-timezone">Time Zone</Label>
                         <Input
@@ -841,22 +802,6 @@ function ChannelsSettings() {
                         value={allowlistText}
                         onChange={(e) => setAllowlistText(e.target.value)}
                         rows={5}
-                    />
-                </div>
-
-                <div className="space-y-1.5">
-                    <Label htmlFor="telegram-fallback">Fallback Reply Text</Label>
-                    <Textarea
-                        id="telegram-fallback"
-                        value={settings.telegram.fallbackText}
-                        onChange={(e) =>
-                            setSettings((prev) =>
-                                prev
-                                    ? { ...prev, telegram: { ...prev.telegram, fallbackText: e.target.value } }
-                                    : prev
-                            )
-                        }
-                        rows={3}
                     />
                 </div>
 

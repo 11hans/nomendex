@@ -77,6 +77,15 @@ Source:
 - `bun-sidecar/src/components/InboxToastProvider.tsx`
 - `bun-sidecar/src/components/WorkspaceSidebar.tsx`
 
+## Telegram Capture
+
+Every message an allowlisted sender DMs to the Telegram bot becomes an Inbox todo, written server-side without any agent (`bun-sidecar/src/gateway/inbox-capture.ts`):
+- text → title = first non-empty line (max 120 chars), full text in `description` when it is longer than the title
+- photo → saved to `uploads/` and attached; title from the caption, or `Fotka z Telegramu`
+- anything else (voice, sticker, file) is not saved; the bot replies `neuloženo – pošli text nebo fotku`
+
+The bot replies `uloženo` once the todo exists. The server broadcasts `upsert` on `/api/todos/events`, so the Inbox view and the sidebar badge refresh; the new-task toast is not shown (it is emitted only by in-app creation). Details: `channels-telegram-v1.md`.
+
 ## Stale Todo Auto-Archiving
 
 On workspace startup (and every 24 hours thereafter), Inbox todos older than **14 days** that are still in `todo` status and not archived are automatically archived (`archived: true, status: "later"`). This prevents the Inbox from accumulating forgotten capture items indefinitely.

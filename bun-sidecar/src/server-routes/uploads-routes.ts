@@ -15,11 +15,11 @@ interface UploadedFile {
     createdAt: string;
 }
 
-function generateFileId(): string {
+export function generateFileId(): string {
     return `upload-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-async function ensureUploadsDir(): Promise<string> {
+export async function ensureUploadsDir(): Promise<string> {
     const uploadsPath = getUploadsPath();
     await mkdir(uploadsPath, { recursive: true });
     return uploadsPath;

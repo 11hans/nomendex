@@ -5,7 +5,6 @@ import {
   appendTelegramMessage,
   compactTelegramMessagesFile,
   findTelegramThread,
-  getLatestTelegramInboundText,
   listTelegramMessages,
   loadChannelsSettings,
   loadTelegramState,
@@ -17,7 +16,7 @@ import {
 import { ChannelManager } from "./channel-manager";
 import { GatewayHttpError } from "./errors";
 import { allowlistMatchType, evaluateTelegramSendPolicy, redactGatewayEvent } from "./security";
-import { generateTelegramReply } from "./ai";
+import { CAPTURE_REPLY_FAILED, CAPTURE_REPLY_SAVED, CAPTURE_REPLY_UNSUPPORTED, PHOTO_MAX_BYTES, captureToInbox } from "./inbox-capture";
 import { listAppThreadMessages, listAppThreads } from "./app-sessions";
 import type {
   ChannelStatus,
@@ -32,12 +31,6 @@ import type {
 } from "./types";
 
 const gatewayLogger = createServiceLogger("GATEWAY");
-
-// Auto-replies are rate limited per chat so a message flood cannot trigger an
-// agent query (and an outbound Telegram send) for every inbound message.
-// Kept short — the channel behaves like a chat — but nonzero as a flood guard.
-// Manual sends and explicit AI replies from the UI are not limited.
-const AUTO_REPLY_MIN_INTERVAL_MS = 5_000;
 
 type ThreadFilter = {
   channel?: "all" | "app" | "telegram";
@@ -66,7 +59,6 @@ class GatewayService {
   private initialized = false;
   private readonly subscribers = new Set<(event: GatewayEvent) => void>();
   private pendingBacklogCount = 0;
-  private readonly lastAutoReplyAtByChat = new Map<string, number>();
 
   private readonly channelManager = new ChannelManager({
     getSettings: async () => loadChannelsSettings(),
@@ -118,23 +110,17 @@ class GatewayService {
     const settings = await loadChannelsSettings();
     const telegramState = await loadTelegramState();
     const token = await secrets.get(settings.telegram.tokenSecretKey);
-    const claudeRaw = await secrets.get("CLAUDE_CODE_OAUTH_TOKEN");
-    const claudeTrimmed = claudeRaw?.trim() || "";
     const threads = await loadTelegramThreads();
     return {
       status: this.getStatus(),
       telegram: {
         enabled: settings.telegram.enabled,
         hasToken: !!token,
-        autoReplyEnabled: settings.telegram.autoReplyEnabled,
         allowlistSize: settings.telegram.allowlist.length,
         timeZone: settings.telegram.timeZone,
         pollingTimeoutSec: settings.telegram.pollingTimeoutSec,
         lastUpdateId: telegramState.lastUpdateId,
         telegramThreadCount: threads.length,
-      },
-      ai: {
-        hasClaudeOauthToken: !!claudeTrimmed,
       },
     };
   }
@@ -214,7 +200,6 @@ class GatewayService {
     threadId?: string;
     chatId?: string;
     text: string;
-    source: "manual" | "ai";
   }): Promise<UnifiedMessage> {
     const text = input.text.trim();
     if (!text) {
@@ -247,7 +232,6 @@ class GatewayService {
     const settings = await loadChannelsSettings();
     const policy = evaluateTelegramSendPolicy({
       enabled: settings.telegram.enabled,
-      autoReplyEnabled: settings.telegram.autoReplyEnabled,
       allowlist: settings.telegram.allowlist,
       chatId,
       username: thread?.externalUsername,
@@ -309,68 +293,6 @@ class GatewayService {
     return message;
   }
 
-  async aiReplyTelegram(input: { threadId: string; prompt?: string }): Promise<{ text: string; fallbackUsed: boolean }> {
-    const settings = await loadChannelsSettings();
-    const thread = await findTelegramThread(input.threadId);
-    if (!thread || !thread.externalChatId) {
-      throw new GatewayHttpError(404, "TELEGRAM_THREAD_NOT_FOUND", "Telegram thread not found");
-    }
-
-    // The send policy must be evaluated before the agent runs, not only inside
-    // sendTelegramMessage — a disabled channel or de-allowlisted sender must
-    // not be able to trigger an agent query (tokens + tool execution).
-    const policy = evaluateTelegramSendPolicy({
-      enabled: settings.telegram.enabled,
-      autoReplyEnabled: settings.telegram.autoReplyEnabled,
-      allowlist: settings.telegram.allowlist,
-      chatId: thread.externalChatId,
-      username: thread.externalUsername,
-    });
-    if (!policy.allowed) {
-      throw new GatewayHttpError(policy.status, policy.code, policy.message);
-    }
-
-    // input.prompt is operator input from the app UI; without it the prompt
-    // falls back to the latest inbound Telegram text. Both carry operator
-    // authority (the allowlist binds the channel to the operator's account),
-    // they just get source-specific framing.
-    const operatorPrompt = input.prompt?.trim();
-    const prompt = operatorPrompt || await getLatestTelegramInboundText(input.threadId);
-    if (!prompt) {
-      throw new GatewayHttpError(400, "TELEGRAM_PROMPT_REQUIRED", "No prompt available for AI reply");
-    }
-
-    let replyText: string;
-    let fallbackUsed = false;
-
-    try {
-      replyText = await generateTelegramReply(prompt, settings.telegram.telegramAgentId, {
-        source: operatorPrompt ? "app" : "telegram",
-      });
-      if (!replyText.trim()) {
-        fallbackUsed = true;
-        replyText = settings.telegram.fallbackText;
-      }
-    } catch (error) {
-      gatewayLogger.error("Telegram AI reply failed", {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      fallbackUsed = true;
-      replyText = settings.telegram.fallbackText;
-    }
-
-    await this.sendTelegramMessage({
-      threadId: input.threadId,
-      text: replyText,
-      source: "ai",
-    });
-
-    return {
-      text: replyText,
-      fallbackUsed,
-    };
-  }
-
   private async handleTelegramInbound(message: TelegramInboundMessage): Promise<void> {
     const settings = await loadChannelsSettings();
 
@@ -405,6 +327,10 @@ class GatewayService {
     const registry = new SessionRegistry(settings.telegram.timeZone);
     const threadId = registry.telegramDmKey(message.chatId, new Date(message.timestampMs));
 
+    // Photos without caption and unsupported messages have no text; the
+    // thread log still records that something arrived.
+    const logText = message.text || (message.kind === "photo" ? "[fotka]" : "[nepodporovaná zpráva]");
+
     const existing = await findTelegramThread(threadId);
     const thread: UnifiedThread = {
       id: threadId,
@@ -413,7 +339,7 @@ class GatewayService {
       createdAt: existing?.createdAt || nowIso(),
       updatedAt: new Date(message.timestampMs).toISOString(),
       messageCount: (existing?.messageCount || 0) + 1,
-      preview: message.text.slice(0, 200),
+      preview: logText.slice(0, 200),
       externalChatId: message.chatId,
       externalUsername: message.username,
     };
@@ -423,7 +349,7 @@ class GatewayService {
       threadId,
       channel: "telegram",
       role: "user",
-      text: message.text,
+      text: logText,
       createdAt: new Date(message.timestampMs).toISOString(),
       source: "telegram",
       direction: "inbound",
@@ -448,32 +374,34 @@ class GatewayService {
       },
     });
 
-    const shouldAutoReply = settings.telegram.autoReplyEnabled
-      && evaluateTelegramSendPolicy({
-        enabled: settings.telegram.enabled,
-        autoReplyEnabled: settings.telegram.autoReplyEnabled,
-        allowlist: settings.telegram.allowlist,
-        chatId: message.chatId,
-        username: message.username,
-      }).allowed;
+    const reply = await this.captureInbound(message);
+    try {
+      await this.sendTelegramMessage({ threadId, text: reply });
+    } catch (error) {
+      gatewayLogger.error("Failed to send Telegram capture reply", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
-    if (shouldAutoReply) {
-      const lastReplyAt = this.lastAutoReplyAtByChat.get(message.chatId) || 0;
-      const elapsedMs = Date.now() - lastReplyAt;
-      if (elapsedMs < AUTO_REPLY_MIN_INTERVAL_MS) {
-        gatewayLogger.warn("Skipping Telegram auto-reply (rate limited)", {
-          chatId: message.chatId,
-          elapsedMs,
-          minIntervalMs: AUTO_REPLY_MIN_INTERVAL_MS,
-        });
-        return;
-      }
+  // Writes the message to Inbox and returns the reply for the sender. No agent
+  // and no tools run here: the bot is a capture channel, not a remote shell.
+  private async captureInbound(message: TelegramInboundMessage): Promise<string> {
+    if (message.kind === "unsupported") return CAPTURE_REPLY_UNSUPPORTED;
 
-      this.lastAutoReplyAtByChat.set(message.chatId, Date.now());
-      // No prompt: aiReplyTelegram falls back to the just-persisted inbound
-      // text and frames it as an inbound Telegram message (source: "telegram")
-      // rather than an app-UI prompt.
-      await this.aiReplyTelegram({ threadId });
+    try {
+      const todo = await captureToInbox(
+        message,
+        (fileId) => this.channelManager.downloadTelegramFile(fileId, PHOTO_MAX_BYTES),
+      );
+      gatewayLogger.info("Captured Telegram message to Inbox", { todoId: todo.id, kind: message.kind });
+      return CAPTURE_REPLY_SAVED;
+    } catch (error) {
+      gatewayLogger.error("Failed to capture Telegram message to Inbox", {
+        kind: message.kind,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return CAPTURE_REPLY_FAILED;
     }
   }
 

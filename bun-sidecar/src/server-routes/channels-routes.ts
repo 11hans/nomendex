@@ -1,13 +1,13 @@
 import { gatewayService } from "@/gateway/service";
 import { GatewayHttpError } from "@/gateway/errors";
-import { ChannelsSettingsPatchSchema, TelegramAiReplySchema, TelegramSendSchema } from "@/gateway/types";
+import { ChannelsSettingsPatchSchema, TelegramSendSchema } from "@/gateway/types";
 import { createServiceLogger } from "@/lib/logger";
 import { evaluateMutatingRequestPolicy } from "@/lib/request-security";
 
 const logger = createServiceLogger("CHANNELS-ROUTES");
 
-// CSRF guard: these routes send Telegram messages and trigger agent runs, so
-// browser requests from foreign origins (or without a JSON content type) are
+// CSRF guard: these routes send Telegram messages and change channel settings,
+// so browser requests from foreign origins (or without a JSON content type) are
 // rejected before the body is parsed.
 function rejectUntrustedMutation(req: Request): Response | null {
   const policy = evaluateMutatingRequestPolicy(req);
@@ -89,7 +89,6 @@ export const channelsRoutes = {
           threadId: parsed.threadId,
           chatId: parsed.chatId,
           text: parsed.text,
-          source: "manual",
         });
 
         return Response.json({ success: true, message: sent });
@@ -102,33 +101,6 @@ export const channelsRoutes = {
         }
         logger.error("Failed to send Telegram message", { error: error instanceof Error ? error.message : String(error) });
         return Response.json({ error: "Failed to send Telegram message" }, { status: 500 });
-      }
-    },
-  },
-
-  "/api/channels/telegram/ai-reply": {
-    async POST(req: Request) {
-      const rejected = rejectUntrustedMutation(req);
-      if (rejected) return rejected;
-      try {
-        const body = await req.json();
-        const parsed = TelegramAiReplySchema.parse(body);
-
-        const result = await gatewayService.aiReplyTelegram({
-          threadId: parsed.threadId,
-          prompt: parsed.prompt,
-        });
-
-        return Response.json({ success: true, ...result });
-      } catch (error) {
-        if (error instanceof Error && error.name === "ZodError") {
-          return Response.json({ error: "Invalid request body" }, { status: 400 });
-        }
-        if (error instanceof GatewayHttpError) {
-          return Response.json({ error: error.message, code: error.code }, { status: error.status });
-        }
-        logger.error("Failed to generate Telegram AI reply", { error: error instanceof Error ? error.message : String(error) });
-        return Response.json({ error: "Failed to generate Telegram AI reply" }, { status: 500 });
       }
     },
   },

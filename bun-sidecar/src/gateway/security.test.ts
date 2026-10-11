@@ -19,7 +19,6 @@ describe("gateway security", () => {
   it("enforces telegram send policy", () => {
     const disabled = evaluateTelegramSendPolicy({
       enabled: false,
-      autoReplyEnabled: false,
       allowlist: [],
       chatId: "123",
     });
@@ -31,25 +30,14 @@ describe("gateway security", () => {
 
     const blockedByAllowlist = evaluateTelegramSendPolicy({
       enabled: true,
-      autoReplyEnabled: true,
       allowlist: ["@alice"],
       chatId: "123",
       username: "bob",
     });
     expect(blockedByAllowlist.allowed).toBe(false);
 
-    const blockedManualSend = evaluateTelegramSendPolicy({
-      enabled: true,
-      autoReplyEnabled: false,
-      allowlist: ["@alice"],
-      chatId: "123",
-      username: "bob",
-    });
-    expect(blockedManualSend.allowed).toBe(false);
-
     const allowed = evaluateTelegramSendPolicy({
       enabled: true,
-      autoReplyEnabled: true,
       allowlist: ["123"],
       chatId: "123",
     });

@@ -1724,7 +1724,6 @@ function TelegramChatView({ threadId, tabId }: ChatViewProps) {
     const [messages, setMessages] = useState<UnifiedMessage[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isSending, setIsSending] = useState(false);
-    const inputRef = useRef<ProseMirrorPromptTextareaHandle>(null);
     const scrollRef = useTabScrollPersistence(tabId);
     const { scrollToBottomIfNeeded } = useAutoStickToBottom(scrollRef);
 
@@ -1816,39 +1815,6 @@ function TelegramChatView({ threadId, tabId }: ChatViewProps) {
         }
     }, [threadId, refreshThread]);
 
-    const sendAiReply = useCallback(async () => {
-        if (!threadId) return;
-
-        const prompt = (inputRef.current?.getContent() || "").trim();
-        if (prompt) {
-            inputRef.current?.clear();
-        }
-
-        try {
-            setIsSending(true);
-            const response = await fetch("/api/channels/telegram/ai-reply", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    threadId,
-                    ...(prompt ? { prompt } : {}),
-                }),
-            });
-
-            if (!response.ok) {
-                const body = await response.json().catch(() => null) as { error?: string } | null;
-                throw new Error(body?.error || "AI reply failed");
-            }
-
-            await refreshThread();
-        } catch (error) {
-            console.error("[TelegramChat] Failed to generate AI reply:", error);
-            toast.error(error instanceof Error ? error.message : "Failed to generate AI reply");
-        } finally {
-            setIsSending(false);
-        }
-    }, [threadId, refreshThread]);
-
     return (
         <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
             <div className="shrink-0 border-b border-border px-4 py-2.5">
@@ -1912,29 +1878,16 @@ function TelegramChatView({ threadId, tabId }: ChatViewProps) {
                 <div className="rounded-2xl border border-border bg-card p-2 chat-input-area">
                     <ProseMirrorPromptInput onSubmit={sendManualMessage} isLoading={isSending} className="border-0 bg-transparent shadow-none">
                         <ProseMirrorPromptTextarea
-                            ref={inputRef}
                             placeholder={isSending ? "Sending..." : "Message to Telegram..."}
                             enterToSend={chatInputEnterToSend}
                             className="min-h-[64px] [&_.pm-chat-input]:text-xs [&>div.absolute]:text-xs"
                         />
                         <ProseMirrorPromptFooter className="justify-end">
-                            <div className="flex items-center gap-1">
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 px-2 text-xs"
-                                    onClick={() => void sendAiReply()}
-                                    disabled={isSending || !threadId}
-                                >
-                                    AI Reply
-                                </Button>
-                                <ProseMirrorPromptSubmit className="rounded-lg" disabled={isSending || !threadId} />
-                            </div>
+                            <ProseMirrorPromptSubmit className="rounded-lg" disabled={isSending || !threadId} />
                         </ProseMirrorPromptFooter>
                     </ProseMirrorPromptInput>
                     <p className="px-2 pb-1 text-xs text-muted-foreground">
-                        Send delivers a manual Telegram message. AI Reply asks the agent to respond.
+                        Inbound messages are saved to Inbox. Send delivers a manual Telegram message.
                     </p>
                 </div>
             </div>
