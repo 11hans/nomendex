@@ -250,7 +250,7 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className="p-0 overflow-hidden gap-0 duration-500 data-[state=open]:zoom-in-90 data-[state=closed]:zoom-out-95"
+                className="p-0 overflow-hidden gap-0 flex flex-col max-h-[85vh] duration-500 data-[state=open]:zoom-in-90 data-[state=closed]:zoom-out-95"
                 showCloseButton={false}
                 style={{
                     backgroundColor: styles.surfacePrimary,
@@ -280,7 +280,7 @@ export function TaskCardEditor({ todo, open, onOpenChange, onSave, onDelete, onT
                     </span>
                 </div>
 
-                <div className="px-6 pt-5 pb-4 space-y-4">
+                <div className="px-6 pt-5 pb-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
                     <div>
                         <div className="mb-1 text-caption uppercase tracking-[0.08em]" style={{ color: styles.contentTertiary }}>
                             Type
