@@ -107,6 +107,12 @@ export const notesAPI = {
     },
     updateNoteTags: (args: { fileName: string; tags: string[] }) => fetchAPI<Note>("update-tags", args),
     getDailyNoteName: (args?: { date?: string }) => fetchAPI<{ fileName: string }>("daily-name", args),
+    /** Today's (or the given date's) daily note, created from the vault's daily template if missing. */
+    openDailyNote: async (args: { date?: string } = {}): Promise<Note> => {
+        const note = await fetchAPI<Note>("daily-open", args);
+        setCachedNote(note.fileName, note);
+        return note;
+    },
     resolveNote: (args: { name: string }) => fetchAPI<{ fileName: string } | null>("resolve", args),
     getRecentDailyNotes: (args: { days?: number } = {}) =>
         fetchAPI<

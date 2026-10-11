@@ -24,10 +24,25 @@ export function getTomorrowDailyNoteFileName(date: Date = new Date()): string {
 }
 
 export function getDailyNoteFileName(date: Date): string {
+    return `${formatDailyNoteDate(date)}.md`;
+}
+
+/** Daily note date as used in file names and template placeholders: M-D-YYYY. */
+export function formatDailyNoteDate(date: Date): string {
     const month = date.getMonth() + 1; // 1-12
     const day = date.getDate(); // 1-31
     const year = date.getFullYear();
-    return `${month}-${day}-${year}.md`;
+    return `${month}-${day}-${year}`;
+}
+
+/** Inverse of formatDailyNoteDate for a file base name ("10-5-2026.md"); null if it isn't one. */
+export function parseDailyNoteDate(baseName: string): Date | null {
+    const match = baseName.match(/^(\d{1,2})-(\d{1,2})-(\d{4})(?:\.md)?$/);
+    if (!match) return null;
+    const [, month, day, year] = match.map(Number);
+    const date = new Date(year, month - 1, day);
+    if (date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+    return date;
 }
 
 const DAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];

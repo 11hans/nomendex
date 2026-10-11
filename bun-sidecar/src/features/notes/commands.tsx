@@ -77,13 +77,7 @@ export function getNotesCommands(context: CommandContext): Command[] {
             icon: "Calendar",
             callback: async () => {
                 context.closeCommandMenu();
-                const { fileName } = await notesAPI.getDailyNoteName();
-
-                // See if note exists in daily notes subfolder
-                const output = await notesAPI.getNoteByFileName({ fileName });
-                if (!output || !output.content) {
-                    await notesAPI.createNote({ fileName });
-                }
+                const { fileName } = await notesAPI.openDailyNote();
 
                 context.openTab({
                     pluginMeta: notesPluginSerial,
@@ -106,13 +100,7 @@ export function getNotesCommands(context: CommandContext): Command[] {
                 context.closeCommandMenu();
                 const date = new Date();
                 date.setDate(date.getDate() - 1);
-                const { fileName } = await notesAPI.getDailyNoteName({ date: date.toISOString() });
-
-                // See if note exists in daily notes subfolder
-                const output = await notesAPI.getNoteByFileName({ fileName });
-                if (!output || !output.content) {
-                    await notesAPI.createNote({ fileName });
-                }
+                const { fileName } = await notesAPI.openDailyNote({ date: date.toISOString() });
 
                 context.openTab({
                     pluginMeta: notesPluginSerial,
@@ -135,13 +123,7 @@ export function getNotesCommands(context: CommandContext): Command[] {
                 context.closeCommandMenu();
                 const date = new Date();
                 date.setDate(date.getDate() + 1);
-                const { fileName } = await notesAPI.getDailyNoteName({ date: date.toISOString() });
-
-                // See if note exists in daily notes subfolder
-                const output = await notesAPI.getNoteByFileName({ fileName });
-                if (!output || !output.content) {
-                    await notesAPI.createNote({ fileName });
-                }
+                const { fileName } = await notesAPI.openDailyNote({ date: date.toISOString() });
 
                 context.openTab({
                     pluginMeta: notesPluginSerial,

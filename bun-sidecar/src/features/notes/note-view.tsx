@@ -77,6 +77,7 @@ import type { QuickActionId } from "./quick-action-types";
 import type { AgentConfig } from "@/features/agents/index";
 import { agentsAPI } from "@/hooks/useAgentsAPI";
 import { chatPluginSerial } from "@/features/chat/index";
+import { DailyNotePanel } from "@/features/today/daily-note-panel";
 
 interface NotesViewProps {
     noteFileName: string;
@@ -2193,6 +2194,9 @@ export function NotesView(props: NotesViewProps) {
                         className="flex-1 h-full"
                         style={{ backgroundColor: currentTheme.styles.surfacePrimary }}
                     >
+                        {!loading && !error && note && (
+                            <DailyNotePanel fileName={note.fileName} compact={compact} />
+                        )}
                         {(loading || !note) ? (
                             // Loading placeholder
                             <div className="h-full" />

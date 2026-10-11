@@ -125,6 +125,16 @@ export const notesRoutes = {
             return Response.json(result);
         },
     },
+    "/api/notes/daily-open": {
+        async POST(req: Request) {
+            const args = await req.json().catch(() => ({}));
+            const result = await functions.openDailyNote.fx(args);
+            if (result.created) {
+                await onNoteCreated({ fileName: result.fileName });
+            }
+            return Response.json(result);
+        },
+    },
     "/api/notes/recent-daily": {
         async POST(req: Request) {
             const args = await req.json();

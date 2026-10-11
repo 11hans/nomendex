@@ -291,11 +291,6 @@ export function useWorkspace(_initialRoute?: RouteParams) {
             return true;
         }
 
-        // Today — one tab per calendar date (so a stale "yesterday" tab can coexist with today)
-        if (pluginMeta.id === "today") {
-            return existingProps.date === props.date;
-        }
-
         // Chat — max 1 tab; specific sessions still match on sessionId
         if (pluginMeta.id === "chat") {
             if (props.sessionId) {

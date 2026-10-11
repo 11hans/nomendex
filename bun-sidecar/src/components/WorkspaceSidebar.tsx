@@ -9,6 +9,7 @@ import { getIcon } from "./PluginViewIcons";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { useGHSync } from "@/contexts/GHSyncContext";
 import { useInboxCount } from "@/hooks/useInboxCount";
+import { openTodayNoteTab } from "@/features/today/open-today-note";
 
 function NavItem({
     icon: Icon,
@@ -85,11 +86,15 @@ export function WorkspaceSidebar() {
         if (currentPath != "/") {
             navigate("/");
         }
+        if (plugin.id === "today") {
+            openTodayNoteTab(openTab).catch((err) => console.error("[Sidebar] Opening today's note failed:", err));
+            return;
+        }
         const view = plugin.id === "todos" || plugin.id === "projects" || plugin.id === "goals"
             ? "browser"
             : "default";
         const props: Record<string, unknown> = {};
-        openTab({ pluginMeta: plugin, view, props, autoPin: plugin.id === "today" });
+        openTab({ pluginMeta: plugin, view, props });
     };
 
     const handleNavigate = (path: string) => {

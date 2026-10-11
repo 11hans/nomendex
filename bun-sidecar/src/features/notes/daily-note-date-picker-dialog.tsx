@@ -51,13 +51,7 @@ export function DailyNoteDatePickerDialog({ onSuccess }: DailyNoteDatePickerDial
 
         setIsOpening(true);
         try {
-            const { fileName } = await notesAPI.getDailyNoteName({ date: selectedDate.toISOString() });
-
-            // See if note exists in daily notes subfolder
-            const output = await notesAPI.getNoteByFileName({ fileName });
-            if (!output || !output.content) {
-                await notesAPI.createNote({ fileName });
-            }
+            const { fileName } = await notesAPI.openDailyNote({ date: selectedDate.toISOString() });
 
             const newTab = addNewTab({
                 pluginMeta: notesPluginSerial,

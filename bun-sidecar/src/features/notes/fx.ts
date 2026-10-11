@@ -3,7 +3,8 @@ import { functionStubs, NotesPluginBase } from "./index";
 import { FunctionsFromStubs } from "@/types/Functions";
 import { FeatureStorage } from "@/storage/FeatureStorage";
 import { getNotesPath, getDailyNotesPath, hasActiveWorkspace } from "@/storage/root-path";
-import { getDailyNoteFileName } from "./date-utils";
+import { formatDailyNoteDate, getDailyNoteFileName } from "./date-utils";
+import { readVaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
 import * as yaml from "@/lib/yaml";
 import path from "path";
 import { mkdir } from "node:fs/promises";
@@ -470,6 +471,45 @@ export async function getDailyNoteName(args?: { date?: string }) {
     return { fileName: path.join(dailyNotesSubfolder, name) };
 }
 
+/**
+ * Return the daily note for a date (default today), creating it from the vault's
+ * daily template if it doesn't exist yet. Mirrors the daily-notes skill script:
+ * the first file with "daily" in its name inside vault-config.json's
+ * folderMapping.templates, with {{date}}, {{yesterday}} and {{tomorrow}} filled
+ * in as M-D-YYYY. No template → empty note.
+ */
+async function openDailyNote(args?: { date?: string }) {
+    const dateObj = args?.date ? new Date(args.date) : new Date();
+    const { fileName } = await getDailyNoteName({ date: dateObj.toISOString() });
+    const created = !(await getStorage().fileExists(fileName));
+    if (created) {
+        const template = await readDailyNoteTemplate();
+        await getStorage().createFile(fileName, template ? fillDailyNoteTemplate(template, dateObj) : "");
+    }
+    return { ...(await getNoteByFileName({ fileName })), created };
+}
+
+async function readDailyNoteTemplate(): Promise<string | null> {
+    const templatesDir = (await readVaultConfig(getNotesPath()))?.folderMapping?.templates;
+    if (!templatesDir) return null;
+    const files = await getStorage().listFiles(templatesDir);
+    const templateFile = files.sort().find((name) => name.toLowerCase().includes("daily"));
+    if (!templateFile) return null;
+    return getStorage().readFile(path.join(templatesDir, templateFile));
+}
+
+function fillDailyNoteTemplate(template: string, date: Date): string {
+    const shift = (days: number) => {
+        const shifted = new Date(date);
+        shifted.setDate(shifted.getDate() + days);
+        return formatDailyNoteDate(shifted);
+    };
+    return template
+        .replaceAll("{{date}}", formatDailyNoteDate(date))
+        .replaceAll("{{yesterday}}", shift(-1))
+        .replaceAll("{{tomorrow}}", shift(1));
+}
+
 async function getRecentDailyNotes(args: { days?: number }) {
     const days = args.days ?? 7;
     const dailyPath = getDailyNotesPath();
@@ -645,6 +685,7 @@ export const functions: FunctionsFromStubs<typeof functionStubs> = {
     deleteNote: { ...functionStubs.deleteNote, fx: deleteNote },
     renameNote: { ...functionStubs.renameNote, fx: renameNote },
     getDailyNoteName: { ...functionStubs.getDailyNoteName, fx: getDailyNoteName },
+    openDailyNote: { ...functionStubs.openDailyNote, fx: openDailyNote },
     getRecentDailyNotes: { ...functionStubs.getRecentDailyNotes, fx: getRecentDailyNotes },
     getFolders: { ...functionStubs.getFolders, fx: getFolders },
     createFolder: { ...functionStubs.createFolder, fx: createFolder },

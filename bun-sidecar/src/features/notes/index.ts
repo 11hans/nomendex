@@ -101,6 +101,10 @@ export const functionStubs = {
         input: z.object({}),
         output: z.object({ fileName: z.string() }),
     },
+    openDailyNote: {
+        input: z.object({ date: z.string().optional() }),
+        output: NoteSchema.extend({ created: z.boolean() }),
+    },
     getRecentDailyNotes: {
         input: z.object({ days: z.number().optional() }),
         output: z.array(

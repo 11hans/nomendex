@@ -27,6 +27,7 @@ import { agentMemoryRoutes } from "./server-routes/agent-memory-routes";
 import { memoryExtractionRoutes } from "./server-routes/memory-extraction-routes";
 import { memoryEmbeddingsRoutes } from "./server-routes/memory-embeddings-routes";
 import { insightsRoutes } from "./server-routes/insights-routes";
+import { todayRoutes } from "./server-routes/today-routes";
 import { channelsRoutes } from "./server-routes/channels-routes";
 import { gatewayService } from "@/gateway/service";
 import { verifyClaudeCli, getCachedClaudeCliInfo } from "@/lib/claude-cli";
@@ -219,6 +220,7 @@ const server = serve<WSData>({
         ...memoryExtractionRoutes,
         ...memoryEmbeddingsRoutes,
         ...insightsRoutes,
+        ...todayRoutes,
         ...channelsRoutes,
         // WebSocket route handler
         "/ws": {
