@@ -392,7 +392,6 @@ Session task tools provide progress spinners during multi-step operations. They 
 | \`weekly-reviewer\` | Facilitate weekly review aligned with goals |
 | \`monthly-reviewer\` | Facilitate monthly review: weekly rollup, quarterly milestone check, next-month plan |
 | \`goal-aligner\` | Check daily/weekly alignment with long-term goals |
-| \`inbox-processor\` | GTD-style inbox processing |
 
 **Subagents run in isolated context** — they do not see this system prompt or your \`agent-memory\` MCP tools. When delegating via the Task tool: (a) call \`memory_search\` first with a query relevant to the subtask, (b) summarize relevant hits (preferences, prior decisions, durable goals) inline in the Task prompt, and (c) include user-specific facts the subagent will need (active goals, current project focus, work style). Without this, the subagent starts cold every time.
 
@@ -466,6 +465,6 @@ Run \`/monthly\`: roll up weekly wins/challenges, check quarterly milestones, pl
 - **Daily notes = read-only snapshots.** Write \`[[todo:id|Title]]\` wiki-links, never new \`[ ]\`/\`[x]\` checkboxes. Legacy checkboxes in historical notes stay untouched.
 - **Goal linkage is typed** via \`goalRef\`/\`goalRefs\`. No \`goalRef\` = unlinked — don't infer from prose.
 - **After goal/project linkage changes**, call \`/api/goals/sync/dashboards\`.
-- **Delegate via Task tool**: weekly review (\`weekly-reviewer\`), monthly review (\`monthly-reviewer\`), inbox processing (\`inbox-processor\`), vault analysis (\`note-organizer\`). When a user invokes \`/weekly\` or \`/monthly\` — or otherwise asks for the full Collect → Reflect → Plan arc — the skill instructs you to delegate to its reviewer subagent; follow it. **Handle directly**: single-note edits, quick lookups, small questions, follow-ups on a review that's already written.
+- **Delegate via Task tool**: weekly review (\`weekly-reviewer\`), monthly review (\`monthly-reviewer\`), vault analysis (\`note-organizer\`). When a user invokes \`/weekly\` or \`/monthly\` — or otherwise asks for the full Collect → Reflect → Plan arc — the skill instructs you to delegate to its reviewer subagent; follow it. **Handle directly**: single-note edits, quick lookups, small questions, follow-ups on a review that's already written.
 `;
 }

@@ -206,15 +206,6 @@ Analyzuje soulad denních aktivit s dlouhodobými cíli. Spouštěj pro:
 
 Výstup obsahuje skóre souladu, přehled mezer a konkrétní doporučení.
 
-### `inbox-processor` – Zpracování inboxu
-
-Zpracovává záchyty podle GTD principů:
-1. Prohledá složku `Inbox/` a poznámky označené `#inbox`
-2. Pro každou položku navrhne kategorii a akci
-3. Čeká na tvoje potvrzení před přesunem
-
-Kategorie: `#next-action`, `#project`, `#waiting`, `#someday`, `#reference`
-
 ### `note-organizer` – Organizace vaultu
 
 Údržba a reorganizace vaultu:
@@ -274,12 +265,6 @@ BPagent:  [Deleguje na weekly-reviewer, zobrazí progress fáze 1/2/3, vrátí s
 ```
 Uživatel: Jak si stojím s letošními cíly?
 BPagent:  [Deleguje na goal-aligner, přečte goals soubory, vrátí alignment report se skóre a doporučeními]
-```
-
-### Zpracování inboxu
-```
-Uživatel: Zpracuj mi inbox
-BPagent:  [Deleguje na inbox-processor, projde Inbox/ složku, navrhne akce pro každou položku]
 ```
 
 ### Organizace vaultu

@@ -4,7 +4,6 @@ import type { VaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
 import { buildWeeklyReviewer } from "./weekly-reviewer";
 import { buildMonthlyReviewer } from "./monthly-reviewer";
 import { buildGoalAligner } from "./goal-aligner";
-import { buildInboxProcessor } from "./inbox-processor";
 import { buildNoteOrganizer } from "./note-organizer";
 
 export function apiBaseUrlBlock(port: number): string {
@@ -31,13 +30,11 @@ export function buildBpagentSubagents(input?: {
     const dailyNotesDir = path.join(notesPath, folderMapping?.dailyNotes ?? "daily-notes");
     const goalsDir = path.join(notesPath, folderMapping?.goals ?? "Goals");
     const projectsDir = path.join(notesPath, folderMapping?.projects ?? "Projects");
-    const inboxDir = path.join(notesPath, folderMapping?.inbox ?? "Inbox");
 
     return {
         "weekly-reviewer": buildWeeklyReviewer({ port, dailyNotesDir, goalsDir }),
         "monthly-reviewer": buildMonthlyReviewer({ port, dailyNotesDir, goalsDir, projectsDir }),
         "goal-aligner": buildGoalAligner({ port, dailyNotesDir, goalsDir, projectsDir }),
-        "inbox-processor": buildInboxProcessor({ port, notesPath, inboxDir, projectsDir }),
         "note-organizer": buildNoteOrganizer({ projectsDir }),
     };
 }
