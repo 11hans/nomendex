@@ -1204,7 +1204,6 @@ function AppChatView({ sessionId: initialSessionId, tabId, initialPrompt, autoSe
                         } else if (data.type === "usage") {
                             const u = data.usage as {
                                 costUsdListPrice: number;
-                                costUsdRollup?: number;
                                 inputTokens: number;
                                 outputTokens: number;
                                 cacheReadTokens: number;
@@ -1228,17 +1227,14 @@ function AppChatView({ sessionId: initialSessionId, tabId, initialPrompt, autoSe
                                         toolsUsed: [],
                                     };
                                     if (u.kind === "result") {
-                                        // SDK's total_cost_usd in result skips sub-agent / tool turns.
-                                        // costUsdRollup (when present) sums every assistant_turn — use it
-                                        // if it's higher than the SDK figure. Falls back to prevUsage
-                                        // accumulated cost if neither exceeds it.
-                                        const rollupCost = u.costUsdRollup ?? 0;
-                                        const finalCost = Math.max(u.costUsdListPrice, rollupCost, prevUsage.costUsd);
+                                        // The SDK total includes subagents and replaces the per-turn
+                                        // estimate (turn events carry only start-of-response output
+                                        // tokens). After a resume it is the chat's running total.
                                         return {
                                             ...m,
                                             usage: {
                                                 ...prevUsage,
-                                                costUsd: finalCost,
+                                                costUsd: u.costUsdListPrice,
                                                 inputTokens: u.inputTokens,
                                                 outputTokens: u.outputTokens,
                                                 cacheReadTokens: u.cacheReadTokens,

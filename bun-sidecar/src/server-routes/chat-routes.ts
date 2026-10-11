@@ -29,6 +29,7 @@ import {
     extractAssistantUsage,
     extractResultUsage,
     logUsageEvent,
+    usageCountedOnce,
 } from "@/dev/usage-logger";
 
 // Create logger for chat routes
@@ -817,10 +818,8 @@ export const chatRoutes = {
                     const startTime = Date.now();
                     let currentTrackingId = queryTrackingId;
                     let resultReceived = false;
-                    // Sum of every assistant_turn cost in this query — emitted as
-                    // costUsdRollup on the result event because SDK's total_cost_usd
-                    // omits sub-agent / tool turns.
-                    let assistantTurnCostSum = 0;
+                    // API responses whose usage was already counted (see usageCountedOnce).
+                    const countedMessageIds = new Set<string>();
 
                     console.log("[API] Starting SDK iterator consumption (outside stream)...");
 
@@ -906,11 +905,10 @@ export const chatRoutes = {
                                             agentId: agentConfig.id,
                                             model: extracted.model || agentConfig.model,
                                             turnIndex: messageCount,
-                                            usage: extracted.usage,
+                                            usage: usageCountedOnce(countedMessageIds, extracted),
                                             toolsUsed: extracted.toolsUsed,
                                             messagePreview: typeof message === "string" ? message.slice(0, 80) : undefined,
                                         });
-                                        assistantTurnCostSum += ev.costUsdListPrice;
                                         void logUsageEvent(ev);
                                         pushToQueue({
                                             type: "usage",
@@ -931,7 +929,6 @@ export const chatRoutes = {
                                             turnIndex: messageCount,
                                             usage: extracted.usage,
                                             costUsd: extracted.costUsd,
-                                            costUsdRollup: assistantTurnCostSum,
                                             durationMs: extracted.durationMs,
                                             numTurns: extracted.numTurns,
                                         });

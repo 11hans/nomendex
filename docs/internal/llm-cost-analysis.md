@@ -4,6 +4,8 @@
 **Datový základ:** `~/Library/Logs/com.firstloop.nomendex/usage.jsonl` (41 záznamů, 2 dny: 23.–24. 4. 2026)  
 **Agent:** `bpagent` (Claude Sonnet 4.6)
 
+> **Oprava (2026-10-11):** Závěr sekce 2.1 neplatí. SDK posílá každý content blok odpovědi jako samostatnou assistant zprávu se stejným `message.id` a celou usage dané odpovědi, takže součet `assistant_turn` započítal jednu odpověď tolikrát, kolik měla bloků. Navíc `outputTokens` v těchto zprávách jsou jen ze začátku odpovědi („7 tokenů na turn“). `total_cost_usd` v `result` subagenty zahrnuje (SDK 0.3.296, `sdk.d.ts`). Po resume je to ale průběžný součet celé relace, takže se `result` záznamy jedné relace nesčítají. Změřeno: `/daily` měl rollup $1.54 při skutečné ceně $0.52. Rollup byl odstraněn a `assistant_turn` teď počítá každou odpověď jednou (`usageCountedOnce()` v `usage-logger.ts`).
+
 ---
 
 ## 1. Shrnutí nálezu

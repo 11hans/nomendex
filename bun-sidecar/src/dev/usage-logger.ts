@@ -44,11 +44,10 @@ export type UsageEvent = {
     cacheReadTokens: number;
     cacheCreationTokens: number;
     thinkingTokens: number;
+    // For kind="result": the SDK's total_cost_usd. It covers subagent turns too, and a
+    // resumed session continues from the total its transcript saved, so after the first
+    // message of a chat it is the chat's running total, not this message's cost.
     costUsdListPrice: number;
-    // For kind="result": sum of all assistant_turn costUsdListPrice values for the same
-    // query run. The SDK's total_cost_usd in result excludes some sub-agent / tool turns,
-    // so this rollup is the truthful figure for HUD + dashboards.
-    costUsdRollup?: number;
     durationMs?: number;
     numTurns?: number;
     toolsUsed: string[];
@@ -96,6 +95,25 @@ export function extractAssistantUsage(msg: unknown): {
         messageId: m.message?.id,
         toolsUsed,
     };
+}
+
+/**
+ * The SDK emits one assistant message per content block, and each repeats the
+ * usage of the API response it came from (5 parallel tool calls = 6 copies).
+ * Returns the usage to count for this block: the response's tokens the first
+ * time its id is seen, zero after that (thinking tokens are per block).
+ */
+export function usageCountedOnce(
+    seenMessageIds: Set<string>,
+    extracted: NonNullable<ReturnType<typeof extractAssistantUsage>>,
+): TokenBreakdown & { thinkingTokens: number } {
+    const { messageId, usage } = extracted;
+    if (messageId === undefined) return usage;
+    if (!seenMessageIds.has(messageId)) {
+        seenMessageIds.add(messageId);
+        return usage;
+    }
+    return { ...usage, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
 }
 
 // Extract usage from SDK "result" message. Format: { total_cost_usd, usage, duration_ms, num_turns }.
@@ -219,7 +237,6 @@ export function buildResultEvent(args: {
     turnIndex: number;
     usage: TokenBreakdown;
     costUsd: number;
-    costUsdRollup?: number;
     durationMs?: number;
     numTurns?: number;
 }): Omit<UsageEvent, "gitBranch" | "gitSha"> {
@@ -236,7 +253,6 @@ export function buildResultEvent(args: {
         cacheCreationTokens: args.usage.cacheCreationTokens,
         thinkingTokens: 0,
         costUsdListPrice: args.costUsd,
-        costUsdRollup: args.costUsdRollup,
         durationMs: args.durationMs,
         numTurns: args.numTurns,
         toolsUsed: [],
