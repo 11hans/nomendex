@@ -1,6 +1,6 @@
-import path from "path";
-import { functions as notesFunctions, getDailyNoteName } from "@/features/notes/fx";
-import { parseDailyNoteDate, toLocalDateString } from "@/features/notes/date-utils";
+import { findDailyNote, functions as notesFunctions } from "@/features/notes/fx";
+import { getDailyNoteDate, getDailyNotesSettings } from "@/features/notes/daily-notes-settings";
+import { toLocalDateString } from "@/features/notes/date-utils";
 import { getArchivedTodos, getTodos } from "@/features/todos/fx";
 import type { Todo } from "@/features/todos/todo-types";
 import { completedOn, extractPlan, inProgress, scheduledOn, startTimeOn } from "./daily-panel";
@@ -12,17 +12,17 @@ import type { DailyPanel } from "./today-types";
  * Null for anything that isn't a daily note.
  */
 export async function getDailyPanel(args: { fileName: string }): Promise<DailyPanel | null> {
-    const day = parseDailyNoteDate(path.basename(args.fileName));
-    if (!day) return null;
+    const settings = await getDailyNotesSettings();
     // Only the daily notes folder counts, not any note that happens to be named like a date.
-    if ((await getDailyNoteName({ date: day.toISOString() })).fileName !== args.fileName) return null;
+    const day = getDailyNoteDate(args.fileName, settings);
+    if (!day) return null;
 
     const previousDay = new Date(day);
     previousDay.setDate(previousDay.getDate() - 1);
-    const { fileName: previousFileName } = await getDailyNoteName({ date: previousDay.toISOString() });
+    const previousFileName = await findDailyNote(previousDay, settings);
 
     const [previousNote, activeTodos, archivedTodos] = await Promise.all([
-        notesFunctions.getNoteByFileName.fx({ fileName: previousFileName }),
+        previousFileName ? notesFunctions.getNoteByFileName.fx({ fileName: previousFileName }) : null,
         getTodos({ includeSubtasks: true }),
         getArchivedTodos({}),
     ]);
@@ -33,7 +33,7 @@ export async function getDailyPanel(args: { fileName: string }): Promise<DailyPa
     const toPanelTodo = ({ id, title, project }: Todo) => ({ id, title, project });
 
     return {
-        plan: extractPlan(previousNote.content),
+        plan: previousNote ? extractPlan(previousNote.content) : undefined,
         scheduledTodos: scheduled.map((todo) => ({ ...toPanelTodo(todo), time: startTimeOn(todo, day) || undefined })),
         inProgressTodos: isToday ? inProgress(activeTodos, scheduled).map(toPanelTodo) : [],
         completedTodos: completedOn([...activeTodos, ...archivedTodos], day).map(toPanelTodo),

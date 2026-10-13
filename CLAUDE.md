@@ -68,6 +68,7 @@ interface GlobalConfig {
 - Notes path is dynamic based on workspace setting:
   - `notesLocation: "root"` → notes live in workspace root
   - `notesLocation: "notes"` → notes live in `{workspace}/notes`
+- Daily notes follow Obsidian's `.obsidian/daily-notes.json` (folder, Moment format, template), read on every call by `getDailyNotesSettings()` (`features/notes/daily-notes-settings.ts`). Without it: `getDailyNotesPath()` + `M-D-YYYY`. Find daily notes by date (`findDailyNote`), never by building the name yourself. See `daily-note-improvements.md`.
 
 **Workspace Directory Structure**:
 
@@ -79,7 +80,7 @@ interface GlobalConfig {
 ├── agents/                        # Custom agent configs
 │   └── _preferences.json          # Built-in agent prefs (lastUsedAgentId, model/tool overrides)
 ├── notes/                         # (if notesLocation: "notes")
-│   ├── daily-notes/               # Daily notes subfolder (auto-created)
+│   ├── daily-notes/               # Daily notes (auto-created; folder + name format from .obsidian/daily-notes.json if present)
 │   ├── Goals/
 │   │   ├── 0-2.md                 # Generated dashboards (vision, yearly, monthly)
 │   │   ├── 3. Weekly Review.md    # Agent-managed working note

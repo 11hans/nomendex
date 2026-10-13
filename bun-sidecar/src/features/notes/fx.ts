@@ -2,9 +2,9 @@ import { TypedPluginWithFunctions } from "@/types/Plugin";
 import { functionStubs, NotesPluginBase } from "./index";
 import { FunctionsFromStubs } from "@/types/Functions";
 import { FeatureStorage } from "@/storage/FeatureStorage";
-import { getNotesPath, getDailyNotesPath, hasActiveWorkspace } from "@/storage/root-path";
-import { formatDailyNoteDate, getDailyNoteFileName } from "./date-utils";
-import { readVaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
+import { getNotesPath, hasActiveWorkspace } from "@/storage/root-path";
+import { formatDailyNoteDate, formatMomentDate, parseDailyNoteDate, toLocalDateString } from "./date-utils";
+import { getDailyNotesSettings, type DailyNotesSettings } from "./daily-notes-settings";
 import * as yaml from "@/lib/yaml";
 import path from "path";
 import { mkdir } from "node:fs/promises";
@@ -30,8 +30,8 @@ export async function initializeNotesService(): Promise<void> {
     await getStorage().initialize();
 
     // Ensure the daily notes subfolder exists
-    const dailyPath = getDailyNotesPath();
-    await mkdir(dailyPath, { recursive: true });
+    const { folder } = await getDailyNotesSettings();
+    await mkdir(path.join(getNotesPath(), folder), { recursive: true });
 }
 
 function getStorage(): FeatureStorage {
@@ -461,60 +461,82 @@ async function getNoteMtime(args: { fileName: string }) {
     return { mtime };
 }
 
-export async function getDailyNoteName(args?: { date?: string }) {
-    const dailyPath = getDailyNotesPath();
-    const notesPath = getNotesPath();
-    const dailyNotesSubfolder = path.relative(notesPath, dailyPath);
+/** Daily notes in the configured folder keyed by local date (YYYY-MM-DD). */
+async function listDailyNotes(settings: DailyNotesSettings): Promise<Map<string, string>> {
+    const files = await getStorage().listFiles(settings.folder || undefined);
+    const notes = new Map<string, string>();
+    for (const name of files.sort()) {
+        const date = parseDailyNoteDate(name, settings.format);
+        const key = date && toLocalDateString(date);
+        if (key && !notes.has(key)) notes.set(key, path.join(settings.folder, name));
+    }
+    return notes;
+}
 
-    const dateObj = args?.date ? new Date(args.date) : new Date();
-    const name = getDailyNoteFileName(dateObj);
-    return { fileName: path.join(dailyNotesSubfolder, name) };
+function expectedDailyNoteName(date: Date, settings: DailyNotesSettings): string {
+    return path.join(settings.folder, `${formatDailyNoteDate(date, settings.format)}.md`);
 }
 
 /**
- * Return the daily note for a date (default today), creating it from the vault's
- * daily template if it doesn't exist yet. Mirrors the daily-notes skill script:
- * the first file with "daily" in its name inside vault-config.json's
- * folderMapping.templates, with {{date}}, {{yesterday}} and {{tomorrow}} filled
- * in as M-D-YYYY. No template → empty note.
+ * The existing daily note for a date, or null. Matches by date, not exact name, so a
+ * note named "1-11-2026.md" still counts for a DD-MM-YYYY vault.
+ */
+export async function findDailyNote(date: Date, settings: DailyNotesSettings): Promise<string | null> {
+    const expected = expectedDailyNoteName(date, settings);
+    if (await getStorage().fileExists(expected)) return expected;
+    return (await listDailyNotes(settings)).get(toLocalDateString(date)) ?? null;
+}
+
+export async function getDailyNoteName(args?: { date?: string }) {
+    const settings = await getDailyNotesSettings();
+    const dateObj = args?.date ? new Date(args.date) : new Date();
+    return { fileName: (await findDailyNote(dateObj, settings)) ?? expectedDailyNoteName(dateObj, settings) };
+}
+
+/**
+ * Return the daily note for a date (default today), creating it from the daily
+ * template if it doesn't exist yet. Folder, file name format and template follow
+ * Obsidian's daily-notes settings (see getDailyNotesSettings). No template → empty note.
  */
 async function openDailyNote(args?: { date?: string }) {
+    const settings = await getDailyNotesSettings();
     const dateObj = args?.date ? new Date(args.date) : new Date();
-    const { fileName } = await getDailyNoteName({ date: dateObj.toISOString() });
-    const created = !(await getStorage().fileExists(fileName));
-    if (created) {
-        const template = await readDailyNoteTemplate();
-        await getStorage().createFile(fileName, template ? fillDailyNoteTemplate(template, dateObj) : "");
+    const existing = await findDailyNote(dateObj, settings);
+    const fileName = existing ?? expectedDailyNoteName(dateObj, settings);
+    if (!existing) {
+        const template = settings.template ? await getStorage().readFile(settings.template) : null;
+        await getStorage().createFile(fileName, template ? fillDailyNoteTemplate(template, dateObj, settings.format) : "");
     }
-    return { ...(await getNoteByFileName({ fileName })), created };
+    return { ...(await getNoteByFileName({ fileName })), created: !existing };
 }
 
-async function readDailyNoteTemplate(): Promise<string | null> {
-    const templatesDir = (await readVaultConfig(getNotesPath()))?.folderMapping?.templates;
-    if (!templatesDir) return null;
-    const files = await getStorage().listFiles(templatesDir);
-    const templateFile = files.sort().find((name) => name.toLowerCase().includes("daily"));
-    if (!templateFile) return null;
-    return getStorage().readFile(path.join(templatesDir, templateFile));
-}
-
-function fillDailyNoteTemplate(template: string, date: Date): string {
+/**
+ * Obsidian's daily note placeholders: {{title}} and {{date}} (the note's name),
+ * {{time}} (HH:mm) and {{date:FORMAT}} / {{time:FORMAT}}. {{yesterday}} and
+ * {{tomorrow}} are Nomendex additions in the daily note format.
+ */
+function fillDailyNoteTemplate(template: string, date: Date, format: string): string {
+    const now = new Date();
+    const stamp = new Date(date);
+    stamp.setHours(now.getHours(), now.getMinutes(), 0, 0);
     const shift = (days: number) => {
         const shifted = new Date(date);
         shifted.setDate(shifted.getDate() + days);
-        return formatDailyNoteDate(shifted);
+        return formatDailyNoteDate(shifted, format);
     };
+    const title = formatDailyNoteDate(date, format);
     return template
-        .replaceAll("{{date}}", formatDailyNoteDate(date))
-        .replaceAll("{{yesterday}}", shift(-1))
-        .replaceAll("{{tomorrow}}", shift(1));
+        .replace(/{{\s*(date|time)\s*:(.+?)}}/gi, (placeholder, _kind: string, momentFormat: string) => formatMomentDate(stamp, momentFormat.trim()) ?? placeholder)
+        .replace(/{{\s*(date|title)\s*}}/gi, title)
+        .replace(/{{\s*time\s*}}/gi, formatMomentDate(stamp, "HH:mm") ?? "")
+        .replace(/{{\s*yesterday\s*}}/gi, shift(-1))
+        .replace(/{{\s*tomorrow\s*}}/gi, shift(1));
 }
 
 async function getRecentDailyNotes(args: { days?: number }) {
     const days = args.days ?? 7;
-    const dailyPath = getDailyNotesPath();
-    const notesPath = getNotesPath();
-    const dailyNotesSubfolder = path.relative(notesPath, dailyPath);
+    const settings = await getDailyNotesSettings();
+    const notes = await listDailyNotes(settings);
 
     const results: Array<{
         date: string;
@@ -527,23 +549,19 @@ async function getRecentDailyNotes(args: { days?: number }) {
     for (let i = 0; i < days; i++) {
         const date = new Date();
         date.setDate(date.getDate() - i);
+        const dateStr = toLocalDateString(date);
+        const fileName = notes.get(dateStr);
 
-        const fileName = getDailyNoteFileName(date);
-        const relativePath = path.join(dailyNotesSubfolder, fileName);
-        const dateStr = date.toISOString().split("T")[0] || "";
-
-        const exists = await getStorage().fileExists(relativePath);
-
-        if (exists) {
-            const rawContent = await getStorage().readFile(relativePath);
+        if (fileName) {
+            const rawContent = await getStorage().readFile(fileName);
             if (rawContent) {
                 const { frontMatter, content } = parseFrontMatter(rawContent);
-                results.push({ date: dateStr, fileName: relativePath, exists: true, content, frontMatter });
+                results.push({ date: dateStr, fileName, exists: true, content, frontMatter });
             } else {
-                results.push({ date: dateStr, fileName: relativePath, exists: true, content: "" });
+                results.push({ date: dateStr, fileName, exists: true, content: "" });
             }
         } else {
-            results.push({ date: dateStr, fileName: relativePath, exists: false });
+            results.push({ date: dateStr, fileName: expectedDailyNoteName(date, settings), exists: false });
         }
     }
 

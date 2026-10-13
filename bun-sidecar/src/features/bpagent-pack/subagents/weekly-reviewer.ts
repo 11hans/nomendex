@@ -4,10 +4,12 @@ import { apiBaseUrlBlock } from "./index";
 export function buildWeeklyReviewer({
     port,
     dailyNotesDir,
+    dailyNoteFormat,
     goalsDir,
 }: {
     port: number;
     dailyNotesDir: string;
+    dailyNoteFormat: string;
     goalsDir: string;
 }): AgentDefinition {
     return {
@@ -52,7 +54,7 @@ ${apiBaseUrlBlock(port)}
 
 ### Secondary: Markdown narrative (for context and reflection)
 - \`${goalsDir}/3. Weekly Review.md\` - Previous reviews
-- \`${dailyNotesDir}/*.md\` - Past 7 days of notes
+- \`${dailyNotesDir}/*.md\` - Past 7 days of notes (named \`${dailyNoteFormat}.md\`)
 
 Do not read \`${goalsDir}/0-2.md\` dashboard files as data sources — they are generated summaries. Use the API instead.
 

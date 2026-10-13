@@ -1,5 +1,6 @@
 import { z } from "zod";
 import path from "node:path";
+import type { DailyNotesSettings } from "@/features/notes/daily-notes-settings";
 
 const VaultConfigSchema = z.object({
     name: z.string().optional(),
@@ -56,15 +57,19 @@ export async function readVaultConfig(notesPath: string): Promise<VaultConfig | 
  * If you must restructure, do it as a single deliberate change and accept
  * the one-time cache rewrite cost.
  */
-export function buildBpagentSystemPrompt(notesPath: string, config: VaultConfig | null, port: number): string {
+export function buildBpagentSystemPrompt(
+    notesPath: string,
+    config: VaultConfig | null,
+    port: number,
+    dailyNotes: Pick<DailyNotesSettings, "folder" | "format">,
+): string {
     const fm = config?.folderMapping;
-    const dailyNotes = fm?.dailyNotes ?? "daily-notes";
     const goals = fm?.goals ?? "Goals";
     const projects = fm?.projects ?? "Projects";
     const templates = fm?.templates ?? "Templates";
     const archives = fm?.archives ?? "Archives";
     const inbox = fm?.inbox ?? "Inbox";
-    const dailyNotesPath = path.join(notesPath, dailyNotes);
+    const dailyNotesPath = path.join(notesPath, dailyNotes.folder);
     const goalsPath = path.join(notesPath, goals);
     const projectsPath = path.join(notesPath, projects);
     const templatesPath = path.join(notesPath, templates);
@@ -115,7 +120,7 @@ These override everything else. Violating them breaks user trust.
 
 ## Workspace Layout
 - **Vault root**: \`${notesPath}\`
-- **Daily notes**: \`${dailyNotesPath}/\` (reuse existing filename pattern exactly; infer from real files, don't guess)
+- **Daily notes**: \`${dailyNotesPath}/\` (files named \`${dailyNotes.format}.md\`, the Moment.js format from Obsidian's daily-notes settings)
 - **Goals**: \`${goalsPath}/\` · **Projects**: \`${projectsPath}/\` · **Templates**: \`${templatesPath}/\` · **Archives**: \`${archivesPath}/\` · **Inbox**: \`${inboxPath}/\`
 - **Projects registry**: \`.nomendex/projects.json\` in workspace root
 - Wiki links: \`[[note-name]]\`. Tags: \`#tag\`.

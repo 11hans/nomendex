@@ -4,11 +4,13 @@ import { apiBaseUrlBlock } from "./index";
 export function buildMonthlyReviewer({
     port,
     dailyNotesDir,
+    dailyNoteFormat,
     goalsDir,
     projectsDir,
 }: {
     port: number;
     dailyNotesDir: string;
+    dailyNoteFormat: string;
     goalsDir: string;
     projectsDir: string;
 }): AgentDefinition {
@@ -60,7 +62,7 @@ ${apiBaseUrlBlock(port)}
 
 ### Secondary: Markdown narrative (for context and reflection)
 - \`${goalsDir}/3. Weekly Review.md\` - Past month's weekly reviews
-- \`${dailyNotesDir}/*.md\` - Past 30 days of notes
+- \`${dailyNotesDir}/*.md\` - Past 30 days of notes (named \`${dailyNoteFormat}.md\`)
 - \`${projectsDir}/*.md\` - Project narrative (Next Actions, Log) for context only
 
 The dashboard files \`${goalsDir}/0-2.md\` and \`${goalsDir}/2. Monthly Goals.md\` are generated summaries — never read them as a data source and never write to them directly. Manage goals via the API, then call \`/api/goals/sync/dashboards\` to regenerate dashboards.

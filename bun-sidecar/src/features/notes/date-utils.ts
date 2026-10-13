@@ -1,47 +1,110 @@
-export function getTodayDailyNoteFileName(date: Date = new Date()): string {
-    const month = date.getMonth() + 1; // 1-12
-    const day = date.getDate(); // 1-31
-    const year = date.getFullYear();
-    return `${month}-${day}-${year}.md`;
+/** Daily note file name format when the vault has no Obsidian daily-notes settings. */
+export const DEFAULT_DAILY_NOTE_FORMAT = "M-D-YYYY";
+
+// The numeric subset of Moment.js format tokens (what Obsidian uses for daily notes).
+const DATE_TOKENS = new Set(["YYYY", "YY", "MM", "M", "DD", "D", "HH", "mm"]);
+
+type FormatPart = { token: string } | { literal: string };
+
+/** Split a Moment-style format into tokens and literals; null if it uses an unsupported token. */
+function tokenizeDateFormat(format: string): FormatPart[] | null {
+    const parts: FormatPart[] = [];
+    let i = 0;
+    while (i < format.length) {
+        const char = format[i];
+        if (char === "[") {
+            const end = format.indexOf("]", i);
+            if (end === -1) return null;
+            parts.push({ literal: format.slice(i + 1, end) });
+            i = end + 1;
+        } else if (/[A-Za-z]/.test(char)) {
+            // A run of the same letter is one token, so "MMMM" or "DDDD" isn't read as two.
+            let end = i;
+            while (format[end] === char) end++;
+            const token = format.slice(i, end);
+            if (!DATE_TOKENS.has(token)) return null;
+            parts.push({ token });
+            i = end;
+        } else {
+            parts.push({ literal: char });
+            i++;
+        }
+    }
+    return parts;
 }
 
-export function getYesterdayDailyNoteFileName(date: Date = new Date()): string {
-    const yesterday = new Date(date);
-    yesterday.setDate(yesterday.getDate() - 1);
-    const month = yesterday.getMonth() + 1; // 1-12
-    const day = yesterday.getDate(); // 1-31
-    const year = yesterday.getFullYear();
-    return `${month}-${day}-${year}.md`;
+function formatToken(date: Date, token: string): string {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    switch (token) {
+        case "YYYY": return String(date.getFullYear());
+        case "YY": return pad(date.getFullYear() % 100);
+        case "MM": return pad(date.getMonth() + 1);
+        case "M": return String(date.getMonth() + 1);
+        case "DD": return pad(date.getDate());
+        case "D": return String(date.getDate());
+        case "HH": return pad(date.getHours());
+        default: return pad(date.getMinutes());
+    }
 }
 
-export function getTomorrowDailyNoteFileName(date: Date = new Date()): string {
-    const tomorrow = new Date(date);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const month = tomorrow.getMonth() + 1; // 1-12
-    const day = tomorrow.getDate(); // 1-31
-    const year = tomorrow.getFullYear();
-    return `${month}-${day}-${year}.md`;
+/** Format a date with the numeric subset of Moment.js tokens; null if the format uses anything else. */
+export function formatMomentDate(date: Date, format: string): string | null {
+    const parts = tokenizeDateFormat(format);
+    if (!parts) return null;
+    return parts.map((part) => ("token" in part ? formatToken(date, part.token) : part.literal)).join("");
 }
 
-export function getDailyNoteFileName(date: Date): string {
-    return `${formatDailyNoteDate(date)}.md`;
+/** Whether a daily note file name format can be formatted and parsed back: year, month and day, no folders. */
+export function isSupportedDailyFormat(format: string): boolean {
+    const parts = tokenizeDateFormat(format);
+    if (!parts) return false;
+    const tokens = parts.flatMap((part) => ("token" in part ? [part.token] : []));
+    const literals = parts.flatMap((part) => ("literal" in part ? [part.literal] : []));
+    return (
+        literals.every((literal) => !/[/\\]/.test(literal)) &&
+        tokens.some((token) => token.startsWith("Y")) &&
+        tokens.some((token) => token.startsWith("M")) &&
+        tokens.some((token) => token.startsWith("D"))
+    );
 }
 
-/** Daily note date as used in file names and template placeholders: M-D-YYYY. */
-export function formatDailyNoteDate(date: Date): string {
-    const month = date.getMonth() + 1; // 1-12
-    const day = date.getDate(); // 1-31
-    const year = date.getFullYear();
-    return `${month}-${day}-${year}`;
+/** Daily note date as used in file names and template placeholders. */
+export function formatDailyNoteDate(date: Date, format: string = DEFAULT_DAILY_NOTE_FORMAT): string {
+    return formatMomentDate(date, format) ?? formatMomentDate(date, DEFAULT_DAILY_NOTE_FORMAT) ?? "";
 }
 
-/** Inverse of formatDailyNoteDate for a file base name ("10-5-2026.md"); null if it isn't one. */
-export function parseDailyNoteDate(baseName: string): Date | null {
-    const match = baseName.match(/^(\d{1,2})-(\d{1,2})-(\d{4})(?:\.md)?$/);
+/**
+ * Inverse of formatDailyNoteDate for a file base name ("13-10-2026.md"); null if it isn't one.
+ * Only the given format counts: M-D and D-M names can't be told apart, so there is no fallback.
+ * Numbers may drop or add a leading zero ("1-11" matches DD-MM).
+ */
+export function parseDailyNoteDate(baseName: string, format: string = DEFAULT_DAILY_NOTE_FORMAT): Date | null {
+    const parts = tokenizeDateFormat(format);
+    if (!parts) return null;
+    const tokens: string[] = [];
+    const pattern = parts
+        .map((part) => {
+            if ("literal" in part) return part.literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            tokens.push(part.token);
+            return part.token === "YYYY" ? "(\\d{4})" : "(\\d{1,2})";
+        })
+        .join("");
+    const match = baseName.match(new RegExp(`^${pattern}(?:\\.md)?$`));
     if (!match) return null;
-    const [, month, day, year] = match.map(Number);
+
+    let year = NaN;
+    let month = NaN;
+    let day = NaN;
+    tokens.forEach((token, index) => {
+        const value = Number(match[index + 1]);
+        if (token === "YYYY") year = value;
+        else if (token === "YY") year = value > 68 ? 1900 + value : 2000 + value;
+        else if (token.startsWith("M")) month = value;
+        else if (token.startsWith("D")) day = value;
+    });
+    if ([year, month, day].some(Number.isNaN)) return null;
     const date = new Date(year, month - 1, day);
-    if (date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
     return date;
 }
 

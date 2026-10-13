@@ -4,11 +4,13 @@ import { apiBaseUrlBlock } from "./index";
 export function buildGoalAligner({
     port,
     dailyNotesDir,
+    dailyNoteFormat,
     goalsDir,
     projectsDir,
 }: {
     port: number;
     dailyNotesDir: string;
+    dailyNoteFormat: string;
     goalsDir: string;
     projectsDir: string;
 }): AgentDefinition {
@@ -29,7 +31,7 @@ ${apiBaseUrlBlock(port)}
 - Projects: \`curl -s http://localhost:${port}/api/projects/list -X POST -H 'Content-Type: application/json' -d '{}'\`
 
 ### Secondary: Markdown narrative (for activity patterns)
-- Daily notes: \`${dailyNotesDir}/\`
+- Daily notes: \`${dailyNotesDir}/\` (named \`${dailyNoteFormat}.md\`)
 - Project notes: \`${projectsDir}/\` (mirror notes, not source of truth)
 
 Do not read \`${goalsDir}/0-2.md\` dashboard files as data sources — they are generated summaries.

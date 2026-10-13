@@ -1,40 +1,7 @@
 import path from "node:path";
 import { readdir } from "node:fs/promises";
-import type { VaultConfig } from "./built-in-bpagent";
-
-type Pattern = "M-D-YYYY" | "YYYY-MM-DD" | "D-M-YYYY";
-
-function formatToday(pattern: Pattern, now: Date): string {
-    const y = now.getFullYear();
-    const m = now.getMonth() + 1;
-    const d = now.getDate();
-    switch (pattern) {
-        case "YYYY-MM-DD":
-            return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-        case "D-M-YYYY":
-            return `${d}-${m}-${y}`;
-        default:
-            return `${m}-${d}-${y}`;
-    }
-}
-
-function detectPattern(filename: string): Pattern | null {
-    const base = filename.replace(/\.md$/, "");
-    if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(base)) return "YYYY-MM-DD";
-    if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(base)) return "M-D-YYYY";
-    return null;
-}
-
-function parseFileDate(filename: string, pattern: Pattern): Date | null {
-    const base = filename.replace(/\.md$/, "");
-    const parts = base.split("-").map((n) => parseInt(n, 10));
-    if (parts.some((n) => Number.isNaN(n))) return null;
-    let y: number, m: number, d: number;
-    if (pattern === "YYYY-MM-DD") [y, m, d] = parts as [number, number, number];
-    else if (pattern === "D-M-YYYY") [d, m, y] = parts as [number, number, number];
-    else [m, d, y] = parts as [number, number, number];
-    return new Date(y, m - 1, d);
-}
+import type { DailyNotesSettings } from "@/features/notes/daily-notes-settings";
+import { formatDailyNoteDate, parseDailyNoteDate, toLocalDateString } from "@/features/notes/date-utils";
 
 /**
  * Pre-computed daily-notes context added to BPagent's user turn (see turn-context.ts).
@@ -43,21 +10,24 @@ function parseFileDate(filename: string, pattern: Pattern): Date | null {
  */
 export async function buildDailyContextBlock(
     notesPath: string,
-    config: VaultConfig | null,
+    settings: DailyNotesSettings,
 ): Promise<string | null> {
-    const dailyDir = config?.folderMapping?.dailyNotes ?? "daily-notes";
-    const dir = path.join(notesPath, dailyDir);
+    const dailyDir = settings.folder || ".";
+    const dir = path.join(notesPath, settings.folder);
 
-    let files: string[];
+    let notes: Array<{ f: string; d: Date }>;
     try {
         const entries = await readdir(dir);
-        files = entries.filter((f) => f.endsWith(".md") && detectPattern(f));
+        notes = entries
+            .map((f) => ({ f, d: parseDailyNoteDate(f, settings.format) }))
+            .filter((x): x is { f: string; d: Date } => x.d !== null)
+            .sort((a, b) => a.d.getTime() - b.d.getTime());
     } catch {
         return null;
     }
 
     const now = new Date();
-    const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const iso = toLocalDateString(now);
     const czDate = now.toLocaleDateString("cs-CZ", {
         year: "numeric",
         month: "long",
@@ -67,26 +37,21 @@ export async function buildDailyContextBlock(
     const hour = now.getHours();
     const timeOfDay = hour < 12 ? "morning" : hour < 16 ? "midday" : "evening";
 
-    if (files.length === 0) {
+    const existingToday = notes.find((x) => toLocalDateString(x.d) === iso)?.f;
+    const todayFile = existingToday ?? `${formatDailyNoteDate(now, settings.format)}.md`;
+    const todayPath = path.join(dir, todayFile);
+
+    if (notes.length === 0) {
         return `<daily-context>
 today: ${iso} (${czDate})
 time_of_day: ${timeOfDay}
 daily_notes_dir: ${dailyDir}
-filename_pattern: unknown (no existing notes)
-today_note: { exists: false }
+filename_pattern: ${settings.format}
+today_note: { filename: "${todayFile}", path: "${todayPath}", exists: false }
 </daily-context>`;
     }
 
-    const pattern = detectPattern(files[0]) ?? "M-D-YYYY";
-    const sorted = files
-        .map((f) => ({ f, d: parseFileDate(f, pattern) }))
-        .filter((x): x is { f: string; d: Date } => x.d !== null)
-        .sort((a, b) => a.d.getTime() - b.d.getTime());
-
-    const latest = sorted[sorted.length - 1]?.f ?? files[files.length - 1];
-    const todayFile = `${formatToday(pattern, now)}.md`;
-    const todayExists = files.includes(todayFile);
-    const todayPath = path.join(dir, todayFile);
+    const latest = notes[notes.length - 1].f;
 
     let streak: string | null = null;
     try {
@@ -101,8 +66,8 @@ today_note: { exists: false }
 today: ${iso} (${czDate})
 time_of_day: ${timeOfDay}
 daily_notes_dir: ${dailyDir}
-filename_pattern: ${pattern}
-today_note: { filename: "${todayFile}", path: "${todayPath}", exists: ${todayExists} }
+filename_pattern: ${settings.format}
+today_note: { filename: "${todayFile}", path: "${todayPath}", exists: ${Boolean(existingToday)} }
 latest_note: { filename: "${latest}"${streak ? `, streak: "${streak}"` : ""} }
 </daily-context>`;
 }

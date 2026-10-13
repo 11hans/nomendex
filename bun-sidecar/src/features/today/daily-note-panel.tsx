@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/useTheme";
 import { onRefresh, subscribe } from "@/lib/events";
 import { todayAPI } from "@/hooks/useTodayAPI";
-import { parseDailyNoteDate } from "@/features/notes/date-utils";
 import type { DailyPanel } from "./today-types";
 
 const REFETCH_DEBOUNCE_MS = 300;
@@ -17,20 +16,25 @@ const REFETCH_DEBOUNCE_MS = 300;
 export function DailyNotePanel({ fileName, compact }: { fileName: string; compact?: boolean }) {
     const { currentTheme } = useTheme();
     const [panel, setPanel] = useState<DailyPanel | null>(null);
-    const isDailyNoteName = parseDailyNoteDate(fileName.split("/").pop() ?? "") !== null;
+    // Daily note names are all digits and separators; the server decides the rest
+    // (folder and format come from Obsidian's settings).
+    const mayBeDailyNote = /\d/.test(fileName.split("/").pop() ?? "");
 
     useEffect(() => {
         setPanel(null);
-        if (!isDailyNoteName) return;
+        if (!mayBeDailyNote) return;
 
         let cancelled = false;
         let timer: ReturnType<typeof setTimeout> | undefined;
+        let unsubscribe = () => {};
         const refetch = async () => {
             try {
                 const result = await todayAPI.getDailyPanel({ fileName });
                 if (!cancelled) setPanel(result);
+                return result;
             } catch {
                 // Best-effort context; the note itself is what matters.
+                return null;
             }
         };
         const scheduleRefetch = () => {
@@ -38,20 +42,25 @@ export function DailyNotePanel({ fileName, compact }: { fileName: string; compac
             timer = setTimeout(() => void refetch(), REFETCH_DEBOUNCE_MS);
         };
 
-        void refetch();
-        const unsubTodos = onRefresh(scheduleRefetch, "todos-list");
-        // The plan lives in the previous day's note, which may be edited elsewhere (e.g. Obsidian).
-        const unsubNotes = subscribe("notes:fileChanged", (event) => {
-            if (event.fileName !== fileName) scheduleRefetch();
+        void refetch().then((result) => {
+            if (cancelled || !result) return;
+            const unsubTodos = onRefresh(scheduleRefetch, "todos-list");
+            // The plan lives in the previous day's note, which may be edited elsewhere (e.g. Obsidian).
+            const unsubNotes = subscribe("notes:fileChanged", (event) => {
+                if (event.fileName !== fileName) scheduleRefetch();
+            });
+            unsubscribe = () => {
+                unsubTodos();
+                unsubNotes();
+            };
         });
 
         return () => {
             cancelled = true;
             clearTimeout(timer);
-            unsubTodos();
-            unsubNotes();
+            unsubscribe();
         };
-    }, [fileName, isDailyNoteName]);
+    }, [fileName, mayBeDailyNote]);
 
     if (!panel) return null;
     const hasPlan = Boolean(panel.plan) || panel.scheduledTodos.length > 0 || panel.inProgressTodos.length > 0;

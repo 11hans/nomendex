@@ -1,50 +1,51 @@
 # Daily Note Improvements
 
-Enhanced daily note creation with a dedicated subfolder, today indicator, and relative date labels.
+Daily notes that work the same in Nomendex and Obsidian, created from the vault template, plus a today indicator and relative date labels in the date picker.
 
 ## Overview
 
-Daily notes are now stored in a `daily-notes/` subfolder within the notes directory, created automatically on startup. The date picker dialog highlights today's date and shows relative labels ("Yesterday", "Tomorrow"). File naming has moved from client-side to server-side to ensure consistency.
+Where daily notes live and how they're named comes from Obsidian's core Daily notes settings (`.obsidian/daily-notes.json`), so both apps open and create the same file. Nomendex only reads these settings; they're changed in Obsidian → Settings → Daily notes, and a change applies without a restart (the file is read on every call).
 
-## Daily Notes Subfolder
+## Settings: `daily-notes-settings.ts`
 
-Previously, daily notes were created at the root of the notes directory alongside regular notes. They are now stored in a dedicated subfolder:
+`getDailyNotesSettings()` returns `{ folder, format, template }`:
+
+| Field | With `.obsidian/daily-notes.json` | Without it |
+|-------|-----------------------------------|------------|
+| `folder` (relative to the notes root, `""` = root) | `folder`, empty = vault root (Obsidian's default) | `daily-notes` (`getDailyNotesPath()`) |
+| `format` (Moment.js) | `format`, empty = `YYYY-MM-DD` (Obsidian's default) | `M-D-YYYY` |
+| `template` | `template` + `.md` if that file exists | first `*daily*.md` in `vault-config.json → folderMapping.templates` |
+
+Supported format tokens: `YYYY YY MM M DD D HH mm` and `[literal]` text. A format with anything else (`dddd`, `MMMM`, `Do`, a `/` folder part) falls back to `M-D-YYYY` with one warning in the log.
 
 ```
-my-workspace/
-└── notes/
-    ├── daily-notes/       ← Auto-created on startup
-    │   ├── 3-1-2026.md
-    │   ├── 3-2-2026.md
-    │   └── 3-3-2026.md
-    └── my-regular-note.md
+my-vault/
+├── .obsidian/daily-notes.json   ← { "folder": "Daily", "format": "DD-MM-YYYY", "template": "Templates/Daily Note Template" }
+├── Daily/                       ← created on startup if missing
+│   ├── 12-10-2026.md
+│   └── 13-10-2026.md
+└── my-regular-note.md
 ```
 
-The subfolder is created during notes service initialization:
+## Finding a Daily Note
 
-```typescript
-// fx.ts
-const dailyPath = getDailyNotesPath();
-await mkdir(dailyPath, { recursive: true });
-```
+A file is the daily note for a date when it sits directly in the daily notes folder and its name parses as that date in the configured format (`getDailyNoteDate(fileName, settings)`):
 
-Path resolution is centralized in `root-path.ts`:
+- Parsing uses **only** the configured format. `10-11-2026` is 10 Nov as `DD-MM-YYYY` and 11 Oct as `M-D-YYYY`, so guessing another order would open the wrong day.
+- Numbers may have a leading zero or not (`1-11-2026` = `01-11-2026`), so a note created by an older naming still matches.
+- iCloud conflict copies (`28-03-2026 2.md`) and impossible dates are not daily notes.
 
-```typescript
-dailyNotesPath: path.join(notesPath, "daily-notes")
-```
+`findDailyNote(date, settings)` tries the exact expected name first, then any file in the folder that parses to the same local day.
 
 ## Server-Side File Naming
-
-The `getDailyNoteName` function moved from a simple client-side utility to a server-side endpoint that returns the full relative path:
 
 ```
 POST /api/notes/daily-name
 Body: { "date": "2026-03-03T00:00:00.000Z" }  // optional, defaults to today
-Response: { "fileName": "daily-notes/3-3-2026.md" }
+Response: { "fileName": "Daily/03-03-2026.md" }
 ```
 
-This ensures the daily notes subfolder prefix is always included and consistent across all callers.
+Returns the existing note for that day if there is one, otherwise the name it would be created under.
 
 ## Creating from the Vault Template
 
@@ -56,7 +57,36 @@ Body: { "date": "2026-03-03T00:00:00.000Z" }  // optional, defaults to today
 Response: Note & { created: boolean }
 ```
 
-If the note doesn't exist yet it is created deterministically (no LLM), the same way as the `daily-notes` skill script: the first file with "daily" in its name inside `vault-config.json → folderMapping.templates`, with `{{date}}`, `{{yesterday}}` and `{{tomorrow}}` filled in as `M-D-YYYY`. No template → empty note. Notes are only created when opened; nothing is pre-created for skipped days.
+If no note exists for that day it is created deterministically (no LLM) from the settings' template, with Obsidian's placeholders filled in:
+
+| Placeholder | Value |
+|-------------|-------|
+| `{{title}}`, `{{date}}` | the note's name (configured format) |
+| `{{time}}` | current time, `HH:mm` |
+| `{{date:FMT}}`, `{{time:FMT}}` | the note's date / current time in `FMT` (supported tokens only, otherwise left as is) |
+| `{{yesterday}}`, `{{tomorrow}}` | Nomendex extension: the neighbouring days' names |
+
+No template → empty note. Notes are only created when opened; nothing is pre-created for skipped days.
+
+## Agents
+
+BPagent's system prompt, its `<daily-context>` block (`daily_notes_dir`, `filename_pattern`, `today_note`) and the weekly/monthly reviewer and goal-aligner subagents all take the folder and format from `getDailyNotesSettings()`. The `/daily` and `daily-notes` skills (`daily-note.sh`) don't: they still read `vault-config.json → folderMapping.dailyNotes` and guess the format from existing names.
+
+## Migrating to Another Folder or Format
+
+`bun-sidecar/scripts/migrate-daily-notes.ts` moves existing daily notes to what's set in Obsidian and rewrites the links to them:
+
+```
+bun scripts/migrate-daily-notes.ts --vault <path> --from-folder daily-notes --from-format M-D-YYYY [--apply]
+```
+
+- Dry run by default: prints renames, skipped files, links per file and any leftover mention of the old folder.
+- Each note is parsed strictly in `--from-format` and renamed to the new folder and format; conflict copies keep their suffix. A taken target name is skipped and reported, never overwritten.
+- Links: `[[old/…]]`, `![[old/…]]`, bare `[[…]]` to a moved note and `[text](old/….md)`, with `|alias`, `#heading` and `^block` kept. Links to days without a note (yesterday/tomorrow navigation) are rewritten too, so clicking them creates the note in the new place. Only those strings change; the rest of each file stays byte-identical.
+- Sets `vault-config.json → folderMapping.dailyNotes` and removes the old folder once it's empty.
+- Refuses to run while Obsidian still points at the old folder or uses an unsupported format.
+
+Afterwards rebuild the indexes: `/api/notes/backlinks/rebuild` and `/api/notes/tags/rebuild`.
 
 ## Daily Panel
 
@@ -69,7 +99,7 @@ Above a daily note's editor, a read-only panel (`features/today/daily-note-panel
   - Overdue todos from earlier days are deliberately not shown — a skipped day must not turn into a backlog.
 - **Hotovo** — todos with `status: "done"` whose `completedAt` falls on the note's local day (archived included).
 
-The panel only appears for notes in the daily notes folder and renders nothing when everything is empty. It refreshes on todo changes and on external note changes (e.g. the previous day's note edited in Obsidian).
+The panel only appears for daily notes (the server decides with `getDailyNoteDate`; the client only skips names without a digit) and renders nothing when everything is empty. The previous day's note is found by date (`findDailyNote`), not by name. It refreshes on todo changes and on external note changes (e.g. the previous day's note edited in Obsidian).
 
 The Today sidebar item opens today's daily note in a regular notes tab. Older Today tabs (formerly a BPagent `/daily` chat) restored from `workspace.json` hand off to the note and close themselves.
 
@@ -110,13 +140,14 @@ The note sidebar's "On This Page" section supports keyboard navigation:
 
 ```
 bun-sidecar/src/features/notes/
-├── fx.ts                              # getDailyNoteName, openDailyNote (template fill)
-├── date-utils.ts                      # getDailyNoteFileName, formatDailyNoteDate, parseDailyNoteDate
+├── daily-notes-settings.ts            # getDailyNotesSettings (Obsidian settings), getDailyNoteDate
+├── date-utils.ts                      # formatDailyNoteDate, parseDailyNoteDate, formatMomentDate (tested)
+├── fx.ts                              # findDailyNote, getDailyNoteName, openDailyNote (template fill)
 ├── daily-note-date-picker-dialog.tsx  # Today indicator, relative labels
 ├── note-view.tsx                      # Interactive table of contents
 
 bun-sidecar/src/storage/
-├── root-path.ts                       # getDailyNotesPath()
+├── root-path.ts                       # getDailyNotesPath() (default folder without Obsidian settings)
 
 bun-sidecar/src/hooks/
 └── useNotesAPI.ts                     # getDailyNoteName accepts optional date arg
@@ -128,7 +159,13 @@ bun-sidecar/src/features/today/
 ├── open-today-note.ts                 # Shared "open today's note" for sidebar + legacy tab
 └── today-view.tsx                     # Legacy Today tab → hands off to today's note
 
+bun-sidecar/src/features/bpagent-pack/
+└── daily-context.ts                   # <daily-context> block from the same settings
+
 bun-sidecar/src/server-routes/
 ├── notes-routes.ts                    # /api/notes/daily-name, /api/notes/daily-open
 └── today-routes.ts                    # /api/today/daily-panel
+
+bun-sidecar/scripts/
+└── migrate-daily-notes.ts             # Move daily notes to a new folder/format + rewrite links
 ```

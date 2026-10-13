@@ -14,6 +14,7 @@ import { buildUiRendererMcpServer } from "@/mcp-servers/ui-renderer";
 import { acquireFileLock, getActiveNoteFileNameForPath, releaseFileLockForToolUse } from "@/services/file-locks";
 import { buildBpagentSubagents } from "@/features/bpagent-pack/subagents";
 import { buildBpagentSystemPrompt, readVaultConfig } from "@/features/bpagent-pack/built-in-bpagent";
+import { getDailyNotesSettings } from "@/features/notes/daily-notes-settings";
 import { buildDailyContextBlock } from "@/features/bpagent-pack/daily-context";
 import { isAutoAllowedLocalApiCurl } from "@/features/bpagent-pack/local-api-curl";
 import { buildMemoryPromptBlock } from "@/features/agent-memory/fx";
@@ -598,6 +599,7 @@ export const chatRoutes = {
                     // BPagent: use dedicated system prompt with real notes path + context
                     const notesPath = getNotesPath();
                     const vaultConfig = await readVaultConfig(notesPath);
+                    const dailyNotes = await getDailyNotesSettings();
                     const serverPort = parseInt(process.env.PORT || "1234", 10);
 
                     // Load extraction config — used for MCP read-only mode and prompt note
@@ -615,7 +617,7 @@ export const chatRoutes = {
                         ? "## Memory\n\nYour conversations are automatically analyzed for memories after each session ends. You do NOT need to call memory_save manually. Use memory_search and memory_list_recent to recall what you know."
                         : "## Memory\n\nUse memory_save proactively to preserve important context, preferences, decisions, and goals that should survive across sessions.";
                     sdkOptions.systemPrompt = [
-                        buildBpagentSystemPrompt(notesPath, vaultConfig, serverPort),
+                        buildBpagentSystemPrompt(notesPath, vaultConfig, serverPort, dailyNotes),
                         memoryModeNote,
                         SYSTEM_PROMPT_DYNAMIC_BOUNDARY,
                         buildAgentContext(notesPath),
@@ -623,7 +625,7 @@ export const chatRoutes = {
 
                     let dailyBlock: string | null = null;
                     try {
-                        dailyBlock = await buildDailyContextBlock(notesPath, vaultConfig);
+                        dailyBlock = await buildDailyContextBlock(notesPath, dailyNotes);
                     } catch (err) {
                         chatLogger.warn("Failed to build daily context block", {
                             error: err instanceof Error ? err.message : String(err),
@@ -658,6 +660,7 @@ export const chatRoutes = {
                         notesPath,
                         config: vaultConfig,
                         port: serverPort,
+                        dailyNotes,
                     });
                     chatLogger.info("BPagent session: injected subagents + memory", {
                         subagents: Object.keys(sdkOptions.agents),
