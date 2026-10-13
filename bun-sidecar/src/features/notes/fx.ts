@@ -290,8 +290,17 @@ async function getNoteByFileName(args: { fileName: string }) {
     return { fileName: args.fileName, content, frontMatter, folderPath, mtime: mtime ?? undefined };
 }
 
-async function saveNote(args: { fileName: string; content: string }) {
+async function saveNote(args: { fileName: string; content: string; expectedMtime?: number }) {
     try {
+        // The editor passes the mtime it last saw; if the file changed since (e.g. in
+        // Obsidian), don't overwrite it and hand back what's on disk instead.
+        if (args.expectedMtime !== undefined) {
+            const diskMtime = await getStorage().getFileMtime(args.fileName);
+            if (diskMtime !== null && diskMtime !== args.expectedMtime) {
+                return { ...(await getNoteByFileName({ fileName: args.fileName })), conflict: true };
+            }
+        }
+
         // Read existing file to preserve front matter
         const existingContent = await getStorage().readFile(args.fileName);
         let frontMatter: Record<string, unknown> | undefined;

@@ -150,6 +150,9 @@ export function NotesView(props: NotesViewProps) {
     const hasSetTabNameRef = useRef<boolean>(false);
     const minimapRef = useRef<HTMLDivElement>(null);
     const lastKnownMtimeRef = useRef<number | null>(null);
+    const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve());
+    const pendingSavesRef = useRef(0);
+    const reloadCountRef = useRef(0);
     const prevActiveTabIdRef = useRef<string | undefined>(undefined);
     const lastAppliedScrollToLineRef = useRef<number | null>(null);
     const { currentTheme } = useTheme();
@@ -161,6 +164,8 @@ export function NotesView(props: NotesViewProps) {
     const noteFileNameRef = useRef(noteFileName);
     const notesAPIRef = useRef(notesAPI);
     const wasActiveRef = useRef(false);
+    const isActiveTab = activeTab?.id === tabId;
+    const isActiveTabRef = useRef(isActiveTab);
 
     useEffect(() => {
         contentRef.current = content;
@@ -173,6 +178,10 @@ export function NotesView(props: NotesViewProps) {
     useEffect(() => {
         notesAPIRef.current = notesAPI;
     }, [notesAPI]);
+
+    useEffect(() => {
+        isActiveTabRef.current = isActiveTab;
+    }, [isActiveTab]);
 
     // Load available agents for the toolbar dropdown
     useEffect(() => {
@@ -911,6 +920,174 @@ export function NotesView(props: NotesViewProps) {
         }
     }, [headings, activeHeadingId]);
 
+    const getCurrentEditorContent = useCallback(() => {
+        if (viewRef.current) {
+            return tableMarkdownSerializer.serialize(viewRef.current.state.doc);
+        }
+        return contentRef.current;
+    }, []);
+
+    // The rich editor writes markdown its own way (e.g. a note from Obsidian), so a
+    // different string isn't an edit by itself: compare documents there.
+    const hasUnsavedEdits = useCallback(() => {
+        const saved = lastSavedContentRef.current;
+        const view = viewRef.current;
+        if (!view) return contentRef.current !== saved;
+        if (tableMarkdownSerializer.serialize(view.state.doc) === saved) return false;
+        const savedDoc = tableMarkdownParser.parse(saved);
+        return !savedDoc || !view.state.doc.eq(savedDoc);
+    }, []);
+
+    // Saves run one at a time, so each sends the mtime the previous one produced. A save
+    // never overwrites a file that changed on disk since we last saw it (e.g. in Obsidian).
+    const writeNote = useCallback((fileName: string, contentToSave: string): Promise<"saved" | "conflict"> => {
+        const reloadCount = reloadCountRef.current;
+        pendingSavesRef.current++;
+        const run = async (): Promise<"saved" | "conflict"> => {
+            const api = notesAPIRef.current;
+            // Left over from a note this view no longer shows: write it as before.
+            if (fileName !== noteFileNameRef.current) {
+                await api.saveNote({ fileName, content: contentToSave });
+                return "saved";
+            }
+            // The editor was reloaded from disk after this save was queued.
+            if (reloadCount !== reloadCountRef.current) return "saved";
+            if (contentToSave === lastSavedContentRef.current) return "saved";
+
+            let result = await api.saveNote({
+                fileName,
+                content: contentToSave,
+                expectedMtime: lastKnownMtimeRef.current ?? undefined,
+            });
+            // Only the mtime or the front matter moved (iCloud touched the file): the text on
+            // disk is still what we saved last, so it's safe to save over it.
+            if (result.conflict && result.content === lastSavedContentRef.current) {
+                result = await api.saveNote({ fileName, content: contentToSave, expectedMtime: result.mtime });
+            }
+            if (result.conflict) return "conflict";
+
+            lastSavedContentRef.current = contentToSave;
+            if (result.mtime) {
+                lastKnownMtimeRef.current = result.mtime;
+            }
+            return "saved";
+        };
+        const saved = saveQueueRef.current.then(run).finally(() => {
+            pendingSavesRef.current--;
+        });
+        saveQueueRef.current = saved.catch(() => undefined);
+        return saved;
+    }, []);
+
+    // Front matter and mtime from disk, without touching the editor.
+    const applyNoteMetadata = useCallback((freshNote: Note) => {
+        lastKnownMtimeRef.current = freshNote.mtime ?? null;
+        const noteTags = freshNote.frontMatter?.tags;
+        if (Array.isArray(noteTags)) {
+            setTags(noteTags.filter((tag): tag is string => typeof tag === "string"));
+        } else {
+            setTags([]);
+        }
+        const noteProject = freshNote.frontMatter?.project;
+        if (typeof noteProject === "string") {
+            setProject(noteProject);
+        } else {
+            setProject(null);
+        }
+    }, []);
+
+    // Replace the editor's text with what's on disk, dropping any save not yet written.
+    const applyFreshNote = useCallback(
+        (freshNote: Note) => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+            reloadCountRef.current++;
+
+            const freshContent = freshNote.content || "";
+            setNote(freshNote);
+            setContent(freshContent);
+            setHeadings(parseHeadings(freshContent));
+            lastSavedContentRef.current = freshContent;
+            initializedContentRef.current = freshContent;
+            setSaveState("saved");
+
+            if (viewRef.current) {
+                const doc = tableMarkdownParser.parse(freshContent) || tableSchema.nodes.doc.createAndFill();
+                const stateWithNewDoc = EditorState.create({
+                    doc,
+                    plugins: viewRef.current.state.plugins,
+                    selection: Selection.atStart(doc!),
+                });
+                viewRef.current.updateState(stateWithNewDoc);
+            }
+
+            applyNoteMetadata(freshNote);
+        },
+        [parseHeadings, applyNoteMetadata]
+    );
+
+    // The file changed on disk while the editor has unsaved edits: let the user pick a side.
+    const showConflictToast = useCallback(() => {
+        const fileName = noteFileNameRef.current;
+        const show = () => {
+            toast("Note was modified externally", {
+                id: `note-conflict-${fileName}`,
+                duration: Infinity,
+                action: {
+                    label: "Reload",
+                    onClick: async () => {
+                        try {
+                            const freshNote = await notesAPIRef.current.getNoteByFileName({ fileName, skipCache: true });
+                            if (fileName === noteFileNameRef.current) {
+                                applyFreshNote(freshNote);
+                            }
+                        } catch (error) {
+                            console.error("Failed to reload note:", error);
+                        }
+                    },
+                },
+                cancel: {
+                    label: "Keep mine",
+                    onClick: async () => {
+                        try {
+                            const { mtime } = await notesAPIRef.current.getNoteMtime({ fileName });
+                            if (fileName !== noteFileNameRef.current) return;
+                            lastKnownMtimeRef.current = mtime;
+                            if ((await writeNote(fileName, getCurrentEditorContent())) === "conflict") {
+                                show();
+                            } else {
+                                setSaveState("saved");
+                            }
+                        } catch (error) {
+                            console.error("Failed to save note:", error);
+                        }
+                    },
+                },
+            });
+        };
+        show();
+    }, [applyFreshNote, writeNote, getCurrentEditorContent]);
+
+    const saveAndReport = useCallback(
+        async (fileName: string, contentToSave: string) => {
+            try {
+                setSaveState("saving");
+                if ((await writeNote(fileName, contentToSave)) === "conflict") {
+                    setSaveState("unsaved");
+                    showConflictToast();
+                } else {
+                    setSaveState("saved");
+                }
+            } catch {
+                setSaveState("error");
+                setTimeout(() => setSaveState("unsaved"), 3000); // Reset error state after 3s
+            }
+        },
+        [writeNote, showConflictToast]
+    );
+
     // Immediate save function (for blur events)
     const saveImmediately = useCallback(
         async (contentToSave: string) => {
@@ -918,22 +1095,9 @@ export function NotesView(props: NotesViewProps) {
                 setSaveState("saved");
                 return;
             }
-
-            try {
-                setSaveState("saving");
-                const savedNote = await notesAPI.saveNote({ fileName: noteFileName, content: contentToSave });
-                lastSavedContentRef.current = contentToSave;
-                // Update mtime to prevent false "external change" detection
-                if (savedNote?.mtime) {
-                    lastKnownMtimeRef.current = savedNote.mtime;
-                }
-                setSaveState("saved");
-            } catch {
-                setSaveState("error");
-                setTimeout(() => setSaveState("unsaved"), 3000); // Reset error state after 3s
-            }
+            await saveAndReport(noteFileName, contentToSave);
         },
-        [notesAPI, noteFileName]
+        [saveAndReport, noteFileName]
     );
 
     // Debounced auto-save function
@@ -949,31 +1113,11 @@ export function NotesView(props: NotesViewProps) {
                     setSaveState("saved");
                     return;
                 }
-
-                try {
-                    setSaveState("saving");
-                    const savedNote = await notesAPI.saveNote({ fileName: noteFileName, content: contentToSave });
-                    lastSavedContentRef.current = contentToSave;
-                    // Update mtime to prevent false "external change" detection
-                    if (savedNote?.mtime) {
-                        lastKnownMtimeRef.current = savedNote.mtime;
-                    }
-                    setSaveState("saved");
-                } catch {
-                    setSaveState("error");
-                    setTimeout(() => setSaveState("unsaved"), 3000); // Reset error state after 3s
-                }
+                await saveAndReport(noteFileName, contentToSave);
             }, 200); // 0.2 second delay
         },
-        [notesAPI, noteFileName]
+        [saveAndReport, noteFileName]
     );
-
-    const getCurrentEditorContent = useCallback(() => {
-        if (viewRef.current) {
-            return tableMarkdownSerializer.serialize(viewRef.current.state.doc);
-        }
-        return contentRef.current;
-    }, []);
 
     const flushPendingDraft = useCallback(async () => {
         if (saveTimeoutRef.current) {
@@ -981,22 +1125,49 @@ export function NotesView(props: NotesViewProps) {
             saveTimeoutRef.current = null;
         }
 
+        if (!hasUnsavedEdits()) return;
         const contentToSave = getCurrentEditorContent();
-        if (contentToSave === lastSavedContentRef.current) return;
 
         try {
-            const savedNote = await notesAPIRef.current.saveNote({
-                fileName: noteFileNameRef.current,
-                content: contentToSave,
-            });
-            lastSavedContentRef.current = contentToSave;
-            if (savedNote?.mtime) {
-                lastKnownMtimeRef.current = savedNote.mtime;
+            // On a conflict the disk keeps the other edits; returning to the tab asks again.
+            if ((await writeNote(noteFileNameRef.current, contentToSave)) === "conflict") {
+                console.warn("Note changed on disk, draft not flushed:", noteFileNameRef.current);
             }
         } catch (error) {
             console.error("Failed to flush note draft on tab switch/unmount:", error);
         }
-    }, [getCurrentEditorContent]);
+    }, [getCurrentEditorContent, hasUnsavedEdits, writeNote]);
+
+    // Pick up changes another app (Obsidian, iCloud) made to the file: reload when that
+    // loses nothing, otherwise ask. Runs on file change events, focus and tab activation.
+    const checkForExternalChanges = useCallback(async () => {
+        const fileName = noteFileNameRef.current;
+        // Skip until the initial load has an mtime, and while our own saves are pending
+        // (they change the mtime too; their result decides whether there's a conflict).
+        const busy = () => saveTimeoutRef.current !== null || pendingSavesRef.current > 0;
+        const knownMtime = lastKnownMtimeRef.current;
+        if (!fileName || knownMtime === null || busy()) return;
+
+        try {
+            const api = notesAPIRef.current;
+            const { mtime } = await api.getNoteMtime({ fileName });
+            if (mtime === null || mtime === knownMtime) return;
+
+            const freshNote = await api.getNoteByFileName({ fileName, skipCache: true });
+            // A save or reload landed meanwhile; its own change event checks again.
+            if (fileName !== noteFileNameRef.current || busy() || lastKnownMtimeRef.current !== knownMtime) return;
+
+            if (freshNote.content === lastSavedContentRef.current) {
+                applyNoteMetadata(freshNote);
+            } else if (!hasUnsavedEdits()) {
+                applyFreshNote(freshNote);
+            } else if (isActiveTabRef.current) {
+                showConflictToast();
+            }
+        } catch (error) {
+            console.error("Failed to check for external changes:", error);
+        }
+    }, [applyNoteMetadata, applyFreshNote, hasUnsavedEdits, showConflictToast]);
 
     // Handle tag updates
     const handleTagsChange = useCallback(
@@ -1161,44 +1332,11 @@ export function NotesView(props: NotesViewProps) {
             // Only handle events for this note
             if (fileName !== noteFileName) return;
 
-            // If the file was changed by an agent while locked, auto-reload silently
-            const locked = isFileLocked(noteFileName);
-
-            if (locked || source === "agent") {
-                // Auto-reload: the user expects changes from the agent
+            // Changes by an agent (or while it holds the lock) reload silently: the user expects them
+            if (isFileLocked(noteFileName) || source === "agent") {
                 try {
                     const freshNote = await notesAPI.getNoteByFileName({ fileName: noteFileName, skipCache: true });
-                    const freshContent = freshNote?.content || "";
-                    setNote(freshNote);
-                    setContent(freshContent);
-                    setHeadings(parseHeadings(freshContent));
-                    lastSavedContentRef.current = freshContent;
-                    lastKnownMtimeRef.current = freshNote?.mtime ?? null;
-                    initializedContentRef.current = freshContent;
-
-                    if (viewRef.current) {
-                        const doc = tableMarkdownParser.parse(freshContent) || tableSchema.nodes.doc.createAndFill();
-                        const stateWithNewDoc = EditorState.create({
-                            doc,
-                            plugins: viewRef.current.state.plugins,
-                            selection: Selection.atStart(doc!),
-                        });
-                        viewRef.current.updateState(stateWithNewDoc);
-                    }
-
-                    // Update tags and project from front matter
-                    const noteTags = freshNote?.frontMatter?.tags;
-                    if (Array.isArray(noteTags)) {
-                        setTags(noteTags.filter((tag): tag is string => typeof tag === "string"));
-                    } else {
-                        setTags([]);
-                    }
-                    const noteProject = freshNote?.frontMatter?.project;
-                    if (typeof noteProject === "string") {
-                        setProject(noteProject);
-                    } else {
-                        setProject(null);
-                    }
+                    applyFreshNote(freshNote);
 
                     // Show toast when lock is released (source === "agent")
                     if (source === "agent") {
@@ -1207,10 +1345,13 @@ export function NotesView(props: NotesViewProps) {
                 } catch (error) {
                     console.error("Failed to reload note from file change event:", error);
                 }
+                return;
             }
-            // For non-agent external changes, the existing mtime-based check handles it on tab activation
+
+            // Anything else (Obsidian, iCloud, our own saves) reloads only if no edit is lost
+            void checkForExternalChanges();
         });
-    }, [noteFileName, notesAPI, isFileLocked, parseHeadings]);
+    }, [noteFileName, notesAPI, isFileLocked, applyFreshNote, checkForExternalChanges]);
 
     // Store updateActiveHeadingFromCursor in a ref to avoid infinite rerenders
     const updateActiveHeadingFromCursorRef = useRef(updateActiveHeadingFromCursor);
@@ -1774,121 +1915,24 @@ export function NotesView(props: NotesViewProps) {
 
         // Only check when transitioning from inactive to active
         if (!isActive || wasActive) return;
-        if (!noteFileName) return;
-        // Skip if we don't have an mtime yet (initial load still in progress)
-        if (lastKnownMtimeRef.current === null) return;
-
-        const checkForExternalChanges = async () => {
-            try {
-                const { mtime: currentMtime } = await notesAPI.getNoteMtime({ fileName: noteFileName });
-                const lastKnownMtime = lastKnownMtimeRef.current;
-
-                // No change detected
-                if (currentMtime === lastKnownMtime) return;
-                if (currentMtime === null) return; // File was deleted
-
-                // Get current editor content
-                const currentEditorContent = viewRef.current
-                    ? tableMarkdownSerializer.serialize(viewRef.current.state.doc)
-                    : content;
-
-                const hasUnsavedEdits = currentEditorContent !== lastSavedContentRef.current;
-
-                if (hasUnsavedEdits) {
-                    // Show conflict toast
-                    toast("Note was modified externally", {
-                        duration: Infinity,
-                        action: {
-                            label: "Reload",
-                            onClick: async () => {
-                                // Reload the note from disk
-                                const freshNote = await notesAPI.getNoteByFileName({ fileName: noteFileName, skipCache: true });
-                                const freshContent = freshNote?.content || "";
-                                setNote(freshNote);
-                                setContent(freshContent);
-                                setHeadings(parseHeadings(freshContent));
-                                lastSavedContentRef.current = freshContent;
-                                lastKnownMtimeRef.current = freshNote?.mtime ?? null;
-                                initializedContentRef.current = freshContent;
-
-                                // Update editor if it exists
-                                if (viewRef.current) {
-                                    const doc = tableMarkdownParser.parse(freshContent) || tableSchema.nodes.doc.createAndFill();
-                                    const stateWithNewDoc = EditorState.create({
-                                        doc,
-                                        plugins: viewRef.current.state.plugins,
-                                        selection: Selection.atStart(doc!),
-                                    });
-                                    viewRef.current.updateState(stateWithNewDoc);
-                                }
-
-                                // Update tags and project from front matter
-                                const noteTags = freshNote?.frontMatter?.tags;
-                                if (Array.isArray(noteTags)) {
-                                    setTags(noteTags.filter((tag): tag is string => typeof tag === "string"));
-                                } else {
-                                    setTags([]);
-                                }
-                                const noteProject = freshNote?.frontMatter?.project;
-                                if (typeof noteProject === "string") {
-                                    setProject(noteProject);
-                                } else {
-                                    setProject(null);
-                                }
-                            },
-                        },
-                        cancel: {
-                            label: "Keep mine",
-                            onClick: () => {
-                                // Just update the mtime ref to suppress future warnings until next external change
-                                lastKnownMtimeRef.current = currentMtime;
-                            },
-                        },
-                    });
-                } else {
-                    // No unsaved edits - silently refresh
-                    const freshNote = await notesAPI.getNoteByFileName({ fileName: noteFileName, skipCache: true });
-                    const freshContent = freshNote?.content || "";
-                    setNote(freshNote);
-                    setContent(freshContent);
-                    setHeadings(parseHeadings(freshContent));
-                    lastSavedContentRef.current = freshContent;
-                    lastKnownMtimeRef.current = freshNote?.mtime ?? null;
-                    initializedContentRef.current = freshContent;
-
-                    // Update editor if it exists
-                    if (viewRef.current) {
-                        const doc = tableMarkdownParser.parse(freshContent) || tableSchema.nodes.doc.createAndFill();
-                        const stateWithNewDoc = EditorState.create({
-                            doc,
-                            plugins: viewRef.current.state.plugins,
-                            selection: Selection.atStart(doc!),
-                        });
-                        viewRef.current.updateState(stateWithNewDoc);
-                    }
-
-                    // Update tags and project from front matter
-                    const noteTags = freshNote?.frontMatter?.tags;
-                    if (Array.isArray(noteTags)) {
-                        setTags(noteTags.filter((tag): tag is string => typeof tag === "string"));
-                    } else {
-                        setTags([]);
-                    }
-                    const noteProject = freshNote?.frontMatter?.project;
-                    if (typeof noteProject === "string") {
-                        setProject(noteProject);
-                    } else {
-                        setProject(null);
-                    }
-                }
-            } catch (error) {
-                console.error("Failed to check for external changes:", error);
-            }
-        };
-
-        checkForExternalChanges();
+        void checkForExternalChanges();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeTab?.id, tabId, noteFileName]); // Only run on tab activation, not on content changes
+
+    // Coming back to the app (e.g. from Obsidian) picks up what changed meanwhile
+    useEffect(() => {
+        if (!isActiveTab) return;
+        const onFocus = () => void checkForExternalChanges();
+        const onVisibilityChange = () => {
+            if (document.visibilityState === "visible") void checkForExternalChanges();
+        };
+        window.addEventListener("focus", onFocus);
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        return () => {
+            window.removeEventListener("focus", onFocus);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+        };
+    }, [isActiveTab, checkForExternalChanges]);
 
     // Add scroll listener to track current section (when cursor isn't moving)
     useEffect(() => {

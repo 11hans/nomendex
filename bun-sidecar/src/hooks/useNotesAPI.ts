@@ -1,4 +1,4 @@
-import { Note, NoteFolder, NoteMetadata, SearchResult } from "@/features/notes";
+import { Note, NoteFolder, NoteMetadata, SaveNoteResult, SearchResult } from "@/features/notes";
 import { BacklinksResult } from "@/features/notes/backlinks-types";
 import type { TagSuggestion, ExplicitTagDefinition } from "@/features/notes/tags-types";
 
@@ -89,8 +89,9 @@ export const notesAPI = {
         setCachedNote(args.fileName, note);
         return note;
     },
-    saveNote: async (args: { fileName: string; content: string }): Promise<Note> => {
-        const note = await fetchAPI<Note>("save", args);
+    /** With expectedMtime, nothing is written if the file changed since; see SaveNoteResult.conflict. */
+    saveNote: async (args: { fileName: string; content: string; expectedMtime?: number }): Promise<SaveNoteResult> => {
+        const note = await fetchAPI<SaveNoteResult>("save", args);
         setCachedNote(args.fileName, note);
         return note;
     },

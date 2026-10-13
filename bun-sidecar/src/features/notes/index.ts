@@ -16,6 +16,12 @@ export const NoteSchema = z.object({
 
 export type Note = z.infer<typeof NoteSchema>;
 
+// saveNote with expectedMtime: conflict = the file changed on disk since then, nothing
+// was written and the result is the note as it is on disk.
+export const SaveNoteResultSchema = NoteSchema.extend({ conflict: z.boolean().optional() });
+
+export type SaveNoteResult = z.infer<typeof SaveNoteResultSchema>;
+
 // Lightweight listing shape — everything from Note except content, plus a
 // server-extracted display title (first H1/H2 heading). Keeps /api/notes/list-metadata
 // payloads small for large vaults.
@@ -76,8 +82,9 @@ export const functionStubs = {
         input: z.object({
             fileName: z.string(),
             content: z.string(),
+            expectedMtime: z.number().optional(),
         }),
-        output: NoteSchema,
+        output: SaveNoteResultSchema,
     },
     updateNoteTags: {
         input: z.object({

@@ -78,9 +78,11 @@ export const notesRoutes = {
         async POST(req: Request) {
             const args = await req.json();
             const result = await functions.saveNote.fx(args);
-            // Update backlinks and tags indexes
-            await onNoteSaved({ fileName: args.fileName, content: args.content });
-            await onNoteSavedTags({ fileName: args.fileName, content: args.content });
+            // Update backlinks and tags indexes (a conflict wrote nothing)
+            if (!("conflict" in result && result.conflict)) {
+                await onNoteSaved({ fileName: args.fileName, content: args.content });
+                await onNoteSavedTags({ fileName: args.fileName, content: args.content });
+            }
             return Response.json(result);
         },
     },
