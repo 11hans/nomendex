@@ -1,7 +1,7 @@
 import { createServiceLogger } from "@/lib/logger";
-import { getSkillsPath, hasActiveWorkspace } from "@/storage/root-path";
+import { getNomendexPath, getSkillsPath, hasActiveWorkspace } from "@/storage/root-path";
 import { SkillMetadata, SkillMetadataSchema, SkillUpdateCheckResult, SkillUpdateInfo } from "./skills-types";
-import { mkdir, chmod, readdir, stat } from "node:fs/promises";
+import { mkdir, chmod, readdir, rename, stat } from "node:fs/promises";
 import path from "path";
 import * as yaml from "@/lib/yaml";
 
@@ -755,576 +755,6 @@ Set a fixed \`height\` parameter to disable auto-resize.
     },
   },
   {
-    name: "daily-notes",
-    files: {
-      "SKILL.md": `---
-name: daily-notes
-description: Helper for /daily — bootstrap and read daily-note files from the vault template via daily-note.sh (get-today, get-note, get-last-x). Not a routine; for morning/evening workflows use /daily, for weekly review use /weekly.
-version: 6
-source: nomendex
----
-
-# Daily Notes Management
-
-## Overview
-
-This skill manages daily notes in the mapped daily-notes folder within the workspace's notes directory.
-It must detect the real folder, nesting, and filename pattern from \`vault-config.json\` and existing notes before reading or creating anything.
-
-## Detection Rules
-
-1. Read \`vault-config.json\` first and use \`folderMapping.dailyNotes\` if present
-2. Inspect existing daily-note filenames to detect the active pattern
-3. Reuse existing folder nesting (flat vs year/month) exactly
-4. If no daily-note convention exists yet, ask before creating the first note
-
-## Getting the Notes Directory
-
-\`\`\`bash
-NOTES_DIR=$(curl -s http://localhost:$PORT/api/workspace/paths | jq -r '.data.notes')
-\`\`\`
-
-Daily notes are stored at the detected folder under \`$NOTES_DIR\`.
-
-## CLI Usage
-
-\`\`\`bash
-NOTES_DIR=/path/to/workspace/notes .claude/skills/daily-notes/daily-note.sh <command> [arguments]
-\`\`\`
-
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| \`get-today\` | Get or create today's daily note |
-| \`get-note [date]\` | Get a specific date's note using the vault's existing format |
-| \`get-last-x [Ndays]\` | Get notes from the last N days |
-
-## How Claude Should Use This Skill
-
-**Important**: Always set \`NOTES_DIR\` to the workspace's notes path before running the script. The script detects the daily-notes folder and naming convention from \`vault-config.json\` and existing notes.
-
-If the script falls back to a default because the vault has no established convention yet, treat that as a prompt to confirm with the user before creating the first note.
-
-### When User Asks About Recent Work
-\`\`\`
-User: "What have I been working on this week?"
--> Run: NOTES_DIR=/path/to/notes ./daily-note.sh get-last-x 7days
--> Parse content and provide summary
-\`\`\`
-
-### When User Wants to Add to Today's Note
-\`\`\`
-User: "Add this to my daily note: Completed feature X"
--> Run: NOTES_DIR=/path/to/notes ./daily-note.sh get-today
--> Use Edit tool to append content to the returned file path
-\`\`\`
-
-## Best Practices
-
-1. **Always set NOTES_DIR** - The script exits with an error when it's unset
-2. **Detect before creating** - Never assume \`daily-notes/\` or a fixed date pattern
-3. **Handle missing notes gracefully** - Not every day has a note
-4. **Preserve existing content** - Use Edit tool, not Write when modifying
-`,
-      "daily-note.sh": `#!/bin/bash
-
-# Daily Notes CLI
-# Detects the real daily-notes folder and filename pattern from vault-config.json and existing notes.
-
-NOTES_DIR="\${NOTES_DIR:-}"
-if [[ -z "$NOTES_DIR" ]]; then
-    echo "Error: NOTES_DIR is not set. Get the workspace notes path first:" >&2
-    echo "  NOTES_DIR=\\\$(curl -s http://localhost:\\\$PORT/api/workspace/paths | jq -r '.data.notes')" >&2
-    exit 1
-fi
-
-read_configured_daily_dir() {
-    local config_file="$NOTES_DIR/vault-config.json"
-    if [[ -f "$config_file" ]] && command -v jq >/dev/null 2>&1; then
-        local mapped_dir
-        mapped_dir=$(jq -r '.folderMapping.dailyNotes // empty' "$config_file" 2>/dev/null)
-        if [[ -n "$mapped_dir" ]]; then
-            echo "$NOTES_DIR/$mapped_dir"
-            return 0
-        fi
-    fi
-    return 1
-}
-
-detect_daily_dir() {
-    local configured_dir
-    configured_dir=$(read_configured_daily_dir)
-    if [[ -n "$configured_dir" ]]; then
-        echo "$configured_dir"
-        return
-    fi
-
-    if [[ -d "$NOTES_DIR/daily-notes" ]]; then
-        echo "$NOTES_DIR/daily-notes"
-        return
-    fi
-
-    if [[ -d "$NOTES_DIR/Daily Notes" ]]; then
-        echo "$NOTES_DIR/Daily Notes"
-        return
-    fi
-
-    local best_dir=""
-    local best_count=0
-    while IFS= read -r dir; do
-        local count
-        count=$(find "$dir" -type f -name "*.md" 2>/dev/null | sed 's#.*/##' | grep -E '(^[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}\\.md$|^[0-9]{4}-[0-9]{2}-[0-9]{2}\\.md$)' | wc -l | tr -d ' ')
-        if [[ "$count" =~ ^[0-9]+$ ]] && (( count > best_count )); then
-            best_count=$count
-            best_dir="$dir"
-        fi
-    done < <(find "$NOTES_DIR" -mindepth 1 -maxdepth 2 -type d ! -path "*/.git*" ! -path "*/.obsidian*" ! -path "*/.claude*" 2>/dev/null)
-
-    if [[ -n "$best_dir" ]]; then
-        echo "$best_dir"
-    else
-        echo "$NOTES_DIR/daily-notes"
-    fi
-}
-
-detect_date_format() {
-    local samples
-    samples=$(find "$DAILY_DIR" -type f -name "*.md" 2>/dev/null | sed 's#.*/##' | grep -E '(^[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}\\.md$|^[0-9]{4}-[0-9]{2}-[0-9]{2}\\.md$)' | head -20)
-    if echo "$samples" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}\\.md$'; then
-        echo "iso"
-    else
-        echo "mdy"
-    fi
-}
-
-detect_nesting_mode() {
-    local sample_path
-    sample_path=$(find "$DAILY_DIR" -mindepth 3 -maxdepth 3 -type f -name "*.md" 2>/dev/null | head -n 1)
-    local relative_path="\${sample_path#$DAILY_DIR/}"
-    if [[ "$relative_path" =~ ^[0-9]{4}/[0-9]{2}/.+\\.md$ ]]; then
-        echo "year_month"
-    else
-        echo "flat"
-    fi
-}
-
-DAILY_DIR=$(detect_daily_dir)
-DATE_FORMAT=$(detect_date_format)
-NESTING_MODE=$(detect_nesting_mode)
-
-format_date() {
-    local date_str="$1"
-    local fmt
-    if [[ "$DATE_FORMAT" == "iso" ]]; then
-        fmt="+%Y-%m-%d"
-    else
-        fmt="+%-m-%-d-%Y"
-    fi
-
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        date -j -f "%Y-%m-%d" "$date_str" "$fmt" 2>/dev/null
-    else
-        date -d "$date_str" "$fmt" 2>/dev/null
-    fi
-}
-
-get_date_n_days_ago() {
-    local days_ago="$1"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        date -v-"\${days_ago}"d "+%Y-%m-%d"
-    else
-        date -d "\${days_ago} days ago" "+%Y-%m-%d"
-    fi
-}
-
-get_today() {
-    if [[ "$DATE_FORMAT" == "iso" ]]; then
-        date "+%Y-%m-%d"
-    else
-        date "+%-m-%-d-%Y"
-    fi
-}
-
-normalize_input_date() {
-    local date_input="$1"
-    if [[ "$date_input" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-        format_date "$date_input"
-    elif [[ "$date_input" =~ ^[0-9]{1,2}-[0-9]{1,2}-[0-9]{4}$ ]] && [[ "$DATE_FORMAT" == "iso" ]]; then
-        local month day year
-        IFS='-' read -r month day year <<< "$date_input"
-        printf "%04d-%02d-%02d\n" "$year" "$month" "$day"
-    else
-        echo "$date_input"
-    fi
-}
-
-build_note_path() {
-    local note_date="$1"
-    local date_iso="$2"
-    local existing_path
-    existing_path=$(find "$DAILY_DIR" -type f -name "$note_date.md" 2>/dev/null | head -n 1)
-    if [[ -n "$existing_path" ]]; then
-        echo "$existing_path"
-        return
-    fi
-
-    if [[ "$NESTING_MODE" == "year_month" ]]; then
-        local year month
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            year=$(date -j -f "%Y-%m-%d" "$date_iso" "+%Y")
-            month=$(date -j -f "%Y-%m-%d" "$date_iso" "+%m")
-        else
-            year=$(date -d "$date_iso" "+%Y")
-            month=$(date -d "$date_iso" "+%m")
-        fi
-        echo "$DAILY_DIR/$year/$month/$note_date.md"
-    else
-        echo "$DAILY_DIR/$note_date.md"
-    fi
-}
-
-display_note() {
-    local note_file="$1"
-    local note_date="$2"
-    local show_header="\${3:-true}"
-
-    if [[ -f "$note_file" && -s "$note_file" ]]; then
-        if [[ "$show_header" == "true" ]]; then
-            echo ""
-            echo "=== Notes from $note_date ==="
-            echo ""
-        fi
-        cat "$note_file"
-        if [[ "$show_header" == "true" ]]; then
-            echo ""
-            echo "---"
-        fi
-        return 0
-    else
-        return 1
-    fi
-}
-
-cmd_get_today() {
-    local TODAY=$(get_today)
-    local TODAY_ISO=$(date "+%Y-%m-%d")
-    local NOTE_PATH
-    NOTE_PATH=$(build_note_path "$TODAY" "$TODAY_ISO")
-    mkdir -p "$(dirname "$NOTE_PATH")"
-
-    if [[ ! -f "$NOTE_PATH" ]]; then
-        local TEMPLATE_FILE=""
-        local config_file="$NOTES_DIR/vault-config.json"
-        if [[ -f "$config_file" ]] && command -v jq >/dev/null 2>&1; then
-            local templates_dir
-            templates_dir=$(jq -r '.folderMapping.templates // empty' "$config_file" 2>/dev/null)
-            if [[ -n "$templates_dir" && -d "$NOTES_DIR/$templates_dir" ]]; then
-                TEMPLATE_FILE=$(find "$NOTES_DIR/$templates_dir" -type f -iname "*daily*" 2>/dev/null | head -n 1)
-            fi
-        fi
-
-        if [[ -n "$TEMPLATE_FILE" && -s "$TEMPLATE_FILE" ]]; then
-            local YESTERDAY TOMORROW
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                YESTERDAY=$(format_date "$(date -v-1d '+%Y-%m-%d')")
-                TOMORROW=$(format_date "$(date -v+1d '+%Y-%m-%d')")
-            else
-                YESTERDAY=$(format_date "$(date -d 'yesterday' '+%Y-%m-%d')")
-                TOMORROW=$(format_date "$(date -d 'tomorrow' '+%Y-%m-%d')")
-            fi
-            sed -e "s|{{date}}|$TODAY|g" \
-                -e "s|{{yesterday}}|$YESTERDAY|g" \
-                -e "s|{{tomorrow}}|$TOMORROW|g" \
-                "$TEMPLATE_FILE" > "$NOTE_PATH"
-        else
-            touch "$NOTE_PATH"
-        fi
-        echo "Created: $NOTE_PATH" >&2
-    fi
-
-    if [[ -s "$NOTE_PATH" ]]; then
-        cat "$NOTE_PATH"
-    fi
-}
-
-cmd_get_note() {
-    local date_input="$1"
-    if [[ -z "$date_input" ]]; then
-        echo "Error: Date required" >&2
-        exit 1
-    fi
-    local normalized_date
-    normalized_date=$(normalize_input_date "$date_input")
-    local NOTE_FILE
-    NOTE_FILE=$(build_note_path "$normalized_date" "$(date "+%Y-%m-%d")")
-    if display_note "$NOTE_FILE" "$date_input" "false"; then
-        exit 0
-    else
-        echo "Error: No note found for date: $date_input" >&2
-        exit 1
-    fi
-}
-
-cmd_get_last_x() {
-    local days_input="$1"
-    if [[ -z "$days_input" ]]; then
-        echo "Error: Duration required (e.g., 7days)" >&2
-        exit 1
-    fi
-    local days="\${days_input//[^0-9]/}"
-    echo "Fetching daily notes from the last $days days..."
-    echo "==========================================="
-    local FOUND_NOTES=0
-    for ((i=0; i<days; i++)); do
-        local DATE_ISO=$(get_date_n_days_ago "$i")
-        local DATE_FORMATTED=$(format_date "$DATE_ISO")
-        if [[ -n "$DATE_FORMATTED" ]]; then
-            local NOTE_FILE
-            NOTE_FILE=$(build_note_path "$DATE_FORMATTED" "$DATE_ISO")
-            if display_note "$NOTE_FILE" "$DATE_FORMATTED"; then
-                FOUND_NOTES=$((FOUND_NOTES + 1))
-            fi
-        fi
-    done
-    echo ""
-    echo "Found $FOUND_NOTES note(s) from the last $days days."
-}
-
-COMMAND="\${1:-}"
-case "$COMMAND" in
-    get-today) cmd_get_today ;;
-    get-note) cmd_get_note "$2" ;;
-    get-last-x) cmd_get_last_x "$2" ;;
-    *)
-        echo "Daily Notes CLI"
-        echo "Usage: $0 <command> [arguments]"
-        echo "Commands: get-today, get-note [date], get-last-x [Ndays]"
-        exit 1
-        ;;
-esac
-`,
-    },
-  },
-  {
-    name: "adopt",
-    files: {
-      "SKILL.md": `---
-name: adopt
-description: Scaffold the BPagent system onto an existing Obsidian vault. Scans your vault structure, maps folders interactively, and generates configuration.
-version: 3
-source: nomendex
----
-
-# Adopt Skill
-
-Bring Your Own Vault (BYOV) — set up the BPagent system on an existing Obsidian vault.
-
-## Usage
-
-\`\`\`
-/adopt    # Run from the root of your existing Obsidian vault
-\`\`\`
-
-## When to Use
-
-- You have an existing Obsidian vault and want to add the BPagent system
-- You want to keep your current folder structure
-
-## Phase 1: Scan Vault Structure
-
-Analyze the existing vault to understand its organization.
-
-### Steps
-
-1. **List top-level directories** using \`ls\`, excluding system dirs (\`.obsidian\`, \`.git\`, \`.trash\`, \`.nomendex\`)
-
-2. **For each directory**, gather signals:
-   - Count \`.md\` files (using Glob)
-   - Check for date-named files (\`M-D-YYYY*.md\` or \`YYYY-MM-DD*.md\`) — indicates daily notes
-   - Grep for goal/review/template keywords in filenames and content
-
-3. **Detect organization method** based on signals:
-   - **PARA**: Folders named Projects, Areas, Resources, Archives
-   - **Zettelkasten**: Numeric-prefixed notes, heavy wiki-linking, flat structure
-   - **LYT (Linking Your Thinking)**: Folders named Atlas, Calendar, Cards, Extras, Sources
-   - **Flat**: Few folders, most files at root
-   - **Custom**: None of the above patterns match
-
-4. **Present findings** to the user:
-   \`\`\`
-   Vault scan complete!
-
-   Found 342 notes across 8 folders:
-     daily-notes/     → 180 notes (date-named — likely daily notes)
-     Projects/        → 45 notes (likely projects)
-     Goals/           → 12 notes (contains goal keywords)
-     Templates/       → 8 notes (contains template keywords)
-     Archives/        → 67 notes
-     inbox/           → 15 notes
-
-   Detected method: PARA-like structure
-   \`\`\`
-
-## Phase 2: Map Folders to Roles
-
-Use AskUserQuestion to confirm or correct the detected mappings.
-
-### Roles to Map
-
-| Role | Purpose | Detection Signal |
-|------|---------|-----------------|
-| Daily Notes | Daily journal entries | Date-named files (\`M-D-YYYY\`) |
-| Goals | Typed goals + mirror notes + weekly review | Goal/review keywords, existing Goals folder |
-| Projects | Active projects | Subdirs with project keywords |
-| Templates | Reusable note structures | Files with template keywords or in Templates/ |
-| Archives | Completed/inactive content | Folder named Archive(s) |
-| Inbox | Uncategorized captures | Folder named Inbox, or files tagged #inbox |
-
-### Interactive Mapping
-
-For each role, ask the user to confirm or correct:
-
-**Question format (use AskUserQuestion):**
-- "Which folder holds your **daily notes**?"
-- Options: detected candidate(s), "I don't have one (create it)", "Skip — I don't use this"
-- For optional roles (Inbox), include "Skip" as a default
-
-**Edge cases:**
-- **No candidate for a role**: Offer to create the folder
-- **Multiple candidates**: Present all and let the user choose
-
-## Phase 3: Personalize Preferences
-
-Ask 4 questions:
-
-**Question 1: Your name**
-- "What should I call you?"
-- Used for personalized prompts and greetings
-
-**Question 2: Preferred review day**
-- "What day do you prefer for your weekly review?"
-- Options: Sunday (Recommended), Saturday, Monday, Friday
-
-**Question 3: Primary goal areas**
-- "Which areas are most important to you right now? (Pick 2-4)"
-- Options: Career & Professional, Health & Wellness, Relationships, Personal Growth
-- Also offer: Financial, Creativity & Fun, Learning, Other
-- multiSelect: true
-
-**Question 4: Work style**
-- "How do you prefer BPagent to interact?"
-- Options: Direct and concise (Recommended), Coaching and challenging, Detailed and thorough, Minimal — just do the task
-
-## Phase 4: Write \`vault-config.json\`
-
-Write \`vault-config.json\` in the vault root. This is the **only configuration file** BPagent reads.
-It contains all personalization and folder mappings:
-
-\`\`\`json
-{
-  "name": "User's name",
-  "reviewDay": "Sunday",
-  "goalAreas": ["Career & Professional", "Health & Wellness"],
-  "workStyle": "Direct and concise",
-  "setupDate": "2026-03-14",
-  "version": "3.2",
-  "adoptedVault": true,
-  "folderMapping": {
-    "dailyNotes": "daily-notes",
-    "goals": "Goals",
-    "projects": "Projects",
-    "templates": "Templates",
-    "archives": "Archives",
-    "inbox": "inbox"
-  }
-}
-\`\`\`
-
-Replace values with the user's actual answers from Phase 2 and 3.
-
-**IMPORTANT:** Do NOT create \`AGENTS.md\`, \`.claude/settings.json\`, \`.claude/rules/\`, or \`.claude/hooks/\`. BPagent does not use these files — it reads only \`vault-config.json\`.
-
-## Phase 5: Scaffold Missing Pieces
-
-Check what's missing and offer to create it. **Always ask before creating.**
-
-### 5a. Typed Goals Bootstrap
-
-If the goals folder is empty or newly created:
-- Ask: "Your goals folder is empty. Want me to bootstrap the typed goals system (API-first) and weekly review note?"
-- If yes:
-  1. Create \`<Goals>/goals/\` for per-goal mirror notes (bidirectional sync target)
-  2. Create \`<Goals>/3. Weekly Review.md\` if missing (working note template)
-  3. **Do not** manually create \`Goals/0. 3-Year Vision.md\`, \`Goals/1. Yearly Goals.md\`, or \`Goals/2. Monthly Goals.md\` as source files (these are generated dashboards in Typed Goal Graph)
-  4. Offer to create initial goals through API:
-     - Use \`POST /api/goals/create\` for first vision/yearly/monthly goals
-     - Then run \`POST /api/goals/sync/dashboards {}\` and \`POST /api/goals/sync/all {}\`
-- If no: skip
-
-### 5b. Templates
-
-If the templates folder is empty or newly created:
-- "Want me to add standard templates? (Daily, Weekly Review, Project)"
-- If yes: create templates, adapting internal links to the user's folder names
-- If no: skip
-
-## Phase 6: Verify & Next Steps
-
-### 6a. Validation
-
-Run quick checks:
-- \`vault-config.json\` is valid JSON (read it back)
-- All mapped folders exist
-
-### 6b. Summary
-
-Present a summary:
-\`\`\`
-Adoption complete!
-
-Vault: /path/to/vault
-Method: Custom (preserved your existing structure)
-Mapped folders:
-  Daily Notes → daily-notes/
-  Goals       → Goals/
-  Projects    → Projects/
-  Templates   → Templates/
-  Archives    → Archives/
-  Inbox       → inbox/
-
-Created:
-  ✓ vault-config.json (preferences & folder mapping)
-  ✓ Typed goals bootstrap (\`Goals/goals/\` + optional \`Goals/3. Weekly Review.md\`)
-  ✓ Standard templates (3 files)
-
-Your vault structure is preserved. Configuration and optional bootstrap files were added; typed goal data lives in \`.nomendex/goals/\` and dashboards are generated via sync.
-\`\`\`
-
-### 6c. Next Steps
-
-Suggest what to do next:
-- "Try \`/daily\` to create today's note"
-- "Try \`/review\` for a guided weekly review"
-- "Try \`/goal-tracking\` to create your first typed goals, then run \`/monthly\` or \`/weekly\`"
-
-## Error Handling
-
-- **Already adopted**: If \`vault-config.json\` exists with \`adoptedVault: true\`, ask: "This vault was already adopted. Re-run adoption? (This will regenerate vault-config.json.)"
-- **Empty vault**: If no \`.md\` files found, that's fine — the skill will create the folder structure from scratch
-
-## Integration
-
-Works with:
-- \`/daily\` — uses mapped daily notes folder from vault-config.json
-- \`/weekly\` — uses mapped goals folder from vault-config.json
-- \`/review\` — respects adopted vault structure
-- \`/monthly\` — uses mapped goals folder from vault-config.json
-- \`/goal-tracking\` — manages typed goals via API and syncs dashboards
-`,
-    },
-  },
-  {
     name: "check-links",
     files: {
       "SKILL.md": `---
@@ -1435,261 +865,6 @@ If all links are valid:
 - Run \`/check-links\` periodically to catch link rot
 - After renaming files, run this to find links that need updating
 - Combine with \`/search\` to find notes that reference deleted content
-`,
-    },
-  },
-  {
-    name: "daily",
-    files: {
-      "SKILL.md": `---
-name: daily
-description: Create daily notes and manage morning, midday, and evening routines. Structure daily planning, task review, and end-of-day reflection. Use for daily productivity routines or when asked to create today's note.
-version: 20
-source: nomendex
----
-
-# Daily Workflow Skill
-
-Morning planning, midday check-in, evening shutdown. The bpagent system prompt holds the semantic rules (Item Types, Today Workset Algorithm, Todo Safety Rules, Scheduling Rules). This skill is the daily-specific workflow on top of them.
-
-## Usage
-Invoke with \`/daily\` or phrases like "start morning", "evening shutdown", "today's plan".
-
-## Pre-computed context
-A \`<daily-context>\` block is injected with: today's ISO date, \`time_of_day\` (morning/midday/evening — the prompt's Daily Review Routing routes on it), \`daily_notes_dir\`, \`filename_pattern\`, \`today_note { filename, path, exists }\`, \`latest_note { filename, streak }\`.
-
-**Use it as the source of truth.** Do not re-scan the filesystem, re-read \`vault-config.json\`, or re-derive today's date. Fall back to manual detection only if the block is missing or \`filename_pattern: "unknown"\`.
-
-### Template variables
-\`{{date}}\`, \`{{date:dddd}}\`, \`{{date:MMMM DD, YYYY}}\`, \`{{date-1:YYYY-MM-DD}}\` (yesterday), \`{{date+1:YYYY-MM-DD}}\` (tomorrow), \`{{time}}\`.
-
----
-
-## Morning Routine (5–10 min)
-
-Read-only by default. Propose first; mutate only after explicit confirmation.
-
-### Steps
-1. Open \`today_note.path\`. If \`exists: false\`, propose creation at that path with the given filename pattern.
-2. **Load today's events + timeblocks** (chat-only, two separate sections). Substitute a real ISO date — never send the literal \`TODAYT00:00\`:
-   \`\`\`bash
-   curl -s -X POST "http://localhost:<port>/api/todos/list" \\
-     -d '{"kinds":["event"],"scheduledOverlap":{"start":"YYYY-MM-DDT00:00:00","end":"YYYY-MM-DDT23:59:59"}}'
-   \`\`\`
-   Split by \`source\`, sort by \`scheduledStart\` asc:
-   - \`source === "user"\` → \`## 📅 Dnešní events\`
-   - \`source === "timeblock-generator"\` (or legacy tag \`timeblock\`) → \`## 🧱 Dnešní timebloky\`
-
-   If either group is empty, say so explicitly and continue. When the user expresses timeblock/event intent during morning, route to \`/timeblocking\`.
-3. **Pull incomplete tasks** from yesterday's real daily note if one exists.
-4. **Load all active todos** for the workset:
-   \`\`\`bash
-   curl -s -X POST "http://localhost:<port>/api/todos/list" \\
-     -d '{"statuses":["todo","planned","in_progress"]}'
-   \`\`\`
-   Then **build the workset** in bucket order (see bpagent prompt → Today Workset Algorithm):
-   - Apply today's ISO date for overdue / due-today / scheduled comparisons
-   - Surface Multi-day Context separately (never in actionable workset or completion math)
-5. If the user names a focus project, surface its open todos before unrelated candidates:
-   \`\`\`bash
-   curl -s -X POST "http://localhost:<port>/api/todos/list" \\
-     -d '{"project":"<name>","statuses":["todo","planned","in_progress"]}'
-   \`\`\`
-6. **Surface goal progress**: \`POST /api/goals/list { "status": "active" }\`, then \`POST /api/goals/graph { goalId }\` for each. Use weekly/monthly notes only as narrative context, and say so if they are template stubs.
-7. **Reality check + focus questions** (read-only; before editing anything):
-   a. Run a behavioral scan: \`curl -s -X POST "http://localhost:<port>/api/insights/scan" -d '{}'\`. It returns deterministic \`signals\` (each is a FACT with numbers — never an accusation).
-   b. Surface **at most ONE** signal in the morning — the top \`warning\`, else the top \`notice\`. If \`signals\` is empty (or only \`info\`), stay quiet; do not manufacture a problem.
-   c. Frame it as **fact → open question**, never a verdict. State the signal's \`detail\` verbatim-ish, then ask a question that invites the user to decide:
-      - \`low_throughput\` → "Jen X done za týden. Co tě nejvíc brzdí — kapacita, nejasné priority, nebo vyhýbání?"
-      - \`goal_overload\` → "N aktivních cílů, focus 0. Vybereme 3 na tento týden a zbytek na pauzu?"
-      - \`neglected_area\` → "Oblast „X" týden na nule. Patří dnes do plánu, nebo ji vědomě odkládáš?"
-      - \`stale_todo\` → "X úkolů leží Y dní bez pohybu. Projdeme je — naplánovat, nebo smazat?"
-      - \`overdue_high_priority\` → "N high-priority po termínu. Co s nimi dnes?"
-   d. Let the answer inform the ONE thing. Then ask the focus questions ("What's your ONE thing? What might get in the way?").
-8. **Save workset snapshot** to the daily note under \`## Today's Workset\`: the \`[[todo:id|Title]]\` list PLUS \`<!-- workset: id1, id2, ... -->\` HTML comment listing only the IDs. Actionable single-day todos only — no events, no timeblocks, no Multi-day Context. This snapshot is the evening baseline.
-9. **Propose new todos** via API if planning reveals a need — never write new \`[ ]\` checkboxes in the note.
-10. **Sunday/review-day nudge**: if today is the user's \`reviewDay\` (from \`vault-config.json\`, default Sunday), offer \`/weekly\` at the end of the morning.
-
-### Example context block
-\`\`\`markdown
-## 📅 Dnešní events
-| Čas | Event | Kontext |
-|-----|-------|---------|
-| 10:00 | Stand-up | Zoom |
-| 14:00 | Schůzka s Petrem | kavárna Liberal |
-
-## 🧱 Dnešní timebloky
-| Čas | Blok | Projekt |
-|-----|------|---------|
-| 09:00–12:00 | Nomendex — práce | Nomendex |
-
-### Today's Context
-- **Overdue:** [[todo:abc-123|Fix bug from yesterday]] · [ProjectA] · due 3/25
-- **Due Today:** [[todo:def-456|Send meter reading]] · [Ops]
-- **Scheduled / In Progress:** [[todo:ghi-789|Draft reply to Tomas]] · in_progress
-- **Multi-day Context:** [[todo:aaa-111|Pohotovost]] · id: aaa-111 · 2026-03-31 → 2026-04-02
-- **Focused Project - Nomendex:** [[todo:jkl-012|Observe BPagent UI bugs]]
-- **Goal Progress:** Career 40% · Health 12/72 · Personal Growth 15%
-\`\`\`
-
-### Morning checklist
-- \`today_note\` resolved from \`<daily-context>\`
-- Events + timeblocks surfaced in chat only
-- Workset in bucket order, Multi-day Context separate
-- Snapshot (\`<!-- workset: ... -->\` + \`[[todo:id]]\` list) saved in note
-- Yesterday's incomplete tasks reviewed
-- One behavioral signal surfaced as fact + question (or silence if scan is clean)
-- ONE priority asked
-- Timeblock/event intents routed through \`/timeblocking\`
-- \`/weekly\` offered if today is review day
-
----
-
-## Midday Check-in (2–3 min)
-
-1. Compare morning workset with current todo states.
-2. Assess energy, identify afternoon priority, reorder if needed.
-3. Prompts: "How's your energy?", "What's most important this afternoon?", "What can you drop today?"
-
-If the user reports partial completion, apply the bpagent **Partial completion** rule: confirm exactly which tasks finished, mark each individually, leave the rest open, schedule remaining work as new todos if needed. Never repurpose a past scheduled item.
-
----
-
-## Evening Shutdown (5 min)
-
-### Step 0 — Bootstrap today's note
-
-1. Get the workspace notes path: \`curl -s http://localhost:$PORT/api/workspace/paths | jq -r '.data.notes'\`
-2. Run \`NOTES_DIR=<notes_path> .claude/skills/daily-notes/daily-note.sh get-today\`
-   — this creates today's note **from the vault template** (with all sections) if it doesn't exist yet.
-3. Read the returned file. If the note was just created, its sections are empty stubs — shutdown will fill them in.
-
-> Template scaffolding is handled by the script. Do NOT write template content manually.
-> This step is a no-op when morning already ran (file is already populated).
-
-### Step 0.5 — Auto-archive stale events
-
-Apply **Evening step 1** from the bpagent prompt: archive \`kind: "event"\` todos whose \`scheduledEnd\` is more than 2 days before today (\`archived: true\`, no confirmation needed). Do this before scoring so stale events don't pollute the lists below.
-
-### Completion Scoring
-
-**Step 1 — Planned set.** Read \`<!-- workset: id1, id2, ... -->\` from today's daily note. Those IDs are the baseline. Reclassify any snapshot todo with a multi-day range (\`scheduledStart\`/\`scheduledEnd\` more than 1 local calendar day apart) into Multi-day Context and remove it from the planned set.
-
-If no snapshot (morning skipped), fall back to: single-day todos with \`dueDate\` today, \`scheduledStart\` covering today, or in a Today/Now custom column. Note in output that completion rate may be less precise.
-
-Always exclude generated timeblock events from the planned set.
-
-**Step 2 — Completion data.**
-\`\`\`bash
-curl -s -X POST "http://localhost:<port>/api/todos/list" -d '{}'
-curl -s -X POST "http://localhost:<port>/api/todos/archived" -d '{}'
-\`\`\`
-A todo counts as \`completed_today\` iff \`status === "done"\` AND \`completedAt\` is within today's local date. Include both active and archived (completed then archived still counts). **Use \`completedAt\`, not \`updatedAt\`.**
-
-**Step 3 — Classify.**
-- \`Planned today\` = snapshot IDs minus reclassified Multi-day Context.
-- \`Ongoing\` = \`in_progress\` NOT in the snapshot (multi-day carry-forward).
-- \`Multi-day Context\` = any todo with a multi-day range, regardless of snapshot presence.
-- Ongoing, Multi-day, and timeblock events never enter the numerator or denominator.
-
-**Step 4 — Rate.**
-\`completion_rate = |completed_today ∩ planned_today| / |planned_today|\`
-Bonus completions (done today but not in snapshot) are shown separately as "Extra wins".
-
-**Step 5 — Batch confirm.** Present one summary:
-\`\`\`
-✓ Completed (3/7):
-- [[todo:abc-123|Fix bug]] — done at 14:30
-
-⬜ Not completed (single-day planned only, 3/6):
-- [[todo:jkl-012|Pohotovost]] · id: jkl-012 · 2026-03-31 → 2026-03-31 — still todo
-
-↔ Multi-day Context (not counted):
-- [[todo:mno-345|Pohotovost]] · id: mno-345 · 2026-03-31 → 2026-04-03 — in_progress
-
-Should any of the incomplete ones be marked as done?
-\`\`\`
-After confirmation, update via API.
-
-**Step 6 — Batch reschedule.** For remaining incomplete single-day planned todos with \`scheduledStart\` today, propose \`scheduledStart → tomorrow\`. Before each \`update\`, re-fetch via \`POST /api/todos/get { todoId }\`. If refreshed state drifted — stop for that todo, show fresh state, ask again.
-
-**Step 7 — Legacy reconcile (read-only).** If the note has legacy \`[x]\` checkboxes with no matching API todo, mention them as ad-hoc completions ("Want to capture these as API todos?"). Never create new checkboxes.
-
-### Timeblock Retrospective Linking
-For each of today's timeblocks (\`source === "timeblock-generator"\` or legacy tag \`timeblock\`) lacking \`<!-- timeblock-worked-todos -->\` in \`description\`, run the full infer → confirm → persist procedure from the bpagent prompt. Do NOT mark contained todos \`done\` based on inference (handled in Completion Scoring Step 5). Do NOT mark the timeblock itself \`done\`.
-
-### Capture
-1. Fill \`## Pracovní zápisek\` — co se řešilo, co se naučilo, otevřené otázky/blockers.
-2. Fill \`## Evening Reflection 🌙\` — What went well, What could be better, Tomorrow's focus, Gratitude.
-3. Update the **Energy / Mood** line at the bottom of the note. Do not track, fill in, or ask about sleep — leave any legacy sleep field blank.
-
-### Today's Cascade Impact
-\`\`\`markdown
-### Today's Cascade Impact
-- **Planned completion:** 5/7 (71.4%)
-  - [Nomendex] 2/3 · [Health] 1/1 · [Work] 2/3
-- **Extra wins:** 1
-- **Ongoing (not counted):** 2 in_progress
-- **Multi-day Context (not counted):** 1
-- **Rescheduled to tomorrow:** 2
-- **Goals touched** (from frozen \`goalRefs\` on completed todos): Career 2 tasks, Health 1 task
-- **Projects advanced:** [[ProjectA]] 3, [[ProjectB]] 1
-\`\`\`
-
-### Prepare
-- Tomorrow's priority (preview from rescheduled + upcoming todos).
-- Offer to commit today's vault changes (git sync).
-
-### Shutdown checklist
-- Batch confirm + reschedule done (via fresh \`/api/todos/get\`)
-- Completion rate from \`completedAt\`
-- Timeblock retrospective linking run for today's timeblocks
-- Reflection + tomorrow's priority captured
-- Changes committed
-
-## Daily Note Structure
-
-The physical template lives in the vault's \`Templates/\` folder (detected via \`vault-config.json → folderMapping.templates\`). The \`daily-note.sh get-today\` script writes this template automatically when creating a new note — never recreate it manually.
-
-| Section | Filled by |
-|---------|-----------|
-| \`## Morning Setup ☀️\` (ONE Big Thing, Schedule & Time Blocks, Carried Over) | Morning routine |
-| \`## Today's Focus\` (todos by project with \`- [x]\`) | Morning routine |
-| \`## Notes & Captures\` (Decisions, Ideas, Learned) | Morning / ad-hoc |
-| \`## Pracovní zápisek\` | Evening shutdown |
-| \`## Evening Reflection 🌙\` (What went well, Better, Tomorrow, Gratitude) | Evening shutdown |
-| \`**Energy / Mood**\` line | Evening shutdown |
-| \`## Links\` (← yesterday \| tomorrow →) | Written by template on creation |
-
-When morning was skipped, leave \`## Morning Setup ☀️\` and \`## Today's Focus\` as empty template stubs.
-
-> **Today's Workset snapshot** (the \`<!-- workset: -->\` comment + \`[[todo:id]]\` list) is appended inside \`## Morning Setup ☀️\` during morning planning. If morning was skipped, this comment is absent — use the fallback in Step 1 of Completion Scoring.
-
-## Configuration
-
-Detect these from the real vault instead of assuming:
-- Daily notes folder from \`vault-config.json\` or existing notes
-- Template location from the mapped templates folder
-- Filename pattern from existing daily notes (e.g. \`YYYY-MM-DD\`, \`M-D-YYYY\`, \`daily-notes/YYYY/MM/YYYY-MM-DD\`). Reuse the user's existing convention exactly.
-
-## Session Tasks
-
-Use session tasks (TaskCreate/TaskUpdate) to surface progress during multi-step routines. Tasks are session-scoped — persistent work lives in the todos API only.
-
-**Morning:** inspect note → fetch today's todos → pull incomplete from yesterday → save workset snapshot → surface goals → set time blocks.
-
-**Evening:** compare snapshot vs current state → batch confirm + reschedule → calculate completion rate → prepare tomorrow → reflect.
-
-Run sequentially, mark \`in_progress\` at start and \`completed\` when done.
-
-## Integration
-
-Works with:
-- \`/todos\` - Fetch today's todos, update completion status
-- \`/weekly\` - Weekly planning uses daily notes
-- \`/monthly\` - Monthly goals inform daily focus
-- \`/project\` - Use project-note next-actions only as fallback when live todos are insufficient
-- Goal tracking skill - Align daily tasks to goals
 `,
     },
   },
@@ -1852,7 +1027,7 @@ The \`monthly-reviewer\` subagent has access to: \`Read\`, \`Write\`, \`Edit\`, 
       "SKILL.md": `---
 name: obsidian-vault-ops
 description: Read and write Obsidian vault files, manage wiki-links, process markdown with YAML frontmatter. Use when working with vault file operations, creating notes, or managing links.
-version: 5
+version: 6
 source: nomendex
 ---
 
@@ -1913,7 +1088,7 @@ status: active
 
 ## Template Variables
 
-Template variable syntax (\`{{date}}\`, \`{{date:format}}\`, \`{{date-1}}\`, \`{{date+1}}\`, \`{{time}}\`) is documented in the \`/daily\` skill — follow it from there instead of a restated copy here.
+\`{{date}}\`, \`{{date:dddd}}\`, \`{{date:MMMM DD, YYYY}}\`, \`{{date-1:YYYY-MM-DD}}\` (yesterday), \`{{date+1:YYYY-MM-DD}}\` (tomorrow), \`{{time}}\`.
 
 **CRITICAL — Daily note navigation links**: When a template contains wiki links to adjacent daily notes (e.g. \`[[{{yesterday}}]]\` or \`[[{{tomorrow}}]]\`), always include the full subfolder path in the resolved link. For example, if daily notes live in \`daily-notes/\`, the resolved link must be \`[[daily-notes/3-21-2026]]\`, NOT \`[[3-21-2026]]\`. A bare filename without the folder prefix cannot be resolved to the correct file and will create a broken or duplicate note.
 
@@ -1952,7 +1127,7 @@ Use the tag taxonomy from the \`built-in-bpagent\` prompt ("Tag System" — prio
       "SKILL.md": `---
 name: project
 description: Create, track, and archive projects linked to goals using Nomendex Projects API and canonical project markdown notes. Use for project lifecycle management, status dashboards, and project note synchronization.
-version: 6
+version: 7
 source: nomendex
 ---
 
@@ -2143,139 +1318,8 @@ Mark each task \`in_progress\` when starting, \`completed\` when done.
 
 Works with:
 - \`/todos\` - Fetch and display project todos, calculate completion rates
-- \`/daily\` - Use live project todos first; surface project next-actions only as fallback
 - \`/weekly\` - Project status in weekly review
 - \`/goal-tracking\` - Project progress feeds goal calculations
-`,
-    },
-  },
-  {
-    name: "review",
-    files: {
-      "SKILL.md": `---
-name: review
-description: Smart review router. Detects context (morning, Sunday, end of month) and launches the appropriate review workflow. Use anytime for the right review at the right time.
-version: 4
-source: nomendex
----
-
-# Review Skill
-
-Smart router that detects context and launches the appropriate review workflow.
-
-## Usage
-
-\`\`\`
-/review           # Auto-detect the right review based on time/context
-/review daily     # Force daily review
-/review weekly    # Force weekly review
-/review monthly   # Force monthly review
-\`\`\`
-
-Or simply: "Help me review" — and the right workflow starts.
-
-## Auto-Detection Logic
-
-When invoked without arguments, detect context using these rules:
-
-### 1. Check the Time of Day
-
-\`\`\`bash
-HOUR=$(date +%H)
-\`\`\`
-
-- **Before noon (< 12):** Morning routine — delegate to \`/daily\` morning workflow
-- **After 5 PM (>= 17):** Evening shutdown — delegate to \`/daily\` evening workflow
-- **Midday (12-17):** Midday check-in — delegate to \`/daily\` midday workflow
-
-### 2. Check the Day of Week
-
-\`\`\`bash
-DAY_OF_WEEK=$(date +%u)  # 1=Monday, 7=Sunday
-\`\`\`
-
-- **Sunday (7) or Monday (1):** Weekly review — delegate to \`/weekly\`
-  - Override time-of-day detection
-  - Ask: "Ready for your weekly review? I can also help you set up next week's timeblocking at the end." before proceeding
-
-### 3. Check the Day of Month
-
-\`\`\`bash
-DAY_OF_MONTH=$(date +%d)
-DAYS_IN_MONTH=$(date -v+1m -v1d -v-1d +%d 2>/dev/null || date -d "$(date +%Y-%m-01) +1 month -1 day" +%d)
-\`\`\`
-
-- **Last 3 days of month (DAY_OF_MONTH >= DAYS_IN_MONTH - 2):** Monthly review — delegate to \`/monthly\`
-  - Override both time-of-day and day-of-week detection
-  - Ask: "End of month — ready for your monthly review?" before proceeding
-
-- **First day of month (DAY_OF_MONTH == 1):** Also suggest monthly review
-  - "It's the first of the month. Want to do your monthly review for last month?"
-
-### 4. Check Staleness
-
-Before routing, check for overdue reviews:
-
-\`\`\`bash
-# Read weekly review file for last date — resolve the goals folder from vault-config, don't hardcode it
-NOTES_DIR=$(curl -s http://localhost:$PORT/api/workspace/paths | jq -r '.data.notes')
-GOALS_DIR=$(jq -r '.folderMapping.goals // "Goals"' "$NOTES_DIR/vault-config.json" 2>/dev/null || echo "Goals")
-WEEKLY_REVIEW="$NOTES_DIR/$GOALS_DIR/3. Weekly Review.md"
-# If last weekly review > 7 days ago, suggest weekly regardless of day
-\`\`\`
-
-- **Weekly review overdue (>7 days):** Suggest weekly review
-  - "Your last weekly review was N days ago. Want to catch up?"
-  - If user says no, fall through to time-of-day detection
-
-## Routing Behavior
-
-After detecting context:
-
-1. Tell the user what was detected: "It's Sunday evening — launching your weekly review."
-2. Delegate to the appropriate skill's workflow
-3. The delegated skill handles everything from there
-
-### Delegation
-
-This skill does NOT duplicate the logic of \`/daily\`, \`/weekly\`, or \`/monthly\`. It:
-1. Detects context
-2. Informs the user
-3. Follows the instructions from the target skill's SKILL.md
-
-### Explicit Override
-
-If the user specifies a type (\`/review weekly\`), skip auto-detection entirely and go directly to that review type.
-
-## Output on Detection
-
-\`\`\`markdown
-### Review Router
-
-**Time:** 7:15 AM (Morning)
-**Day:** Sunday
-**Month day:** 15th
-
-**Detected:** Weekly review (Sunday override)
-**Last weekly review:** 3 days ago (not overdue)
-
-Launching weekly review...
-\`\`\`
-
-## Edge Cases
-
-- **Multiple triggers** (e.g., last Sunday of month): Monthly takes priority over weekly
-- **No daily note exists**: Ask the user — "Today's daily note doesn't exist yet. Want me to create it before continuing with the review?" Do NOT auto-create.
-- **User says "no" to suggestion**: Fall through to next detection level
-- **Explicit argument overrides everything**: \`/review monthly\` runs monthly review even on a Tuesday morning
-
-## Integration
-
-Works with:
-- \`/daily\` — Morning, midday, and evening routines
-- \`/weekly\` — Full weekly review process
-- \`/timeblocking\` — Weekly or ad-hoc timeblock planning after review
-- \`/monthly\` — Monthly review and planning
 `,
     },
   },
@@ -2285,7 +1329,7 @@ Works with:
       "SKILL.md": `---
 name: search
 description: Search vault content by keyword using Grep. Zero dependencies — works in any vault without indexes or plugins. Groups results by directory for easy scanning.
-version: 3
+version: 4
 source: nomendex
 ---
 
@@ -2373,7 +1417,6 @@ If no matches are found:
 
 - Search is case-sensitive by default. Add \`-i: true\` to the Grep call for case-insensitive search
 - Use regex patterns for advanced searches: \`task.*complete\`, \`#tag-name\`
-- Combine with \`/daily\` to quickly find when something was mentioned
 `,
     },
   },
@@ -2580,6 +1623,14 @@ The \`weekly-reviewer\` subagent has access to: \`Read\`, \`Write\`, \`Edit\`, \
   }
 ];
 
+/**
+ * Default skills retired in the October 2026 agent review. Their Nomendex-owned workspace
+ * copies are moved out of .claude/skills on startup, so the agent stops seeing them.
+ * Nothing is deleted: to bring one back, move it into .claude/skills and change its
+ * `source:` so it is no longer treated as Nomendex-owned.
+ */
+const RETIRED_SKILLS = ["daily", "daily-notes", "review", "adopt"];
+
 
 /**
  * In-memory storage for pending updates.
@@ -2767,6 +1818,34 @@ async function writeDefaultSkill(skillName: string): Promise<boolean> {
 }
 
 /**
+ * Move Nomendex-owned copies of retired skills to .nomendex/archived-skills/.
+ * User-owned skills with the same name are left alone.
+ */
+async function archiveRetiredSkills(): Promise<void> {
+  const archiveRoot = path.join(getNomendexPath(), "archived-skills");
+
+  for (const skillName of RETIRED_SKILLS) {
+    if ((await getInstalledSkillSource(skillName)) !== "nomendex") {
+      continue;
+    }
+
+    let destPath = path.join(archiveRoot, skillName);
+    const destExists = await stat(destPath).then(() => true, () => false);
+    if (destExists) {
+      destPath = `${destPath}-${Date.now()}`;
+    }
+
+    try {
+      await mkdir(archiveRoot, { recursive: true });
+      await rename(path.join(getSkillsPath(), skillName), destPath);
+      logger.info(`Archived retired skill ${skillName} to ${destPath}`);
+    } catch (error) {
+      logger.error(`Failed to archive retired skill: ${skillName}`, { error });
+    }
+  }
+}
+
+/**
  * Check for available skill updates.
  * Only considers skills where the installed copy has source: nomendex (or is missing).
  * User-created skills with colliding names are skipped entirely.
@@ -2845,6 +1924,8 @@ export async function initializeDefaultSkills(): Promise<SkillUpdateCheckResult>
   }
 
   logger.info("Initializing default skills...");
+
+  await archiveRetiredSkills();
 
   // Check for new skills and updates (already ownership-filtered)
   const updateCheck = await checkForSkillUpdates();

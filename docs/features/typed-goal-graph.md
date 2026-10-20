@@ -315,7 +315,6 @@ The BPagent system prompt (`built-in-bpagent.ts`) includes:
 
 | Skill | Change |
 |-------|--------|
-| `/daily` | Morning context surfacing includes goal progress from API. Evening cascade impact uses the effective `goalRefs` (frozen on completed todos). |
 | `/weekly` | Goal progress from `/api/goals/graph`. Project dashboard includes `goalRef`. Todo creation includes `goalRefs` when needed. |
 | `/monthly` | Quarterly milestone check from typed goals. Monthly goal completion from API. |
 | `/goal-tracking` | Completely rewritten to structured-first: reads goals from API, displays progress per `progressMode`, shows full cascade. |

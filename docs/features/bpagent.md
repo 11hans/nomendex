@@ -16,7 +16,7 @@ BPagent je dostupný ve všech pracovních prostorech bez dalšího nastavení.
 
 ## Očekávaná struktura vaultu
 
-BPagent předpokládá Obsidian-kompatibilní strukturu složek. Pokud ji zatím nemáš, použij `/adopt` pro automatické nastavení.
+BPagent předpokládá Obsidian-kompatibilní strukturu složek.
 
 ```
 {workspace}/
@@ -38,7 +38,7 @@ BPagent pracuje s hierarchií cílů, která propojuje dlouhodobou vizi s denní
 
 ```
 3letá vize → Roční cíle → Projekty → Měsíční cíle → Týdenní review → Denní úkoly
-  /goal-tracking   /project    /project        /monthly         /weekly         /daily
+  /goal-tracking   /project    /project        /monthly         /weekly
 ```
 
 ---
@@ -58,29 +58,6 @@ Tagy se používají přímo v obsahu poznámek syntaxí `#tag`.
 ## Dostupné skills
 
 Skills se spouštějí příkazem `/název` v chatu s BPagentem, nebo je agent použije automaticky.
-
-### `/daily` – Denní poznámka
-
-Vytvoří nebo aktualizuje dnešní denní záznam.
-
-**Důležité:** Agent nejdřív detekuje reálnou vault konvenci (složku, případné vnoření, formát názvu souboru), až potom čte nebo zakládá denní poznámku.
-
-**Ranní rutina (5 min):**
-- Todo-first workset (nejdřív živé TODO položky)
-- Teprve pak strategický kontext z cílů a projektů
-- Identifikace jednoho hlavního zaměření dne
-- Přehled nedokončených úkolů z předchozího dne
-- Uložení workset snapshotu do daily note (`<!-- workset: id1, id2, ... -->`)
-- Nastavení časových bloků
-
-**Večerní rutina (5 min):**
-- Aktualizace stavu todos přes `/todos` skill (nastaví `completedAt`)
-- Výpočet completion rate z `completedAt` (NE `updatedAt`) proti rannímu workset snapshotu
-- Ongoing úkoly (`in_progress`, `planned` mimo ranní workset) se zobrazí zvlášť a nevstupují do completion rate
-- Jednosměrný reconcile: daily note `[x]` bez protějšku v API → nabídnout zachycení jako ad-hoc
-- Reflexe (paralelně s reconcile)
-- Identifikace zítřejší priority, přesun nedokončených úkolů
-- Uložení změn
 
 ### `/weekly` – Týdenní review
 
@@ -106,14 +83,6 @@ Průběh je viditelný jako progress indikátory v chatu. Jednorázové dotazy (
 
 Vytváření, sledování a archivace projektů propojených s cíli. Projektová metadata jsou v `.nomendex/projects.json` a stavová poznámka projektu je kanonicky v `Projects/<ProjectName>.md`.
 
-### `/review` – Chytrý router
-
-Automaticky detekuje správný typ review podle kontextu (denní / týdenní / měsíční) a spustí příslušný workflow.
-
-### `/adopt` – Nastavení BPagent workflow
-
-Pokud nemáš připravenou strukturu, `/adopt` ji nastaví nad existujícím workspace krok za krokem.
-
 ### Automaticky spouštěné skills
 
 Tyto skills BPagent volá sám bez explicitního příkazu:
@@ -124,7 +93,7 @@ Tyto skills BPagent volá sám bez explicitního příkazu:
 | `obsidian-vault-ops` | Čtení a zápis souborů vaultu, wiki-linky |
 | `check-links` | Hledání rozbitých wiki-linků |
 | `search` | Fulltextové vyhledávání v obsahu vaultu |
-| `todos` | Primární čtení/zápis TODO workflow (daily/weekly/monthly) |
+| `todos` | Primární čtení/zápis TODO workflow (weekly/monthly) |
 
 ---
 
@@ -154,8 +123,6 @@ Pro dotazy typu „show today“, „co mám dnes dělat“, „schedule“, „
 Schedule a calendar dotazy primárně zohledňují `scheduledStart`/`scheduledEnd`, výběry pro overdue a deadline spoléhají na `dueDate`.
 
 Výstup má být po bucket sekcích, ne jako jeden smíšený seznam.
-
-Po sestavení worksetu agent uloží snapshot ID do daily note jako `<!-- workset: id1, id2, ... -->`. Tento snapshot slouží jako baseline pro večerní completion rate. Pokud ranní workset nebyl uložen (ranní flow se nepustil), večerní flow použije API heuristiku s upozorněním na nižší přesnost.
 
 ## Read-only default pro plánování
 
@@ -206,15 +173,29 @@ Analyzuje soulad denních aktivit s dlouhodobými cíli. Spouštěj pro:
 
 Výstup obsahuje skóre souladu, přehled mezer a konkrétní doporučení.
 
-### `note-organizer` – Organizace vaultu
+---
 
-Údržba a reorganizace vaultu:
-- Identifikace osiřelých poznámek (bez příchozích linků)
-- Hledání a oprava rozbitých wiki-linků `[[takto]]`
-- Standardizace tagů
-- Přesun dokončených projektů do `Archives/`
+## Vypnuté skilly a subagenti (říjen 2026)
 
-**Důležité:** Agent vždy nejprve navrhne plán změn a čeká na tvoje potvrzení.
+Revize agentů (11. 10. 2026, poznámka `Revize agentů 2026-10.md` ve vaultu) vypnula rituály, které stály na staré šabloně deníku. Deník teď Honza píše sám v Today view.
+
+| Co | Proč |
+|----|------|
+| `/daily` | Ranní a večerní rituál (workset, Evening Reflection, Energy/Mood) přepisoval deník na starou strukturu |
+| `/daily-notes` | Pomocník pro `/daily` (`daily-note.sh`) |
+| `/review` | Router, který posílal hlavně na `/daily` |
+| `/adopt` | Jednorázové zakládání struktury vaultu |
+| `note-organizer` | Subagent pro reorganizaci vaultu |
+
+Současně z promptu zmizela sekce Daily Workflow (Morning a Evening, zápis `<!-- workset: … -->` do deníku) a `<daily-context>` už neposílá streak „DEN X“.
+
+**Jak vypnutí funguje.** Skilly už nejsou mezi výchozími (`services/default-skills.ts`). Při startu appka přesune jejich kopie se `source: nomendex` z `.claude/skills/<název>/` do `.nomendex/archived-skills/<název>/` (`RETIRED_SKILLS`, `archiveRetiredSkills()`). Nic nemaže. Kopie s jiným `source:` nechá být. Když archivní složka už existuje, přidá k názvu časovou značku.
+
+**Jak vrátit.**
+- Jeden skill: přesuň složku zpátky do `.claude/skills/` a změň v ní `source: nomendex` na `source: user`. Jinak ji appka při dalším startu znovu archivuje.
+- Všechno: `git revert` commitu, který skilly vypnul. Skilly se při dalším startu znovu nainstalují a `note-organizer` se vrátí do `subagents/index.ts`.
+
+`/weekly` a `/monthly` a jejich revieweři stále počítají se streakem a starou šablonou deníku. Předělávají se v úkolu „3 · Předělat weekly a monthly agenty“.
 
 ---
 
@@ -249,12 +230,6 @@ BPagent si pamatuje kontext mezi sezeními. Jak se paměti ukládají, určuje n
 
 ## Příklady použití
 
-### Ranní zahájení dne
-```
-Uživatel: /daily
-BPagent:  [Vytvoří dnešní denní poznámku s kontextem z cílů a projekty pro dnešek]
-```
-
 ### Týdenní review
 ```
 Uživatel: /weekly
@@ -265,12 +240,6 @@ BPagent:  [Deleguje na weekly-reviewer, zobrazí progress fáze 1/2/3, vrátí s
 ```
 Uživatel: Jak si stojím s letošními cíly?
 BPagent:  [Deleguje na goal-aligner, přečte goals soubory, vrátí alignment report se skóre a doporučeními]
-```
-
-### Organizace vaultu
-```
-Uživatel: Zorganizuj mi vault, najdi rozbitý linky
-BPagent:  [Deleguje na note-organizer, provede analýzu, navrhne plán – ČEKÁ na potvrzení před změnami]
 ```
 
 ---

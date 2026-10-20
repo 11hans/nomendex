@@ -194,7 +194,7 @@ Most entity views (Goals, Projects, Todos, Notes, Inbox, Memory, Chat) are plugi
 - API: `/api/goals/{list,get,create,update,delete,graph,graph/forest,sync/*,migration/*}`.
 - UI: Goals browser (forest summary, attention heuristics) + Goal detail (inline editing, mode-aware progress editor).
 - Mirror notes (goals + projects) use managed sections with `managedHash` conflict detection.
-- BPagent skills (`/daily`, `/weekly`, `/monthly`, `/goal-tracking`) read from the API, not from markdown.
+- BPagent skills (`/weekly`, `/monthly`, `/goal-tracking`) read from the API, not from markdown.
 
 Details: `docs/features/typed-goal-graph.md`, `docs/features/goals-workspace-v1.md`.
 
@@ -265,7 +265,7 @@ Effective prompt sources (shown in Agents UI):
 Model catalog: `/api/agents/models` merges Anthropic `/v1/models` (if `ANTHROPIC_API_KEY` present) with a local fallback list.
 
 ### BPagent
-Specialized planning agent with skills (`/daily`, `/weekly`, `/monthly`, `/goal-tracking`, `/project`, `/review`, `/adopt`), subagents (`weekly-reviewer`, `monthly-reviewer`, `goal-aligner`, `inbox-processor`, `note-organizer`), and typed goal integration. Expects Obsidian-compatible vault structure. Details: `docs/features/bpagent.md`.
+Specialized planning agent with skills (`/weekly`, `/monthly`, `/goal-tracking`, `/project`), subagents (`weekly-reviewer`, `monthly-reviewer`, `goal-aligner`), and typed goal integration. `/daily`, `/daily-notes`, `/review`, `/adopt` and `note-organizer` were retired in October 2026; their workspace copies are moved to `.nomendex/archived-skills/` on startup (`RETIRED_SKILLS` in `services/default-skills.ts`). Expects Obsidian-compatible vault structure. Details: `docs/features/bpagent.md`.
 
 ### MCP Servers
 - User-defined in `{workspace}/.nomendex/mcp-servers.json`.

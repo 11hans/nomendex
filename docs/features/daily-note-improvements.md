@@ -70,7 +70,7 @@ No template → empty note. Notes are only created when opened; nothing is pre-c
 
 ## Agents
 
-BPagent's system prompt, its `<daily-context>` block (`daily_notes_dir`, `filename_pattern`, `today_note`) and the weekly/monthly reviewer and goal-aligner subagents all take the folder and format from `getDailyNotesSettings()`. The `/daily` and `daily-notes` skills (`daily-note.sh`) don't: they still read `vault-config.json → folderMapping.dailyNotes` and guess the format from existing names.
+BPagent's system prompt, its `<daily-context>` block (`daily_notes_dir`, `filename_pattern`, `today_note`) and the weekly/monthly reviewer and goal-aligner subagents all take the folder and format from `getDailyNotesSettings()`.
 
 ## Migrating to Another Folder or Format
 

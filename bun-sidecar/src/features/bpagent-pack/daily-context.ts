@@ -6,7 +6,7 @@ import { formatDailyNoteDate, parseDailyNoteDate, toLocalDateString } from "@/fe
 /**
  * Pre-computed daily-notes context added to BPagent's user turn (see turn-context.ts).
  * Saves the agent from probing the filesystem to figure out today's date,
- * folder, filename pattern, and streak on every /daily invocation.
+ * folder, and filename pattern.
  */
 export async function buildDailyContextBlock(
     notesPath: string,
@@ -53,21 +53,12 @@ today_note: { filename: "${todayFile}", path: "${todayPath}", exists: false }
 
     const latest = notes[notes.length - 1].f;
 
-    let streak: string | null = null;
-    try {
-        const text = await Bun.file(path.join(dir, latest)).text();
-        const m = text.match(/DEN\s+\d+/i);
-        if (m) streak = m[0];
-    } catch {
-        // ignore
-    }
-
     return `<daily-context>
 today: ${iso} (${czDate})
 time_of_day: ${timeOfDay}
 daily_notes_dir: ${dailyDir}
 filename_pattern: ${settings.format}
 today_note: { filename: "${todayFile}", path: "${todayPath}", exists: ${Boolean(existingToday)} }
-latest_note: { filename: "${latest}"${streak ? `, streak: "${streak}"` : ""} }
+latest_note: { filename: "${latest}" }
 </daily-context>`;
 }

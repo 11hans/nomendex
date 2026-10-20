@@ -191,15 +191,12 @@ async function writeSessionsFile(filePath: string, sessions: SessionMetadata[]):
 }
 
 // Slash commands whose output materially depends on the bpagent system prompt.
-// `daily-notes`, `obsidian-vault-ops`, `check-links`, `search` are general-purpose and
+// `obsidian-vault-ops`, `check-links`, `search` are general-purpose and
 // remain agent-agnostic. `todos`, `projects`, `manage-skills` work fine on default.
 const BPAGENT_SLASH_COMMANDS = new Set([
-    "daily",
     "weekly",
     "monthly",
-    "review",
     "project",
-    "adopt",
     "timeblocking",
     "goal-tracking",
 ]);
@@ -347,8 +344,8 @@ export const chatRoutes = {
                 }
 
                 // Defensive routing: bpagent-context slash commands need the bpagent system prompt
-                // (operating principles, item-type semantics, daily workflow). The default agent has
-                // skills installed but lacks that context, so /daily etc. produce truncated output.
+                // (operating principles, item-type semantics, review routing). The default agent has
+                // skills installed but lacks that context, so /weekly etc. produce truncated output.
                 // If a new session starts with such a command on the default agent (typically a tab
                 // race where lastUsedAgentId still pointed at default), reroute to bpagent.
                 if (!sessionId && agentId === "default" && isBpagentSlashCommand(message)) {

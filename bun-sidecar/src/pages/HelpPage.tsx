@@ -367,12 +367,10 @@ function HelpContent() {
                         <CardContent>
                             <Accordion type="multiple" className="w-full">
                                 <AccordionItem value="user-invoked">
-                                    <AccordionTrigger>User-Invoked Skills <Badge variant="secondary" className="ml-auto text-caption">9</Badge></AccordionTrigger>
+                                    <AccordionTrigger>User-Invoked Skills <Badge variant="secondary" className="ml-auto text-caption">6</Badge></AccordionTrigger>
                                     <AccordionContent>
                                         <div className="rounded-lg p-4 bg-surface-elevated">
                                             <div className="grid grid-cols-[1fr_2fr] gap-x-6 gap-y-1.5 text-sm">
-                                                <code>/daily</code>
-                                                <span className="text-muted-foreground">Create daily notes, morning/midday/evening routines</span>
                                                 <code>/weekly</code>
                                                 <span className="text-muted-foreground">Weekly review — reflect, align with goals, plan next week</span>
                                                 <code>/timeblocking</code>
@@ -381,10 +379,6 @@ function HelpContent() {
                                                 <span className="text-muted-foreground">Monthly review — roll up weeks, check quarterly milestones, plan next month</span>
                                                 <code>/project</code>
                                                 <span className="text-muted-foreground">Create, track, and archive projects linked to goals</span>
-                                                <code>/review</code>
-                                                <span className="text-muted-foreground">Smart router — auto-detects daily/weekly/monthly based on context</span>
-                                                <code>/adopt</code>
-                                                <span className="text-muted-foreground">Scaffold BPagent structure onto an existing notes workspace</span>
                                                 <code>/check-links</code>
                                                 <span className="text-muted-foreground">Find broken wiki-links in the vault</span>
                                                 <code>/search &lt;term&gt;</code>
@@ -395,7 +389,7 @@ function HelpContent() {
                                 </AccordionItem>
 
                                 <AccordionItem value="auto-skills">
-                                    <AccordionTrigger>Auto Skills <Badge variant="secondary" className="ml-auto text-caption">4</Badge></AccordionTrigger>
+                                    <AccordionTrigger>Auto Skills <Badge variant="secondary" className="ml-auto text-caption">3</Badge></AccordionTrigger>
                                     <AccordionContent>
                                         <div className="rounded-lg p-4 bg-surface-elevated">
                                             <p className="text-xs text-muted-foreground mb-3 opacity-70">
@@ -408,8 +402,6 @@ function HelpContent() {
                                                 <span className="text-muted-foreground">Read/write vault files, manage wiki-links, process markdown with YAML frontmatter</span>
                                                 <code>todos</code>
                                                 <span className="text-muted-foreground">Manage project todos via REST API — create, view, update, delete with Kanban support</span>
-                                                <code>daily-notes</code>
-                                                <span className="text-muted-foreground">Manage daily notes using vault-config folder mapping and naming convention</span>
                                             </div>
                                         </div>
                                     </AccordionContent>

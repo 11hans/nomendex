@@ -146,4 +146,3 @@ await api.updateTodo({
 ## Related Features
 
 - [Subtasks](subtasks.md) — recurrence not available on subtasks
-- [Daily Notes](daily-note-improvements.md) — daily skill integrates recurring tasks for daily review

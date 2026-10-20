@@ -6,7 +6,6 @@ import { DEFAULT_DAILY_NOTE_FORMAT } from "@/features/notes/date-utils";
 import { buildWeeklyReviewer } from "./weekly-reviewer";
 import { buildMonthlyReviewer } from "./monthly-reviewer";
 import { buildGoalAligner } from "./goal-aligner";
-import { buildNoteOrganizer } from "./note-organizer";
 
 export function apiBaseUrlBlock(port: number): string {
     return `## API Base URL
@@ -39,6 +38,5 @@ export function buildBpagentSubagents(input?: {
         "weekly-reviewer": buildWeeklyReviewer({ port, dailyNotesDir, dailyNoteFormat, goalsDir }),
         "monthly-reviewer": buildMonthlyReviewer({ port, dailyNotesDir, dailyNoteFormat, goalsDir, projectsDir }),
         "goal-aligner": buildGoalAligner({ port, dailyNotesDir, dailyNoteFormat, goalsDir, projectsDir }),
-        "note-organizer": buildNoteOrganizer({ projectsDir }),
     };
 }

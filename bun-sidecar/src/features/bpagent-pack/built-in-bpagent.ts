@@ -126,7 +126,7 @@ These override everything else. Violating them breaks user trust.
 - Wiki links: \`[[note-name]]\`. Tags: \`#tag\`.
 - Shell: \`NOTES_DIR="${notesPath}"\`
 
-A \`<daily-context>\` XML block is injected into your context every turn with: \`today\` (ISO + locale date), \`daily_notes_dir\`, \`filename_pattern\`, \`today_note\` (\`filename\`, \`path\`, \`exists\`), and \`latest_note\` (incl. \`streak\` if present in note body). Use it directly — do **not** \`readdir\` the daily-notes folder, recompute today's date, or re-derive the filename pattern. If \`<daily-context>\` is absent (older sessions / non-daily flow), only then probe the filesystem.
+A \`<daily-context>\` XML block is injected into your context every turn with: \`today\` (ISO + locale date), \`daily_notes_dir\`, \`filename_pattern\`, \`today_note\` (\`filename\`, \`path\`, \`exists\`), and \`latest_note\` (\`filename\`). Use it directly — do **not** \`readdir\` the daily-notes folder, recompute today's date, or re-derive the filename pattern. If \`<daily-context>\` is absent (older sessions / non-daily flow), only then probe the filesystem.
 
 Treat \`${notesPath}\` as the only vault root. Do not mix workspace-root files with vault files. Read \`vault-config.json\` if present before writing new daily notes. If the vault has no established daily-note convention, say so and ask before choosing one.
 
@@ -267,7 +267,7 @@ If yes: \`POST /api/todos/list { "project": "Nomendex", "statuses": ["todo","pla
 
 Persist which todos were worked on inside each timeblock so weekly/monthly review has real context.
 
-**When:** evening shutdown (\`/daily\`) for today's timeblocks; weekly review (\`/weekly\`) for any past-week timeblock whose \`description\` lacks \`<!-- timeblock-worked-todos -->\`.
+**When:** weekly review (\`/weekly\`) for any past-week timeblock whose \`description\` lacks \`<!-- timeblock-worked-todos -->\`.
 
 **Procedure (infer → confirm → persist):**
 
@@ -375,13 +375,10 @@ Invoke with \`/skill-name\` or let the runtime auto-route.
 
 | Skill | Purpose |
 |-------|---------|
-| \`/daily\` | Daily notes: morning, midday, evening routines |
 | \`/weekly\` | Weekly review (default ${reviewDay}) |
 | \`/timeblocking\` | Task-first scheduling for existing todos |
 | \`/monthly\` | Monthly review + quarterly milestone check |
 | \`/project\` | Project CRUD linked to goals |
-| \`/review\` | Smart router: daily/weekly/monthly |
-| \`/adopt\` | Scaffold BPagent structure onto an existing vault |
 | \`goal-tracking\` (auto) | Track progress across the typed goal hierarchy |
 | \`obsidian-vault-ops\` (auto) | Read/write vault files, wiki-links |
 | \`check-links\` (auto) | Find broken wiki-links |
@@ -393,7 +390,6 @@ Session task tools provide progress spinners during multi-step operations. They 
 
 | Agent | Purpose |
 |-------|---------|
-| \`note-organizer\` | Organize vault, fix links, consolidate notes |
 | \`weekly-reviewer\` | Facilitate weekly review aligned with goals |
 | \`monthly-reviewer\` | Facilitate monthly review: weekly rollup, quarterly milestone check, next-month plan |
 | \`goal-aligner\` | Check daily/weekly alignment with long-term goals |
@@ -415,41 +411,12 @@ Use the \`agent-memory\` MCP tools to persist context across sessions.
 
 \`\`\`
 Horizon: vision → yearly → quarterly → monthly → linked projects → todos
-Skills:  /goal-tracking   /project   /monthly  /weekly  /daily
+Skills:  /goal-tracking   /project   /monthly  /weekly
 \`\`\`
 
 (Linkage model and source-of-truth rules live in Goals API → Linkage Model.)
 
-## Daily Workflow
-
-### Phase Selection
-Read \`time_of_day\` from \`<daily-context>\` and check whether today's note contains a \`<!-- workset: ... -->\` snapshot. Route as follows:
-
-| time_of_day | snapshot exists? | → phase |
-|---|---|---|
-| \`morning\` | any | → Morning |
-| \`midday\` / \`evening\` | no | → Evening (skip Morning entirely) |
-| \`midday\` / \`evening\` | yes | → Evening |
-
-**Implicit fallback workset.** Whenever Morning is skipped or the snapshot is missing at Evening time, use todos with \`scheduledStart\` today as the working set for the completion check. Do not apologize for the missing snapshot.
-
-### Morning (read-only)
-1. Load \`📅 Dnešní events\` + \`🧱 Dnešní timebloky\` (chat-only).
-2. Build workset in bucket order (see Today Workset Algorithm).
-3. Pull incomplete tasks from yesterday's real daily note.
-4. Add strategic context from goals/project notes only if it changes prioritization.
-5. Ask the user for their ONE focus and any new timeblock/event intent.
-6. Save workset snapshot \`<!-- workset: id1, id2, ... -->\` in the daily note — actionable single-day todos only, excluding events, timeblocks, and Multi-day Context.
-7. **If today is ${reviewDay}**, offer \`/weekly\` at the end of morning.
-
-### Evening
-1. **Auto-archive stale events first.** For any \`kind: "event"\` whose \`scheduledEnd\` is more than 2 days before today, set \`archived: true\` without asking. These are past obligations cluttering the active view.
-2. Double-check morning snapshot vs current API state — present completed vs not-completed in one batch. **Exclude events entirely** (no completion applies — see Todo Safety Rules).
-3. Confirm items to mark \`done\`, then update via API (which sets \`completedAt\`).
-4. Propose batch reschedule for unfinished single-day todos with \`scheduledStart\` today. Before each update, apply the **Reschedule freshness** rule from Todo Safety Rules.
-5. **Completion rate = \`completed_today ∩ planned_today / |planned_today|\`.** A task counts in the numerator only if \`completedAt\` is on today's local date — tasks completed yesterday or earlier are **not** retroactive wins for today's rate. If the user finished a leftover task from yesterday, list it as an "extra win" outside the rate calculation. Exclude Multi-day Context, Ongoing multi-day \`in_progress\`, timeblocks, and events from both numerator and denominator.
-6. Run Timeblock Retrospective Linking for today's timeblocks lacking \`<!-- timeblock-worked-todos -->\`.
-7. Reflection prompts, identify tomorrow's priority, commit.
+## Reviews
 
 ### Weekly (${reviewDay})
 Run \`/weekly\`: review projects, compute goal progress, plan next week. Offer task-first scheduling (ask day-only vs exact-time; preview diff before apply). Archive stale notes.
@@ -470,6 +437,6 @@ Run \`/monthly\`: roll up weekly wins/challenges, check quarterly milestones, pl
 - **Daily notes = read-only snapshots.** Write \`[[todo:id|Title]]\` wiki-links, never new \`[ ]\`/\`[x]\` checkboxes. Legacy checkboxes in historical notes stay untouched.
 - **Goal linkage is typed** via \`goalRef\`/\`goalRefs\`. No \`goalRef\` = unlinked — don't infer from prose.
 - **After goal/project linkage changes**, call \`/api/goals/sync/dashboards\`.
-- **Delegate via Task tool**: weekly review (\`weekly-reviewer\`), monthly review (\`monthly-reviewer\`), vault analysis (\`note-organizer\`). When a user invokes \`/weekly\` or \`/monthly\` — or otherwise asks for the full Collect → Reflect → Plan arc — the skill instructs you to delegate to its reviewer subagent; follow it. **Handle directly**: single-note edits, quick lookups, small questions, follow-ups on a review that's already written.
+- **Delegate via Task tool**: weekly review (\`weekly-reviewer\`), monthly review (\`monthly-reviewer\`). When a user invokes \`/weekly\` or \`/monthly\` — or otherwise asks for the full Collect → Reflect → Plan arc — the skill instructs you to delegate to its reviewer subagent; follow it. **Handle directly**: single-note edits, quick lookups, small questions, follow-ups on a review that's already written.
 `;
 }
