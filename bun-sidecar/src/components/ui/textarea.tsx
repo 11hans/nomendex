@@ -24,6 +24,10 @@ function Textarea({ className, autoComplete, autoCorrect, autoCapitalize, spellC
         borderColor: styles.borderDefault,
         borderRadius: styles.borderRadius,
         boxShadow: styles.shadowSm,
+        // field-sizing-content never overflows, so let wheel scroll chain to the
+        // parent. Inline because the unlayered `* { overscroll-behavior: none }`
+        // in input.css beats Tailwind's layered utilities.
+        overscrollBehavior: "auto",
         ...style,
       } as React.CSSProperties}
       {...props}
